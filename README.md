@@ -1,6 +1,6 @@
 # TEEMS Solver
 
-[![License](https://img.shields.io/badge/License-GPL_v3.0-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/License-GPL_v3.0-blue.svg)]([LICENSE](https://github.com/teemsphere/teems-solver/blob/main/LICENSE))
 [![Version](https://img.shields.io/badge/version-0.9-green.svg)](https://github.com/matthewcantele/teems-solver/releases)
 [![Docker](https://img.shields.io/badge/docker-required-2496ED.svg)](https://www.docker.com/)
 
@@ -187,7 +187,7 @@ REPOSITORY   TAG       IMAGE ID       CREATED          SIZE
 teems        latest    abc123def456   2 minutes ago    ~2GB
 ```
 
-## Usage
+<!-- ## Usage
 
 The TEEMS solver is designed to work seamlessly with the TEEMS R package:
 
@@ -202,7 +202,7 @@ result <- teems_solve(model_data)
 
 ### In-Situ Solve
 
-The TEEMS R package also supports in-container solving for enhanced performance:
+The TEEMS R package also supports in-container solving for enhanced performance: -->
 
 ## Troubleshooting
 
