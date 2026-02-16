@@ -1,12 +1,12 @@
 FROM ubuntu:20.04
 
-LABEL org.label-schema.name="TEEMS solver Dockerfile"
-LABEL org.label-schema.version="0.91"
-LABEL org.label-schema.description="Full Docker build for TEEMS solver"
-LABEL org.label-schema.author="Matthew Cantele <matthew.cantele@protonmail.com>"
-LABEL org.label-schema.maintainer="Matthew Cantele <matthew.cantele@protonmail.com>"
-LABEL org.label-schema.source="https://github.com/matthewcantele/teems-solver"
-LABEL org.label-schema.licenses="GPLv3.0"
+LABEL org.opencontainers.image.name="TEEMS solver full Dockerfile"
+LABEL org.opencontainers.image.version="0.92"
+LABEL org.opencontainers.image.description="Full Docker build for TEEMS solver"
+LABEL org.opencontainers.image.author="Matthew Cantele <matthew.cantele@protonmail.com>"
+LABEL org.opencontainers.image.maintainer="Matthew Cantele <matthew.cantele@protonmail.com>"
+LABEL org.opencontainers.image.source="https://github.com/matthewcantele/teems-solver"
+LABEL org.opencontainers.image.licenses="GPLv3.0"
 
 ARG PATH_HSL_MA48
 ARG PATH_HSL_MA51
@@ -17,6 +17,7 @@ ARG OPENMPI_VERSION=5.0.7
 ARG OPENMPI_BASE_VERSION=5.0
 ARG MPICH_VERSION=4.3.0
 ARG PETSC_ARCH=native
+ARG PETSC_VERSION=v3.24.4
 ARG USERNAME=teems
 ARG USER_UID=1000
 ARG USER_GID=$USER_UID
@@ -30,7 +31,6 @@ COPY ${PATH_HSL_MA51} ${TEEMS_TMP}/ma51.tar.gz
 COPY ${PATH_HSL_MC66} ${TEEMS_TMP}/mc66.tar.gz
 COPY ${PATH_HSL_MP48} ${TEEMS_TMP}/mp48.tar.gz
 COPY ./src ${BUILD_DIR}/src
-COPY ./teems-parser /opt/teems-parser
 
 RUN echo 'APT::Install-Suggests "0";' >> /etc/apt/apt.conf.d/00-docker \
     && echo 'APT::Install-Recommends "0";' >> /etc/apt/apt.conf.d/00-docker \
@@ -47,12 +47,10 @@ RUN echo 'APT::Install-Suggests "0";' >> /etc/apt/apt.conf.d/00-docker \
         python3 \
         python3-pip \
         python3-distutils \
-        python-setuptools \
+        python3-setuptools \
         tzdata \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* \
-    # Python libraries for bin_parser
-    && pip3 install --no-cache-dir pandas toolz numpy Pyarrow \
     # OPENMPI
     && cd ${TEEMS_TMP} \
     && mkdir openmpi \
@@ -75,12 +73,11 @@ RUN echo 'APT::Install-Suggests "0";' >> /etc/apt/apt.conf.d/00-docker \
     && make install \
     # PETSC
     && cd ${BUILD_DIR}/lib \
-    && git clone -b release https://gitlab.com/petsc/petsc.git petsc \
+    && git clone -b ${PETSC_VERSION} https://gitlab.com/petsc/petsc.git petsc \
     && cd petsc \
-    && mkdir ${BUILD_DIR}/LICENSES/petsc \ 
+    && mkdir ${BUILD_DIR}/LICENSES/petsc \
     && cp ${BUILD_DIR}/lib/petsc/LICENSE ${BUILD_DIR}/LICENSES/petsc \
     && ldconfig \
-    && pip3 install --no-cache-dir pandas toolz \
     && python3 ./config/configure.py PETSC_ARCH=${PETSC_ARCH} PETSC_DIR=$PWD --with-debugging=0 --with-mpi-dir=${BUILD_DIR}/lib/mpi --with-afterimage COPTFLAGS="-Ofast -march=native -mtune=native" CXXOPTFLAGS="-Ofast -march=native -mtune=native" FOPTFLAGS="-Ofast -march=native -mtune=native" --with-shared-libraries=0 --with-openmp --with-threadsafety --with-log=0 --with-x=0 --force \
     && make PETSC_DIR=${PWD} PETSC_ARCH=${PETSC_ARCH} all \
     # HSL
@@ -128,9 +125,9 @@ RUN echo 'APT::Install-Suggests "0";' >> /etc/apt/apt.conf.d/00-docker \
     # non-root user
     && groupadd --gid $USER_GID $USERNAME \
     && useradd --uid $USER_UID --gid $USER_GID -m $USERNAME \
-    # fix permissions for the bin_parser directory
-    && chown -R 1000:1000 /opt/teems-parser \
-    && chmod -R 755 /opt/teems-parser 
+    # cleanup
+    && apt-get autoremove -y \
+    && apt-get autoclean
 
 USER $USERNAME
 WORKDIR /opt/teems

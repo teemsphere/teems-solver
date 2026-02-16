@@ -1,8 +1,8 @@
 FROM matthewcantele/teems_base:latest
 
-LABEL org.opencontainers.image.name="TEEMS solver base layer Dockerfile"
-LABEL org.opencontainers.image.version="0.91"
-LABEL org.opencontainers.image.description="Base Layer Docker build for TEEMS solver"
+LABEL org.opencontainers.image.name="TEEMS solver final layer Dockerfile"
+LABEL org.opencontainers.image.version="0.92"
+LABEL org.opencontainers.image.description="Final Layer Docker build for TEEMS solver"
 LABEL org.opencontainers.image.author="Matthew Cantele <matthew.cantele@protonmail.com>"
 LABEL org.opencontainers.image.maintainer="Matthew Cantele <matthew.cantele@protonmail.com>"
 LABEL org.opencontainers.image.source="https://github.com/matthewcantele/teems-solver"
@@ -13,10 +13,6 @@ ARG PATH_HSL_MA51
 ARG PATH_HSL_MC66
 ARG PATH_HSL_MP48
 ARG BUILD_DIR=/opt/teems-solver
-ARG OPENMPI_VERSION=5.0.7
-ARG OPENMPI_BASE_VERSION=5.0
-ARG MPICH_VERSION=4.3.0
-ARG PETSC_ARCH=native
 ARG USERNAME=teems
 ARG USER_UID=1000
 ARG USER_GID=$USER_UID
@@ -68,9 +64,6 @@ RUN cd ${TEEMS_TMP} \
     # non-root user
     && groupadd --gid $USER_GID $USERNAME \
     && useradd --uid $USER_UID --gid $USER_GID -m $USERNAME \
-    # permissions for the bin_parser directory
-    && chown -R 1000:1000 /opt/teems-parser \
-    && chmod -R 755 /opt/teems-parser \
     # cleanup
     && rm -rf ${TEEMS_TMP}
 

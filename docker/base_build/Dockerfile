@@ -1,7 +1,7 @@
 FROM ubuntu:20.04
 
 LABEL org.opencontainers.image.name="TEEMS solver base layer Dockerfile"
-LABEL org.opencontainers.image.version="0.91"
+LABEL org.opencontainers.image.version="0.92"
 LABEL org.opencontainers.image.description="Base Layer Docker build for TEEMS solver"
 LABEL org.opencontainers.image.author="Matthew Cantele <matthew.cantele@protonmail.com>"
 LABEL org.opencontainers.image.maintainer="Matthew Cantele <matthew.cantele@protonmail.com>"
@@ -13,13 +13,13 @@ ARG OPENMPI_VERSION=5.0.7
 ARG OPENMPI_BASE_VERSION=5.0
 ARG MPICH_VERSION=4.3.0
 ARG PETSC_ARCH=native
+ARG PETSC_VERSION=v3.24.4
 ARG TEEMS_TMP=/tmp/teems
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PATH="${BUILD_DIR}/lib/mpi/bin:$PATH"
 
 COPY ./src ${BUILD_DIR}/src
-COPY ./teems-parser /opt/teems-parser
 
 RUN echo 'APT::Install-Suggests "0";' >> /etc/apt/apt.conf.d/00-docker \
     && echo 'APT::Install-Recommends "0";' >> /etc/apt/apt.conf.d/00-docker \
@@ -40,8 +40,6 @@ RUN echo 'APT::Install-Suggests "0";' >> /etc/apt/apt.conf.d/00-docker \
         tzdata \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* \
-    # Python libraries for bin_parser
-    && pip3 install --no-cache-dir pandas toolz numpy Pyarrow \
     # OPENMPI
     && mkdir ${TEEMS_TMP} \
     && cd ${TEEMS_TMP} \
@@ -65,9 +63,9 @@ RUN echo 'APT::Install-Suggests "0";' >> /etc/apt/apt.conf.d/00-docker \
     && make install \
     # PETSC
     && cd ${BUILD_DIR}/lib \
-    && git clone -b release https://gitlab.com/petsc/petsc.git petsc \
+    && git clone -b ${PETSC_VERSION} https://gitlab.com/petsc/petsc.git petsc \
     && cd petsc \
-    && mkdir ${BUILD_DIR}/LICENSES/petsc \ 
+    && mkdir ${BUILD_DIR}/LICENSES/petsc \
     && cp ${BUILD_DIR}/lib/petsc/LICENSE ${BUILD_DIR}/LICENSES/petsc \
     && ldconfig \
     && python3 ./config/configure.py PETSC_ARCH=${PETSC_ARCH} PETSC_DIR=$PWD --with-debugging=0 --with-mpi-dir=${BUILD_DIR}/lib/mpi --with-afterimage COPTFLAGS="-Ofast -march=native -mtune=native" CXXOPTFLAGS="-Ofast -march=native -mtune=native" FOPTFLAGS="-Ofast -march=native -mtune=native" --with-shared-libraries=0 --with-openmp --with-threadsafety --with-log=0 --with-x=0 --force \
