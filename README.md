@@ -1,7 +1,7 @@
 # TEEMS Solver
 
 [![License](https://img.shields.io/badge/License-GPL_v3.0-blue.svg)]([LICENSE](https://github.com/teemsphere/teems-solver/blob/main/LICENSE))
-[![Version](https://img.shields.io/badge/version-0.9-green.svg)](https://github.com/matthewcantele/teems-solver/releases)
+[![Version](https://img.shields.io/badge/version-0.92-green.svg)](https://github.com/matthewcantele/teems-solver/releases)
 [![Docker](https://img.shields.io/badge/docker-required-2496ED.svg)](https://www.docker.com/)
 
 High-performance optimization solver for the TEEMS (Temporally Explicit Ecosystem Management Simulator) R package. Built on PETSc with MPI parallelization and HSL sparse linear algebra libraries.
