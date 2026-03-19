@@ -1,10 +1,10 @@
 # TEEMS Solver
 
-[![License](https://img.shields.io/badge/License-GPL_v3.0-blue.svg)]([LICENSE](https://github.com/teemsphere/teems-solver/blob/main/LICENSE))
+[![License](https://img.shields.io/badge/License-AGPL_v3.0-blue.svg)]([LICENSE](https://github.com/teemsphere/teems-solver/blob/main/LICENSE))
 [![Version](https://img.shields.io/badge/version-0.92-green.svg)](https://github.com/matthewcantele/teems-solver/releases)
 [![Docker](https://img.shields.io/badge/docker-required-2496ED.svg)](https://www.docker.com/)
 
-High-performance optimization solver for the TEEMS (Temporally Explicit Ecosystem Management Simulator) R package. Built on PETSc with MPI parallelization and HSL sparse linear algebra libraries.
+High-performance optimization solver for the TEEMS (Trade and Environment Equilibrium Modeling System) R package. Built on PETSc with MPI parallelization and HSL sparse linear algebra libraries.
 
 ## Overview
 
@@ -248,7 +248,7 @@ Additional documentation is available:
 
 ## License
 
-This project is licensed under the **GNU General Public License v3.0** - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the **GNU Affero General Public License v3.0** - see the [LICENSE](LICENSE) file for details.
 
 ### Component Licenses
 
@@ -256,7 +256,7 @@ Individual components retain their original licenses:
 
 | Component | License |
 |-----------|---------|
-| TEEMS Solver | GPL-3.0 |
+| TEEMS Solver | AGPL-3.0 |
 | PETSc | BSD 2-Clause |
 | OpenMPI | BSD 3-Clause |
 | MPICH | Custom Open Source |
