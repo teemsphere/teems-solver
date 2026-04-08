@@ -199,7 +199,7 @@ int main(int argc,char **args) {
   if (!flg) {
     strcpy(filename,"./reg.cmf");//orani03.cmf");
   }
-  PetscOptionsGetBool(PETSC_NULL,NULL, "-enable_time", &sbbd_overuser,PETSC_NULL);/* Overrid MC66 ordering */
+  PetscOptionsGetBool(PETSC_NULLPTR,NULL, "-enable_time", &sbbd_overuser,PETSC_NULLPTR);/* Overrid MC66 ordering */
   regset[0]='\0';
   PetscOptionsGetString(NULL,NULL,"-regset",regset,NAMESIZE,&flg);
   if(regset[0]!='\0')for(i=0; i<NAMESIZE; i++) {
@@ -622,7 +622,7 @@ int main(int argc,char **args) {
   //****************************** MATRIX FROM FORMULA************************************
   //**************************************************************************************
   VecSize = (PetscInt) nvarele-nexo;
-  PetscPrintf(PETSC_COMM_SELF,"VecSize %d exo %d\n",VecSize,nexo);
+  PetscPrintf(PETSC_COMM_SELF,"VecSize %d exo %ld\n",VecSize,nexo);
   strcpy(commsyntax,"equation");
   uvadd neq=0,neq1;
   if(rank==0) {
