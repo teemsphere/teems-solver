@@ -138,7 +138,8 @@ hsl/
 Pulls the pre-built base image (`matthewcantele/teems_base:latest`) from Dockerhub and adds HSL compilation and the final solver binary. The correct base image architecture (`amd64` or `arm64`) is selected automatically.
 
 ```bash
-docker build -t teems:latest \
+docker build --pull \
+  -t teems:latest \
   --build-arg PATH_HSL_MA48="hsl/ma48-2.2.0.tar.gz" \
   --build-arg PATH_HSL_MA51="hsl/ma51-1.0.0.tar.gz" \
   --build-arg PATH_HSL_MC66="hsl/hsl_mc66-2.2.1.tar.gz" \
@@ -176,7 +177,7 @@ docker image ls | grep teems
 Expected output:
 ```
 REPOSITORY   TAG       IMAGE ID       CREATED          SIZE
-teems        latest    abc123def456   2 minutes ago    ~260MB
+teems        latest    abc123def456   2 minutes ago    ~175MB
 ```
 
 ## Usage
