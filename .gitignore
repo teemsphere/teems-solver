@@ -3,3 +3,5 @@ tarballs
 singularity
 *.code-workspace
 *.log
+beta
+build_push.sh
