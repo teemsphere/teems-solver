@@ -1,52 +1,37 @@
-FROM matthewcantele/teems_base:latest
-
-LABEL org.opencontainers.image.name="TEEMS solver final layer Dockerfile"
-LABEL org.opencontainers.image.version="0.92"
-LABEL org.opencontainers.image.description="Final Layer Docker build for TEEMS solver"
-LABEL org.opencontainers.image.author="Matthew Cantele <matthew.cantele@protonmail.com>"
-LABEL org.opencontainers.image.maintainer="Matthew Cantele <matthew.cantele@protonmail.com>"
-LABEL org.opencontainers.image.source="https://github.com/matthewcantele/teems-solver"
-LABEL org.opencontainers.image.licenses="GPLv3.0"
+FROM matthewcantele/teems_base:latest AS builder
 
 ARG PATH_HSL_MA48
 ARG PATH_HSL_MA51
 ARG PATH_HSL_MC66
 ARG PATH_HSL_MP48
 ARG BUILD_DIR=/opt/teems-solver
-ARG USERNAME=teems
-ARG USER_UID=1000
-ARG USER_GID=$USER_UID
-ARG TEEMS_TMP=/tmp/teems
 
-ENV DEBIAN_FRONTEND=noninteractive
-ENV PATH="${BUILD_DIR}/lib/mpi/bin:$PATH"
+COPY ${PATH_HSL_MA48} ${BUILD_DIR}/hsl/ma48.tar.gz
+COPY ${PATH_HSL_MA51} ${BUILD_DIR}/hsl/ma51.tar.gz
+COPY ${PATH_HSL_MC66} ${BUILD_DIR}/hsl/mc66.tar.gz
+COPY ${PATH_HSL_MP48} ${BUILD_DIR}/hsl/mp48.tar.gz
 
-COPY ${PATH_HSL_MA48} ${TEEMS_TMP}/ma48.tar.gz
-COPY ${PATH_HSL_MA51} ${TEEMS_TMP}/ma51.tar.gz
-COPY ${PATH_HSL_MC66} ${TEEMS_TMP}/mc66.tar.gz
-COPY ${PATH_HSL_MP48} ${TEEMS_TMP}/mp48.tar.gz
-
-RUN cd ${TEEMS_TMP} \
-    && tar xfz ma48.tar.gz --strip-components=1 -C ${BUILD_DIR}/lib/ma48 \
+RUN mkdir -p ${BUILD_DIR}/LICENSES/hsl \
+    && mkdir -p ${BUILD_DIR}/lib/ma48 \
+    && tar xfz ${BUILD_DIR}/hsl/ma48.tar.gz --strip-components=1 -C ${BUILD_DIR}/lib/ma48 \
     && cp ${BUILD_DIR}/lib/ma48/LICENCE ${BUILD_DIR}/LICENSES/hsl \
-    && tar xfz ${TEEMS_TMP}/ma51.tar.gz --strip-components=1 -C ${BUILD_DIR}/lib/ma51 \
-    && tar xfz ${TEEMS_TMP}/mc66.tar.gz --strip-components=1 -C ${BUILD_DIR}/lib/mc66 \
-    && tar xfz ${TEEMS_TMP}/mp48.tar.gz --strip-components=1 -C ${BUILD_DIR}/lib/mp48 \
+    && mkdir -p ${BUILD_DIR}/lib/ma51 \
+    && tar xfz ${BUILD_DIR}/hsl/ma51.tar.gz --strip-components=1 -C ${BUILD_DIR}/lib/ma51 \
+    && mkdir -p ${BUILD_DIR}/lib/mc66 \
+    && tar xfz ${BUILD_DIR}/hsl/mc66.tar.gz --strip-components=1 -C ${BUILD_DIR}/lib/mc66 \
+    && mkdir -p ${BUILD_DIR}/lib/mp48 \
+    && tar xfz ${BUILD_DIR}/hsl/mp48.tar.gz --strip-components=1 -C ${BUILD_DIR}/lib/mp48 \
     && cd ${BUILD_DIR}/lib/ma48 \
     && autoreconf -fi \
     && ./configure \
     && make \
-    && ln -s ${BUILD_DIR}/lib/ma48/src/.libs/libma48.so.0.0.0 /usr/local/lib/libma48.so \
-    && ln -s ${BUILD_DIR}/lib/ma48/src/.libs/libma48.so.0.0.0 /usr/local/lib/libma48.so.0 \
     && cd ${BUILD_DIR}/lib/ma51 \
     && autoreconf -fi \
     && ./configure \
     && make \
-    && ln -s ${BUILD_DIR}/lib/ma51/src/.libs/libma51.so.0.0.0 /usr/local/lib/libma51.so \
-    && ln -s ${BUILD_DIR}/lib/ma51/src/.libs/libma51.so.0.0.0 /usr/local/lib/libma51.so.0 \
     && cd ${BUILD_DIR}/lib/mp48 \
     && autoreconf -fi \
-    && ./configure \
+    && ./configure FFLAGS="-fallow-argument-mismatch" FCFLAGS="-fallow-argument-mismatch" \
     && make \
     && cp ${BUILD_DIR}/lib/mp48/src/hsl_mp48d.f90 ${BUILD_DIR}/src \
     && cp ${BUILD_DIR}/lib/mp48/src/ddeps.f ${BUILD_DIR}/src \
@@ -56,16 +41,67 @@ RUN cd ${TEEMS_TMP} \
     && ./mp48_mod.sh \
     && cp ${BUILD_DIR}/lib/mc66/src/hsl_mc66d.f90 ${BUILD_DIR}/src \
     && cp ${BUILD_DIR}/lib/mc66/src/ddeps90.f90 ${BUILD_DIR}/src \
-    && ldconfig \
     # final build
     && cd ${BUILD_DIR}/src \
     && make \
     && mv ${BUILD_DIR}/src ${BUILD_DIR}/solver \
-    # non-root user
-    && groupadd --gid $USER_GID $USERNAME \
-    && useradd --uid $USER_UID --gid $USER_GID -m $USERNAME \
-    # cleanup
-    && rm -rf ${TEEMS_TMP}
+    && rm -rf ${BUILD_DIR}/hsl \
+    && mkdir -p ${BUILD_DIR}/mpi-runtime/lib ${BUILD_DIR}/mpi-runtime/bin \
+    && find ${BUILD_DIR}/lib/mpi/lib -name "*.so*" \
+           -exec cp -P {} ${BUILD_DIR}/mpi-runtime/lib/ \; \
+    && for b in mpirun mpiexec mpiexec.hydra hydra_pmi_proxy hydra_nameserver hydra_persist; do \
+           [ -f ${BUILD_DIR}/lib/mpi/bin/$b ] \
+           && cp ${BUILD_DIR}/lib/mpi/bin/$b ${BUILD_DIR}/mpi-runtime/bin/; \
+       done; true
+
+# ── runtime image ──────────────────────────────────────────────────────────────
+FROM debian:bookworm-slim
+
+LABEL org.opencontainers.image.name="TEEMS solver expedited build Dockerfile"
+LABEL org.opencontainers.image.version="1.0.0"
+LABEL org.opencontainers.image.description="Expedited Docker build for TEEMS solver"
+LABEL org.opencontainers.image.author="Matthew Cantele <matthew.cantele@protonmail.com>"
+LABEL org.opencontainers.image.maintainer="Matthew Cantele <matthew.cantele@protonmail.com>"
+LABEL org.opencontainers.image.source="https://github.com/matthewcantele/teems-solver"
+LABEL org.opencontainers.image.licenses="AGPL-3.0"
+
+ARG BUILD_DIR=/opt/teems-solver
+ARG USERNAME=teems
+ARG USER_UID=1000
+ARG USER_GID=$USER_UID
+
+ARG DEBIAN_FRONTEND=noninteractive
+ENV PATH="${BUILD_DIR}/lib/mpi/bin:$PATH"
+
+# solver binary and LICENSES
+COPY --from=builder ${BUILD_DIR}/solver/hsl          ${BUILD_DIR}/solver/hsl
+COPY --from=builder ${BUILD_DIR}/LICENSES            ${BUILD_DIR}/LICENSES
+
+# HSL shared libraries (MA48 and MA51 are linked dynamically)
+COPY --from=builder \
+    ${BUILD_DIR}/lib/ma48/src/.libs/libma48.so.0.0.0 \
+    /usr/local/lib/libma48.so.0.0.0
+COPY --from=builder \
+    ${BUILD_DIR}/lib/ma51/src/.libs/libma51.so.0.0.0 \
+    /usr/local/lib/libma51.so.0.0.0
+
+# MPICH runtime — shared libs and launcher only
+COPY --from=builder ${BUILD_DIR}/mpi-runtime/lib  ${BUILD_DIR}/lib/mpi/lib
+COPY --from=builder ${BUILD_DIR}/mpi-runtime/bin  ${BUILD_DIR}/lib/mpi/bin
+
+RUN echo 'APT::Install-Suggests "0";' >> /etc/apt/apt.conf.d/00-docker \
+    && echo 'APT::Install-Recommends "0";' >> /etc/apt/apt.conf.d/00-docker \
+    && apt-get update \
+    && apt-get install -y \
+        libopenblas0 \
+        libgfortran5 \
+        libgomp1 \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* \
+    && echo "${BUILD_DIR}/lib/mpi/lib" > /etc/ld.so.conf.d/teems-mpi.conf \
+    && ldconfig \
+    && groupadd -g $USER_GID $USERNAME \
+    && useradd -m -u $USER_UID -g $USER_GID -s /bin/bash $USERNAME
 
 USER $USERNAME
 WORKDIR /opt/teems
