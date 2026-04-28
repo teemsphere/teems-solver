@@ -1,20 +1,20 @@
 # TEEMS Solver
 
-[![License](https://img.shields.io/badge/License-AGPL_v3.0-blue.svg)]([LICENSE](https://github.com/teemsphere/teems-solver/blob/main/LICENSE))
-[![Version](https://img.shields.io/badge/version-0.92-green.svg)](https://github.com/matthewcantele/teems-solver/releases)
+[![License](https://img.shields.io/badge/License-AGPL_v3.0-blue.svg)](LICENSE)
+[![Version](https://img.shields.io/badge/version-1.0.0-green.svg)](https://github.com/matthewcantele/teems-solver/releases)
 [![Docker](https://img.shields.io/badge/docker-required-2496ED.svg)](https://www.docker.com/)
 
-High-performance optimization solver for the TEEMS (Trade and Environment Equilibrium Modeling System) R package. Built on PETSc with MPI parallelization and HSL sparse linear algebra libraries.
+High-performance optimization solver for the TEEMS (Trade and Environment Equilibrium Modelling System) R package. Built on PETSc with MPI parallelization and HSL sparse linear algebra libraries.
 
 ## Overview
 
-The TEEMS solver is a specialized computational engine designed for large-scale ecosystem management optimization problems. It combines:
+The TEEMS solver is a specialized computational engine for large-scale computable general equilibrium (CGE) model runs. It combines:
 
-- **PETSc** for portable, scalable scientific computation
-- **MPI** (OpenMPI/MPICH) for parallel processing
+- **PETSc** (v3.25.0) for portable, scalable scientific computation
+- **MPICH** (v5.0.1) for parallel processing
 - **HSL libraries** for efficient sparse matrix operations
 
-The solver is distributed as Docker images to ensure reproducibility and ease of deployment across different systems.
+The solver is distributed as a Docker image to ensure reproducibility and ease of deployment across different systems and platforms.
 
 ## Table of Contents
 
@@ -29,30 +29,26 @@ The solver is distributed as Docker images to ensure reproducibility and ease of
 - [Verification](#verification)
 - [Usage](#usage)
 - [Troubleshooting](#troubleshooting)
-- [Documentation](#documentation)
 - [License](#license)
 - [Code Authorship](#code-authorship)
 - [Contact](#contact)
 
 ## Prerequisites
 
-Before beginning installation, ensure you have:
-
 ### Required Software
 
-- **Docker** (v20.10+) - [Installation guide](https://www.docker.com/get-started/)
-- **Git** - For cloning the repository
+- **Docker** (v20.10+) — [Installation guide](https://www.docker.com/get-started/)
 
 ### Required HSL Libraries
 
-The following HSL libraries must be obtained directly from [HSL](https://www.hsl.rl.ac.uk/):
+The following HSL libraries must be obtained directly from [HSL](https://www.hsl.rl.ac.uk/). These are available at no cost for academic use.
 
-| Library | Version | Download Link |
-|---------|---------|---------------|
-| MA48 | 2.2.0 | [hsl.rl.ac.uk/catalogue/ma48.html](https://www.hsl.rl.ac.uk/catalogue/ma48.html) |
-| MA51 | 1.0.0 | [hsl.rl.ac.uk/catalogue/ma51.html](https://www.hsl.rl.ac.uk/catalogue/ma51.html) |
-| HSL_MC66 | 2.2.1 | [hsl.rl.ac.uk/catalogue/hsl_mc66.html](https://www.hsl.rl.ac.uk/catalogue/hsl_mc66.html) |
-| HSL_MP48 | 2.1.1 | [hsl.rl.ac.uk/catalogue/hsl_mp48.html](https://www.hsl.rl.ac.uk/catalogue/hsl_mp48.html) |
+| Library | Version |
+|---------|---------|
+| MA48 | 2.2.0 |
+| MA51 | 1.0.0 |
+| HSL_MC66 | 2.2.1 |
+| HSL_MP48 | 2.1.1 |
 
 **Note**: Backward compatibility with other HSL library versions is not guaranteed.
 
@@ -68,20 +64,18 @@ Linux users **must** configure Docker to run without `sudo`:
 git clone --depth 1 https://github.com/matthewcantele/teems-solver.git
 cd teems-solver
 
-# Copy HSL libraries to hsl/ directory
+# Copy HSL tarballs into the hsl/ directory
 cp /path/to/your/hsl/*.tar.gz hsl/
 
-# Build (expedited version - 5 minutes)
-docker build -t teems:latest \
+# Expedited build (~5 minutes)
+docker build --pull \
+  -t teems:latest \
   --build-arg PATH_HSL_MA48="hsl/ma48-2.2.0.tar.gz" \
   --build-arg PATH_HSL_MA51="hsl/ma51-1.0.0.tar.gz" \
   --build-arg PATH_HSL_MC66="hsl/hsl_mc66-2.2.1.tar.gz" \
   --build-arg PATH_HSL_MP48="hsl/hsl_mp48-2.1.1.tar.gz" \
   -f ./docker/expedited_build/Dockerfile \
   .
-
-# Verify installation
-docker image ls | grep teems
 ```
 
 ## Installation
@@ -108,12 +102,10 @@ docker run hello-world
 
 Two build approaches are available:
 
-| Build Type | Time | Use Case |
-|------------|------|----------|
-| **Expedited** | ~5 min | Recommended for most users |
-| **Full** | ~40 min | Developers, customization needed |
-
-The expedited build uses a pre-built base image containing all open-source dependencies, requiring only HSL library integration.
+| Build Type | Time | Description |
+|------------|------|-------------|
+| **Expedited** | ~5 min | Recommended for most users. Pulls a pre-built base image containing all open-source dependencies; only HSL compilation and the final solver link are performed locally. |
+| **Full** | ~40 min | Compiles all dependencies from source. Use if you cannot pull from Dockerhub or require customization. |
 
 #### Step 1: Clone Repository
 
@@ -124,7 +116,7 @@ cd teems-solver
 
 #### Step 2: Prepare HSL Libraries
 
-Copy your HSL library files into the `hsl/` directory:
+Copy your HSL library tarballs into the `hsl/` directory:
 
 ```bash
 cp /path/to/downloads/*.tar.gz hsl/
@@ -143,10 +135,11 @@ hsl/
 
 ##### Expedited Build (Recommended)
 
-Uses pre-built base image with all open-source dependencies:
+Pulls the pre-built base image (`matthewcantele/teems_base:latest`) from Dockerhub and adds HSL compilation and the final solver binary. The correct base image architecture (`amd64` or `arm64`) is selected automatically.
 
 ```bash
-docker build -t teems:latest \
+docker build --pull \
+  -t teems:latest \
   --build-arg PATH_HSL_MA48="hsl/ma48-2.2.0.tar.gz" \
   --build-arg PATH_HSL_MA51="hsl/ma51-1.0.0.tar.gz" \
   --build-arg PATH_HSL_MC66="hsl/hsl_mc66-2.2.1.tar.gz" \
@@ -159,7 +152,7 @@ docker build -t teems:latest \
 
 ##### Full Build
 
-Compiles all dependencies from source:
+Compiles all dependencies (MPICH, PETSc, HSL, solver) from source on a `debian:bookworm-slim` base:
 
 ```bash
 docker build -t teems:latest \
@@ -178,37 +171,22 @@ docker build -t teems:latest \
 After building, verify the image exists:
 
 ```bash
-docker image ls
+docker image ls | grep teems
 ```
 
 Expected output:
 ```
 REPOSITORY   TAG       IMAGE ID       CREATED          SIZE
-teems        latest    abc123def456   2 minutes ago    ~2GB
+teems        latest    abc123def456   2 minutes ago    ~175MB
 ```
 
-<!-- ## Usage
+## Usage
 
-The TEEMS solver is designed to work seamlessly with the TEEMS R package:
-
-### With TEEMS R Package (Recommended)
-
-```r
-library(teems)
-
-# The R package automatically interfaces with the Docker container
-result <- teems_solve(model_data)
-```
-
-### In-Situ Solve
-
-The TEEMS R package also supports in-container solving for enhanced performance: -->
+The TEEMS solver is designed to work seamlessly with the [teems R package](https://github.com/teemsphere/teems-R). Once the Docker image is built, the R package handles all solver invocation automatically via `ems_solve()`.
 
 ## Troubleshooting
 
-### Common Issues
-
-#### Docker Permission Denied (Linux)
+### Docker Permission Denied (Linux)
 
 **Error**: `permission denied while trying to connect to the Docker daemon socket`
 
@@ -218,11 +196,11 @@ sudo usermod -aG docker $USER
 newgrp docker
 ```
 
-#### Build Fails: HSL Libraries Not Found
+### Build Fails: HSL Libraries Not Found
 
 **Error**: `COPY failed: file not found`
 
-**Solution**: Verify HSL files are in the `hsl/` directory with exact filenames:
+**Solution**: Verify HSL tarballs are in the `hsl/` directory with the exact filenames passed to `--build-arg`:
 ```bash
 ls -l hsl/
 ```
@@ -232,50 +210,28 @@ ls -l hsl/
 If you encounter issues not covered here:
 
 1. Check [existing issues](https://github.com/matthewcantele/teems-solver/issues)
-2. Review Docker logs: `docker logs <container_id>`
-3. [Open a new issue](https://github.com/matthewcantele/teems-solver/issues/new) with:
-   - System information (`uname -a`, `docker --version`)
-   - Complete error message
-   - Steps to reproduce
-
-## Documentation
-
-Additional documentation is available:
-
-- [Base Layer Dockerfile](docker/base_layer/BASE_LAYER.md) - Details on the pre-built base image
-- [Full Build Dockerfile](docker/full_build/README.md) - Complete build from source documentation
-- [Expedited Build Dockerfile](docker/expedited_build/README.md) - Quick build documentation
+2. [Open a new issue](https://github.com/matthewcantele/teems-solver/issues/new) with system information (`uname -a`, `docker --version`) and the complete error message
 
 ## License
 
-This project is licensed under the **GNU Affero General Public License v3.0** - see the [LICENSE](LICENSE) file for details.
-
-### Component Licenses
-
-Individual components retain their original licenses:
+This project is licensed under the **GNU Affero General Public License v3.0** — see the [LICENSE](LICENSE) file for details.
 
 | Component | License |
 |-----------|---------|
 | TEEMS Solver | AGPL-3.0 |
 | PETSc | BSD 2-Clause |
-| OpenMPI | BSD 3-Clause |
 | MPICH | Custom Open Source |
 | HSL Libraries | (user must obtain) |
 
 ## Code Authorship
 
-This work represents years of collaborative development:
-
 | Component | Author(s) |
 |-----------|-----------|
-| C source code (`src/`) | Tom Kompas, Ha Van Pham |
+| Source code (`src/`) | Tom Kompas, Ha Van Pham, Matthew Cantele |
 | Docker scripts | Matthew Cantele |
-| Build system | Matthew Cantele |
 
 ## Contact
 
 - **Project Maintainer**: [Matthew Cantele](mailto:matthew.cantele@protonmail.com)
 - **Project Homepage**: [https://github.com/matthewcantele/teems-solver](https://github.com/matthewcantele/teems-solver)
 - **Bug Reports**: [https://github.com/matthewcantele/teems-solver/issues](https://github.com/matthewcantele/teems-solver/issues)
-
-**Note**: This solver is actively maintained. For the latest updates and releases, watch this repository or check the [releases page](https://github.com/matthewcantele/teems-solver/releases).

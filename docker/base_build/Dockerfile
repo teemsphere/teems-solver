@@ -1,19 +1,18 @@
-FROM ubuntu:20.04
+FROM debian:bookworm-slim
 
 LABEL org.opencontainers.image.name="TEEMS solver base layer Dockerfile"
-LABEL org.opencontainers.image.version="0.92"
-LABEL org.opencontainers.image.description="Base Layer Docker build for TEEMS solver"
+LABEL org.opencontainers.image.version="1.0.0"
+LABEL org.opencontainers.image.description="Base layer Docker build for TEEMS solver (open-source components)"
 LABEL org.opencontainers.image.author="Matthew Cantele <matthew.cantele@protonmail.com>"
 LABEL org.opencontainers.image.maintainer="Matthew Cantele <matthew.cantele@protonmail.com>"
 LABEL org.opencontainers.image.source="https://github.com/matthewcantele/teems-solver"
-LABEL org.opencontainers.image.licenses="GPLv3.0"
+LABEL org.opencontainers.image.licenses="AGPL-3.0"
 
+ARG TARGETARCH
 ARG BUILD_DIR=/opt/teems-solver
-ARG OPENMPI_VERSION=5.0.7
-ARG OPENMPI_BASE_VERSION=5.0
-ARG MPICH_VERSION=4.3.0
+ARG MPICH_VERSION=5.0.1
 ARG PETSC_ARCH=native
-ARG PETSC_VERSION=v3.24.4
+ARG PETSC_VERSION=v3.25.0
 ARG TEEMS_TMP=/tmp/teems
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -31,28 +30,34 @@ RUN echo 'APT::Install-Suggests "0";' >> /etc/apt/apt.conf.d/00-docker \
         build-essential \
         gfortran \
         wget \
+        ca-certificates \
         libopenblas-dev \
         git \
         python3 \
-        python3-pip \
-        python3-distutils \
-        python3-setuptools \
-        tzdata \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* \
-    # OPENMPI
-    && mkdir ${TEEMS_TMP} \
-    && cd ${TEEMS_TMP} \
-    && mkdir openmpi \
-    && cd openmpi \
-    && wget https://download.open-mpi.org/release/open-mpi/v${OPENMPI_BASE_VERSION}/openmpi-${OPENMPI_VERSION}.tar.gz \
-    && tar xfz openmpi-${OPENMPI_VERSION}.tar.gz --strip-components=1 \
-    && mkdir -p ${BUILD_DIR}/LICENSES/openmpi \
-    && cp ${TEEMS_TMP}/openmpi/LICENSE ${BUILD_DIR}/LICENSES/openmpi \
-    && mkdir -p ${BUILD_DIR}/lib/mpi \
-    && ./configure --prefix=${BUILD_DIR}/lib/mpi \
-    && make all install \
+    && ARCH="${TARGETARCH:-}" \
+    && if [ -z "$ARCH" ]; then \
+         case "$(uname -m)" in \
+           x86_64)        ARCH=amd64   ;; \
+           aarch64|arm64) ARCH=arm64   ;; \
+           armv7l)        ARCH=arm     ;; \
+           ppc64le)       ARCH=ppc64le ;; \
+           s390x)         ARCH=s390x   ;; \
+           *)             ARCH=unknown ;; \
+         esac; \
+       fi \
+    && case "$ARCH" in \
+         amd64)   OPT_FLAGS="-Ofast -march=native -mtune=native" ;; \
+         arm64)   OPT_FLAGS="-Ofast -march=armv8-a"              ;; \
+         arm)     OPT_FLAGS="-Ofast -march=armv7-a -mfpu=neon"   ;; \
+         ppc64le) OPT_FLAGS="-Ofast -mcpu=powerpc64le"           ;; \
+         s390x)   OPT_FLAGS="-Ofast"                             ;; \
+         *)       OPT_FLAGS="-O2"                                ;; \
+       esac \
+    && BLAS_LIB=$(find /usr/lib/$(gcc -print-multiarch) -name "libopenblas.so" | head -1) \
     # MPICH
+    && mkdir -p ${TEEMS_TMP} \
     && cd ${TEEMS_TMP} \
     && mkdir mpich \
     && cd mpich \
@@ -61,24 +66,29 @@ RUN echo 'APT::Install-Suggests "0";' >> /etc/apt/apt.conf.d/00-docker \
     && ./configure --prefix=${BUILD_DIR}/lib/mpi \
     && make \
     && make install \
-    # PETSC
+    # PETSc
     && cd ${BUILD_DIR}/lib \
     && git clone -b ${PETSC_VERSION} https://gitlab.com/petsc/petsc.git petsc \
     && cd petsc \
-    && mkdir ${BUILD_DIR}/LICENSES/petsc \
+    && mkdir -p ${BUILD_DIR}/LICENSES/petsc \
     && cp ${BUILD_DIR}/lib/petsc/LICENSE ${BUILD_DIR}/LICENSES/petsc \
-    && ldconfig \
-    && python3 ./config/configure.py PETSC_ARCH=${PETSC_ARCH} PETSC_DIR=$PWD --with-debugging=0 --with-mpi-dir=${BUILD_DIR}/lib/mpi --with-afterimage COPTFLAGS="-Ofast -march=native -mtune=native" CXXOPTFLAGS="-Ofast -march=native -mtune=native" FOPTFLAGS="-Ofast -march=native -mtune=native" --with-shared-libraries=0 --with-openmp --with-threadsafety --with-log=0 --with-x=0 --force \
+    && python3 ./config/configure.py \
+        PETSC_ARCH=${PETSC_ARCH} \
+        PETSC_DIR=$PWD \
+        --with-debugging=0 \
+        --with-mpi-dir=${BUILD_DIR}/lib/mpi \
+        COPTFLAGS="$OPT_FLAGS" \
+        CXXOPTFLAGS="$OPT_FLAGS" \
+        FOPTFLAGS="$OPT_FLAGS" \
+        --with-blas-lib="$BLAS_LIB" \
+        --with-lapack-lib="$BLAS_LIB" \
+        --with-shared-libraries=0 \
+        --with-openmp \
+        --with-threadsafety \
+        --with-log=0 \
+        --with-x=0 \
+        --force \
     && make PETSC_DIR=${PWD} PETSC_ARCH=${PETSC_ARCH} all \
-    # HSL
-    && mkdir -p ${BUILD_DIR}/LICENSES/hsl \
-    && mkdir ${BUILD_DIR}/lib/ma48 \
-    && mkdir ${BUILD_DIR}/lib/ma51 \
-    && mkdir ${BUILD_DIR}/lib/mc66 \
-    && mkdir ${BUILD_DIR}/lib/mp48 \
-    # cleanup
-    && rm -rf ${TEEMS_TMP} \
-    && apt-get autoremove -y \
-    && apt-get autoclean
+    && rm -rf ${TEEMS_TMP}
 
 CMD ["/bin/bash"]

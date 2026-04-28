@@ -10,8 +10,9 @@ MPICH_DIR    = $(BUILD_DIR)/lib/mpi
 FC          = $(MPICH_DIR)/bin/mpif90 -fopenmp
 F77          = $(MPICH_DIR)/bin/mpif77 -fopenmp
 F77FLAGS   = -I. -I/usr/local/include
-CFLAGS    = -I. -I${PETSC_DIR}/native/include -I ${PETSC_DIR}/include -fopenmp
-FCFLAGS     =
+CFLAGS    = -I. -I${PETSC_DIR}/native/include -I ${PETSC_DIR}/include -fopenmp -fcommon
+FCFLAGS     = -fallow-argument-mismatch
+FFLAGS      = -fallow-argument-mismatch
 LDFLAGS     = -fopenmp
 
 LIBS        =  ${PETSC_KSP_LIB} $(BUILD_DIR)/lib/ma48/src/.libs/libma48.so $(BUILD_DIR)/lib/ma51/src/.libs/libma51.so
