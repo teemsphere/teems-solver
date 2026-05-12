@@ -4,7 +4,7 @@
 [![Version](https://img.shields.io/badge/version-1.0.0-green.svg)](https://github.com/matthewcantele/teems-solver/releases)
 [![Docker](https://img.shields.io/badge/docker-required-2496ED.svg)](https://www.docker.com/)
 
-High-performance optimization solver for the TEEMS (Trade and Environment Equilibrium Modelling System) R package. Built on PETSc with MPI parallelization and HSL sparse linear algebra libraries.
+High-performance optimization solver for the TEEMS (Trade and Environment Equilibrium Modeling System) R package. Built on PETSc with MPI parallelization and HSL sparse linear algebra libraries.
 
 ## Overview
 
@@ -63,10 +63,10 @@ Linux users **must** configure Docker to run without `sudo`:
 # Clone repository
 git clone --depth 1 https://github.com/matthewcantele/teems-solver.git
 cd teems-solver
+# Copy HSL tarballs into the empty hsl/ directory
+```
 
-# Copy HSL tarballs into the hsl/ directory
-cp /path/to/your/hsl/*.tar.gz hsl/
-
+```bash
 # Expedited build (~5 minutes)
 docker build --pull \
   -t teems:latest \
@@ -116,11 +116,7 @@ cd teems-solver
 
 #### Step 2: Prepare HSL Libraries
 
-Copy your HSL library tarballs into the `hsl/` directory:
-
-```bash
-cp /path/to/downloads/*.tar.gz hsl/
-```
+Copy your HSL library tarballs into the `hsl/` directory.
 
 The `hsl/` directory should contain:
 ```
