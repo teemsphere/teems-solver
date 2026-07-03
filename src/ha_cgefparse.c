@@ -1,19 +1,14 @@
-//#include <ha_cgefparse.h>
-//#include <ha_cgetab.h>
 #include <ha_cgeglobal.h>
 int ha_chrfrall(char *line, int finditem, int replitem)
 {
   long int i=0;
   while (line[i]!='\0')
   {
-    //printf("i %d\n",i);
     if (line[i]==finditem) {
-      //printf("find %d repl %d\n",finditem,replitem);
       line[i]=replitem;
     }
     i++;
   }
-  //printf("i %ld\n",i);
   return 0;
 }
 
@@ -99,15 +94,12 @@ char* ha_cgeeqfind(char *line, int finditem)
   for (i=count1-1; i>-1; i--)
   {
     if(line[i]==finditem){
-      //printf("i %d\n",i);
       j1=0;j2=0;
       for(j=1;j<count1-i;j++){
         if(line[i+j]==')')j1++;
         if(line[i+j]=='(')j2++;
       }
-      //printf("i %d j1 %d j2 %d\n",i,j1,j2);
       if(j1==j2){
-        //printf("i %d\n",i);
         return &line[i];
       }
     }

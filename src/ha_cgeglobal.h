@@ -44,21 +44,8 @@ typedef long int uvadd;
 typedef int uvaddshort;//relax if nvarele greater than 2 billions
 typedef long int forint;
 typedef float ha_floattype;
-//typedef int utlin;
-//typedef int svdim;
-//typedef long int svadd;
-//typedef int stlin;
-//typedef long int uvar;
 
 //thu
-//typedef struct
-//{
-//    char varname[NAMESIZE];
-//    char varindex[NAMESIZE];
-//    char varset[NAMESIZE];
-//    char varpos[NAMESIZE];
-//    ha_cgetype varval;
-//} ha_cgevarname;
 
 //ha_cgeiof.c
 typedef struct
@@ -75,7 +62,6 @@ typedef struct
 } ha_cgemvar1 ;
 int ha_cgermvar1(char *varname, char *filename,uvdim d1, ha_cgemvar1 *record);
 int ha_cgerdvar1(char *varname, char *filename,uvdim *vsize, char *longname,uvdim *d1);
-//int ha_cgewmvar1(char *vname, char *longname, char *fname, char *wmode, int rsize, int vsize, int d1, ha_cgemvar1 *record);
 int hcge_rcmd(char *filename, int niodata, hcge_iodata *iodata, char *tabfile, char *closure, char *shock);
 int hcge_wtab(char *filename, char *newtabfile);
 int hcge_rsetname(char *filename, char *varname, int indx, char *setname);
@@ -84,28 +70,20 @@ int hcge_rsetname(char *filename, char *varname, int indx, char *setname);
 
 typedef struct
 {
-  //char varname[NAMESIZE];
   ha_floattype varval;
 } ha_cgesumele ;
 typedef struct
 {
-  //char varname[NAMESIZE];
   ha_floattype varval;
   ha_floattype var0;
-  //ha_cgetype varchange;
   ha_floattype csolpupd;//cursol;//In stochastic case, with plus var, var0 holds x value.
-  //ha_floattype pastupd;
 } ha_cgevar ;
 char* ha_revstrpbrk(char *line, char *finditems);
 int ha_cgerevfind(char *line, char *finditem);
 int ha_cgenchf(char *line, int finditem);
-//int ha_cgefpmul(char *fomulain, ha_cgevar *record, int sofrecord, ha_cgevar *varpar, int npar, ha_cgevar *varpow, int npow, ha_cgevar *varmul, int nmul);
 int ha_cgenfind(char *line, char *finditem);
 char* ha_cgeeqfind(char *line, int finditem);
 bool intreadCSV(char *fileName,int* vec, int vecCol);
-//int ha_cgefpdiv(char *fomulain, ha_cgevar *record, int sofrecord, ha_cgevar *varpar, int npar, ha_cgevar *varpow, int npow, ha_cgevar *varmul, int nmul, ha_cgevar *vardiv, int ndiv);
-//int ha_cgefpplu(char *fomulain, ha_cgevar *record, int sofrecord, ha_cgevar *varpar, int npar, ha_cgevar *varpow, int npow, ha_cgevar *varmul, int nmul, ha_cgevar *varplu, int nplu);
-//int ha_cgefpmin(char *fomulain, ha_cgevar *record, int sofrecord, ha_cgevar *varpar, int npar, ha_cgevar *varpow, int npow, ha_cgevar *varmul, int nmul, ha_cgevar *varplu, int nplu, ha_cgevar *varmin, int nmin);
 
 //ha_cgetab.c
 
@@ -118,8 +96,6 @@ typedef struct
   uvadd begadd;
   uvdim size;
   uvdim subsetid[MAXSUPSET];//Supersetid to be more precised
-  //char supersetname[MAXSUPSET][NAMESIZE];
-  //uvdim supersetsize[MAXSUPSET];
   bool intertemp;
   int intsup;
   bool regional;
@@ -136,12 +112,8 @@ typedef struct
   char cofname[NAMESIZE];
   uvadd begadd;
   uvdim size;
-  //uvdim dims[MAXVARDIM];//dimension size
-  //uvadd setbegadd;
   uvadd setid[MAXVARDIM];
-  //uvadd setbegadd1[MAXVARDIM];
   uvadd antidims[MAXVARDIM];
-  //char dimsets[MAXVARDIM][NAMESIZE];
   uvadd matsize;
   bool level_par;
   bool change_real;
@@ -153,42 +125,24 @@ typedef struct
 typedef struct
 {
   char sumname[NAMESIZE];
-  //uvdim sumsize;
   uvadd summatsize;
-  //char sumset[NAMESIZE];
   char sumindx[NAMESIZE];
-  //uvdim sumsubsetid;
-  //uvdim sumsupsetsize;
   uvdim size;
   uvadd begadd;
-  //uvadd ssetbegadd;
   uvadd sumsetid;
   char dimnames[MAXVARDIM][NAMESIZE];
   uvadd setid[MAXVARDIM];
-  //char dimsets[MAXVARDIM][NAMESIZE];
-  //uvdim dims[MAXVARDIM];
-  //uvadd dimssetbegadd[MAXVARDIM];
-  //uvdim subsetid[MAXVARDIM][MAXSUPSET];
-  //uvdim supsetsize[MAXVARDIM];
   uvadd antidims[MAXVARDIM];
 } hcge_sumcof ;
 
 typedef struct
 {
-  //char cofname[NAMESIZE];
   ha_floattype cofval;
 } ha_cgecofele ;
 
-//typedef struct
-//{
-//  long int row;
-//  long int col;
-//  ha_cgetype mval;
-//} ha_cgespamat ;
 
 typedef struct
 {
-  //char ExoName[NAMESIZE];
   uvaddshort ExoIndx;
   bool ShockId;//1 exo
   ha_floattype ShockVal;
@@ -196,23 +150,11 @@ typedef struct
 
 typedef struct
 {
-  //char arSet[NAMESIZE];
   char arIndx[NAMESIZE];
   uvadd setid;
   uvdim indx;
-  //uvdim SetSize;
-  //uvadd SetBegAdd;
-  //uvdim SuperSetSize;
-  //uvdim subsetid[MAXSUPSET];
 } ha_cgesetindx ;
 
-//typedef struct
-//{
-//  char SetIndxName[NAMESIZE];
-//  uvadd SetBegAdd;
-//  uvdim SetSize;
-//  uvdim SetIndxNum;
-//} ha_cgesumindx ;
 
 typedef struct
 {
@@ -224,14 +166,6 @@ typedef struct
   uvdim dimindx[MAXVARDIM];
 } hcge_linvars ;
 
-//typedef struct
-//{
-//  uvadd begadd;
-//  uvdim vartype;
-//  uvdim size;
-//  uvadd antidims[MAXVARDIM];
-//  uvdim arSet[MAXVARDIM];
-//} hcge_cvar ;
 int ha_csumindx(char *formulain);
 int hcge_wvar(char *filename, char *newtabfile,hcge_cof *ha_var,uvadd nvar);
 
@@ -260,55 +194,43 @@ uvadd hcge_rexo(char *fname, char *commsyntax,ha_cgeexovar *ha_cgeshock, hcge_co
 uvadd hcge_rshock(char *fname, char *commsyntax,ha_cgeexovar *ha_cgeshock,uvadd nvarele, hcge_cof *ha_var,uvadd nvar,ha_cgeset *ha_set,uvdim nset, ha_cgesetele *ha_setele,uvdim subints);
 uvadd hcge_rcof(char *fname, char *commsyntax, hcge_cof *record, uvadd ncof, ha_cgeset *ha_set,uvadd nset);
 int hcge_rcofele(hcge_cof *ha_cof,uvadd ncof, ha_cgeset *ha_set,uvdim nset, ha_cgecofele *ha_cofele);
-//int hcge_rsumele(hcge_sumcof *ha_cof,uvadd ncof, ha_cgeset *ha_set,uvdim nset, ha_cgesetele *ha_setele,ha_cgesumele *ha_cofele);
-//int hcge_mrsumele(hcge_sumcof *ha_cof, long int ncof, ha_cgeset *ha_set, int nset, ha_cgesetele *ha_setele,ha_cgevar *ha_cofele);
 uvadd hcge_readff(char *fname, int niodata, hcge_iodata *iodata, char *commsyntax,ha_cgeset *ha_set,uvdim nset, ha_cgesetele *ha_setele,hcge_cof *ha_cof,uvadd ncof, ha_cgecofele *ha_cofele,uvadd ncofele,hcge_cof *ha_var,uvadd nvar, ha_cgecofele *ha_varele,uvadd nvarele);
 int hcge_repllin(char *formulain,int linindx);
 int hcge_rlinzero(char *formulain,int linindx);
 int hcge_nsum(char *formulain, char *commsyntax);
-//int hcge_rsum(char *formulain, char *commsyntax, hcge_sumcof *sum_cof);
 uvadd hcge_dsum(char *formulain, char *commsyntax, hcge_sumcof *sum_cof,ha_cgesetindx *arSet,ha_cgeset *ha_set,uvdim nset,uvdim fdim,int j);
 int ha_cgecutsum(char *formula);
 int ha_cgerecovar(char *fomulain);
 uvadd ha_cgersubset(char *fname, ha_cgesetele *ha_setele, ha_cgeset *ha_set,uvdim nset);
 char *ha_cgefrchr(char *line, int finditem, int replitem);
-//int ha_spadd_size(int *irnA, int *jcnA, int *irnB, int *jcnB,int nrow,int *irnC);
-//int ha_spadd_oper(int *irnA, int *jcnA, ha_cgetype *valsA, int *irnB, int *jcnB, ha_cgetype *valsB,int nrow,int *irnC, int *jcnC,ha_cgetype *valsC);
 //thu
 //Moi
 
 typedef struct
 {
   uvdim Oper;//0 none; 1 *;2 /;3 +; 4 -;5 ^;71 if =;72 if >; 73 if <; 74 if <>; 75 if <=; 76 if >=;
-  //int TmpVarType;//0 temvar;1 par; 2 number
   char TmpVarName[NAMESIZE];
   ha_floattype TmpVarVal;
   uvdim Var1Type;//0 var cof;1 lin; 2 sum;3 lin;4 calvars; 5 number; 6 varchange; 41 id01, 42 abs, 43 loge
   uvadd Var1BegAdd;
   int Var1leadlag[MAXVARDIM];
-  //uvadd Var1Size;
   uvadd Var1SupSet[MAXVARDIM];
   uvadd Var1SSIndx[MAXVARDIM];
-  //uvadd Var1SetAdd[MAXVARDIM];
   uvadd Var1ADims[MAXVARDIM];
   ha_floattype Var1Val;
   uvdim Var2Type;
   uvadd Var2BegAdd;
   int Var2leadlag[MAXVARDIM];
-  //uvadd Var2Size;
   uvadd Var2SupSet[MAXVARDIM];
   uvadd Var2SSIndx[MAXVARDIM];
-  //uvadd Var2SetAdd[MAXVARDIM];
   uvadd Var2ADims[MAXVARDIM];
   ha_floattype Var2Val;
 
   uvdim Var3Type;
   uvadd Var3BegAdd;
   int Var3leadlag[MAXVARDIM];
-  //uvadd Var2Size;
   uvadd Var3SupSet[MAXVARDIM];
   uvadd Var3SSIndx[MAXVARDIM];
-  //uvadd Var2SetAdd[MAXVARDIM];
   uvadd Var3ADims[MAXVARDIM];
   ha_floattype Var3Val;
 } hcge_calvars ;
@@ -351,10 +273,7 @@ int HaNDBBDParSol(Mat A, Vec b, ha_cgetype *x1, uvadd VecSize, PetscInt mpisize,
 int HaReduce(ha_cgetype *vecbivi,forint vecbivisize,PetscInt mpisize,PetscInt rank,PetscInt targetrank);
 int HaReduceNoComp(ha_cgetype *vecbivi,forint vecbivisize,PetscInt mpisize,PetscInt rank,PetscInt targetrank);
 int hcge_wdata(char *filename, char *newdatlogname, char *newdatfile,ha_cgeset *ha_set,uvdim nset, ha_cgesetele *ha_setele,hcge_cof *ha_cof,uvadd ncof,uvadd ncofele,hcge_cof *ha_var,uvadd nvar,uvadd nvarele, ha_cgevar *ha_cofvar);
-//int HaMatGetSubMats(Mat A,uvadd indxbsize,PetscInt *indicesB,uvadd *ha_ndblocks,uvadd *begblock, uvadd *countvarintra1, uvadd *ha_cols,PetscInt mpisize,PetscInt rank,forint nmatin,PetscInt origrank,int **nzbs,int **bns,int **bms,int **irnbs,int **jcnbs,PetscScalar **valbs);
 
-////Temp
-//ha_cgetype ha_newfpcalshow(ha_cgevar *record,ha_cgeset *ha_set,ha_cgesetele *ha_setele,ha_cgesumele *ha_sumele,hcge_calvars *ha_calvar,int ha_calvarsize,ha_cgesetindx *arSet,uvdim fdim, ha_cgetype zerodivide,int show);
 uvadd hnew_biupd(PetscInt rank,char *fname,ha_cgeset *ha_set,uvdim nset, ha_cgesetele *ha_setele, hcge_cof *ha_cof,uvadd ncof,hcge_cof *ha_var,uvadd nvar, ha_cgevar *ha_cofvar,uvadd ncofvar,uvadd ncofele,ha_cgeexovar *ha_cgeshock,uvadd nvarele,int laA,uvdim subints,bool IsIni,int IsSplint,int nsteps);
 bool spline(ha_cgetype* y,ha_cgetype* x,ha_cgetype sx0,ha_cgetype sxn,int size,ha_cgetype* w,int laA);
 
