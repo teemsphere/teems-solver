@@ -1237,7 +1237,6 @@ int main(int argc,char **args) {
   forint tindx1;
   printf("rank %d ncof %ld\n",rank,ncof);
   
-  if(solmethod==11)Johansen(nohsl,VecSize,A,dnz,dnnz,onz,onnz,B,dnzB,dnnzB,onzB,onnzB,vecb,vece,rank,rank_hsl,mpisize,tabfile,commsyntax,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,&ha_cofvar,ncofele+nvarele,ncofele,nvarele,&ha_cgeshock,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,ha_eqadd,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,presol,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,&xcf);
 
   if(solmethod==10) { //Johansen
 
@@ -1612,7 +1611,6 @@ int main(int argc,char **args) {
   ha_cgetype vpercents=1.0,perprecis=0;
   FILE* solution;
   int maxsol=3;
-    if(solmethod==0)ModMidPoint(nohsl,VecSize,&A,dnz,dnnz,onz,onnz,&B,dnzB,dnnzB,onzB,onnzB,&vecb,&vece,rank,rank_hsl,mpisize,tabfile,commsyntax,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,&ha_cofvar,ncofele+nvarele,ncofele,nvarele,&ha_cgeshock,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,ha_eqadd,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,presol,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,subints,fcomm,&xcf,0);
 
     if(solmethod==1) { //Modified midpoint Pearson 1991
               uvadd *counteqs= (uvadd *) calloc (ndblock+1,sizeof(uvadd));
