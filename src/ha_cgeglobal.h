@@ -263,7 +263,6 @@ int hcge_rcofele(hcge_cof *ha_cof,uvadd ncof, ha_cgeset *ha_set,uvdim nset, ha_c
 //int hcge_rsumele(hcge_sumcof *ha_cof,uvadd ncof, ha_cgeset *ha_set,uvdim nset, ha_cgesetele *ha_setele,ha_cgesumele *ha_cofele);
 //int hcge_mrsumele(hcge_sumcof *ha_cof, long int ncof, ha_cgeset *ha_set, int nset, ha_cgesetele *ha_setele,ha_cgevar *ha_cofele);
 uvadd hcge_readff(char *fname, int niodata, hcge_iodata *iodata, char *commsyntax,ha_cgeset *ha_set,uvdim nset, ha_cgesetele *ha_setele,hcge_cof *ha_cof,uvadd ncof, ha_cgecofele *ha_cofele,uvadd ncofele,hcge_cof *ha_var,uvadd nvar, ha_cgecofele *ha_varele,uvadd nvarele);
-uvadd rdatconv(hcge_cof *ha_var,uvadd varindx,uvadd loops,ha_cgeset *ha_set);
 int hcge_repllin(char *formulain,int linindx);
 int hcge_rlinzero(char *formulain,int linindx);
 int hcge_nsum(char *formulain, char *commsyntax);
@@ -320,17 +319,14 @@ int hnew_intrpl(char *line);
 int hnew_arset(char *p,int *leadlag);
 int ha_newfparse(char *fomulain, ha_cgeset *ha_set,hcge_cof *ha_cof, uvadd ncof, hcge_cof *ha_var,uvadd nvar,uvadd ncofele,hcge_sumcof *sum_cof,uvdim totalsum,hcge_calvars *ha_calvar,uvdim *ha_calvarsize,ha_cgesetindx *arSet,uvdim fdim);
 ha_cgetype ha_newfpcal(ha_cgevar *record, ha_cgeset *ha_set,ha_cgesetele *ha_setele,ha_cgesumele *ha_sumele,hcge_calvars *ha_calvar,int ha_calvarsize,ha_cgesetindx *arSet,uvdim fdim, ha_cgetype zerodivide);
-ha_cgetype ha_newfpcal01(ha_cgevar *record, ha_cgeset *ha_set,ha_cgesetele *ha_setele,ha_cgesumele *ha_sumele,hcge_calvars *ha_calvar,int ha_calvarsize,ha_cgesetindx *arSet,uvdim fdim, ha_cgetype zerodivide);
 int ha_newfppow(char *fomulain, ha_cgeset *ha_set,int npow,int ipar,hcge_cof *ha_cof,uvadd ncof, hcge_cof *ha_var,uvadd nvar,uvadd ncofele,hcge_sumcof *sum_cof,int totalsum,hcge_calvars *ha_calvar,int *ha_calvarsize,ha_cgesetindx *arSet,uvdim fdim);
 int ha_newfpmuldiv(char *fomulain, ha_cgeset *ha_set,int nmul,int ipar,hcge_cof *ha_cof,uvadd ncof, hcge_cof *ha_var,uvadd nvar,uvadd ncofele,hcge_sumcof *sum_cof,int totalsum,hcge_calvars *ha_calvar,int *ha_calvarsize,ha_cgesetindx *arSet,uvdim fdim);
 int ha_newfpplumin(char *fomulain, ha_cgeset *ha_set,int nplu,int ipar,hcge_cof *ha_cof,uvadd ncof, hcge_cof *ha_var,uvadd nvar,uvadd ncofele,hcge_sumcof *sum_cof,int totalsum,hcge_calvars *ha_calvar,int *ha_calvarsize,ha_cgesetindx *arSet,uvdim fdim);
-int ha_newfpplumin01(char *fomulain, ha_cgeset *ha_set,int nplu,int ipar,hcge_cof *ha_cof,uvadd ncof, hcge_cof *ha_var,uvadd nvar,uvadd ncofele,hcge_sumcof *sum_cof,int totalsum,hcge_calvars *ha_calvar,int *ha_calvarsize,ha_cgesetindx *arSet,uvdim fdim);
 int ha_newfpif(char *fomulain, ha_cgeset *ha_set,int nif,int ipar,hcge_cof *ha_cof,uvadd ncof, hcge_cof *ha_var,uvadd nvar,uvadd ncofele,hcge_sumcof *sum_cof,int totalsum,hcge_calvars *ha_calvar,int *ha_calvarsize,ha_cgesetindx *arSet,uvdim fdim);
 uvadd hnew_calcff(char *fname, char *commsyntax,ha_cgeset *ha_set,uvdim nset, ha_cgesetele *ha_setele, hcge_cof *ha_cof,uvadd ncof,hcge_cof *ha_var,uvadd nvar, ha_cgevar *ha_cofvar,uvadd ncofvar,uvadd ncofele,bool IsIni);
 int hnew_calsum(char *formulain, char *commsyntax,ha_cgeset *ha_set,uvdim nset, ha_cgesetele *ha_setele,ha_cgevar *ha_cofvar,uvadd ncofvar,uvadd ncofele, hcge_cof *ha_cof,uvadd ncof, hcge_cof *ha_var,uvadd nvar,hcge_sumcof *sum_cof,int totalsum,ha_cgesumele *ha_sumele,uvadd nsumele,hcge_calvars *ha_calvar,ha_cgesetindx *arSet1,uvdim fdim,int *sumindx,int j, ha_cgetype zerodivide);
 uvadd hnew_update(char *fname,ha_cgeset *ha_set,uvdim nset, ha_cgesetele *ha_setele, hcge_cof *ha_cof,uvadd ncof,hcge_cof *ha_var,uvadd nvar, ha_cgevar *ha_cofvar,uvadd ncofvar,uvadd ncofele);
 uvadd hnew_mupdate(char *fname,ha_cgeset *ha_set,uvdim nset, ha_cgesetele *ha_setele, hcge_cof *ha_cof,uvadd ncof,hcge_cof *ha_var,uvadd nvar, ha_cgevar *ha_cofvar,uvadd ncofvar,uvadd ncofele);
-uvadd hnew_graggupd(char *fname,ha_cgeset *ha_set,uvdim nset, ha_cgesetele *ha_setele, hcge_cof *ha_cof,uvadd ncof,hcge_cof *ha_var,uvadd nvar, ha_cgevar *ha_cofvar,uvadd ncofvar,uvadd ncofele);
 uvadd hnew_gupd(char *fname,ha_cgeset *ha_set,uvdim nset, ha_cgesetele *ha_setele, hcge_cof *ha_cof,uvadd ncof,hcge_cof *ha_var,uvadd nvar, ha_cgevar *ha_cofvar,uvadd ncofvar,uvadd ncofele);
 //lin
 
@@ -343,22 +339,17 @@ int NewMatreadele(char *fname, char *commsyntax,ha_cgeset *ha_set,uvdim nset,ha_
 int NewMatvarRead(char *fname, char *commsyntax,ha_cgeset *ha_set,uvdim nset,ha_cgesetele *ha_setele,hcge_cof *ha_cof,uvadd ncof,hcge_cof *ha_var,uvadd nvar,ha_cgevar *ha_cofvar,uvadd ncofvar,uvadd ncofele,ha_cgeexovar *ha_cgeshock,bool *var_inter,hcge_cof *ha_eq,bool *ha_eqint,uvdim *eq_orderintra,uvdim *eq_orderreg,uvadd allregset,uvadd alltimeset,uvdim *orderintra,uvdim *orderreg);
 int NestedMatvarRead(char *fname, char *commsyntax,ha_cgeset *ha_set,uvdim nset,ha_cgesetele *ha_setele,hcge_cof *ha_cof,uvadd ncof,hcge_cof *ha_var,uvadd nvar,ha_cgevar *ha_cofvar,uvadd ncofvar,uvadd ncofele,ha_cgeexovar *ha_cgeshock,bool *var_inter,hcge_cof *ha_eq,bool *ha_eqint,uvdim *eq_orderintra,uvdim *eq_orderreg,uvadd allregset,uvadd alltimeset,uvdim *orderintra,uvdim *orderreg);
 bool NDBBD_sol(PetscInt rank, int begmat,int nreg,int * insize,int insizes, Mat **submatCij,Mat **submatBij,ha_cgetype *b,ha_cgetype *sol,bool ifremove,char** fn01,char** fn02, char** fn03);
-bool NDBBD_sol_nread(PetscInt rank, int begmat,int nreg,int * insize,int insizes, Mat **submatCij,Mat **submatBij,ha_cgetype *b,ha_cgetype *sol,int** irnereg,int** keepreg,ha_cgetype** valereg,ha_cgetype *cntl,ha_cgetype *rinfo,ha_cgetype *error1,int *icntl,int *info,ha_cgetype *w,int *iw);
 bool NDBBD_sol_nread1(PetscInt rank, int begmat,int nreg,int * insize,int insizes, Mat **submatCij,Mat **submatBij,ha_cgetype *b,ha_cgetype *sol,int** irnereg,int** keepreg,ha_cgetype** valereg,ha_cgetype *cntl,ha_cgetype *rinfo,ha_cgetype *error1,int *icntl,int *info,ha_cgetype *w,int *iw,ha_cgetype *b02);
-uvadd hcge_req(char *fname, char *commsyntax, hcge_cof *record, uvadd ncof, ha_cgeset *ha_set,uvdim nset);
 
 int HaNDBBDMatOderPre(Mat A, uvadd VecSize, PetscInt mpisize, PetscInt rank, PetscInt Istart, PetscInt Iend,int nreg, int ntime, uvadd nvarele, uvadd *ha_eqadd,int *ha_rows,int *ha_cols, uvadd ndblock,int *ha_ndblocks, uvadd *countvarintra1, uvadd *counteq, uvadd *counteqnoadd,uvdim laA,uvdim laDi,ha_cgetype cntl6,PetscInt* ndbbdrank,PetscBool presol);
 int HaDBBDMatOder(Mat A, uvadd VecSize, PetscInt mpisize, PetscInt rank, PetscInt Istart, PetscInt Iend, uvadd nvarele, uvadd *ha_eqadd,int *ha_rows,int *ha_cols, uvadd ndblock,int *ha_ndblocks, uvadd *countvarintra1, uvadd *counteq, uvadd *counteqnoadd,uvdim laA,ha_cgetype cntl6);
 int HaDBBDMatOder1(Mat A, uvadd VecSize, PetscInt mpisize, PetscInt rank, PetscInt Istart, PetscInt Iend, uvadd nvarele, uvadd *ha_eqadd,int *ha_rows,int *ha_cols, uvadd ndblock,int *ha_ndblocks, uvadd *countvarintra1, uvadd *counteq, uvadd *counteqnoadd,uvdim laA,ha_cgetype cntl6);
-int HaDBBDSol(Mat A, Vec b, ha_cgetype *x1, uvadd VecSize, PetscInt mpisize, PetscInt rank, PetscInt Istart, PetscInt Iend,int *ha_rows,int *ha_cols, uvadd ndblock,int *ha_ndblocks, uvadd *countvarintra1, uvadd *counteq, uvadd *counteqnoadd,uvdim laA, uvdim laD);
 int HaDBBDParSol(Mat A, Vec b, ha_cgetype *x1, uvadd VecSize, PetscInt mpisize, PetscInt rank, PetscInt Istart, PetscInt Iend,int *ha_rows,int *ha_cols, uvadd ndblock,int *ha_ndblocks, uvadd *countvarintra1, uvadd *counteq, uvadd *counteqnoadd,uvdim laA,uvdim laD,PetscReal cntl3);//,bool iter
 int HaNDBBDMatOder(Mat A, uvadd VecSize, PetscInt mpisize, PetscInt rank, PetscInt Istart, PetscInt Iend,int nreg, int ntime, uvadd nvarele, uvadd *ha_eqadd,int *ha_rows,int *ha_cols, uvadd ndblock,int *ha_ndblocks, uvadd *countvarintra1, uvadd *counteq, uvadd *counteqnoadd,uvdim laA,uvdim laDi,ha_cgetype cntl6,PetscInt* ndbbdrank,PetscBool presol);
 int HaNDBBDParPre(Mat A, Vec b, ha_cgetype *x1, uvadd VecSize, PetscInt mpisize, PetscInt rank, PetscInt Istart, PetscInt Iend,int *ha_rows,int *ha_cols, uvadd ndblock,uvadd nreg,uvadd ntime,int *ha_ndblocks, uvadd *countvarintra1, uvadd *counteq, uvadd *counteqnoadd,uvdim laA,uvdim laDi,uvdim laD,PetscReal cntl3,PetscReal cntl6,PetscBool presol);//,bool iter
 int HaNDBBDParSol(Mat A, Vec b, ha_cgetype *x1, uvadd VecSize, PetscInt mpisize, PetscInt rank, PetscInt Istart, PetscInt Iend,int *ha_rows,int *ha_cols, uvadd ndblock,uvadd nreg,uvadd ntime,int *ha_ndblocks, uvadd *countvarintra1, uvadd *counteq, uvadd *counteqnoadd,uvdim laA,uvdim laDi,uvdim laD,PetscReal cntl3,PetscReal cntl6,PetscBool presol);//,bool iter
 int HaReduce(ha_cgetype *vecbivi,forint vecbivisize,PetscInt mpisize,PetscInt rank,PetscInt targetrank);
 int HaReduceNoComp(ha_cgetype *vecbivi,forint vecbivisize,PetscInt mpisize,PetscInt rank,PetscInt targetrank);
-int HaReducebivi(ha_cgetype *vecbivi,int *nz,int *biviindx1,int *bivinzrow,int *bivinzcol,int *bivinzrow0,int *bivinzcol0,int *bivinzrow1,int *bivinzcol1,int bivirowsize,int bivicolsize,PetscInt Dcolsize,PetscInt mpisize,PetscInt rank,PetscInt targetrank);
-int HaSpaVecAdd(ha_cgetype *vecbivi,int *biviindx,int *nz0,ha_cgetype *vecbivi0,int *biviindx0,int j2);
 int hcge_wdata(char *filename, char *newdatlogname, char *newdatfile,ha_cgeset *ha_set,uvdim nset, ha_cgesetele *ha_setele,hcge_cof *ha_cof,uvadd ncof,uvadd ncofele,hcge_cof *ha_var,uvadd nvar,uvadd nvarele, ha_cgevar *ha_cofvar);
 //int HaMatGetSubMats(Mat A,uvadd indxbsize,PetscInt *indicesB,uvadd *ha_ndblocks,uvadd *begblock, uvadd *countvarintra1, uvadd *ha_cols,PetscInt mpisize,PetscInt rank,forint nmatin,PetscInt origrank,int **nzbs,int **bns,int **bms,int **irnbs,int **jcnbs,PetscScalar **valbs);
 

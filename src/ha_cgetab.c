@@ -1565,32 +1565,6 @@ uvadd hcge_readff(char *fname, int niodata, hcge_iodata *iodata, char *commsynta
   return j;
 }
 
-uvadd rdatconv(hcge_cof *ha_var,uvadd varindx,uvadd loops,ha_cgeset *ha_set) {
-  uvadd dcount,dcount1[MAXVARDIM],bdcount1[MAXVARDIM],cdcount1[MAXVARDIM],l;//i,
-  if(ha_var[varindx].size<2) {
-    printf("Variable dimension should bigger than 1");
-    return -1;
-  }
-  for (dcount=0; dcount<ha_var[varindx].size; dcount++) {
-    dcount1[dcount]=(long int) loops/ha_set[ha_var[varindx].setid[dcount]].size;
-    loops=loops-dcount1[dcount]*ha_set[ha_var[varindx].setid[dcount]].size;
-    //printf("dc %d dims %d loops %d\n",dcount1[dcount],ha_var[varindx].dims[dcount],loops);
-  }
-  for (dcount=1; dcount<ha_var[varindx].size; dcount++) {
-    l=ha_var[varindx].size-dcount;
-    bdcount1[l]=dcount1[dcount];
-    cdcount1[l-2]=ha_set[ha_var[varindx].setid[l-1]].size;
-  }
-  bdcount1[0]=dcount1[ha_var[varindx].size-2];
-  bdcount1[1]=dcount1[ha_var[varindx].size-1];
-  cdcount1[ha_var[varindx].size-1]=1;
-  cdcount1[0]=ha_set[ha_var[varindx].setid[ha_var[varindx].size-1]].size;
-  l=0;
-  for (dcount=0; dcount<ha_var[varindx].size; dcount++) {
-    l=l+bdcount1[dcount]*cdcount1[dcount];
-  }
-  return l;
-}
 
 uvadd hcge_dsum(char *formulain, char *commsyntax, hcge_sumcof *sum_cof,ha_cgesetindx *arSet,ha_cgeset *ha_set,uvdim nset,uvdim fdim,int j) {
   char *readitem,*p,*p1,*p2,interchar2[TABREADLINE],argu[TABREADLINE];//,line5[TABREADLINE]
@@ -3191,53 +3165,6 @@ uvadd ha_cgeralltime(ha_cgeset *ha_set,uvdim nset) {
   }
 }
 
-uvadd hcge_req(char *fname, char *commsyntax, hcge_cof *record, uvadd ncof, ha_cgeset *ha_set,uvdim nset) {
-  FILE * filehandle;
-  char line[TABREADLINE]="\0",linecopy[TABREADLINE];
-  uvadd n,i,j=0,ncommsyntax,l;
-  char *readitem=NULL;
-  filehandle = fopen(fname,"r");
-
-  while (ha_cgertabl(commsyntax,filehandle,line,TABREADLINE)) {
-    if (strstr(line,"(default")==NULL) {
-      n=ha_cgenfind(line,"(all,");
-      //printf("n %d\n",n);
-      record[j].size=n;
-      if (n>0) {
-        readitem = strtok(line," ");
-        readitem = strtok(NULL,"(");
-        strcpy(record[j].cofname,readitem);
-        ncommsyntax=0;
-        while (record[j].cofname[ncommsyntax] != '\0') {
-          ncommsyntax++;
-        }
-        if(record[j].cofname[ncommsyntax-1]==' ') {
-          record[j].cofname[ncommsyntax-1]='\0';
-        }
-        for (i=0; i<n; i++) {
-          //if(i>0)readitem = strtok(NULL,"(");
-          readitem = strtok(NULL,",");
-          readitem = strtok(NULL,",");
-          readitem = strtok(NULL,")");
-          //printf("read %s j %d\n",readitem,j);
-          for(l=0; l<nset; l++)if(strcmp(ha_set[l].setname,readitem)==0) {
-              record[j].setid[i]=l;
-              break;
-            }
-        }
-      } else {
-        readitem = strtok(line," ");
-        readitem = strtok(NULL," ");
-        strcpy(record[j].cofname,readitem);
-        //record[j].size=0;
-        record[j].matsize=1;
-      }
-      j++;
-    }
-  }
-  fclose(filehandle);
-  return j;
-}
 
 uvadd hcge_rcof(char *fname, char *commsyntax, hcge_cof *record, uvadd ncof, ha_cgeset *ha_set,uvadd nset) {
   FILE * filehandle;
