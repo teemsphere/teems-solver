@@ -188,6 +188,41 @@ int main(int argc,char **args) {
   PetscOptionsGetInt(NULL,NULL,"-isLinux",&isLinux,NULL);/*For read and fread, slightly better performance for linux*/
   PetscOptionsGetInt(NULL,NULL,"-stoiter",&StoIter,NULL);
   isLinux=0;//permanently set to zero, errors in large system!!!!
+  {
+    /* Scratch directory for solver temp files: -tempdir option, else
+       TMPDIR, else the compiled-in default (/tmp/). Capped at 200
+       chars so appended file names always fit the 255/256-byte path
+       buffers used throughout the solver. */
+    char tmpopt[NAMESIZE];
+    PetscBool tmpflg=PETSC_FALSE;
+    PetscOptionsGetString(NULL,NULL,"-tempdir",tmpopt,NAMESIZE,&tmpflg);
+    if(!tmpflg) {
+      char *envtmp=getenv("TMPDIR");
+      if(envtmp!=NULL&&envtmp[0]!='\0') {
+        strncpy(tmpopt,envtmp,NAMESIZE-1);
+        tmpopt[NAMESIZE-1]='\0';
+        tmpflg=PETSC_TRUE;
+      }
+    }
+    if(tmpflg) {
+      size_t tlen=strlen(tmpopt);
+      if(tlen==0||tlen>200) {
+        if(rank==0)printf("Error!!! tempdir must be 1-200 characters: %s\n",tmpopt);
+        PetscFinalize();
+        return 1;
+      }
+      if(tmpopt[tlen-1]!='/') {
+        tmpopt[tlen]='/';
+        tmpopt[tlen+1]='\0';
+      }
+      strcpy(temdir,tmpopt);
+    }
+    if(access(temdir,W_OK)!=0) {
+      if(rank==0)printf("Error!!! tempdir is not a writable directory: %s\n",temdir);
+      PetscFinalize();
+      return 1;
+    }
+  }
   PetscInt *ndbbddrank1= (PetscInt *) calloc (ndbbdrank,sizeof(PetscInt));
   PetscOptionsGetString(NULL,NULL,"-nestfile",filename,TABREADLINE,&flg);
   if (!flg) {
