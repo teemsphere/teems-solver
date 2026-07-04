@@ -247,8 +247,7 @@ int ha_newfpplumin(char *fomulain, ha_cgeset *ha_set,int nplu,int ipar,hcge_cof 
 int ha_newfpif(char *fomulain, ha_cgeset *ha_set,int nif,int ipar,hcge_cof *ha_cof,uvadd ncof, hcge_cof *ha_var,uvadd nvar,uvadd ncofele,hcge_sumcof *sum_cof,int totalsum,hcge_calvars *ha_calvar,int *ha_calvarsize,ha_cgesetindx *arSet,uvdim fdim);
 uvadd hnew_calcff(char *fname, char *commsyntax,ha_cgeset *ha_set,uvdim nset, ha_cgesetele *ha_setele, hcge_cof *ha_cof,uvadd ncof,hcge_cof *ha_var,uvadd nvar, ha_cgevar *ha_cofvar,uvadd ncofvar,uvadd ncofele,bool IsIni);
 int hnew_calsum(char *formulain, char *commsyntax,ha_cgeset *ha_set,uvdim nset, ha_cgesetele *ha_setele,ha_cgevar *ha_cofvar,uvadd ncofvar,uvadd ncofele, hcge_cof *ha_cof,uvadd ncof, hcge_cof *ha_var,uvadd nvar,hcge_sumcof *sum_cof,int totalsum,ha_cgesumele *ha_sumele,uvadd nsumele,hcge_calvars *ha_calvar,ha_cgesetindx *arSet1,uvdim fdim,int *sumindx,int j, ha_cgetype zerodivide);
-uvadd hnew_update(char *fname,ha_cgeset *ha_set,uvdim nset, ha_cgesetele *ha_setele, hcge_cof *ha_cof,uvadd ncof,hcge_cof *ha_var,uvadd nvar, ha_cgevar *ha_cofvar,uvadd ncofvar,uvadd ncofele);
-uvadd hnew_mupdate(char *fname,ha_cgeset *ha_set,uvdim nset, ha_cgesetele *ha_setele, hcge_cof *ha_cof,uvadd ncof,hcge_cof *ha_var,uvadd nvar, ha_cgevar *ha_cofvar,uvadd ncofvar,uvadd ncofele);
+uvadd hnew_update(char *fname,ha_cgeset *ha_set,uvdim nset, ha_cgesetele *ha_setele, hcge_cof *ha_cof,uvadd ncof,hcge_cof *ha_var,uvadd nvar, ha_cgevar *ha_cofvar,uvadd ncofvar,uvadd ncofele,int midpoint);
 uvadd hnew_gupd(char *fname,ha_cgeset *ha_set,uvdim nset, ha_cgesetele *ha_setele, hcge_cof *ha_cof,uvadd ncof,hcge_cof *ha_var,uvadd nvar, ha_cgevar *ha_cofvar,uvadd ncofvar,uvadd ncofele);
 //lin
 

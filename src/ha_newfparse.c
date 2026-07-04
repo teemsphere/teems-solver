@@ -1846,302 +1846,11 @@ uvadd hnew_calcff(char *fname, char *commsyntax,ha_cgeset *ha_set,uvdim nset, ha
   return j;
 }
 
-uvadd hnew_update(char *fname,ha_cgeset *ha_set,uvdim nset, ha_cgesetele *ha_setele, hcge_cof *ha_cof,uvadd ncof,hcge_cof *ha_var,uvadd nvar, ha_cgevar *ha_cofvar,uvadd ncofvar,uvadd ncofele) {
-  FILE * filehandle;
-  char commsyntax[NAMESIZE],line[TABREADLINE],line1[TABREADLINE],line2[TABREADLINE],linecopy[TABREADLINE];
-  char vname[NAMESIZE],sumsyntax[NAMESIZE],argu[NAMESIZE];
-  char *readitem=NULL,*p=NULL;
-  uvadd i,i1,i3,i4,l,l2=0,j=0,nsumele,dcountdim1[4*MAXVARDIM],nloops;//m,
-  uvdim fdim,dcount,sup,varsupsetid[MAXVARDIM];
-  int ha_calvarsize=0,totalsum,sumcount=1,npow,nmul,ndiv,nplu,nmin,npar,sumindx;
-  bool IsChange=false,IsExplicit=false;
-  ha_cgetype zerodivide=0,temp1;
-  uvadd varantidim[MAXVARDIM],varsubset[MAXVARDIM],vararset[MAXVARDIM];
-  ha_cgesetindx *arSet1=NULL;
-  hcge_calvars *ha_calvar1= NULL;
-  strcpy(commsyntax,"update");
-  filehandle = fopen(fname,"r");
-  while (ha_cgertabl1(commsyntax,filehandle,line,ha_cofvar,ha_cof,ncof,&zerodivide,TABREADLINE)) {
-    IsChange=false;
-    IsExplicit=false;
-    if(strstr(line, "(change)")!=NULL) {
-      IsChange=true;
-      ha_cgefrstr1(line, "(change)", "");
-    }
-    if(strstr(line, "(explicit)")!=NULL) {
-      IsExplicit=true;
-      ha_cgefrstr1(line, "(explicit)", "");
-    }
-    ha_cgefrstr1(line, commsyntax, "");
-    while (ha_cgefrstr(line," ", ""));
-    while (ha_cgefrchr(line, '[', '('));
-    while (ha_cgefrchr(line, ']', ')'));
-    while (ha_cgefrchr(line, '{', '('));
-    while (ha_cgefrchr(line, '}', ')'));
-    strcpy(linecopy,line);
-    readitem = strtok(line,"=");
-    fdim=ha_cgenchf(readitem, '(');
-    if (fdim==1) {
-      fdim=fdim+1;
-    }
-    ha_cgesetindx *arSet= (ha_cgesetindx *) calloc (fdim+1,sizeof(ha_cgesetindx));
-
-    nloops=1;
-    if (fdim==0) {
-      readitem = strtok(line,"=");
-    } else {
-      for (i=0; i<fdim-1; i++) {
-        if(i==0) {
-          readitem = strtok(line,",");
-        } else {
-          readitem = strtok(NULL,",");
-        }
-        readitem = strtok(NULL,",");
-        strcpy(arSet[i].arIndx,readitem);
-        readitem = strtok(NULL,")");
-        for (i4=0; i4<nset; i4++) if(strcmp(readitem,ha_set[i4].setname)==0) {
-            arSet[i].setid=i4;
-            break;
-          }
-        nloops=nloops*ha_set[arSet[i].setid].size;
-      }
-      readitem = strtok(NULL,"=");
-      dcountdim1[fdim-2]=1;
-      for (i=fdim-3; i>-1; i--) {
-        dcountdim1[i]=ha_set[arSet[i+1].setid].size*dcountdim1[i+1];
-      }
-    }
-    strcpy(vname,readitem);
-    strcpy(line,linecopy);
-    readitem = strtok(line,"=");
-    readitem = strtok(NULL,";");
-    if(IsChange==false&&IsExplicit==false) {
-      while (ha_cgefrstr(readitem,"*", "+"));
-      strcpy(line1,vname);
-      strcat(line1,"*(1+(");
-      strcat(line1,readitem);
-      strcat(line1,")/100)");
-      readitem=line1;
-    }
-    if(IsChange==true) {
-      strcpy(line1,vname);
-      if(readitem[0]!='+'||readitem[0]!='-') strcat(line1,"+");
-      strcat(line1,readitem);
-      readitem=line1;
-    }
-    npow=ha_cgenchf(readitem, '^');
-    nmul=ha_cgenchf(readitem, '*');
-    ndiv=ha_cgenchf(readitem, '/');
-    nmul=nmul+ndiv;
-    nplu=ha_cgenchf(readitem, '+');
-    nmin=ha_cgenchf(readitem, '-');
-    nplu=nplu+nmin;
-
-    while (ha_cgerecovar(readitem)==1);
-    hnew_intrpl(readitem);
-    npar=ha_cgenchf(readitem, '(');
-    strcpy(sumsyntax,"sum(");
-    totalsum=hcge_nsum(readitem,sumsyntax);
-    hcge_sumcof *sum_cof= (hcge_sumcof *) calloc (totalsum,sizeof(hcge_sumcof));
-    sumcount=0;
-    strcpy(line1,readitem);
-    strcpy(line2,line1);
-    readitem=line2;
-    while (hcge_dsum(readitem,sumsyntax,sum_cof,arSet,ha_set,nset,fdim,sumcount)==1) {
-      sumcount++;
-    }
-    totalsum=sumcount;
-    i3=0;
-    for (i=0; i<totalsum; i++) {
-      i1=1;
-      for(j=0; j<sum_cof[i].size; j++) {
-        i1=i1*ha_set[sum_cof[i].setid[j]].size;
-      }
-      sum_cof[i].begadd=i3;
-      i3=i3+i1;
-    }
-    nsumele=i3;
-    for (i=0; i<totalsum; i++) {
-      i1=1;
-      sum_cof[i].antidims[sum_cof[i].size-1]=1;
-      for(j=sum_cof[i].size-2; j>-1; j--) {
-        sum_cof[i].antidims[j]=sum_cof[i].antidims[j+1]*ha_set[sum_cof[i].setid[j+1]].size;
-      }
-    }
-    hcge_calvars *ha_calvar= (hcge_calvars *) calloc (npow+nmul+nplu+2*npar+2,sizeof(hcge_calvars));
-    ha_cgesumele *ha_sumele= (ha_cgesumele *) calloc (nsumele,sizeof(ha_cgesumele));
-    sumcount=0;
-    strcpy(line2,line1);
-    readitem=line2;
-    sumindx=0;
-    while (hnew_calsum(readitem,sumsyntax,ha_set,nset,ha_setele,ha_cofvar,ncofvar,ncofele,ha_cof,ncof,ha_var,nvar,sum_cof,totalsum,ha_sumele,nsumele,ha_calvar,arSet,fdim,&sumindx,sumcount,zerodivide)==1) {
-      sumcount++;
-    }
-    strcpy(line1,readitem);
-    uvadd index=ncof-1, begadd=0;//,simpl=0;
-    bool check10=true;
-        uvadd varsize=0;
-        p=strtok(vname,"(");
-        do {
-          if (strcmp(ha_cof[index].cofname,p)==0) {
-            begadd=ha_cof[index].begadd;
-            varsize=ha_cof[index].size;
-            if(ha_cof[index].size>0){strcpy(argu,strtok(NULL,")"));strcat(argu,",");}
-            check10=false;
-            break;
-          }
-        } while (index--);
-        if (check10) {
-          index=nvar-1;
-          do {
-            if (strcmp(ha_var[index].cofname,p)==0) {
-              begadd=ncofele+ha_var[index].begadd;
-              varsize=ha_var[index].size;
-              if(ha_var[index].size>0){strcpy(argu,strtok(NULL,")"));strcat(argu,",");}
-              break;
-            }
-          } while (index--);
-        }
-        for (l=0; l<MAXVARDIM; l++){varantidim[l]=0;varsubset[l]=0;varsupsetid[l]=0;}
-        if (check10) {
-            for (dcount=0; dcount<ha_var[index].size; dcount++) {
-              if(dcount==0)p=strtok(argu,",");
-              else p=strtok(NULL,",");
-              for (l=0; l<fdim-1; l++) if (strcmp(arSet[l].arIndx,p)==0) {
-                  varantidim[dcount]=ha_var[index].antidims[dcount];
-                  vararset[dcount]=l+1;
-                  if (ha_set[arSet[l].setid].size!=ha_set[ha_var[index].setid[dcount]].size){
-                    varsubset[dcount]=1;
-                    for(sup=1;sup<MAXSUPSET;sup++)if(ha_set[arSet[l].setid].subsetid[sup]==ha_var[index].setid[dcount]){varsupsetid[dcount]=sup;break;}
-                  }
-                  break;
-                }
-            }
-        } else {
-            for (dcount=0; dcount<ha_cof[index].size; dcount++) {
-              if(dcount==0)p=strtok(argu,",");
-              else p=strtok(NULL,",");
-              for (l=0; l<fdim-1; l++) if (strcmp(arSet[l].arIndx,p)==0) {
-                  varantidim[dcount]=ha_cof[index].antidims[dcount];
-                  vararset[dcount]=l+1;
-                  if (ha_set[arSet[l].setid].size!=ha_set[ha_cof[index].setid[dcount]].size){
-                    varsubset[dcount]=1;
-                    for(sup=1;sup<MAXSUPSET;sup++)if(ha_set[arSet[l].setid].subsetid[sup]==ha_cof[index].setid[dcount]){varsupsetid[dcount]=sup;break;}
-                  }
-                  break;
-                }
-            }
-        }
-    ha_newfparse(line1,ha_set,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,&ha_calvarsize,arSet,fdim-1);
-        #pragma omp parallel private(l,l2,i4,dcount,i3,i1,temp1,arSet1,ha_calvar1) shared(ha_cofvar,arSet)
-        {
-        if(omp_get_thread_num()!=0){
-          arSet1=realloc(arSet1,(fdim+1)*sizeof(ha_cgesetindx));
-          memcpy (arSet1,arSet,(fdim+1)*sizeof(ha_cgesetindx));
-          ha_calvar1=realloc(ha_calvar1,ha_calvarsize*sizeof(hcge_calvars));
-          memcpy (ha_calvar1,ha_calvar,ha_calvarsize*sizeof(hcge_calvars));
-        }else{
-          ha_calvar1=ha_calvar;
-          arSet1=arSet;
-        }
-        #pragma omp for
-    for (l=0; l<nloops; l++) {
-      l2=0;
-      i4=l;
-            for (dcount=0; dcount<fdim-1; dcount++) {
-              i3=(uvadd) i4/dcountdim1[dcount];
-              arSet1[dcount].indx=i3;
-              i4=i4-i3*dcountdim1[dcount];
-              if(varsize<=fdim-1) {
-                for(i1=0; i1<varsize; i1++) {
-                  if(vararset[i1]-1==dcount) {
-                    if(varsubset[i1]==1) {
-                      l2=l2+ha_setele[ha_set[arSet1[dcount].setid].begadd+i3].setsh[varsupsetid[i1]]*varantidim[i1];
-                    } else {
-                      l2=l2+i3*varantidim[i1];
-                    }
-                    break;
-                  }
-                }
-              } else {
-                for(i1=0; i1<varsize; i1++) {
-                  if(vararset[i1]-1==dcount) {
-                    if(varsubset[i1]==1) {
-                      l2=l2+ha_setele[ha_set[arSet1[dcount].setid].begadd+i3].setsh[varsupsetid[i1]]*varantidim[i1];
-                    } else {
-                      l2=l2+i3*varantidim[i1];
-                    }
-                  }
-                }
-              }
-            }
-      ha_cofvar[begadd+l2].csolpupd=ha_cofvar[begadd+l2].varval;
-      temp1=ha_newfpcal(ha_cofvar,ha_set,ha_setele,ha_sumele,ha_calvar1,ha_calvarsize,arSet1,fdim-1,zerodivide);
-      if(temp1-ha_cofvar[begadd+l2].varval>0.000000001||temp1-ha_cofvar[begadd+l2].varval<-0.000000001)ha_cofvar[begadd+l2].varval=temp1;
-    }
-        if(omp_get_thread_num()!=0){
-          free(arSet1);
-          arSet1=NULL;
-          free(ha_calvar1);
-          ha_calvar1=NULL;
-        }else{
-          ha_calvar1=NULL;
-          arSet1=NULL;
-        }
-        }
-    free(sum_cof);
-    free(ha_sumele);
-    free(arSet);
-    free(ha_calvar);
-
-        if(ha_cof[index].gltype>0){
-        #pragma omp parallel private(l) shared(ha_cofvar,ha_cof,ncof,begadd,index)
-        {
-          if(ha_cof[index].gltype==1){
-          #pragma omp for
-          for (l=0; l<varsize; l++) {
-            if(ha_cofvar[begadd+l].varval<ha_cof[index].glval){
-              printf("Error!!! Condition not met var %s type 1!\n",ha_cof[index].cofname);
-              l=varsize;
-            }
-          }
-          }
-          if(ha_cof[index].gltype==2){
-          #pragma omp for
-          for (l=0; l<varsize; l++) {
-            if(ha_cofvar[begadd+l].varval<=ha_cof[index].glval){
-              printf("Error!!! Condition not met var %s type 2!\n",ha_cof[index].cofname);
-              l=varsize;
-            }
-          }
-          }
-          if(ha_cof[index].gltype==3){
-          #pragma omp for
-          for (l=0; l<varsize; l++) {
-            if(ha_cofvar[begadd+l].varval>ha_cof[index].glval){
-              printf("Error!!! Condition not met var %s type 3!\n",ha_cof[index].cofname);
-              l=varsize;
-            }
-          }
-          }
-          if(ha_cof[index].gltype==4){
-          #pragma omp for
-          for (l=0; l<varsize; l++) {
-            if(ha_cofvar[begadd+l].varval>=ha_cof[index].glval){
-              printf("Error!!! Condition not met var %s type 4!\n",ha_cof[index].cofname);
-              l=varsize;
-            }
-          }
-          }
-        }
-        }
-    
-  }
-  fclose(filehandle);
-  return j;
-}
-
-uvadd hnew_mupdate(char *fname,ha_cgeset *ha_set,uvdim nset, ha_cgesetele *ha_setele, hcge_cof *ha_cof,uvadd ncof,hcge_cof *ha_var,uvadd nvar, ha_cgevar *ha_cofvar,uvadd ncofvar,uvadd ncofele) {
+/* Applies the TAB update statements to coefficient values. With
+   midpoint!=0 the modified-midpoint correction is used: the value is
+   advanced from the sub-step base (csolpupd) by twice the computed
+   change, and csolpupd retains the pre-update value. */
+uvadd hnew_update(char *fname,ha_cgeset *ha_set,uvdim nset, ha_cgesetele *ha_setele, hcge_cof *ha_cof,uvadd ncof,hcge_cof *ha_var,uvadd nvar, ha_cgevar *ha_cofvar,uvadd ncofvar,uvadd ncofele,int midpoint) {
   FILE * filehandle;
   char commsyntax[NAMESIZE],line[TABREADLINE],line1[TABREADLINE],line2[TABREADLINE],linecopy[TABREADLINE];
   char vname[NAMESIZE],sumsyntax[NAMESIZE],argu[NAMESIZE];
@@ -2370,10 +2079,16 @@ uvadd hnew_mupdate(char *fname,ha_cgeset *ha_set,uvdim nset, ha_cgesetele *ha_se
                 }
               }
             }
-      temp2=ha_cofvar[begadd+l2].varval;
-      temp1=ha_newfpcal(ha_cofvar,ha_set,ha_setele,ha_sumele,ha_calvar1,ha_calvarsize,arSet1,fdim-1,zerodivide);
-      if(temp1-ha_cofvar[begadd+l2].varval>0.000000001||temp1-ha_cofvar[begadd+l2].varval<-0.000000001)ha_cofvar[begadd+l2].varval=ha_cofvar[begadd+l2].csolpupd+2*(temp1-ha_cofvar[begadd+l2].varval);
-      ha_cofvar[begadd+l2].csolpupd=temp2;
+      if(midpoint){
+        temp2=ha_cofvar[begadd+l2].varval;
+        temp1=ha_newfpcal(ha_cofvar,ha_set,ha_setele,ha_sumele,ha_calvar1,ha_calvarsize,arSet1,fdim-1,zerodivide);
+        if(temp1-ha_cofvar[begadd+l2].varval>0.000000001||temp1-ha_cofvar[begadd+l2].varval<-0.000000001)ha_cofvar[begadd+l2].varval=ha_cofvar[begadd+l2].csolpupd+2*(temp1-ha_cofvar[begadd+l2].varval);
+        ha_cofvar[begadd+l2].csolpupd=temp2;
+      }else{
+        ha_cofvar[begadd+l2].csolpupd=ha_cofvar[begadd+l2].varval;
+        temp1=ha_newfpcal(ha_cofvar,ha_set,ha_setele,ha_sumele,ha_calvar1,ha_calvarsize,arSet1,fdim-1,zerodivide);
+        if(temp1-ha_cofvar[begadd+l2].varval>0.000000001||temp1-ha_cofvar[begadd+l2].varval<-0.000000001)ha_cofvar[begadd+l2].varval=temp1;
+      }
     }
         if(omp_get_thread_num()!=0){
           free(arSet1);
@@ -2436,6 +2151,7 @@ uvadd hnew_mupdate(char *fname,ha_cgeset *ha_set,uvdim nset, ha_cgesetele *ha_se
   fclose(filehandle);
   return j;
 }
+
 
 
 uvadd hnew_gupd(char *fname,ha_cgeset *ha_set,uvdim nset, ha_cgesetele *ha_setele, hcge_cof *ha_cof,uvadd ncof,hcge_cof *ha_var,uvadd nvar, ha_cgevar *ha_cofvar,uvadd ncofvar,uvadd ncofele) {
