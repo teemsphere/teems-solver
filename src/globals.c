@@ -4,7 +4,6 @@
 
 int isLinux;
 int smallthreads;
-int medthreads;
 int mymaxnumthrd;
 double kindx1, kindx2, kval1, kval2, kval3;
 int step1, step2, step3;

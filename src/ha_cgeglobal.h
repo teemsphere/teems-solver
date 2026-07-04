@@ -32,7 +32,6 @@
 /* Definitions live in globals.c */
 extern int isLinux;
 extern int smallthreads;
-extern int medthreads;
 extern int mymaxnumthrd;
 extern double kindx1,kindx2,kval1,kval2,kval3;
 extern int step1,step2,step3;

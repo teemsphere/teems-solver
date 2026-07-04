@@ -163,7 +163,6 @@ int main(int argc,char **args) {
   kindx2=step3/(double)step1;
   step3=(PetscInt)step3/step1;
   smallthreads=0;
-  medthreads=0;
   mymaxnumthrd=1;
   PetscOptionsGetInt(NULL,NULL,"-maxthreads",&mymaxnumthrd,NULL);
   if(mymaxnumthrd>1&&mymaxnumthrd<=omp_get_max_threads( )){
@@ -173,10 +172,8 @@ int main(int argc,char **args) {
     mymaxnumthrd=1;
     omp_set_num_threads(mymaxnumthrd);
   }
-  PetscOptionsGetInt(NULL,NULL,"-medthreads",&smallthreads,NULL);
   PetscOptionsGetInt(NULL,NULL,"-smllthreads",&smallthreads,NULL);
   if(smallthreads==0)smallthreads=mymaxnumthrd;
-  if(medthreads==0)medthreads=mymaxnumthrd;
   PetscOptionsGetInt(NULL,NULL,"-nsubints",&subints,NULL);
   PetscOptionsGetInt(NULL,NULL,"-nsbbdblocks",&nsbbdblocks,NULL);
   PetscOptionsGetInt(NULL,NULL,"-nesteddbbd",&nesteddbbd,NULL);
@@ -185,9 +182,7 @@ int main(int argc,char **args) {
   PetscOptionsGetReal(NULL,NULL,"-cntl_6",&cntl6,NULL); /* CNTL6 in Mat Order */
   PetscOptionsGetReal(NULL,NULL,"-cntl_3",&cntl3,NULL);/*Iterative threshold */
   PetscOptionsGetInt(NULL,NULL,"-ndbbd_bl_rank",&ndbbdrank,NULL);/*Override default rank for last block in NDBBD method. Read text file. >0 text column. Use with care*/
-  PetscOptionsGetInt(NULL,NULL,"-isLinux",&isLinux,NULL);/*For read and fread, slightly better performance for linux*/
   PetscOptionsGetInt(NULL,NULL,"-stoiter",&StoIter,NULL);
-  isLinux=0;//permanently set to zero, errors in large system!!!!
   {
     /* Scratch directory for solver temp files: -tempdir option, else
        TMPDIR, else the compiled-in default (/tmp/). Capped at 200
