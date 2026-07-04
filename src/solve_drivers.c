@@ -307,18 +307,18 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
     ierr = VecDestroy(&vece);
     CHKERRQ(ierr);
 
-    if(matsol>1) {
+    if(matsol>=MM_DBBD) {
       gettimeofday(&begintime, NULL);
       clock_gettime(CLOCK_REALTIME, &gettime_beg);
       int *ha_rows= (int *) calloc (VecSize,sizeof(int));
       int *ha_cols= (int *) calloc (VecSize,sizeof(int));
       int *ha_ndblocks= (int *) calloc (ndblock,sizeof(int));
-      if(matsol==2) {
+      if(matsol==MM_DBBD) {
         dbbd_order(A,VecSize,mpisize,rank,Istart,Iend,nvarele,ha_eqadd,ha_rows,ha_cols,ndblock,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,cntl6);
         x0=realloc (x0,VecSize*sizeof(solve_real));
         dbbd_solve(A,vecb,x0,VecSize,mpisize,rank,Istart,Iend,ha_rows,ha_cols,ndblock,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,laD,cntl3);//,iter
       }
-      if(matsol==3) {
+      if(matsol==MM_NDBBD) {
         presol=1;
         if(presol){
         ndbbd_order_presolve(A,VecSize,mpisize,rank,Istart,Iend,nreg,ntime,nvarele,ha_eqadd,ha_rows,ha_cols,ndblock,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,laDi,cntl6,ndbbddrank1,presol);
@@ -364,7 +364,7 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
       }
       indata[0]=count;//.nz
 
-      if(matsol==1) {
+      if(matsol==MM_SBBD) {
         int *irn=(int *) calloc (count,sizeof(int));
         int *irn1=(int *) calloc (nz01,sizeof(int));
         int *jcn=(int *) calloc (count,sizeof(int));
@@ -826,19 +826,19 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
           CHKERRQ(ierr);
           ierr = MatDestroy(&B);
           CHKERRQ(ierr);
-          if(matsol>=2) {
+          if(matsol>=MM_DBBD) {
             int *ha_rows= (int *) calloc (VecSize,sizeof(int));
             int *ha_cols= (int *) calloc (VecSize,sizeof(int));
             int *ha_ndblocks= (int *) calloc (ndblock,sizeof(int));
             time(&timestr);
 
-            if(matsol==2) {
+            if(matsol==MM_DBBD) {
               dbbd_order(A,VecSize,mpisize,rank,Istart,Iend,nvarele,ha_eqadd,ha_rows,ha_cols,ndblock,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,cntl6);
               x1=realloc (x1,VecSize*sizeof(solve_real));
               dbbd_solve(A,vecb,x1,VecSize,mpisize,rank,Istart,Iend,ha_rows,ha_cols,ndblock,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,laD,cntl3);//,iter
             }
 
-            if(matsol==3) {
+            if(matsol==MM_NDBBD) {
               presol=1;
               memcpy(counteq,counteqs,(ndblock+1)*sizeof(offset_t));
               memcpy(counteqnoadd,counteqnoadds,(ndblock)*sizeof(offset_t));
@@ -863,7 +863,7 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
             MPI_Barrier(PETSC_COMM_WORLD);
           }
           else {
-            if(matsol==1) {
+            if(matsol==MM_SBBD) {
               if(rank==rank_hsl) {
                 Mat_SeqAIJ *aa=(Mat_SeqAIJ*)A->data;
                 ai= aa->i;
@@ -1322,19 +1322,19 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
         CHKERRQ(ierr);
         ierr = MatDestroy(&B);
         CHKERRQ(ierr);
-        if(matsol>=2) {
+        if(matsol>=MM_DBBD) {
           int *ha_rows= (int *) calloc (VecSize,sizeof(int));
           int *ha_cols= (int *) calloc (VecSize,sizeof(int));
           int *ha_ndblocks= (int *) calloc (ndblock,sizeof(int));
           time(&timestr);
 
-          if(matsol==2) {
+          if(matsol==MM_DBBD) {
             dbbd_order(A,VecSize,mpisize,rank,Istart,Iend,nvarele,ha_eqadd,ha_rows,ha_cols,ndblock,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,cntl6);
             x1=realloc (x1,VecSize*sizeof(solve_real));
             dbbd_solve(A,vecb,x1,VecSize,mpisize,rank,Istart,Iend,ha_rows,ha_cols,ndblock,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,laD,cntl3);//,iter
           }
 
-          if(matsol==3) {
+          if(matsol==MM_NDBBD) {
             presol=1;
             memcpy(counteq,counteqs,(ndblock+1)*sizeof(offset_t));
             memcpy(counteqnoadd,counteqnoadds,(ndblock)*sizeof(offset_t));
@@ -1359,7 +1359,7 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
           MPI_Barrier(PETSC_COMM_WORLD);
         }
         else {
-          if(matsol==1) {
+          if(matsol==MM_SBBD) {
             if(rank==rank_hsl) {
               Mat_SeqAIJ *aa=(Mat_SeqAIJ*)A->data;
               ai= aa->i;

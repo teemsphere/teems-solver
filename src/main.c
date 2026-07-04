@@ -110,8 +110,8 @@ int main(int argc,char **args) {
   strcat(newtabfile,".tab");
   strcat(newtabfile1,".tab");
   PetscOptionsGetInt(NULL,NULL,"-matsol",&matsol,NULL);//0 MA48 (nproc must be 1) 1 SBBD 2 DBBD, if >=1 should enable reg or time. First reg set will be regorder in var. Note INCL(4) in hsl_mp48ss
-  if(matsol==2)nohsl=true;
-  if(matsol==3)nohsl=true;
+  if(matsol==MM_DBBD)nohsl=true;
+  if(matsol==MM_NDBBD)nohsl=true;
   isLinux=0;
   PetscOptionsGetInt(NULL,NULL,"-laA",&laA,NULL);
   if(laA==0)laA=2;
@@ -240,11 +240,11 @@ int main(int argc,char **args) {
     strcpy(solmed,"Mmid");//orani03.cmf");
   }
   int solmethod;
-  if(strcmp(solmed,"Mmid")==0)solmethod=1;
-  if(strcmp(solmed,"Johansen")==0)solmethod=10;
-  if(strcmp(solmed,"Stochastic")==0)solmethod=20;
-  if(strcmp(solmed,"StoSim")==0)solmethod=21;
-  if(strcmp(solmed,"NoSol")==0)solmethod=100;
+  if(strcmp(solmed,"Mmid")==0)solmethod=SM_MODIFIED_MIDPOINT;
+  if(strcmp(solmed,"Johansen")==0)solmethod=SM_JOHANSEN;
+  if(strcmp(solmed,"Stochastic")==0)solmethod=SM_STOCHASTIC;
+  if(strcmp(solmed,"StoSim")==0)solmethod=SM_STOSIM;
+  if(strcmp(solmed,"NoSol")==0)solmethod=SM_NOSOLVE;
   printf("Sol med %d regset %s\n",solmethod,regset);
 
   #pragma omp parallel private(i)
@@ -1266,7 +1266,7 @@ int main(int argc,char **args) {
   printf("rank %d ncof %ld\n",rank,ncof);
   
 
-  if(solmethod==10)solve_johansen(nohsl,VecSize,A,dnz,dnnz,onz,onnz,B,dnzB,dnnzB,onzB,onnzB,vecb,vece,rank,rank_hsl,mpisize,tabfile,commsyntax,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,&ha_cofvar,ncofele+nvarele,ncofele,nvarele,&ha_cgeshock,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,ha_eqadd,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,presol,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,&xcf);
+  if(solmethod==SM_JOHANSEN)solve_johansen(nohsl,VecSize,A,dnz,dnnz,onz,onnz,B,dnzB,dnnzB,onzB,onnzB,vecb,vece,rank,rank_hsl,mpisize,tabfile,commsyntax,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,&ha_cofvar,ncofele+nvarele,ncofele,nvarele,&ha_cgeshock,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,ha_eqadd,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,presol,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,&xcf);
   
   int stepcount;
   int nsteps=3;
@@ -1274,9 +1274,9 @@ int main(int argc,char **args) {
   FILE* solution;
   int maxsol=3;
 
-    if(solmethod==1)solve_modified_midpoint(nohsl,VecSize,&A,dnz,dnnz,onz,onnz,&B,dnzB,dnnzB,onzB,onnzB,&vecb,&vece,rank,rank_hsl,mpisize,tabfile,commsyntax,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,&ha_cofvar,ncofele+nvarele,ncofele,nvarele,&ha_cgeshock,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,ha_eqadd,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,presol,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,subints,fcomm,&xcf,0);
+    if(solmethod==SM_MODIFIED_MIDPOINT)solve_modified_midpoint(nohsl,VecSize,&A,dnz,dnnz,onz,onnz,&B,dnzB,dnnzB,onzB,onnzB,&vecb,&vece,rank,rank_hsl,mpisize,tabfile,commsyntax,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,&ha_cofvar,ncofele+nvarele,ncofele,nvarele,&ha_cgeshock,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,ha_eqadd,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,presol,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,subints,fcomm,&xcf,0);
     
-  if(solmethod==20){
+  if(solmethod==SM_STOCHASTIC){
     MPI_Barrier(PETSC_COMM_WORLD);
   for(j=0;j<StoIter;j++){
     if(j>0){
@@ -1302,7 +1302,7 @@ int main(int argc,char **args) {
   printf("ncof %ld rank %d\n",ncof,rank);
   }
   }
-  if(solmethod==21){
+  if(solmethod==SM_STOSIM){
     MPI_Barrier(PETSC_COMM_WORLD);
     printf("Heere rank %d\n",rank);
       solve_modified_midpoint(nohsl,VecSize,&A,dnz,dnnz,onz,onnz,&B,dnzB,dnnzB,onzB,onnzB,&vecb,&vece,rank,rank_hsl,mpisize,tabfile,commsyntax,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,&ha_cofvar,ncofele+nvarele,ncofele,nvarele,&ha_cgeshock,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,ha_eqadd,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,presol,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,subints,fcomm,&xcf,2);

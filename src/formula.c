@@ -40,10 +40,10 @@ int formula_bind_operand(char *var2, set_def *ha_set,array_def *ha_cof,offset_t 
       if(!ha_cof[index].suplval)printf("Warning!!!! coefficient %s has not been supplied with values!\n",ha_cof[index].cofname);
       if(varindex==2) {
         ha_calvar[ha_calvarsize].Var2BegAdd=ha_cof[index].offset;
-        ha_calvar[ha_calvarsize].Var2Type=0;
+        ha_calvar[ha_calvarsize].Var2Type=OT_ARRAY;
       } else {
         ha_calvar[ha_calvarsize].Var1BegAdd=ha_cof[index].offset;
-        ha_calvar[ha_calvarsize].Var1Type=0;
+        ha_calvar[ha_calvarsize].Var1Type=OT_ARRAY;
       }
       switch(ha_cof[index].size) {
       case 0:
@@ -159,12 +159,12 @@ int formula_bind_operand(char *var2, set_def *ha_set,array_def *ha_cof,offset_t 
     if (strcmp(ha_var[index].cofname,p)==0) {
       if(varindex==2) {
         ha_calvar[ha_calvarsize].Var2BegAdd=ha_var[index].offset+ncofele;
-        if(IsChange) ha_calvar[ha_calvarsize].Var2Type=6;
-        else ha_calvar[ha_calvarsize].Var2Type=0;
+        if(IsChange) ha_calvar[ha_calvarsize].Var2Type=OT_CHANGE;
+        else ha_calvar[ha_calvarsize].Var2Type=OT_ARRAY;
       } else {
         ha_calvar[ha_calvarsize].Var1BegAdd=ha_var[index].offset+ncofele;
-        if(IsChange) ha_calvar[ha_calvarsize].Var1Type=6;
-        else ha_calvar[ha_calvarsize].Var1Type=0;
+        if(IsChange) ha_calvar[ha_calvarsize].Var1Type=OT_CHANGE;
+        else ha_calvar[ha_calvarsize].Var1Type=OT_ARRAY;
       }
       switch(ha_var[index].size) {
       case 0:
@@ -281,11 +281,11 @@ int formula_bind_operand(char *var2, set_def *ha_set,array_def *ha_cof,offset_t 
     if (strcmp(sum_cof[index].sumname,p)==0) {
       if(varindex==2) {
         ha_calvar[ha_calvarsize].Var2BegAdd=sum_cof[index].offset;
-        ha_calvar[ha_calvarsize].Var2Type=2;
+        ha_calvar[ha_calvarsize].Var2Type=OT_SUM;
         for (l1=0; l1<sum_cof[index].size; l1++)ha_calvar[ha_calvarsize].Var2SSIndx[l1]=0;
       } else {
         ha_calvar[ha_calvarsize].Var1BegAdd=sum_cof[index].offset;
-        ha_calvar[ha_calvarsize].Var1Type=2;
+        ha_calvar[ha_calvarsize].Var1Type=OT_SUM;
         for (l1=0; l1<sum_cof[index].size; l1++)ha_calvar[ha_calvarsize].Var1SSIndx[l1]=0;
       }
       switch(sum_cof[index].size) {
@@ -351,10 +351,10 @@ int formula_bind_operand(char *var2, set_def *ha_set,array_def *ha_cof,offset_t 
   for (l1=0; l1<ha_calvarsize; l1++) {
     if (strcmp(var2,ha_calvar[l1].TmpVarName)==0) {
       if(varindex==2) {
-        ha_calvar[ha_calvarsize].Var2Type=4;
+        ha_calvar[ha_calvarsize].Var2Type=OT_TEMP;
         ha_calvar[ha_calvarsize].Var2BegAdd=l1;
       } else {
-        ha_calvar[ha_calvarsize].Var1Type=4;
+        ha_calvar[ha_calvarsize].Var1Type=OT_TEMP;
         ha_calvar[ha_calvarsize].Var1BegAdd=l1;
       }
       return 1;
@@ -362,10 +362,10 @@ int formula_bind_operand(char *var2, set_def *ha_set,array_def *ha_cof,offset_t 
   }
   if (var2[0]>='0'&&var2[0]<='9') {
     if(varindex==2) {
-      ha_calvar[ha_calvarsize].Var2Type=5;
+      ha_calvar[ha_calvarsize].Var2Type=OT_CONST;
       ha_calvar[ha_calvarsize].Var2Val=atof(var2);
     } else {
-      ha_calvar[ha_calvarsize].Var1Type=5;
+      ha_calvar[ha_calvarsize].Var1Type=OT_CONST;
       ha_calvar[ha_calvarsize].Var1Val=atof(var2);
     }
     return 1;
@@ -436,7 +436,7 @@ int formula_compile(char *fomulain, set_def *ha_set,array_def *ha_cof, offset_t 
       formula_compile_addsub(fomulain,ha_set,nplu,0,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,ha_calvarsize,arSet,fdim);
     }
       formula_bind_operand(fomulain,ha_set,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,*ha_calvarsize,arSet,fdim,1);
-      ha_calvar[*ha_calvarsize].Oper=0;
+      ha_calvar[*ha_calvarsize].Oper=OP_LOAD;
       ha_calvar[*ha_calvarsize].TmpVarName[0]='\0';
       *ha_calvarsize=*ha_calvarsize+1;
     return 1;
@@ -484,7 +484,7 @@ int formula_compile(char *fomulain, set_def *ha_set,array_def *ha_cof, offset_t 
     }
       if(strpbrk(fpart2,"=<>")==NULL){
       formula_bind_operand(fpart2,ha_set,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,*ha_calvarsize,arSet,fdim,1);
-      ha_calvar[*ha_calvarsize].Oper=0;
+      ha_calvar[*ha_calvarsize].Oper=OP_LOAD;
       ha_calvar[*ha_calvarsize].TmpVarName[0]='\0';
       *ha_calvarsize=*ha_calvarsize+1;
       }
@@ -508,24 +508,24 @@ int formula_compile(char *fomulain, set_def *ha_set,array_def *ha_cof, offset_t 
     }
     strcat(interchar,interchar1);
     strcpy(ha_calvar[*ha_calvarsize].TmpVarName,interchar);
-    ha_calvar[*ha_calvarsize].Oper=0;
+    ha_calvar[*ha_calvarsize].Oper=OP_LOAD;
     ha_calvar[*ha_calvarsize].Var1BegAdd=*ha_calvarsize-1;
     j=strlen(fpart1);
-    ha_calvar[*ha_calvarsize].Var1Type=4;
+    ha_calvar[*ha_calvarsize].Var1Type=OT_TEMP;
     if (j>3) if (fpart1[j-1]=='1'&&fpart1[j-2]=='0'&&tolower((int)fpart1[j-3])=='d'&&tolower((int)fpart1[j-4])=='i') {
-        ha_calvar[*ha_calvarsize].Var1Type=41;
+        ha_calvar[*ha_calvarsize].Var1Type=OT_TEMP_ID01;
         fpart1[j-4]='\0';
       }
     if (j>3) if (fpart1[j-1]=='e'&&fpart1[j-2]=='g'&&fpart1[j-3]=='o'&&fpart1[j-4]=='l') {
-        ha_calvar[*ha_calvarsize].Var1Type=43;
+        ha_calvar[*ha_calvarsize].Var1Type=OT_TEMP_LOG;
         fpart1[j-4]='\0';
       }
     if (j==3) if (fpart1[j-1]=='s'&&fpart1[j-2]=='b'&&fpart1[j-3]=='a') {
-        ha_calvar[*ha_calvarsize].Var1Type=42;
+        ha_calvar[*ha_calvarsize].Var1Type=OT_TEMP_ABS;
         fpart1[j-3]='\0';
       }
     if (j>3) if (fpart1[j-1]=='s'&&fpart1[j-2]=='b'&&fpart1[j-3]=='a') if(j==3||fpart1[j-4]==' '||fpart1[j-4]=='('||fpart1[j-4]=='+'||fpart1[j-4]=='-'||fpart1[j-4]=='*'||fpart1[j-4]=='/'||fpart1[j-4]=='^'||fpart1[j-4]==',') {
-          ha_calvar[*ha_calvarsize].Var1Type=42;
+          ha_calvar[*ha_calvarsize].Var1Type=OT_TEMP_ABS;
           fpart1[j-3]='\0';
         }
     if (j==2) if (fpart1[j-1]=='f'&&fpart1[j-2]=='i') {
@@ -551,8 +551,8 @@ solve_real formula_eval(elem_value *record,set_def *ha_set,set_element *ha_setel
   solve_real eval1=0,eval2=0,eval3=0;
   for (i=0; i<ha_calvarsize; i++) {
     switch(ha_calvar[i].Oper) {
-    case 0:
-      if (ha_calvar[i].Var1Type==0) {
+    case OP_LOAD:
+      if (ha_calvar[i].Var1Type==OT_ARRAY) {
         l=0;
         for (j=0; j<fdim; j++) {
           if(ha_calvar[i].Var1SupSet[j]==1) {
@@ -564,7 +564,7 @@ solve_real formula_eval(elem_value *record,set_def *ha_set,set_element *ha_setel
         ha_calvar[i].TmpVarVal=record[ha_calvar[i].Var1BegAdd+l].value;
         break;
       }
-      if (ha_calvar[i].Var1Type==2) {
+      if (ha_calvar[i].Var1Type==OT_SUM) {
         l=0;
         for (j=0; j<fdim; j++) {
           l+=ha_calvar[i].Var1ADims[j]*arSet[j].indx;
@@ -572,29 +572,29 @@ solve_real formula_eval(elem_value *record,set_def *ha_set,set_element *ha_setel
         ha_calvar[i].TmpVarVal=ha_sumele[ha_calvar[i].Var1BegAdd+l].value;
         break;
       }
-      if (ha_calvar[i].Var1Type==4) {
+      if (ha_calvar[i].Var1Type==OT_TEMP) {
         ha_calvar[i].TmpVarVal=ha_calvar[ha_calvar[i].Var1BegAdd].TmpVarVal;
         break;
       }
-      if (ha_calvar[i].Var1Type==41) {
+      if (ha_calvar[i].Var1Type==OT_TEMP_ID01) {
         if(ha_calvar[ha_calvar[i].Var1BegAdd].TmpVarVal==0)ha_calvar[i].TmpVarVal=1;
         else ha_calvar[i].TmpVarVal=ha_calvar[ha_calvar[i].Var1BegAdd].TmpVarVal;
         break;
       }
-      if (ha_calvar[i].Var1Type==42) {
+      if (ha_calvar[i].Var1Type==OT_TEMP_ABS) {
         if(ha_calvar[ha_calvar[i].Var1BegAdd].TmpVarVal<0)ha_calvar[i].TmpVarVal=-ha_calvar[ha_calvar[i].Var1BegAdd].TmpVarVal;
         else ha_calvar[i].TmpVarVal=ha_calvar[ha_calvar[i].Var1BegAdd].TmpVarVal;
         break;
       }
-      if (ha_calvar[i].Var1Type==43) {
+      if (ha_calvar[i].Var1Type==OT_TEMP_LOG) {
         ha_calvar[i].TmpVarVal=log(ha_calvar[ha_calvar[i].Var1BegAdd].TmpVarVal);
         break;
       }
-      if (ha_calvar[i].Var1Type==5) {
+      if (ha_calvar[i].Var1Type==OT_CONST) {
         ha_calvar[i].TmpVarVal=ha_calvar[i].Var1Val;
         break;
       }
-      if (ha_calvar[i].Var1Type==6) {
+      if (ha_calvar[i].Var1Type==OT_CHANGE) {
         l=0;
         for (j=0; j<fdim; j++) {
           if(ha_calvar[i].Var1SupSet[j]==1) {
@@ -607,8 +607,8 @@ solve_real formula_eval(elem_value *record,set_def *ha_set,set_element *ha_setel
         break;
       }
       break;
-    case 1:
-      if(ha_calvar[i].Var1Type<3||ha_calvar[i].Var1Type==6) {
+    case OP_MUL:
+      if(ha_calvar[i].Var1Type<3||ha_calvar[i].Var1Type==OT_CHANGE) {
         l=0;
         for (j=0; j<fdim; j++) {
           if(ha_calvar[i].Var1SupSet[j]==1) {
@@ -618,7 +618,7 @@ solve_real formula_eval(elem_value *record,set_def *ha_set,set_element *ha_setel
           }
         }
       }
-      if(ha_calvar[i].Var2Type<3||ha_calvar[i].Var2Type==6) {
+      if(ha_calvar[i].Var2Type<3||ha_calvar[i].Var2Type==OT_CHANGE) {
         l1=0;
         for (j=0; j<fdim; j++) {
           if(ha_calvar[i].Var2SupSet[j]==1) {
@@ -628,20 +628,20 @@ solve_real formula_eval(elem_value *record,set_def *ha_set,set_element *ha_setel
           }
         }
       }
-      if(ha_calvar[i].Var1Type==0) eval1=record[ha_calvar[i].Var1BegAdd+l].value;
-      if(ha_calvar[i].Var1Type==2) eval1=ha_sumele[ha_calvar[i].Var1BegAdd+l].value;
-      if(ha_calvar[i].Var1Type==4) eval1=ha_calvar[ha_calvar[i].Var1BegAdd].TmpVarVal;
-      if(ha_calvar[i].Var1Type==5) eval1=ha_calvar[i].Var1Val;
-      if(ha_calvar[i].Var1Type==6) eval1=record[ha_calvar[i].Var1BegAdd+l].substep_base;
-      if(ha_calvar[i].Var2Type==0) eval2=record[ha_calvar[i].Var2BegAdd+l1].value;
-      if(ha_calvar[i].Var2Type==2) eval2=ha_sumele[ha_calvar[i].Var2BegAdd+l1].value;
-      if(ha_calvar[i].Var2Type==4) eval2=ha_calvar[ha_calvar[i].Var2BegAdd].TmpVarVal;
-      if(ha_calvar[i].Var2Type==5) eval2=ha_calvar[i].Var2Val;
-      if(ha_calvar[i].Var2Type==6) eval2=record[ha_calvar[i].Var2BegAdd+l1].substep_base;
+      if(ha_calvar[i].Var1Type==OT_ARRAY) eval1=record[ha_calvar[i].Var1BegAdd+l].value;
+      if(ha_calvar[i].Var1Type==OT_SUM) eval1=ha_sumele[ha_calvar[i].Var1BegAdd+l].value;
+      if(ha_calvar[i].Var1Type==OT_TEMP) eval1=ha_calvar[ha_calvar[i].Var1BegAdd].TmpVarVal;
+      if(ha_calvar[i].Var1Type==OT_CONST) eval1=ha_calvar[i].Var1Val;
+      if(ha_calvar[i].Var1Type==OT_CHANGE) eval1=record[ha_calvar[i].Var1BegAdd+l].substep_base;
+      if(ha_calvar[i].Var2Type==OT_ARRAY) eval2=record[ha_calvar[i].Var2BegAdd+l1].value;
+      if(ha_calvar[i].Var2Type==OT_SUM) eval2=ha_sumele[ha_calvar[i].Var2BegAdd+l1].value;
+      if(ha_calvar[i].Var2Type==OT_TEMP) eval2=ha_calvar[ha_calvar[i].Var2BegAdd].TmpVarVal;
+      if(ha_calvar[i].Var2Type==OT_CONST) eval2=ha_calvar[i].Var2Val;
+      if(ha_calvar[i].Var2Type==OT_CHANGE) eval2=record[ha_calvar[i].Var2BegAdd+l1].substep_base;
       ha_calvar[i].TmpVarVal=eval1*eval2;
       break;
-    case 2:
-      if(ha_calvar[i].Var1Type<3||ha_calvar[i].Var1Type==6) {
+    case OP_DIV:
+      if(ha_calvar[i].Var1Type<3||ha_calvar[i].Var1Type==OT_CHANGE) {
         l=0;
         for (j=0; j<fdim; j++) {
           if(ha_calvar[i].Var1SupSet[j]==1) {
@@ -651,7 +651,7 @@ solve_real formula_eval(elem_value *record,set_def *ha_set,set_element *ha_setel
           }
         }
       }
-      if(ha_calvar[i].Var2Type<3||ha_calvar[i].Var2Type==6) {
+      if(ha_calvar[i].Var2Type<3||ha_calvar[i].Var2Type==OT_CHANGE) {
         l1=0;
         for (j=0; j<fdim; j++) {
           if(ha_calvar[i].Var2SupSet[j]==1) {
@@ -661,24 +661,24 @@ solve_real formula_eval(elem_value *record,set_def *ha_set,set_element *ha_setel
           }
         }
       }
-      if(ha_calvar[i].Var1Type==0) eval1=record[ha_calvar[i].Var1BegAdd+l].value;
-      if(ha_calvar[i].Var1Type==2) eval1=ha_sumele[ha_calvar[i].Var1BegAdd+l].value;
-      if(ha_calvar[i].Var1Type==4) eval1=ha_calvar[ha_calvar[i].Var1BegAdd].TmpVarVal;
-      if(ha_calvar[i].Var1Type==5) eval1=ha_calvar[i].Var1Val;
-      if(ha_calvar[i].Var1Type==6) eval1=record[ha_calvar[i].Var1BegAdd+l].substep_base;
-      if(ha_calvar[i].Var2Type==0) eval2=record[ha_calvar[i].Var2BegAdd+l1].value;
-      if(ha_calvar[i].Var2Type==2) eval2=ha_sumele[ha_calvar[i].Var2BegAdd+l1].value;
-      if(ha_calvar[i].Var2Type==4) eval2=ha_calvar[ha_calvar[i].Var2BegAdd].TmpVarVal;
-      if(ha_calvar[i].Var2Type==5) eval2=ha_calvar[i].Var2Val;
-      if(ha_calvar[i].Var2Type==6) eval2=record[ha_calvar[i].Var2BegAdd+l1].substep_base;
+      if(ha_calvar[i].Var1Type==OT_ARRAY) eval1=record[ha_calvar[i].Var1BegAdd+l].value;
+      if(ha_calvar[i].Var1Type==OT_SUM) eval1=ha_sumele[ha_calvar[i].Var1BegAdd+l].value;
+      if(ha_calvar[i].Var1Type==OT_TEMP) eval1=ha_calvar[ha_calvar[i].Var1BegAdd].TmpVarVal;
+      if(ha_calvar[i].Var1Type==OT_CONST) eval1=ha_calvar[i].Var1Val;
+      if(ha_calvar[i].Var1Type==OT_CHANGE) eval1=record[ha_calvar[i].Var1BegAdd+l].substep_base;
+      if(ha_calvar[i].Var2Type==OT_ARRAY) eval2=record[ha_calvar[i].Var2BegAdd+l1].value;
+      if(ha_calvar[i].Var2Type==OT_SUM) eval2=ha_sumele[ha_calvar[i].Var2BegAdd+l1].value;
+      if(ha_calvar[i].Var2Type==OT_TEMP) eval2=ha_calvar[ha_calvar[i].Var2BegAdd].TmpVarVal;
+      if(ha_calvar[i].Var2Type==OT_CONST) eval2=ha_calvar[i].Var2Val;
+      if(ha_calvar[i].Var2Type==OT_CHANGE) eval2=record[ha_calvar[i].Var2BegAdd+l1].substep_base;
       if(eval2==0) {
         ha_calvar[i].TmpVarVal=zerodivide;
       } else {
         ha_calvar[i].TmpVarVal=eval1/eval2;
       }
       break;
-    case 3:
-      if(ha_calvar[i].Var1Type==0) {
+    case OP_ADD:
+      if(ha_calvar[i].Var1Type==OT_ARRAY) {
         l=0;
         for (j=0; j<fdim; j++) {
           if(ha_calvar[i].Var1SupSet[j]==1) {
@@ -689,7 +689,7 @@ solve_real formula_eval(elem_value *record,set_def *ha_set,set_element *ha_setel
         }
         eval1=record[ha_calvar[i].Var1BegAdd+l].value;
       }
-      if(ha_calvar[i].Var1Type==2) {
+      if(ha_calvar[i].Var1Type==OT_SUM) {
         l=0;
         for (j=0; j<fdim; j++) {
           if(ha_calvar[i].Var1SupSet[j]==1) {
@@ -700,13 +700,13 @@ solve_real formula_eval(elem_value *record,set_def *ha_set,set_element *ha_setel
         }
         eval1=ha_sumele[ha_calvar[i].Var1BegAdd+l].value;
       }
-      if (ha_calvar[i].Var1Type==4) {
+      if (ha_calvar[i].Var1Type==OT_TEMP) {
         eval1=ha_calvar[ha_calvar[i].Var1BegAdd].TmpVarVal;
       }
-      if (ha_calvar[i].Var1Type==5) {
+      if (ha_calvar[i].Var1Type==OT_CONST) {
         eval1=ha_calvar[i].Var1Val;
       }
-      if(ha_calvar[i].Var1Type==6) {
+      if(ha_calvar[i].Var1Type==OT_CHANGE) {
         l=0;
         for (j=0; j<fdim; j++) {
           if(ha_calvar[i].Var1SupSet[j]==1) {
@@ -717,7 +717,7 @@ solve_real formula_eval(elem_value *record,set_def *ha_set,set_element *ha_setel
         }
         eval1=record[ha_calvar[i].Var1BegAdd+l].substep_base;
       }
-      if(ha_calvar[i].Var2Type==0) {
+      if(ha_calvar[i].Var2Type==OT_ARRAY) {
         l=0;
         for (j=0; j<fdim; j++) {
           if(ha_calvar[i].Var2SupSet[j]==1) {
@@ -728,7 +728,7 @@ solve_real formula_eval(elem_value *record,set_def *ha_set,set_element *ha_setel
         }
         eval2=record[ha_calvar[i].Var2BegAdd+l].value;
       }
-      if(ha_calvar[i].Var2Type==2) {
+      if(ha_calvar[i].Var2Type==OT_SUM) {
         l=0;
         for (j=0; j<fdim; j++) {
             l1=l;
@@ -740,13 +740,13 @@ solve_real formula_eval(elem_value *record,set_def *ha_set,set_element *ha_setel
         }
         eval2=ha_sumele[ha_calvar[i].Var2BegAdd+l].value;
       }
-      if (ha_calvar[i].Var2Type==4) {
+      if (ha_calvar[i].Var2Type==OT_TEMP) {
         eval2=ha_calvar[ha_calvar[i].Var2BegAdd].TmpVarVal;
       }
-      if (ha_calvar[i].Var2Type==5) {
+      if (ha_calvar[i].Var2Type==OT_CONST) {
         eval2=ha_calvar[i].Var2Val;
       }
-      if(ha_calvar[i].Var2Type==6) {
+      if(ha_calvar[i].Var2Type==OT_CHANGE) {
         l=0;
         for (j=0; j<fdim; j++) {
           if(ha_calvar[i].Var2SupSet[j]==1) {
@@ -759,8 +759,8 @@ solve_real formula_eval(elem_value *record,set_def *ha_set,set_element *ha_setel
       }
       ha_calvar[i].TmpVarVal=eval1+eval2;
       break;
-    case 4:
-      if(ha_calvar[i].Var1Type==0) {
+    case OP_SUB:
+      if(ha_calvar[i].Var1Type==OT_ARRAY) {
         l=0;
         for (j=0; j<fdim; j++) {
           if(ha_calvar[i].Var1SupSet[j]==1) {
@@ -771,7 +771,7 @@ solve_real formula_eval(elem_value *record,set_def *ha_set,set_element *ha_setel
         }
         eval1=record[ha_calvar[i].Var1BegAdd+l].value;
       }
-      if(ha_calvar[i].Var1Type==2) {
+      if(ha_calvar[i].Var1Type==OT_SUM) {
         l=0;
         for (j=0; j<fdim; j++) {
           if(ha_calvar[i].Var1SupSet[j]==1) {
@@ -782,13 +782,13 @@ solve_real formula_eval(elem_value *record,set_def *ha_set,set_element *ha_setel
         }
         eval1=ha_sumele[ha_calvar[i].Var1BegAdd+l].value;
       }
-      if (ha_calvar[i].Var1Type==4) {
+      if (ha_calvar[i].Var1Type==OT_TEMP) {
         eval1=ha_calvar[ha_calvar[i].Var1BegAdd].TmpVarVal;
       }
-      if (ha_calvar[i].Var1Type==5) {
+      if (ha_calvar[i].Var1Type==OT_CONST) {
         eval1=ha_calvar[i].Var1Val;
       }
-      if(ha_calvar[i].Var1Type==6) {
+      if(ha_calvar[i].Var1Type==OT_CHANGE) {
         l=0;
         for (j=0; j<fdim; j++) {
           if(ha_calvar[i].Var1SupSet[j]==1) {
@@ -799,7 +799,7 @@ solve_real formula_eval(elem_value *record,set_def *ha_set,set_element *ha_setel
         }
         eval1=record[ha_calvar[i].Var1BegAdd+l].substep_base;
       }
-      if(ha_calvar[i].Var2Type==0) {
+      if(ha_calvar[i].Var2Type==OT_ARRAY) {
         l=0;
         for (j=0; j<fdim; j++) {
           if(ha_calvar[i].Var2SupSet[j]==1) {
@@ -810,7 +810,7 @@ solve_real formula_eval(elem_value *record,set_def *ha_set,set_element *ha_setel
         }
         eval2=record[ha_calvar[i].Var2BegAdd+l].value;
       }
-      if(ha_calvar[i].Var2Type==2) {
+      if(ha_calvar[i].Var2Type==OT_SUM) {
         l=0;
         for (j=0; j<fdim; j++) {
           if(ha_calvar[i].Var2SupSet[j]==1) {
@@ -821,13 +821,13 @@ solve_real formula_eval(elem_value *record,set_def *ha_set,set_element *ha_setel
         }
         eval2=ha_sumele[ha_calvar[i].Var2BegAdd+l].value;
       }
-      if (ha_calvar[i].Var2Type==4) {
+      if (ha_calvar[i].Var2Type==OT_TEMP) {
         eval2=ha_calvar[ha_calvar[i].Var2BegAdd].TmpVarVal;
       }
-      if (ha_calvar[i].Var2Type==5) {
+      if (ha_calvar[i].Var2Type==OT_CONST) {
         eval2=ha_calvar[i].Var2Val;
       }
-      if(ha_calvar[i].Var2Type==6) {
+      if(ha_calvar[i].Var2Type==OT_CHANGE) {
         l=0;
         for (j=0; j<fdim; j++) {
           if(ha_calvar[i].Var2SupSet[j]==1) {
@@ -840,8 +840,8 @@ solve_real formula_eval(elem_value *record,set_def *ha_set,set_element *ha_setel
       }
       ha_calvar[i].TmpVarVal=eval1-eval2;
       break;
-    case 5:
-      if(ha_calvar[i].Var1Type<3||ha_calvar[i].Var1Type==6) {
+    case OP_POW:
+      if(ha_calvar[i].Var1Type<3||ha_calvar[i].Var1Type==OT_CHANGE) {
         l=0;
         for (j=0; j<fdim; j++) {
           if(ha_calvar[i].Var1SupSet[j]==1) {
@@ -851,7 +851,7 @@ solve_real formula_eval(elem_value *record,set_def *ha_set,set_element *ha_setel
           }
         }
       }
-      if(ha_calvar[i].Var2Type<3||ha_calvar[i].Var2Type==6) {
+      if(ha_calvar[i].Var2Type<3||ha_calvar[i].Var2Type==OT_CHANGE) {
         l1=0;
         for (j=0; j<fdim; j++) {
           if(ha_calvar[i].Var2SupSet[j]==1) {
@@ -861,16 +861,16 @@ solve_real formula_eval(elem_value *record,set_def *ha_set,set_element *ha_setel
           }
         }
       }
-      if(ha_calvar[i].Var1Type==0) eval1=record[ha_calvar[i].Var1BegAdd+l].value;
-      if(ha_calvar[i].Var1Type==2) eval1=ha_sumele[ha_calvar[i].Var1BegAdd+l].value;
-      if(ha_calvar[i].Var1Type==4) eval1=ha_calvar[ha_calvar[i].Var1BegAdd].TmpVarVal;
-      if(ha_calvar[i].Var1Type==5) eval1=ha_calvar[i].Var1Val;
-      if(ha_calvar[i].Var1Type==6) eval1=record[ha_calvar[i].Var1BegAdd+l].substep_base;
-      if(ha_calvar[i].Var2Type==0) eval2=record[ha_calvar[i].Var2BegAdd+l1].value;
-      if(ha_calvar[i].Var2Type==2) eval2=ha_sumele[ha_calvar[i].Var2BegAdd+l1].value;
-      if(ha_calvar[i].Var2Type==4) eval2=ha_calvar[ha_calvar[i].Var2BegAdd].TmpVarVal;
-      if(ha_calvar[i].Var2Type==5) eval2=ha_calvar[i].Var2Val;
-      if(ha_calvar[i].Var2Type==6) eval2=record[ha_calvar[i].Var2BegAdd+l1].substep_base;
+      if(ha_calvar[i].Var1Type==OT_ARRAY) eval1=record[ha_calvar[i].Var1BegAdd+l].value;
+      if(ha_calvar[i].Var1Type==OT_SUM) eval1=ha_sumele[ha_calvar[i].Var1BegAdd+l].value;
+      if(ha_calvar[i].Var1Type==OT_TEMP) eval1=ha_calvar[ha_calvar[i].Var1BegAdd].TmpVarVal;
+      if(ha_calvar[i].Var1Type==OT_CONST) eval1=ha_calvar[i].Var1Val;
+      if(ha_calvar[i].Var1Type==OT_CHANGE) eval1=record[ha_calvar[i].Var1BegAdd+l].substep_base;
+      if(ha_calvar[i].Var2Type==OT_ARRAY) eval2=record[ha_calvar[i].Var2BegAdd+l1].value;
+      if(ha_calvar[i].Var2Type==OT_SUM) eval2=ha_sumele[ha_calvar[i].Var2BegAdd+l1].value;
+      if(ha_calvar[i].Var2Type==OT_TEMP) eval2=ha_calvar[ha_calvar[i].Var2BegAdd].TmpVarVal;
+      if(ha_calvar[i].Var2Type==OT_CONST) eval2=ha_calvar[i].Var2Val;
+      if(ha_calvar[i].Var2Type==OT_CHANGE) eval2=record[ha_calvar[i].Var2BegAdd+l1].substep_base;
       if(eval1==0&&eval2<0) {
         ha_calvar[i].TmpVarVal=zerodivide;
       } else {
@@ -879,7 +879,7 @@ solve_real formula_eval(elem_value *record,set_def *ha_set,set_element *ha_setel
       }
       break;
     default:
-      if(ha_calvar[i].Var1Type==0) {
+      if(ha_calvar[i].Var1Type==OT_ARRAY) {
         l=0;
         for (j=0; j<fdim; j++) {
           if(ha_calvar[i].Var1SupSet[j]==1) {
@@ -890,7 +890,7 @@ solve_real formula_eval(elem_value *record,set_def *ha_set,set_element *ha_setel
         }
         eval1=record[ha_calvar[i].Var1BegAdd+l].value;
       }
-      if(ha_calvar[i].Var1Type==2) {
+      if(ha_calvar[i].Var1Type==OT_SUM) {
         l=0;
         for (j=0; j<fdim; j++) {
           if(ha_calvar[i].Var1SupSet[j]==1) {
@@ -901,13 +901,13 @@ solve_real formula_eval(elem_value *record,set_def *ha_set,set_element *ha_setel
         }
         eval1=ha_sumele[ha_calvar[i].Var1BegAdd+l].value;
       }
-      if (ha_calvar[i].Var1Type==4) {
+      if (ha_calvar[i].Var1Type==OT_TEMP) {
         eval1=ha_calvar[ha_calvar[i].Var1BegAdd].TmpVarVal;
       }
-      if (ha_calvar[i].Var1Type==5) {
+      if (ha_calvar[i].Var1Type==OT_CONST) {
         eval1=ha_calvar[i].Var1Val;
       }
-      if(ha_calvar[i].Var1Type==6) {
+      if(ha_calvar[i].Var1Type==OT_CHANGE) {
         l=0;
         for (j=0; j<fdim; j++) {
           if(ha_calvar[i].Var1SupSet[j]==1) {
@@ -918,7 +918,7 @@ solve_real formula_eval(elem_value *record,set_def *ha_set,set_element *ha_setel
         }
         eval1=record[ha_calvar[i].Var1BegAdd+l].substep_base;
       }
-      if(ha_calvar[i].Var2Type==0) {
+      if(ha_calvar[i].Var2Type==OT_ARRAY) {
         l=0;
         for (j=0; j<fdim; j++) {
           if(ha_calvar[i].Var2SupSet[j]==1) {
@@ -929,7 +929,7 @@ solve_real formula_eval(elem_value *record,set_def *ha_set,set_element *ha_setel
         }
         eval2=record[ha_calvar[i].Var2BegAdd+l].value;
       }
-      if(ha_calvar[i].Var2Type==2) {
+      if(ha_calvar[i].Var2Type==OT_SUM) {
         l=0;
         for (j=0; j<fdim; j++) {
           if(ha_calvar[i].Var2SupSet[j]==1) {
@@ -940,13 +940,13 @@ solve_real formula_eval(elem_value *record,set_def *ha_set,set_element *ha_setel
         }
         eval2=ha_sumele[ha_calvar[i].Var2BegAdd+l].value;
       }
-      if (ha_calvar[i].Var2Type==4) {
+      if (ha_calvar[i].Var2Type==OT_TEMP) {
         eval2=ha_calvar[ha_calvar[i].Var2BegAdd].TmpVarVal;
       }
-      if (ha_calvar[i].Var2Type==5) {
+      if (ha_calvar[i].Var2Type==OT_CONST) {
         eval2=ha_calvar[i].Var2Val;
       }
-      if(ha_calvar[i].Var2Type==6) {
+      if(ha_calvar[i].Var2Type==OT_CHANGE) {
         l=0;
         for (j=0; j<fdim; j++) {
           if(ha_calvar[i].Var2SupSet[j]==1) {
@@ -958,7 +958,7 @@ solve_real formula_eval(elem_value *record,set_def *ha_set,set_element *ha_setel
         eval2=record[ha_calvar[i].Var2BegAdd+l].substep_base;
       }
 
-      if(ha_calvar[i].Var3Type==0) {
+      if(ha_calvar[i].Var3Type==OT_ARRAY) {
         l=0;
         for (j=0; j<fdim; j++) {
           if(ha_calvar[i].Var3SupSet[j]==1) {
@@ -969,7 +969,7 @@ solve_real formula_eval(elem_value *record,set_def *ha_set,set_element *ha_setel
         }
         eval3=record[ha_calvar[i].Var3BegAdd+l].value;
       }
-      if(ha_calvar[i].Var3Type==2) {
+      if(ha_calvar[i].Var3Type==OT_SUM) {
         l=0;
         for (j=0; j<fdim; j++) {
           if(ha_calvar[i].Var3SupSet[j]==1) {
@@ -980,13 +980,13 @@ solve_real formula_eval(elem_value *record,set_def *ha_set,set_element *ha_setel
         }
         eval3=ha_sumele[ha_calvar[i].Var3BegAdd+l].value;
       }
-      if (ha_calvar[i].Var3Type==4) {
+      if (ha_calvar[i].Var3Type==OT_TEMP) {
         eval3=ha_calvar[ha_calvar[i].Var3BegAdd].TmpVarVal;
       }
-      if (ha_calvar[i].Var3Type==5) {
+      if (ha_calvar[i].Var3Type==OT_CONST) {
         eval3=ha_calvar[i].Var3Val;
       }
-      if(ha_calvar[i].Var3Type==6) {
+      if(ha_calvar[i].Var3Type==OT_CHANGE) {
         l=0;
         for (j=0; j<fdim; j++) {
           if(ha_calvar[i].Var3SupSet[j]==1) {
@@ -997,12 +997,12 @@ solve_real formula_eval(elem_value *record,set_def *ha_set,set_element *ha_setel
         }
         eval3=record[ha_calvar[i].Var3BegAdd+l].substep_base;
       }
-      if(ha_calvar[i].Oper==71)if(eval1==eval2)ha_calvar[i].TmpVarVal=eval3;else ha_calvar[i].TmpVarVal=0;
-      if(ha_calvar[i].Oper==72)if(eval1>eval2)ha_calvar[i].TmpVarVal=eval3;else ha_calvar[i].TmpVarVal=0;
-      if(ha_calvar[i].Oper==73)if(eval1<eval2)ha_calvar[i].TmpVarVal=eval3;else ha_calvar[i].TmpVarVal=0;
-      if(ha_calvar[i].Oper==74)if(eval1!=eval2)ha_calvar[i].TmpVarVal=eval3;else ha_calvar[i].TmpVarVal=0;
-      if(ha_calvar[i].Oper==75)if(eval1<=eval2)ha_calvar[i].TmpVarVal=eval3;else ha_calvar[i].TmpVarVal=0;
-      if(ha_calvar[i].Oper==76)if(eval1>=eval2)ha_calvar[i].TmpVarVal=eval3;else ha_calvar[i].TmpVarVal=0;
+      if(ha_calvar[i].Oper==OP_IF_EQ)if(eval1==eval2)ha_calvar[i].TmpVarVal=eval3;else ha_calvar[i].TmpVarVal=0;
+      if(ha_calvar[i].Oper==OP_IF_GT)if(eval1>eval2)ha_calvar[i].TmpVarVal=eval3;else ha_calvar[i].TmpVarVal=0;
+      if(ha_calvar[i].Oper==OP_IF_LT)if(eval1<eval2)ha_calvar[i].TmpVarVal=eval3;else ha_calvar[i].TmpVarVal=0;
+      if(ha_calvar[i].Oper==OP_IF_NE)if(eval1!=eval2)ha_calvar[i].TmpVarVal=eval3;else ha_calvar[i].TmpVarVal=0;
+      if(ha_calvar[i].Oper==OP_IF_LE)if(eval1<=eval2)ha_calvar[i].TmpVarVal=eval3;else ha_calvar[i].TmpVarVal=0;
+      if(ha_calvar[i].Oper==OP_IF_GE)if(eval1>=eval2)ha_calvar[i].TmpVarVal=eval3;else ha_calvar[i].TmpVarVal=0;
       break;
     }
   }
@@ -1094,7 +1094,7 @@ int formula_compile_pow(char *fomulain, set_def *ha_set,int npow,int ipar,array_
     sprintf(interchar1, "%d", i);
     strcat(interchar,interchar1);
     strcpy(ha_calvar[*ha_calvarsize].TmpVarName,interchar);
-    ha_calvar[*ha_calvarsize].Oper=5;
+    ha_calvar[*ha_calvarsize].Oper=OP_POW;
     *ha_calvarsize=*ha_calvarsize+1;
     strcat(fpart1, interchar);
     strcat(fpart1, fpart2);
@@ -1111,9 +1111,9 @@ int formula_compile_muldiv(char *fomulain, set_def *ha_set,int nmul,int ipar,arr
     index=0;
     p=strpbrk(fomulain,"*/");
     if (*p=='/') {
-      ha_calvar[*ha_calvarsize].Oper=2;
+      ha_calvar[*ha_calvarsize].Oper=OP_DIV;
     } else {
-      ha_calvar[*ha_calvarsize].Oper=1;
+      ha_calvar[*ha_calvarsize].Oper=OP_MUL;
     }
     index=p-fomulain;
 
@@ -1207,9 +1207,9 @@ int formula_compile_addsub(char *fomulain, set_def *ha_set,int nplu,int ipar,arr
     index=0;
     p=strpbrk(fomulain,"+-");
     if (*p=='+') {
-      ha_calvar[*ha_calvarsize].Oper=3;
+      ha_calvar[*ha_calvarsize].Oper=OP_ADD;
     } else {
-      ha_calvar[*ha_calvarsize].Oper=4;
+      ha_calvar[*ha_calvarsize].Oper=OP_SUB;
     }
     index=p-fomulain;
 
@@ -1260,12 +1260,12 @@ int formula_compile_addsub(char *fomulain, set_def *ha_set,int nplu,int ipar,arr
     strcpy(fpart2,fpart3+index);
 
     if(i==1&&var1[0]=='\0'){
-        ha_calvar[*ha_calvarsize].Var1Type=5;
+        ha_calvar[*ha_calvarsize].Var1Type=OT_CONST;
         ha_calvar[*ha_calvarsize].Var1Val=0;
     }
     else formula_bind_operand(var1,ha_set,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,*ha_calvarsize,arSet,fdim,1);
     if(i==1&&var2[0]=='\0'){
-        ha_calvar[*ha_calvarsize].Var2Type=5;
+        ha_calvar[*ha_calvarsize].Var2Type=OT_CONST;
         ha_calvar[*ha_calvarsize].Var2Val=0;
     }
     else formula_bind_operand(var2,ha_set,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,*ha_calvarsize,arSet,fdim,2);
@@ -1312,18 +1312,18 @@ int formula_compile_if(char *fomulain, set_def *ha_set,int nif,int ipar,array_de
   var1[p-p1]='\0';
   p3=p+1;
   if(*p3=='='){
-    if(*p=='<')ha_calvar[*ha_calvarsize].Oper=75;
-    if(*p=='>')ha_calvar[*ha_calvarsize].Oper=76;
+    if(*p=='<')ha_calvar[*ha_calvarsize].Oper=OP_IF_LE;
+    if(*p=='>')ha_calvar[*ha_calvarsize].Oper=OP_IF_GE;
     p++;
     p++;
   }else if(*p3=='>'){
-          ha_calvar[*ha_calvarsize].Oper=74;
+          ha_calvar[*ha_calvarsize].Oper=OP_IF_NE;
           p++;
           p++;
           }else{
-          if(*p=='=')ha_calvar[*ha_calvarsize].Oper=71;
-          if(*p=='>')ha_calvar[*ha_calvarsize].Oper=72;
-          if(*p=='<')ha_calvar[*ha_calvarsize].Oper=73;
+          if(*p=='=')ha_calvar[*ha_calvarsize].Oper=OP_IF_EQ;
+          if(*p=='>')ha_calvar[*ha_calvarsize].Oper=OP_IF_GT;
+          if(*p=='<')ha_calvar[*ha_calvarsize].Oper=OP_IF_LT;
           p++;
         }
   l=strlen(p);
@@ -1794,7 +1794,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *ha_set,dim_t ns
         if(ha_cof[index].gltype>0){
         #pragma omp parallel private(l) shared(ha_cofvar,ha_cof,ncof,offset,index)
         {
-          if(ha_cof[index].gltype==1){
+          if(ha_cof[index].gltype==BT_GE){
           #pragma omp for
           for (l=0; l<varsize; l++) {
             if(ha_cofvar[offset+l].value<ha_cof[index].glval){
@@ -1803,7 +1803,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *ha_set,dim_t ns
             }
           }
           }
-          if(ha_cof[index].gltype==2){
+          if(ha_cof[index].gltype==BT_GT){
           #pragma omp for
           for (l=0; l<varsize; l++) {
             if(ha_cofvar[offset+l].value<=ha_cof[index].glval){
@@ -1812,7 +1812,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *ha_set,dim_t ns
             }
           }
           }
-          if(ha_cof[index].gltype==3){
+          if(ha_cof[index].gltype==BT_LE){
           #pragma omp for
           for (l=0; l<varsize; l++) {
             if(ha_cofvar[offset+l].value>ha_cof[index].glval){
@@ -1821,7 +1821,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *ha_set,dim_t ns
             }
           }
           }
-          if(ha_cof[index].gltype==4){
+          if(ha_cof[index].gltype==BT_LT){
           #pragma omp for
           for (l=0; l<varsize; l++) {
             if(ha_cofvar[offset+l].value>=ha_cof[index].glval){
@@ -2108,7 +2108,7 @@ offset_t updates_apply(char *fname,set_def *ha_set,dim_t nset, set_element *ha_s
         if(ha_cof[index].gltype>0){
         #pragma omp parallel private(l) shared(ha_cofvar,ha_cof,ncof,offset,index)
         {
-          if(ha_cof[index].gltype==1){
+          if(ha_cof[index].gltype==BT_GE){
           #pragma omp for
           for (l=0; l<varsize; l++) {
             if(ha_cofvar[offset+l].value<ha_cof[index].glval){
@@ -2117,7 +2117,7 @@ offset_t updates_apply(char *fname,set_def *ha_set,dim_t nset, set_element *ha_s
             }
           }
           }
-          if(ha_cof[index].gltype==2){
+          if(ha_cof[index].gltype==BT_GT){
           #pragma omp for
           for (l=0; l<varsize; l++) {
             if(ha_cofvar[offset+l].value<=ha_cof[index].glval){
@@ -2126,7 +2126,7 @@ offset_t updates_apply(char *fname,set_def *ha_set,dim_t nset, set_element *ha_s
             }
           }
           }
-          if(ha_cof[index].gltype==3){
+          if(ha_cof[index].gltype==BT_LE){
           #pragma omp for
           for (l=0; l<varsize; l++) {
             if(ha_cofvar[offset+l].value>ha_cof[index].glval){
@@ -2135,7 +2135,7 @@ offset_t updates_apply(char *fname,set_def *ha_set,dim_t nset, set_element *ha_s
             }
           }
           }
-          if(ha_cof[index].gltype==4){
+          if(ha_cof[index].gltype==BT_LT){
           #pragma omp for
           for (l=0; l<varsize; l++) {
             if(ha_cofvar[offset+l].value>=ha_cof[index].glval){
@@ -2405,7 +2405,7 @@ offset_t updates_apply_product(char *fname,set_def *ha_set,dim_t nset, set_eleme
         if(ha_cof[index].gltype>0){
         #pragma omp parallel private(l) shared(ha_cofvar,ha_cof,ncof,offset,index)
         {
-          if(ha_cof[index].gltype==1){
+          if(ha_cof[index].gltype==BT_GE){
           #pragma omp for
           for (l=0; l<varsize; l++) {
             if(ha_cofvar[offset+l].value<ha_cof[index].glval){
@@ -2414,7 +2414,7 @@ offset_t updates_apply_product(char *fname,set_def *ha_set,dim_t nset, set_eleme
             }
           }
           }
-          if(ha_cof[index].gltype==2){
+          if(ha_cof[index].gltype==BT_GT){
           #pragma omp for
           for (l=0; l<varsize; l++) {
             if(ha_cofvar[offset+l].value<=ha_cof[index].glval){
@@ -2423,7 +2423,7 @@ offset_t updates_apply_product(char *fname,set_def *ha_set,dim_t nset, set_eleme
             }
           }
           }
-          if(ha_cof[index].gltype==3){
+          if(ha_cof[index].gltype==BT_LE){
           #pragma omp for
           for (l=0; l<varsize; l++) {
             if(ha_cofvar[offset+l].value>ha_cof[index].glval){
@@ -2432,7 +2432,7 @@ offset_t updates_apply_product(char *fname,set_def *ha_set,dim_t nset, set_eleme
             }
           }
           }
-          if(ha_cof[index].gltype==4){
+          if(ha_cof[index].gltype==BT_LT){
           #pragma omp for
           for (l=0; l<varsize; l++) {
             if(ha_cofvar[offset+l].value>=ha_cof[index].glval){

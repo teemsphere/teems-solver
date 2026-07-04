@@ -1933,7 +1933,7 @@ offset_t variables_read(char *fname, char *commsyntax, array_def *record, offset
     }
     readitem=strstr(line, "(ge ");
     if(readitem!=NULL){
-      record[j].gltype=1;
+      record[j].gltype=BT_GE;
       strcpy(linecopy,line);
       tpnt=strstr(readitem, ")");
       tpnt+=1;
@@ -1945,7 +1945,7 @@ offset_t variables_read(char *fname, char *commsyntax, array_def *record, offset
     }
     readitem=strstr(line, "(gt ");
     if(readitem!=NULL){
-      record[j].gltype=2;
+      record[j].gltype=BT_GT;
       strcpy(linecopy,line);
       tpnt=strstr(readitem, ")");
       tpnt+=1;
@@ -1957,7 +1957,7 @@ offset_t variables_read(char *fname, char *commsyntax, array_def *record, offset
     }
     readitem=strstr(line, "(le ");
     if(readitem!=NULL){
-      record[j].gltype=3;
+      record[j].gltype=BT_LE;
       strcpy(linecopy,line);
       tpnt=strstr(readitem, ")");
       tpnt+=1;
@@ -1969,7 +1969,7 @@ offset_t variables_read(char *fname, char *commsyntax, array_def *record, offset
     }
     readitem=strstr(line, "(lt ");
     if(readitem!=NULL){
-      record[j].gltype=4;
+      record[j].gltype=BT_LT;
       strcpy(linecopy,line);
       tpnt=strstr(readitem, ")");
       tpnt+=1;
@@ -1982,7 +1982,7 @@ offset_t variables_read(char *fname, char *commsyntax, array_def *record, offset
 
     readitem=strstr(line, ",ge ");
     if(readitem!=NULL){
-      record[j].gltype=1;
+      record[j].gltype=BT_GE;
       strcpy(linecopy,line);
       tpnt=strstr(readitem, ")");
       memmove(readitem,tpnt,strlen(tpnt)+1);
@@ -1995,7 +1995,7 @@ offset_t variables_read(char *fname, char *commsyntax, array_def *record, offset
     }
     readitem=strstr(line, ",gt ");
     if(readitem!=NULL){
-      record[j].gltype=2;
+      record[j].gltype=BT_GT;
       strcpy(linecopy,line);
       tpnt=strstr(readitem, ")");
       memmove(readitem,tpnt,strlen(tpnt)+1);
@@ -2006,7 +2006,7 @@ offset_t variables_read(char *fname, char *commsyntax, array_def *record, offset
     }
     readitem=strstr(line, ",le ");
     if(readitem!=NULL){
-      record[j].gltype=3;
+      record[j].gltype=BT_LE;
       strcpy(linecopy,line);
       tpnt=strstr(readitem, ")");
       memmove(readitem,tpnt,strlen(tpnt)+1);
@@ -2017,7 +2017,7 @@ offset_t variables_read(char *fname, char *commsyntax, array_def *record, offset
     }
     readitem=strstr(line, ",lt ");
     if(readitem!=NULL){
-      record[j].gltype=4;
+      record[j].gltype=BT_LT;
       strcpy(linecopy,line);
       tpnt=strstr(readitem, ")");
       memmove(readitem,tpnt,strlen(tpnt)+1);
@@ -2200,7 +2200,7 @@ offset_t coefficients_read(char *fname, char *commsyntax, array_def *record, off
   while (tab_next_statement(commsyntax,filehandle,line,TABREADLINE)) {
     readitem=strstr(line, "(ge ");
     if(readitem!=NULL){
-      record[j].gltype=1;
+      record[j].gltype=BT_GE;
       strcpy(linecopy,line);
       tpnt=strstr(readitem, ")");
       tpnt+=1;
@@ -2212,7 +2212,7 @@ offset_t coefficients_read(char *fname, char *commsyntax, array_def *record, off
     }
     readitem=strstr(line, "(gt ");
     if(readitem!=NULL){
-      record[j].gltype=2;
+      record[j].gltype=BT_GT;
       strcpy(linecopy,line);
       tpnt=strstr(readitem, ")");
       tpnt+=1;
@@ -2224,7 +2224,7 @@ offset_t coefficients_read(char *fname, char *commsyntax, array_def *record, off
     }
     readitem=strstr(line, "(le ");
     if(readitem!=NULL){
-      record[j].gltype=3;
+      record[j].gltype=BT_LE;
       strcpy(linecopy,line);
       tpnt=strstr(readitem, ")");
       tpnt+=1;
@@ -2236,7 +2236,7 @@ offset_t coefficients_read(char *fname, char *commsyntax, array_def *record, off
     }
     readitem=strstr(line, "(lt ");
     if(readitem!=NULL){
-      record[j].gltype=4;
+      record[j].gltype=BT_LT;
       strcpy(linecopy,line);
       tpnt=strstr(readitem, ")");
       tpnt+=1;
@@ -2249,7 +2249,7 @@ offset_t coefficients_read(char *fname, char *commsyntax, array_def *record, off
 
     readitem=strstr(line, ",ge ");
     if(readitem!=NULL){
-      record[j].gltype=1;
+      record[j].gltype=BT_GE;
       strcpy(linecopy,line);
       tpnt=strstr(readitem, ")");
       memmove(readitem,tpnt,strlen(tpnt)+1);
@@ -2260,7 +2260,7 @@ offset_t coefficients_read(char *fname, char *commsyntax, array_def *record, off
     }
     readitem=strstr(line, ",gt ");
     if(readitem!=NULL){
-      record[j].gltype=2;
+      record[j].gltype=BT_GT;
       strcpy(linecopy,line);
       tpnt=strstr(readitem, ")");
       memmove(readitem,tpnt,strlen(tpnt)+1);
@@ -2271,7 +2271,7 @@ offset_t coefficients_read(char *fname, char *commsyntax, array_def *record, off
     }
     readitem=strstr(line, ",le ");
     if(readitem!=NULL){
-      record[j].gltype=3;
+      record[j].gltype=BT_LE;
       strcpy(linecopy,line);
       tpnt=strstr(readitem, ")");
       memmove(readitem,tpnt,strlen(tpnt)+1);
@@ -2282,7 +2282,7 @@ offset_t coefficients_read(char *fname, char *commsyntax, array_def *record, off
     }
     readitem=strstr(line, ",lt ");
     if(readitem!=NULL){
-      record[j].gltype=4;
+      record[j].gltype=BT_LT;
       strcpy(linecopy,line);
       tpnt=strstr(readitem, ")");
       memmove(readitem,tpnt,strlen(tpnt)+1);
