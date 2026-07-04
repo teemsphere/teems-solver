@@ -14,7 +14,7 @@
 #include <petscsys.h>
 #include <petsctime.h>
 #include <stdbool.h>
-#include </opt/teems-solver/lib/petsc/src/mat/impls/aij/seq/aij.h>
+#include <aij.h> /* PETSc private SeqAIJ header; path supplied by makefile */
 #include <petscdmda.h>
 #include <omp.h>
 

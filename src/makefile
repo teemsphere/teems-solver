@@ -11,7 +11,7 @@ FC        = $(MPICH_DIR)/bin/mpif90 -fopenmp
 F77       = $(MPICH_DIR)/bin/mpif77 -fopenmp
 OPT      ?= -Ofast
 F77FLAGS  = -I. -I/usr/local/include
-CFLAGS    = -I. -I${PETSC_DIR}/native/include -I ${PETSC_DIR}/include -fopenmp
+CFLAGS    = -I. -I${PETSC_DIR}/native/include -I ${PETSC_DIR}/include -I${PETSC_DIR}/src/mat/impls/aij/seq -fopenmp
 FFLAGS    = -fallow-argument-mismatch
 LDFLAGS   = -fopenmp
 
