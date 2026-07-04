@@ -183,6 +183,7 @@ int main(int argc,char **args) {
   PetscOptionsGetReal(NULL,NULL,"-cntl_3",&cntl3,NULL);/*Iterative threshold */
   PetscOptionsGetInt(NULL,NULL,"-ndbbd_bl_rank",&ndbbdrank,NULL);/*Override default rank for last block in NDBBD method. Read text file. >0 text column. Use with care*/
   PetscOptionsGetInt(NULL,NULL,"-stoiter",&StoIter,NULL);
+  PetscOptionsGetInt(NULL,NULL,"-inmemory",&inmemory,NULL);/* keep value arrays resident instead of spilling to scratch */
   {
     /* Scratch directory for solver temp files: -tempdir option, else
        TMPDIR, else the compiled-in default (/tmp/). Capped at 200
@@ -1269,6 +1270,25 @@ int main(int argc,char **args) {
   printf("rank %d ncof %ld\n",rank,ncof);
   
 
+  if(inmemory) {
+    /* Residency cost of skipping the driver spills: value arrays plus the
+       modified-midpoint step state. Fall back to scratch files unless it
+       fits comfortably in available memory. */
+    long need=(long)(ncofele+nvarele)*sizeof(elem_value)
+             +(long)nvarele*(sizeof(closure_entry)+6*sizeof(solve_real)+sizeof(int));
+    long avail=-1;
+    FILE *mi=fopen("/proc/meminfo","r");
+    if(mi) {
+      char mline[256];
+      while(fgets(mline,sizeof(mline),mi))if(sscanf(mline,"MemAvailable: %ld kB",&avail)==1)break;
+      fclose(mi);
+      if(avail>0)avail*=1024;
+    }
+    if(avail>0&&2*need>avail) {
+      if(rank==0)printf("Warning!!! -inmemory needs ~%ld MB per rank but only ~%ld MB available; using scratch files instead\n",need/1048576,avail/1048576);
+      inmemory=0;
+    } else if(rank==0)printf("inmemory: keeping ~%ld MB of value arrays resident per rank\n",need/1048576);
+  }
   if(solmethod==SM_JOHANSEN)solve_johansen(nohsl,VecSize,A,dnz,dnnz,onz,onnz,B,dnzB,dnnzB,onzB,onnzB,vecb,vece,rank,rank_hsl,mpisize,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,&elem_vals,ncofele+nvarele,ncofele,nvarele,&closure_vals,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,eq_addr,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,presol,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,&xcf);
   
   int stepcount;

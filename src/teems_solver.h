@@ -31,6 +31,7 @@
 #define MAXSSIZE 187500000//1500000000/8
 /* Definitions live in globals.c */
 extern int isLinux;
+extern int inmemory; /* -inmemory: keep value arrays resident instead of spilling to scratch */
 extern int section_threads;
 extern int max_threads;
 extern double step_ratio2,step_ratio3,extrap_w1,extrap_w2,extrap_w3;

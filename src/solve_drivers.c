@@ -249,6 +249,7 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
     ierr = VecAssemblyEnd(vece);
     CHKERRQ(ierr);
     if(rank==rank_hsl) {
+      if(!inmemory){
       strcpy(tempfilenam,scratch_dir);
       strcat(tempfilenam,"_tempshock");
       sprintf(tempchar, "%d",rank);
@@ -262,8 +263,10 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
       free(*closure_vals2);//
       *closure_vals2=NULL;//realloc (ha_cgeshock,1*sizeof(ha_cgeexovar));
       closure_vals=*closure_vals2;
+      }
     }
     if(rank==rank_hsl) {
+      if(!inmemory){
       strcpy(tempfilenam,scratch_dir);
       strcat(tempfilenam,"_tempvar");
       sprintf(tempchar, "%d",rank);
@@ -277,6 +280,7 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
       free(*elem_vals2);//
       *elem_vals2=NULL;//realloc (ha_cofvar,1*sizeof(ha_cgevar));
       elem_vals=*elem_vals2;
+      }
     }
 
     MPI_Barrier(PETSC_COMM_WORLD);
@@ -476,6 +480,7 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
       if(rank==0)printf("One step calculation time %f\n",(endtime.tv_sec - begintime.tv_sec)+((double)(endtime.tv_usec - begintime.tv_usec))/ 1000000);
     }
     if(rank==rank_hsl) {
+      if(!inmemory){
       if ((tempvar = fopen(tempfilenam, "rb")) == NULL) {
         printf("Error opening file\n");
       }
@@ -483,8 +488,10 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
       freadresult=fread(*elem_vals2, sizeof(elem_value),ncofele+nvarele, tempvar);
       fclose(tempvar);
       remove(tempfilenam);
+      }
       elem_vals=*elem_vals2;
 
+      if(!inmemory){
       strcpy(tempfilenam,scratch_dir);
       strcat(tempfilenam,"_tempshock");
       sprintf(tempchar, "%d",rank);
@@ -497,6 +504,7 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
       freadresult=fread(*closure_vals2, sizeof(closure_entry),nvarele, tempvar);
       fclose(tempvar);
       remove(tempfilenam);
+      }
       closure_vals=*closure_vals2;      
     }
     *xcf2=(solve_real*)realloc (*xcf2,nvarele*sizeof(solve_real));
@@ -697,6 +705,7 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
           printf("OK!!!\n");
           if(rank==rank_hsl) {
 
+            if(!inmemory){
             strcpy(tempfilenam,scratch_dir);
             strcat(tempfilenam,"_tempclag1");
             sprintf(tempchar, "%d",rank);
@@ -709,7 +718,9 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
             fclose(tempvar);
             free(clag1);
             clag1=NULL;
+            }
 
+            if(!inmemory){
             strcpy(tempfilenam,scratch_dir);
             strcat(tempfilenam,"_tempvarchange");
             sprintf(tempchar, "%d",rank);
@@ -722,6 +733,7 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
             fclose(tempvar);
             free(varchange);
             varchange=NULL;
+            }
           }
           MPI_Barrier(PETSC_COMM_WORLD);
 
@@ -774,6 +786,7 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
             jacobian_fill(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,closure_vals,ndblock,alltimeset,allregset,eq_addr,counteq,nintraeq,A,B);
           }
           if(rank==rank_hsl) {
+            if(!inmemory){
             strcpy(tempfilenam,scratch_dir);
             strcat(tempfilenam,"_tempvar");
             sprintf(tempchar, "%d",rank);
@@ -787,7 +800,9 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
             free(*elem_vals2);
             *elem_vals2=NULL;
             elem_vals=*elem_vals2;
+            }
 
+            if(!inmemory){
             strcpy(tempfilenam,scratch_dir);
             strcat(tempfilenam,"_tempshock");
             sprintf(tempchar, "%d",rank);
@@ -801,6 +816,7 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
             free(*closure_vals2);
             *closure_vals2=NULL;
             closure_vals=*closure_vals2;
+            }
           }
 
           MPI_Barrier(PETSC_COMM_WORLD);
@@ -1017,6 +1033,7 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
             }
           }
           if(rank==rank_hsl) {
+            if(!inmemory){
             if ((tempvar = fopen(tempfilenam, "rb")) == NULL) {
               printf("Error opening file\n");
             }
@@ -1024,8 +1041,10 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
             freadresult=fread(*closure_vals2, sizeof(closure_entry),nvarele, tempvar);
             fclose(tempvar);
             remove(tempfilenam);
+            }
             closure_vals=*closure_vals2;
 
+            if(!inmemory){
             strcpy(tempfilenam,scratch_dir);
             strcat(tempfilenam,"_tempvar");
             sprintf(tempchar, "%d",rank);
@@ -1038,8 +1057,10 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
             freadresult=fread(*elem_vals2, sizeof(elem_value),ncofele+nvarele, tempvar);
             fclose(tempvar);
             remove(tempfilenam);
+            }
             elem_vals=*elem_vals2;
 
+            if(!inmemory){
             strcpy(tempfilenam,scratch_dir);
             strcat(tempfilenam,"_tempclag1");
             sprintf(tempchar, "%d",rank);
@@ -1052,7 +1073,9 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
             freadresult=fread(clag1, sizeof(solve_real),nvarele, tempvar);
             fclose(tempvar);
             remove(tempfilenam);
+            }
 
+            if(!inmemory){
             strcpy(tempfilenam,scratch_dir);
             strcat(tempfilenam,"_tempvarchange");
             sprintf(tempchar, "%d",rank);
@@ -1065,6 +1088,7 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
             freadresult=fread(varchange, sizeof(solve_real),nvarele, tempvar);
             fclose(tempvar);
             remove(tempfilenam);
+            }
 
           }
           printf("sol %d stepcount %d\n\n",sol,stepcount);
@@ -1194,6 +1218,7 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
         if(rank==rank_hsl) {
 
 
+          if(!inmemory){
           strcpy(tempfilenam,scratch_dir);
           strcat(tempfilenam,"_tempclag1");
           sprintf(tempchar, "%d",rank);
@@ -1206,7 +1231,9 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
           fclose(tempvar);
           free(clag1);
           clag1=NULL;
+          }
 
+          if(!inmemory){
           strcpy(tempfilenam,scratch_dir);
           strcat(tempfilenam,"_tempvarchange");
           sprintf(tempchar, "%d",rank);
@@ -1219,6 +1246,7 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
           fclose(tempvar);
           free(varchange);
           varchange=NULL;
+          }
 
         }
 
@@ -1270,6 +1298,7 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
         }
 
         if(rank==rank_hsl) {
+          if(!inmemory){
           strcpy(tempfilenam,scratch_dir);
           strcat(tempfilenam,"_tempvar");
           sprintf(tempchar, "%d",rank);
@@ -1283,7 +1312,9 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
           free(*elem_vals2);
           *elem_vals2=NULL;
           elem_vals=*elem_vals2;
+          }
 
+          if(!inmemory){
           strcpy(tempfilenam,scratch_dir);
           strcat(tempfilenam,"_tempshock");
           sprintf(tempchar, "%d",rank);
@@ -1297,6 +1328,7 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
           free(*closure_vals2);
           *closure_vals2=NULL;
           closure_vals=*closure_vals2;
+          }
         }
 
         MPI_Barrier(PETSC_COMM_WORLD);
@@ -1512,6 +1544,7 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
           }
         }
         if(rank==rank_hsl) {
+          if(!inmemory){
           if ((tempvar = fopen(tempfilenam, "rb")) == NULL) {
             printf("Error opening file\n");
           }
@@ -1519,8 +1552,10 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
           freadresult=fread(*closure_vals2, sizeof(closure_entry),nvarele, tempvar);
           fclose(tempvar);
           remove(tempfilenam);
+          }
           closure_vals=*closure_vals2;
 
+          if(!inmemory){
           strcpy(tempfilenam,scratch_dir);
           strcat(tempfilenam,"_tempvar");
           sprintf(tempchar, "%d",rank);
@@ -1533,8 +1568,10 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
           freadresult=fread(*elem_vals2, sizeof(elem_value),ncofele+nvarele, tempvar);
           fclose(tempvar);
           remove(tempfilenam);
+          }
           elem_vals=*elem_vals2;
 
+          if(!inmemory){
           strcpy(tempfilenam,scratch_dir);
           strcat(tempfilenam,"_tempclag1");
           sprintf(tempchar, "%d",rank);
@@ -1547,7 +1584,9 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
           freadresult=fread(clag1, sizeof(solve_real),nvarele, tempvar);
           fclose(tempvar);
           remove(tempfilenam);
+          }
 
+          if(!inmemory){
           strcpy(tempfilenam,scratch_dir);
           strcat(tempfilenam,"_tempvarchange");
           sprintf(tempchar, "%d",rank);
@@ -1560,6 +1599,7 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
           freadresult=fread(varchange, sizeof(solve_real),nvarele, tempvar);
           fclose(tempvar);
           remove(tempfilenam);
+          }
 
         }
         elem_vals1=elem_vals+ncofele;
@@ -1591,6 +1631,7 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
         }
         if(rank==rank_hsl) {
           if(subindx!=0||sol!=0) {
+            if(!inmemory){
             strcpy(tempfilenam,scratch_dir);
             strcat(tempfilenam,"_tempxcf");
             sprintf(tempchar, "%d",rank);
@@ -1604,7 +1645,9 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
             freadresult=fread(xcf, sizeof(solve_real),nvarele, tempvar);
             fclose(tempvar);
             remove(tempfilenam);
+            }
 
+            if(!inmemory){
             strcpy(tempfilenam,scratch_dir);
             strcat(tempfilenam,"_tempxc12");
             sprintf(tempchar, "%d",rank);
@@ -1617,6 +1660,8 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
             freadresult=fread(xc12, sizeof(solve_real),nvarele, tempvar);
             fclose(tempvar);
             remove(tempfilenam);
+            }
+            if(!inmemory){
             strcpy(tempfilenam,scratch_dir);
             strcat(tempfilenam,"_tempxc24");
             sprintf(tempchar, "%d",rank);
@@ -1629,9 +1674,11 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
             freadresult=fread(xc24, sizeof(solve_real),nvarele, tempvar);
             fclose(tempvar);
             remove(tempfilenam);
+            }
             
             xc0=realloc (xc0,(nvarele)*sizeof(solve_real));
             if(subindx>0&&sol>0){
+            if(!inmemory){
             strcpy(tempfilenam,scratch_dir);
             strcat(tempfilenam,"_tempxcO");
             sprintf(tempchar, "%d",rank);
@@ -1643,6 +1690,7 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
             freadresult=fread(xc0, sizeof(solve_real),nvarele, tempvar);
             fclose(tempvar);
             if(subindx==subints-1&&sol==maxsol-1)remove(tempfilenam);
+            }
             }
 
           }
@@ -1781,6 +1829,7 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
 
           
           if(!(subindx==subints-1&&sol==maxsol-1)) {
+            if(!inmemory){
             strcpy(tempfilenam,scratch_dir);
             strcat(tempfilenam,"_tempxcf");
             sprintf(tempchar, "%d",rank);
@@ -1794,7 +1843,9 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
             free(*xcf2);
             *xcf2=NULL;
             xcf=*xcf2;
+            }
             
+            if(!inmemory){
             if(subindx>0&&sol==0){            strcpy(tempfilenam,scratch_dir);
             strcat(tempfilenam,"_tempxcO");
             sprintf(tempchar, "%d",rank);
@@ -1806,6 +1857,7 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
             fwrite(xc0, sizeof(solve_real),nvarele, tempvar);
             fclose(tempvar);
             }
+            }
             free(xc0);
             xc0=NULL;
           }
@@ -1815,6 +1867,7 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
               xc124=realloc (xc124,nvarele*sizeof(int));
               for(i=0; i<nvarele; i++)xc124[i]=6;
             }else{
+            if(!inmemory){
             strcpy(tempfilenam,scratch_dir);
             strcat(tempfilenam,"_tempxc124");
             sprintf(tempchar, "%d",rank);
@@ -1827,6 +1880,7 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
             freadresult=fread(xc124, sizeof(int),nvarele, tempvar);
             fclose(tempvar);
             remove(tempfilenam);
+            }
             }
 
       for(i=0; i<nvarele; i++){
@@ -1865,6 +1919,7 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
         }
       }
       if(subindx!=subints-1){
+            if(!inmemory){
             strcpy(tempfilenam,scratch_dir);
             strcat(tempfilenam,"_tempxc124");
             sprintf(tempchar, "%d",rank);
@@ -1877,10 +1932,12 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
             fclose(tempvar);
             free(xc124);
             xc124=NULL;
+            }
       }
     }
             
           if(!(subindx==subints-1&&sol==maxsol-1)) {
+            if(!inmemory){
             strcpy(tempfilenam,scratch_dir);
             strcat(tempfilenam,"_tempxc12");
             sprintf(tempchar, "%d",rank);
@@ -1893,6 +1950,8 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
             fclose(tempvar);
             free(xc12);
             xc12=NULL;
+            }
+            if(!inmemory){
             strcpy(tempfilenam,scratch_dir);
             strcat(tempfilenam,"_tempxc24");
             sprintf(tempchar, "%d",rank);
@@ -1905,9 +1964,12 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
             fclose(tempvar);
             free(xc24);
             xc24=NULL;
+            }
           }
           
           
+          if(!inmemory){
+          /* per-subinterval solution snapshot; nothing reads it back */
           strcpy(solchar,scratch_dir);
           if(subindx<10)strcat(solchar,"_tempsol0");
           else strcat(solchar,"_tempsol");
@@ -1923,6 +1985,7 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
           }
           fwrite(xcf, sizeof(solve_real),nvarele, solution);
           fclose(solution);
+          }
         }
         free(x1);
         x1=NULL;

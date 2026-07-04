@@ -3,6 +3,7 @@
 #include <teems_solver.h>
 
 int isLinux;
+int inmemory;
 int section_threads;
 int max_threads;
 double step_ratio2, step_ratio3, extrap_w1, extrap_w2, extrap_w3;
