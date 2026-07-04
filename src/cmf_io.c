@@ -776,7 +776,7 @@ int tab_preprocess(char *filename, char *newtabfile) {
   return 1;
 }
 
-int outputs_write_csv(char *filename, char *newdatlogname, char *newdatfile,set_def *ha_set,dim_t nset, set_element *ha_setele,array_def *ha_cof,offset_t ncof,offset_t ncofele,array_def *ha_var,offset_t nvar,offset_t nvarele, elem_value *ha_cofvar) {
+int outputs_write_csv(char *filename, char *newdatlogname, char *newdatfile,set_def *sets,dim_t nset, set_element *set_elems,array_def *coefs,offset_t ncof,offset_t ncofele,array_def *vars,offset_t nvar,offset_t nvarele, elem_value *elem_vals) {
   FILE * filehandle,*fout;
   char line[TABREADLINE]="\0",*readline,comsyntax[TABREADLINE],longname[TABREADLINE],datline[DATREADLINE],varname[NAMESIZE],*vname1,header[NAMESIZE],setsize[DATREADLINE],tempname[NAMESIZE];
   filehandle = fopen(filename,"r");
@@ -811,15 +811,15 @@ int outputs_write_csv(char *filename, char *newdatlogname, char *newdatfile,set_
         longname[i]='\0';
         setsize[0]='\0';
         for (i=0; i<nset; i++) {
-          if (strcmp(ha_set[i].setname,varname)==0) {
-            sprintf(setsize, "%d", ha_set[i].size);
+          if (strcmp(sets[i].setname,varname)==0) {
+            sprintf(setsize, "%d", sets[i].size);
             strcat(setsize," Strings Length 12 Header \"");
             strcat(setsize,header);
             strcat(setsize,"\" LongName \"");
             strcat(setsize,longname);
             strcat(setsize,"\";\n");
             fprintf(fout,"%s",setsize);
-            for (j=0; j<ha_set[i].size; j++)fprintf(fout,"%s\n",ha_setele[ha_set[i].offset+j].setele);
+            for (j=0; j<sets[i].size; j++)fprintf(fout,"%s\n",set_elems[sets[i].offset+j].setele);
             fprintf(fout,"\n");
           }
         }
@@ -843,32 +843,32 @@ int outputs_write_csv(char *filename, char *newdatlogname, char *newdatfile,set_
         longname[i]='\0';
         setsize[0]='\0';
         for (i=0; i<ncof; i++) {
-          vname1= strtok(ha_cof[i].cofname,"(");
+          vname1= strtok(coefs[i].cofname,"(");
 
           if (strcmp(vname1,varname)==0) {
-            if(ha_cof[i].size==0) {
+            if(coefs[i].size==0) {
               innerloop=1;
               outerloop=0;
             }
-            if(ha_cof[i].size==1) {
-              innerloop=ha_set[ha_cof[i].setid[0]].size;
+            if(coefs[i].size==1) {
+              innerloop=sets[coefs[i].setid[0]].size;
               outerloop=0;
             }
-            if(ha_cof[i].size==2) {
-              innerloop=ha_set[ha_cof[i].setid[0]].size*ha_set[ha_cof[i].setid[1]].size;
+            if(coefs[i].size==2) {
+              innerloop=sets[coefs[i].setid[0]].size*sets[coefs[i].setid[1]].size;
               outerloop=1;
             }
-            if(ha_cof[i].size>2) {
-              innerloop=ha_set[ha_cof[i].setid[0]].size*ha_set[ha_cof[i].setid[1]].size;
+            if(coefs[i].size>2) {
+              innerloop=sets[coefs[i].setid[0]].size*sets[coefs[i].setid[1]].size;
               outerloop=1;
-              for(j=2; j<ha_cof[i].size; j++)outerloop*=ha_set[ha_cof[i].setid[j]].size;
+              for(j=2; j<coefs[i].size; j++)outerloop*=sets[coefs[i].setid[j]].size;
             }
-            for(j=0; j<ha_cof[i].size; j++) {
-              sprintf(tempname, "%d", ha_set[ha_cof[i].setid[j]].size);
+            for(j=0; j<coefs[i].size; j++) {
+              sprintf(tempname, "%d", sets[coefs[i].setid[j]].size);
               strcat(setsize,tempname);
               strcat(setsize," ");
             }
-            if(ha_cof[i].size==0){
+            if(coefs[i].size==0){
               sprintf(tempname, "%d", 1);
               strcat(setsize,tempname);
               strcat(setsize," ");
@@ -880,31 +880,31 @@ int outputs_write_csv(char *filename, char *newdatlogname, char *newdatfile,set_
             strcat(setsize,"\";\n");
             fprintf(fout,"%s",setsize);
             indx=0;
-            if(ha_cof[i].size<2) {
+            if(coefs[i].size<2) {
               for(j=0; j<innerloop; j++) {
-                fprintf(fout,"%f\n",ha_cofvar[ha_cof[i].offset+j].value);
+                fprintf(fout,"%f\n",elem_vals[coefs[i].offset+j].value);
               }
               fprintf(fout,"\n");
             } else {
               antidim[2]=1;
-              for (l=3; l<ha_cof[i].size; l++){
-                antidim[l]=antidim[l-1]*ha_set[ha_cof[i].setid[l-1]].size;
+              for (l=3; l<coefs[i].size; l++){
+                antidim[l]=antidim[l-1]*sets[coefs[i].setid[l-1]].size;
               }
               for(j1=0; j1<outerloop; j1++) {
                 indx=j1;
-                for (l=ha_cof[i].size-1; l>1; l--) {
+                for (l=coefs[i].size-1; l>1; l--) {
                   setindx[l]=indx/antidim[l];
                   indx-=setindx[l]*antidim[l];
                 }
                 for(j=0; j<innerloop; j++) {
-                  setindx[0]=j/ha_set[ha_cof[i].setid[1]].size;
-                  setindx[1]=j-ha_set[ha_cof[i].setid[1]].size*setindx[0];
+                  setindx[0]=j/sets[coefs[i].setid[1]].size;
+                  setindx[1]=j-sets[coefs[i].setid[1]].size*setindx[0];
                   indx=0;
-                  for (l=0; l<ha_cof[i].size; l++)indx+=ha_cof[i].strides[l]*setindx[l];
-                  if(setindx[1]==ha_set[ha_cof[i].setid[1]].size-1){
-                    fprintf(fout,"%f\n",ha_cofvar[ha_cof[i].offset+indx].value);
+                  for (l=0; l<coefs[i].size; l++)indx+=coefs[i].strides[l]*setindx[l];
+                  if(setindx[1]==sets[coefs[i].setid[1]].size-1){
+                    fprintf(fout,"%f\n",elem_vals[coefs[i].offset+indx].value);
                   }else{
-                    fprintf(fout,"%f,",ha_cofvar[ha_cof[i].offset+indx].value);
+                    fprintf(fout,"%f,",elem_vals[coefs[i].offset+indx].value);
                   }
                 }
                 fprintf(fout,"\n");
@@ -921,7 +921,7 @@ int outputs_write_csv(char *filename, char *newdatlogname, char *newdatfile,set_
   return 1;
 }
 
-int tab_write_variables(char *filename, char *newtabfile,array_def *ha_var,offset_t nvar) {
+int tab_write_variables(char *filename, char *newtabfile,array_def *vars,offset_t nvar) {
   FILE * filehandle,*fout;
   char line[TABREADLINE+1]="\0",*p;//,nvarname[nvar][NAMESIZE+2],*p;//,line1[DATREADLINE];//,*ne,*np;//,*n2;
   filehandle = fopen(filename,"r");
@@ -935,20 +935,20 @@ int tab_write_variables(char *filename, char *newtabfile,array_def *ha_var,offse
         p=strchr(line,';');
         line[p-line+1]='\n';
         line[p-line+2]='\0';
-        n=str_count_ci(line,ha_var[i].cofname);
-        lvar=strlen(ha_var[i].cofname);
+        n=str_count_ci(line,vars[i].cofname);
+        lvar=strlen(vars[i].cofname);
         l=0;
         for (j=0; j<n; j++) {
-          l1=str_find_ci(&line[l],ha_var[i].cofname);
+          l1=str_find_ci(&line[l],vars[i].cofname);
           l=l+l1;
-          if(strncmp(ha_var[i].cofname,"p_",2)!=0&&ha_var[i].level_par==false) if(line[l+lvar]==' '||line[l+lvar]=='('||line[l+lvar]=='+'||line[l+lvar]=='-'||line[l+lvar]=='*'||line[l+lvar]=='/'||line[l+lvar]=='^'||line[l+lvar]==']'||line[l+lvar]==','||line[l+lvar]==';'||line[l+lvar]=='=')if(line[l-1]==' '||line[l-1]=='+'||line[l-1]=='-'||line[l-1]=='*'||line[l-1]=='/'||line[l-1]=='^'||line[l-1]=='['||line[l-1]=='('||line[l-1]==','||line[l-1]=='=') {
+          if(strncmp(vars[i].cofname,"p_",2)!=0&&vars[i].level_par==false) if(line[l+lvar]==' '||line[l+lvar]=='('||line[l+lvar]=='+'||line[l+lvar]=='-'||line[l+lvar]=='*'||line[l+lvar]=='/'||line[l+lvar]=='^'||line[l+lvar]==']'||line[l+lvar]==','||line[l+lvar]==';'||line[l+lvar]=='=')if(line[l-1]==' '||line[l-1]=='+'||line[l-1]=='-'||line[l-1]=='*'||line[l-1]=='/'||line[l-1]=='^'||line[l-1]=='['||line[l-1]=='('||line[l-1]==','||line[l-1]=='=') {
                 memmove(&line[l+2],&line[l],linelght-l);
                 line[l]='p';
                 line[l+1]='_';
                 l=l+2;
                 linelght+=2;
               }
-          l=l+strlen(ha_var[i].cofname);
+          l=l+strlen(vars[i].cofname);
         }
       }
 

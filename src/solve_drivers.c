@@ -154,7 +154,7 @@ bool cubic_spline(solve_real* y,solve_real* x,solve_real sx0,solve_real sxn,int 
   return 1;
 }
 
-bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt* dnnz,PetscInt onz,PetscInt* onnz,Mat B,PetscInt dnzB,PetscInt* dnnzB,PetscInt onzB,PetscInt* onnzB,Vec vecb,Vec vece,PetscInt rank,PetscInt rank_hsl,PetscInt mpisize,char* tabfile, char *commsyntax,set_def *ha_set,dim_t nset, set_element *ha_setele, array_def *ha_cof,offset_t ncof,array_def *ha_var,offset_t nvar, elem_value **ha_cofvar2,offset_t ncofvar,offset_t ncofele,offset_t nvarele,closure_entry **ha_cgeshock2,offset_t alltimeset,offset_t allregset,offset_t nintraeq,dim_t matsol,PetscInt Istart,PetscInt Iend,  offset_t nreg, offset_t ntime, offset_t *ha_eqadd, offset_t ndblock, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laDi,dim_t laD,PetscReal cntl3,PetscReal cntl6,PetscBool presol,dim_t nesteddbbd,int localsize,PetscInt *ndbbddrank1,fortran_int* indata,dim_t mc66,fortran_int *ptx,struct timeval begintime,solve_real **xcf2){ //Johansen
+bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt* dnnz,PetscInt onz,PetscInt* onnz,Mat B,PetscInt dnzB,PetscInt* dnnzB,PetscInt onzB,PetscInt* onnzB,Vec vecb,Vec vece,PetscInt rank,PetscInt rank_hsl,PetscInt mpisize,char* tabfile, char *commsyntax,set_def *sets,dim_t nset, set_element *set_elems, array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar, elem_value **elem_vals2,offset_t ncofvar,offset_t ncofele,offset_t nvarele,closure_entry **closure_vals2,offset_t alltimeset,offset_t allregset,offset_t nintraeq,dim_t matsol,PetscInt Istart,PetscInt Iend,  offset_t nreg, offset_t ntime, offset_t *eq_addr, offset_t ndblock, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laDi,dim_t laD,PetscReal cntl3,PetscReal cntl6,PetscBool presol,dim_t nesteddbbd,int localsize,PetscInt *ndbbddrank1,fortran_int* indata,dim_t mc66,fortran_int *ptx,struct timeval begintime,solve_real **xcf2){ //Johansen
   char tempfilenam[256],tempchar[256];
   PetscScalar value,*vals=NULL;
   PetscErrorCode ierr;
@@ -164,8 +164,8 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
   solve_real *b1=NULL,*x0=NULL;
   bool IsIni;
   FILE* tempvar;
-  closure_entry *ha_cgeshock;
-  ha_cgeshock=*ha_cgeshock2;
+  closure_entry *closure_vals;
+  closure_vals=*closure_vals2;
   solve_real *xcf;
   xcf=*xcf2;
 
@@ -175,9 +175,9 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
   long int start_time=0;
   double rep_time;
   size_t freadresult;
-  elem_value *ha_cofvar;
-  ha_cofvar=*ha_cofvar2;
-  elem_value *ha_cofvar1=NULL;
+  elem_value *elem_vals;
+  elem_vals=*elem_vals2;
+  elem_value *elem_vals1=NULL;
   
     if(nohsl) {
       MatCreate(PETSC_COMM_WORLD,&A);
@@ -230,16 +230,16 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
     if(rank==0)printf("Matrix preparation time %f\n",(endtime.tv_sec - begintime.tv_sec)+((double)(endtime.tv_usec - begintime.tv_usec))/ 1000000);
     
     if(rank==rank_hsl) {
-      jacobian_fill(tabfile,commsyntax,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,ha_cofvar,ncofele+nvarele,ncofele,ha_cgeshock,ndblock,alltimeset,allregset,ha_eqadd,counteq,nintraeq,A,B);
+      jacobian_fill(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,closure_vals,ndblock,alltimeset,allregset,eq_addr,counteq,nintraeq,A,B);
     }
 
     gettimeofday(&begintime, NULL);
     if(rank==0)printf("Matrix calculation time %f\n",(begintime.tv_sec - endtime.tv_sec)+((double)(begintime.tv_usec - endtime.tv_usec))/ 1000000);
 
     for (count=0; count<nvarele; count++) {
-      if (ha_cgeshock[count].is_exogenous) {
-        value = ha_cgeshock[count].shock_value;
-        dnz=ha_cgeshock[count].exo_index;
+      if (closure_vals[count].is_exogenous) {
+        value = closure_vals[count].shock_value;
+        dnz=closure_vals[count].exo_index;
         VecSetValues(vece,1,&dnz,&value,INSERT_VALUES);
       }
     }
@@ -257,11 +257,11 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
       if ( (tempvar = fopen(tempfilenam, "wb")) == NULL ) {
         printf("Error opening file\n");
       }
-      fwrite(ha_cgeshock, sizeof(closure_entry),nvarele, tempvar);
+      fwrite(closure_vals, sizeof(closure_entry),nvarele, tempvar);
       fclose(tempvar);
-      free(*ha_cgeshock2);//
-      *ha_cgeshock2=NULL;//realloc (ha_cgeshock,1*sizeof(ha_cgeexovar));
-      ha_cgeshock=*ha_cgeshock2;
+      free(*closure_vals2);//
+      *closure_vals2=NULL;//realloc (ha_cgeshock,1*sizeof(ha_cgeexovar));
+      closure_vals=*closure_vals2;
     }
     if(rank==rank_hsl) {
       strcpy(tempfilenam,scratch_dir);
@@ -272,11 +272,11 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
       if ( (tempvar = fopen(tempfilenam, "wb")) == NULL ) {
         printf("Error opening file\n");
       }
-      fwrite(ha_cofvar, sizeof(elem_value),ncofele+nvarele, tempvar);
+      fwrite(elem_vals, sizeof(elem_value),ncofele+nvarele, tempvar);
       fclose(tempvar);
-      free(*ha_cofvar2);//
-      *ha_cofvar2=NULL;//realloc (ha_cofvar,1*sizeof(ha_cgevar));
-      ha_cofvar=*ha_cofvar2;
+      free(*elem_vals2);//
+      *elem_vals2=NULL;//realloc (ha_cofvar,1*sizeof(ha_cgevar));
+      elem_vals=*elem_vals2;
     }
 
     MPI_Barrier(PETSC_COMM_WORLD);
@@ -310,24 +310,24 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
     if(matsol>=MM_DBBD) {
       gettimeofday(&begintime, NULL);
       clock_gettime(CLOCK_REALTIME, &gettime_beg);
-      int *ha_rows= (int *) calloc (VecSize,sizeof(int));
-      int *ha_cols= (int *) calloc (VecSize,sizeof(int));
-      int *ha_ndblocks= (int *) calloc (ndblock,sizeof(int));
+      int *row_order= (int *) calloc (VecSize,sizeof(int));
+      int *col_order= (int *) calloc (VecSize,sizeof(int));
+      int *block_sizes= (int *) calloc (ndblock,sizeof(int));
       if(matsol==MM_DBBD) {
-        dbbd_order(A,VecSize,mpisize,rank,Istart,Iend,nvarele,ha_eqadd,ha_rows,ha_cols,ndblock,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,cntl6);
+        dbbd_order(A,VecSize,mpisize,rank,Istart,Iend,nvarele,eq_addr,row_order,col_order,ndblock,block_sizes,countvarintra1,counteq,counteqnoadd,laA,cntl6);
         x0=realloc (x0,VecSize*sizeof(solve_real));
-        dbbd_solve(A,vecb,x0,VecSize,mpisize,rank,Istart,Iend,ha_rows,ha_cols,ndblock,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,laD,cntl3);//,iter
+        dbbd_solve(A,vecb,x0,VecSize,mpisize,rank,Istart,Iend,row_order,col_order,ndblock,block_sizes,countvarintra1,counteq,counteqnoadd,laA,laD,cntl3);//,iter
       }
       if(matsol==MM_NDBBD) {
         presol=1;
         if(presol){
-        ndbbd_order_presolve(A,VecSize,mpisize,rank,Istart,Iend,nreg,ntime,nvarele,ha_eqadd,ha_rows,ha_cols,ndblock,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,laDi,cntl6,ndbbddrank1,presol);
-        ndbbd_presolve(A,vecb,x0,VecSize,mpisize,rank,Istart,Iend,ha_rows,ha_cols,ndblock,nreg,ntime,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,presol);//,iter
+        ndbbd_order_presolve(A,VecSize,mpisize,rank,Istart,Iend,nreg,ntime,nvarele,eq_addr,row_order,col_order,ndblock,block_sizes,countvarintra1,counteq,counteqnoadd,laA,laDi,cntl6,ndbbddrank1,presol);
+        ndbbd_presolve(A,vecb,x0,VecSize,mpisize,rank,Istart,Iend,row_order,col_order,ndblock,nreg,ntime,block_sizes,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,presol);//,iter
         }
         presol=0;
-        ndbbd_order(A,VecSize,mpisize,rank,Istart,Iend,nreg,ntime,nvarele,ha_eqadd,ha_rows,ha_cols,ndblock,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,laDi,cntl6,ndbbddrank1,presol);
+        ndbbd_order(A,VecSize,mpisize,rank,Istart,Iend,nreg,ntime,nvarele,eq_addr,row_order,col_order,ndblock,block_sizes,countvarintra1,counteq,counteqnoadd,laA,laDi,cntl6,ndbbddrank1,presol);
         x0=realloc (x0,VecSize*sizeof(solve_real));
-        ndbbd_solve(A,vecb,x0,VecSize,mpisize,rank,Istart,Iend,ha_rows,ha_cols,ndblock,nreg,ntime,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,presol);//,iter
+        ndbbd_solve(A,vecb,x0,VecSize,mpisize,rank,Istart,Iend,row_order,col_order,ndblock,nreg,ntime,block_sizes,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,presol);//,iter
       }
       time(&timeend);
       gettimeofday(&endtime, NULL);
@@ -335,9 +335,9 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
       rep_time = ((double)(gettime_end.tv_nsec-gettime_beg.tv_nsec))/1000000000.0;
       if(rank==0)printf("One step calculation time %f\n",(endtime.tv_sec - begintime.tv_sec)+((double)(endtime.tv_usec - begintime.tv_usec))/ 1000000);
       if(rank==0)printf("One step calculation real time %lf\n",rep_time);
-      free(ha_rows);
-      free(ha_cols);
-      free(ha_ndblocks);
+      free(row_order);
+      free(col_order);
+      free(block_sizes);
       printf("rank %d\n",rank);
       MPI_Barrier(PETSC_COMM_WORLD);
     }
@@ -479,11 +479,11 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
       if ((tempvar = fopen(tempfilenam, "rb")) == NULL) {
         printf("Error opening file\n");
       }
-      *ha_cofvar2=(elem_value*)realloc (*ha_cofvar2,(ncofele+nvarele)*sizeof(elem_value));
-      freadresult=fread(*ha_cofvar2, sizeof(elem_value),ncofele+nvarele, tempvar);
+      *elem_vals2=(elem_value*)realloc (*elem_vals2,(ncofele+nvarele)*sizeof(elem_value));
+      freadresult=fread(*elem_vals2, sizeof(elem_value),ncofele+nvarele, tempvar);
       fclose(tempvar);
       remove(tempfilenam);
-      ha_cofvar=*ha_cofvar2;
+      elem_vals=*elem_vals2;
 
       strcpy(tempfilenam,scratch_dir);
       strcat(tempfilenam,"_tempshock");
@@ -493,63 +493,63 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
       if ((tempvar = fopen(tempfilenam, "rb")) == NULL) {
         printf("Error opening file\n");
       }
-      *ha_cgeshock2=(closure_entry*)realloc (*ha_cgeshock2,(nvarele)*sizeof(closure_entry));
-      freadresult=fread(*ha_cgeshock2, sizeof(closure_entry),nvarele, tempvar);
+      *closure_vals2=(closure_entry*)realloc (*closure_vals2,(nvarele)*sizeof(closure_entry));
+      freadresult=fread(*closure_vals2, sizeof(closure_entry),nvarele, tempvar);
       fclose(tempvar);
       remove(tempfilenam);
-      ha_cgeshock=*ha_cgeshock2;      
+      closure_vals=*closure_vals2;      
     }
     *xcf2=(solve_real*)realloc (*xcf2,nvarele*sizeof(solve_real));
     xcf=*xcf2;
     printf("Hello world1!\n");
     if(rank==rank_hsl) {
-      ha_cofvar1=ha_cofvar+ncofele;
+      elem_vals1=elem_vals+ncofele;
       for(i=0; i<nvar; i++) {
-        if(ha_var[i].change_real) {
-          for(j=ha_var[i].offset; j<ha_var[i].nelem+ha_var[i].offset; j++) {
-            if(ha_cgeshock[j].is_exogenous) {
-              ha_cofvar1[j].initial=ha_cofvar1[j].value;
-              ha_cofvar1[j].value+=ha_cgeshock[j].shock_value;
-              xcf[j]=ha_cgeshock[j].shock_value;//varchange[j]
-              ha_cofvar1[j].substep_base=ha_cgeshock[j].shock_value;
+        if(vars[i].change_real) {
+          for(j=vars[i].offset; j<vars[i].nelem+vars[i].offset; j++) {
+            if(closure_vals[j].is_exogenous) {
+              elem_vals1[j].initial=elem_vals1[j].value;
+              elem_vals1[j].value+=closure_vals[j].shock_value;
+              xcf[j]=closure_vals[j].shock_value;//varchange[j]
+              elem_vals1[j].substep_base=closure_vals[j].shock_value;
             }
             else {
-              ha_cofvar1[j].initial=ha_cofvar1[j].value;
-              ha_cofvar1[j].value+=x0[ha_cgeshock[j].exo_index];
-              xcf[j]=x0[ha_cgeshock[j].exo_index];//varchange[j]
-              ha_cofvar1[j].substep_base=x0[ha_cgeshock[j].exo_index];
+              elem_vals1[j].initial=elem_vals1[j].value;
+              elem_vals1[j].value+=x0[closure_vals[j].exo_index];
+              xcf[j]=x0[closure_vals[j].exo_index];//varchange[j]
+              elem_vals1[j].substep_base=x0[closure_vals[j].exo_index];
             }
           }
         }
         else {
-          for(j=ha_var[i].offset; j<ha_var[i].nelem+ha_var[i].offset; j++) {
-            if(ha_cgeshock[j].is_exogenous) {
-              ha_cofvar1[j].initial=ha_cofvar1[j].value;
-              ha_cofvar1[j].value+=ha_cgeshock[j].shock_value*ha_cofvar1[j].initial/100;
-              xcf[j]=ha_cgeshock[j].shock_value;//varchange[j]
-              ha_cofvar1[j].substep_base=ha_cgeshock[j].shock_value;
+          for(j=vars[i].offset; j<vars[i].nelem+vars[i].offset; j++) {
+            if(closure_vals[j].is_exogenous) {
+              elem_vals1[j].initial=elem_vals1[j].value;
+              elem_vals1[j].value+=closure_vals[j].shock_value*elem_vals1[j].initial/100;
+              xcf[j]=closure_vals[j].shock_value;//varchange[j]
+              elem_vals1[j].substep_base=closure_vals[j].shock_value;
             }
             else {
-              ha_cofvar1[j].initial=ha_cofvar1[j].value;
-              xcf[j]=x0[ha_cgeshock[j].exo_index];//varchange[j]
-              ha_cofvar1[j].value+=x0[ha_cgeshock[j].exo_index]/100*ha_cofvar1[j].value;
-              ha_cofvar1[j].substep_base=x0[ha_cgeshock[j].exo_index];
+              elem_vals1[j].initial=elem_vals1[j].value;
+              xcf[j]=x0[closure_vals[j].exo_index];//varchange[j]
+              elem_vals1[j].value+=x0[closure_vals[j].exo_index]/100*elem_vals1[j].value;
+              elem_vals1[j].substep_base=x0[closure_vals[j].exo_index];
             }
           }
         }
       }
-      updates_apply(tabfile,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,ha_cofvar,ncofele+nvarele,ncofele,0);
+      updates_apply(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,0);
       strcpy(commsyntax,"formula");
       IsIni=false;
-      formulas_execute(tabfile,commsyntax,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,ha_cofvar,ncofele+nvarele,ncofele,IsIni);
+      formulas_execute(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,IsIni);
 
     }
-    ha_cofvar1=NULL;
+    elem_vals1=NULL;
     free(x0);
     return 1;
   }
 
-bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt* dnnz,PetscInt onz,PetscInt* onnz,Mat* B1,PetscInt dnzB,PetscInt* dnnzB,PetscInt onzB,PetscInt* onnzB,Vec* vecb1,Vec *vece1,PetscInt rank,PetscInt rank_hsl,PetscInt mpisize,char* tabfile, char *commsyntax,set_def *ha_set,dim_t nset, set_element *ha_setele, array_def *ha_cof,offset_t ncof,array_def *ha_var,offset_t nvar, elem_value **ha_cofvar2,offset_t ncofvar,offset_t ncofele,offset_t nvarele,closure_entry **ha_cgeshock2,offset_t alltimeset,offset_t allregset,offset_t nintraeq,dim_t matsol,PetscInt Istart,PetscInt Iend,  offset_t nreg, offset_t ntime, offset_t *ha_eqadd, offset_t ndblock, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laDi,dim_t laD,PetscReal cntl3,PetscReal cntl6,PetscBool presol,dim_t nesteddbbd,int localsize,PetscInt *ndbbddrank1,fortran_int* indata,dim_t mc66,fortran_int *ptx,struct timeval begintime,dim_t subints,MPI_Fint fcomm,solve_real **xcf2,int Isbiupd){ //Modified midpoint Pearson 1991
+bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt* dnnz,PetscInt onz,PetscInt* onnz,Mat* B1,PetscInt dnzB,PetscInt* dnnzB,PetscInt onzB,PetscInt* onnzB,Vec* vecb1,Vec *vece1,PetscInt rank,PetscInt rank_hsl,PetscInt mpisize,char* tabfile, char *commsyntax,set_def *sets,dim_t nset, set_element *set_elems, array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar, elem_value **elem_vals2,offset_t ncofvar,offset_t ncofele,offset_t nvarele,closure_entry **closure_vals2,offset_t alltimeset,offset_t allregset,offset_t nintraeq,dim_t matsol,PetscInt Istart,PetscInt Iend,  offset_t nreg, offset_t ntime, offset_t *eq_addr, offset_t ndblock, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laDi,dim_t laD,PetscReal cntl3,PetscReal cntl6,PetscBool presol,dim_t nesteddbbd,int localsize,PetscInt *ndbbddrank1,fortran_int* indata,dim_t mc66,fortran_int *ptx,struct timeval begintime,dim_t subints,MPI_Fint fcomm,solve_real **xcf2,int Isbiupd){ //Modified midpoint Pearson 1991
   char tempfilenam[256],tempchar[256],solchar[255];
   PetscScalar value,*vals;
   PetscErrorCode ierr;
@@ -572,11 +572,11 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
   long int start_time=0;
   double rep_time;
   size_t freadresult;
-  elem_value *ha_cofvar;
-  ha_cofvar=*ha_cofvar2;
-  elem_value *ha_cofvar1;
-  closure_entry *ha_cgeshock;
-  ha_cgeshock=*ha_cgeshock2;
+  elem_value *elem_vals;
+  elem_vals=*elem_vals2;
+  elem_value *elem_vals1;
+  closure_entry *closure_vals;
+  closure_vals=*closure_vals2;
   Vec vece,vecb;
   Mat A,B;
   A=*A1;
@@ -633,56 +633,56 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
               VecSetOption(vece, VEC_IGNORE_NEGATIVE_INDICES,PETSC_TRUE);
             }
             if(sol==0)for(i=0; i<ncofele; i++) {
-                ha_cofvar[i].initial=ha_cofvar[i].value;
+                elem_vals[i].initial=elem_vals[i].value;
               }
             else for(i=0; i<ncofele; i++) {
-                ha_cofvar[i].value=ha_cofvar[i].initial;
+                elem_vals[i].value=elem_vals[i].initial;
               }
             printf("rank %d OK!!!\n",rank);
-            ha_cofvar1=ha_cofvar+ncofele;
+            elem_vals1=elem_vals+ncofele;
             for(i=0; i<nvar; i++) {
-              if(ha_var[i].change_real) {
-                for(tindx1=ha_var[i].offset; tindx1<ha_var[i].nelem+ha_var[i].offset; tindx1++) {
-                  if(ha_cgeshock[tindx1].is_exogenous) {
+              if(vars[i].change_real) {
+                for(tindx1=vars[i].offset; tindx1<vars[i].nelem+vars[i].offset; tindx1++) {
+                  if(closure_vals[tindx1].is_exogenous) {
                     if(sol==0) {
-                      ha_cofvar1[tindx1].initial=ha_cofvar1[tindx1].value;
+                      elem_vals1[tindx1].initial=elem_vals1[tindx1].value;
                     }
                     else {
-                      ha_cofvar1[tindx1].value=ha_cofvar1[tindx1].initial;
+                      elem_vals1[tindx1].value=elem_vals1[tindx1].initial;
                     }
-                    ha_cofvar1[tindx1].substep_base=ha_cgeshock[tindx1].shock_value/nsteps;
-                    VecSetValue(vece,ha_cgeshock[tindx1].exo_index,ha_cofvar1[tindx1].substep_base,INSERT_VALUES);
+                    elem_vals1[tindx1].substep_base=closure_vals[tindx1].shock_value/nsteps;
+                    VecSetValue(vece,closure_vals[tindx1].exo_index,elem_vals1[tindx1].substep_base,INSERT_VALUES);
                   }
                   else {
                     if(sol==0) {
-                      ha_cofvar1[tindx1].initial=ha_cofvar1[tindx1].value;
+                      elem_vals1[tindx1].initial=elem_vals1[tindx1].value;
                     }
                     else {
-                      ha_cofvar1[tindx1].value=ha_cofvar1[tindx1].initial;
+                      elem_vals1[tindx1].value=elem_vals1[tindx1].initial;
                     }
                   }
                 }
               }
               else {
-                for(tindx1=ha_var[i].offset; tindx1<ha_var[i].nelem+ha_var[i].offset; tindx1++) {
-                  if(ha_cgeshock[tindx1].is_exogenous) {
+                for(tindx1=vars[i].offset; tindx1<vars[i].nelem+vars[i].offset; tindx1++) {
+                  if(closure_vals[tindx1].is_exogenous) {
                     if(sol==0) {
-                      ha_cofvar1[tindx1].initial=ha_cofvar1[tindx1].value;
+                      elem_vals1[tindx1].initial=elem_vals1[tindx1].value;
                     }
                     else {
-                      ha_cofvar1[tindx1].value=ha_cofvar1[tindx1].initial;
+                      elem_vals1[tindx1].value=elem_vals1[tindx1].initial;
                     }
-                    temp2=ha_cgeshock[tindx1].shock_value;//subints;
-                    ha_cofvar1[tindx1].substep_base=(100+(subindx+1)*temp2)/(100+subindx*temp2)-1;//ha_cgeshock[ha_var[i].begadd+j].ShockVal/nsteps;//(exp(log(1+ha_cgeshock[ha_var[i].begadd+j].ShockVal/100)/nsteps)-1)*100;
-                    ha_cofvar1[tindx1].substep_base*=vpercents;//nsteps*100;
-                    VecSetValue(vece,ha_cgeshock[tindx1].exo_index,ha_cofvar1[tindx1].substep_base,INSERT_VALUES);
+                    temp2=closure_vals[tindx1].shock_value;//subints;
+                    elem_vals1[tindx1].substep_base=(100+(subindx+1)*temp2)/(100+subindx*temp2)-1;//ha_cgeshock[ha_var[i].begadd+j].ShockVal/nsteps;//(exp(log(1+ha_cgeshock[ha_var[i].begadd+j].ShockVal/100)/nsteps)-1)*100;
+                    elem_vals1[tindx1].substep_base*=vpercents;//nsteps*100;
+                    VecSetValue(vece,closure_vals[tindx1].exo_index,elem_vals1[tindx1].substep_base,INSERT_VALUES);
                   }
                   else {
                     if(sol==0) {
-                      ha_cofvar1[tindx1].initial=ha_cofvar1[tindx1].value;
+                      elem_vals1[tindx1].initial=elem_vals1[tindx1].value;
                     }
                     else {
-                      ha_cofvar1[tindx1].value=ha_cofvar1[tindx1].initial;
+                      elem_vals1[tindx1].value=elem_vals1[tindx1].initial;
                     }
                   }
                 }
@@ -771,7 +771,7 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
           printf("OKB!!!\n");
 
           if(rank==rank_hsl) {
-            jacobian_fill(tabfile,commsyntax,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,ha_cofvar,ncofele+nvarele,ncofele,ha_cgeshock,ndblock,alltimeset,allregset,ha_eqadd,counteq,nintraeq,A,B);
+            jacobian_fill(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,closure_vals,ndblock,alltimeset,allregset,eq_addr,counteq,nintraeq,A,B);
           }
           if(rank==rank_hsl) {
             strcpy(tempfilenam,scratch_dir);
@@ -782,11 +782,11 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
             if ( (tempvar = fopen(tempfilenam, "wb")) == NULL ) {
               printf("Error opening file\n");
             }
-            fwrite(ha_cofvar, sizeof(elem_value),ncofele+nvarele, tempvar);
+            fwrite(elem_vals, sizeof(elem_value),ncofele+nvarele, tempvar);
             fclose(tempvar);
-            free(*ha_cofvar2);
-            *ha_cofvar2=NULL;
-            ha_cofvar=*ha_cofvar2;
+            free(*elem_vals2);
+            *elem_vals2=NULL;
+            elem_vals=*elem_vals2;
 
             strcpy(tempfilenam,scratch_dir);
             strcat(tempfilenam,"_tempshock");
@@ -796,11 +796,11 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
             if ( (tempvar = fopen(tempfilenam, "wb")) == NULL ) {
               printf("Error opening file\n");
             }
-            fwrite(ha_cgeshock, sizeof(closure_entry),nvarele, tempvar);
+            fwrite(closure_vals, sizeof(closure_entry),nvarele, tempvar);
             fclose(tempvar);
-            free(*ha_cgeshock2);
-            *ha_cgeshock2=NULL;
-            ha_cgeshock=*ha_cgeshock2;
+            free(*closure_vals2);
+            *closure_vals2=NULL;
+            closure_vals=*closure_vals2;
           }
 
           MPI_Barrier(PETSC_COMM_WORLD);
@@ -827,15 +827,15 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
           ierr = MatDestroy(&B);
           CHKERRQ(ierr);
           if(matsol>=MM_DBBD) {
-            int *ha_rows= (int *) calloc (VecSize,sizeof(int));
-            int *ha_cols= (int *) calloc (VecSize,sizeof(int));
-            int *ha_ndblocks= (int *) calloc (ndblock,sizeof(int));
+            int *row_order= (int *) calloc (VecSize,sizeof(int));
+            int *col_order= (int *) calloc (VecSize,sizeof(int));
+            int *block_sizes= (int *) calloc (ndblock,sizeof(int));
             time(&timestr);
 
             if(matsol==MM_DBBD) {
-              dbbd_order(A,VecSize,mpisize,rank,Istart,Iend,nvarele,ha_eqadd,ha_rows,ha_cols,ndblock,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,cntl6);
+              dbbd_order(A,VecSize,mpisize,rank,Istart,Iend,nvarele,eq_addr,row_order,col_order,ndblock,block_sizes,countvarintra1,counteq,counteqnoadd,laA,cntl6);
               x1=realloc (x1,VecSize*sizeof(solve_real));
-              dbbd_solve(A,vecb,x1,VecSize,mpisize,rank,Istart,Iend,ha_rows,ha_cols,ndblock,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,laD,cntl3);//,iter
+              dbbd_solve(A,vecb,x1,VecSize,mpisize,rank,Istart,Iend,row_order,col_order,ndblock,block_sizes,countvarintra1,counteq,counteqnoadd,laA,laD,cntl3);//,iter
             }
 
             if(matsol==MM_NDBBD) {
@@ -843,12 +843,12 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
               memcpy(counteq,counteqs,(ndblock+1)*sizeof(offset_t));
               memcpy(counteqnoadd,counteqnoadds,(ndblock)*sizeof(offset_t));
               memcpy(countvarintra1,countvarintra1s,(ndblock+1)*sizeof(offset_t));
-              ndbbd_order_presolve(A,VecSize,mpisize,rank,Istart,Iend,nreg,ntime,nvarele,ha_eqadd,ha_rows,ha_cols,ndblock,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,laDi,cntl6,ndbbddrank1,presol);
-              ndbbd_presolve(A,vecb,x1,VecSize,mpisize,rank,Istart,Iend,ha_rows,ha_cols,ndblock,nreg,ntime,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,presol);//,iter
+              ndbbd_order_presolve(A,VecSize,mpisize,rank,Istart,Iend,nreg,ntime,nvarele,eq_addr,row_order,col_order,ndblock,block_sizes,countvarintra1,counteq,counteqnoadd,laA,laDi,cntl6,ndbbddrank1,presol);
+              ndbbd_presolve(A,vecb,x1,VecSize,mpisize,rank,Istart,Iend,row_order,col_order,ndblock,nreg,ntime,block_sizes,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,presol);//,iter
               presol=0;
-              ndbbd_order(A,VecSize,mpisize,rank,Istart,Iend,nreg,ntime,nvarele,ha_eqadd,ha_rows,ha_cols,ndblock,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,laDi,cntl6,ndbbddrank1,presol);
+              ndbbd_order(A,VecSize,mpisize,rank,Istart,Iend,nreg,ntime,nvarele,eq_addr,row_order,col_order,ndblock,block_sizes,countvarintra1,counteq,counteqnoadd,laA,laDi,cntl6,ndbbddrank1,presol);
               x1=realloc (x1,VecSize*sizeof(solve_real));
-              ndbbd_solve(A,vecb,x1,VecSize,mpisize,rank,Istart,Iend,ha_rows,ha_cols,ndblock,nreg,ntime,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,presol);//,iter
+              ndbbd_solve(A,vecb,x1,VecSize,mpisize,rank,Istart,Iend,row_order,col_order,ndblock,nreg,ntime,block_sizes,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,presol);//,iter
             }
 
             time(&timeend);
@@ -856,9 +856,9 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
             ierr = PetscGetCPUTime(&time1);
             ierr = PetscPrintf(PETSC_COMM_WORLD,"One step solution %f\n",time1-time0);
             if(rank==0)printf("One step calculation time %f\n",difftime(timeend,timestr));
-            free(ha_rows);
-            free(ha_cols);
-            free(ha_ndblocks);
+            free(row_order);
+            free(col_order);
+            free(block_sizes);
             printf("rank %d\n",rank);
             MPI_Barrier(PETSC_COMM_WORLD);
           }
@@ -1020,11 +1020,11 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
             if ((tempvar = fopen(tempfilenam, "rb")) == NULL) {
               printf("Error opening file\n");
             }
-            *ha_cgeshock2=(closure_entry*)realloc (*ha_cgeshock2,(nvarele)*sizeof(closure_entry));
-            freadresult=fread(*ha_cgeshock2, sizeof(closure_entry),nvarele, tempvar);
+            *closure_vals2=(closure_entry*)realloc (*closure_vals2,(nvarele)*sizeof(closure_entry));
+            freadresult=fread(*closure_vals2, sizeof(closure_entry),nvarele, tempvar);
             fclose(tempvar);
             remove(tempfilenam);
-            ha_cgeshock=*ha_cgeshock2;
+            closure_vals=*closure_vals2;
 
             strcpy(tempfilenam,scratch_dir);
             strcat(tempfilenam,"_tempvar");
@@ -1034,11 +1034,11 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
             if ((tempvar = fopen(tempfilenam, "rb")) == NULL) {
               printf("Error opening file\n");
             }
-            *ha_cofvar2=(elem_value*)realloc (*ha_cofvar2,(ncofele+nvarele)*sizeof(elem_value));
-            freadresult=fread(*ha_cofvar2, sizeof(elem_value),ncofele+nvarele, tempvar);
+            *elem_vals2=(elem_value*)realloc (*elem_vals2,(ncofele+nvarele)*sizeof(elem_value));
+            freadresult=fread(*elem_vals2, sizeof(elem_value),ncofele+nvarele, tempvar);
             fclose(tempvar);
             remove(tempfilenam);
-            ha_cofvar=*ha_cofvar2;
+            elem_vals=*elem_vals2;
 
             strcpy(tempfilenam,scratch_dir);
             strcat(tempfilenam,"_tempclag1");
@@ -1084,35 +1084,35 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
           if(nesteddbbd==1)VecSetSizes(vece,localsize,VecSize);
           else VecSetSizes(vece,PETSC_DECIDE,VecSize);
           VecSetOption(vece, VEC_IGNORE_NEGATIVE_INDICES,PETSC_TRUE);
-          ha_cofvar1=ha_cofvar+ncofele;
+          elem_vals1=elem_vals+ncofele;
           if(stepcount==0) {
             for(i=0; i<nvar; i++) {
-              if(ha_var[i].change_real) {
-                for(tindx1=ha_var[i].offset; tindx1<ha_var[i].nelem+ha_var[i].offset; tindx1++) {
-                  if(ha_cgeshock[tindx1].is_exogenous) {
-                    ha_cofvar1[tindx1].value+=ha_cofvar1[tindx1].substep_base;
-                    varchange[tindx1]=ha_cofvar1[tindx1].substep_base;
-                    VecSetValue(vece,ha_cgeshock[tindx1].exo_index,ha_cofvar1[tindx1].substep_base,INSERT_VALUES);
+              if(vars[i].change_real) {
+                for(tindx1=vars[i].offset; tindx1<vars[i].nelem+vars[i].offset; tindx1++) {
+                  if(closure_vals[tindx1].is_exogenous) {
+                    elem_vals1[tindx1].value+=elem_vals1[tindx1].substep_base;
+                    varchange[tindx1]=elem_vals1[tindx1].substep_base;
+                    VecSetValue(vece,closure_vals[tindx1].exo_index,elem_vals1[tindx1].substep_base,INSERT_VALUES);
                   }
                   else {
-                    varchange[tindx1]=x1[ha_cgeshock[tindx1].exo_index];
-                    ha_cofvar1[tindx1].value+=x1[ha_cgeshock[tindx1].exo_index];
-                    ha_cofvar1[tindx1].substep_base=x1[ha_cgeshock[tindx1].exo_index];
+                    varchange[tindx1]=x1[closure_vals[tindx1].exo_index];
+                    elem_vals1[tindx1].value+=x1[closure_vals[tindx1].exo_index];
+                    elem_vals1[tindx1].substep_base=x1[closure_vals[tindx1].exo_index];
                     clag1[tindx1]=0;
                   }
                 }
               }
               else {
-                for(tindx1=ha_var[i].offset; tindx1<ha_var[i].nelem+ha_var[i].offset; tindx1++) {
-                  if(ha_cgeshock[tindx1].is_exogenous) {
-                    varchange[tindx1]=ha_cofvar1[tindx1].substep_base;
-                    ha_cofvar1[tindx1].value*=(1+ha_cofvar1[tindx1].substep_base/100);
-                    VecSetValue(vece,ha_cgeshock[tindx1].exo_index,ha_cofvar1[tindx1].substep_base/(1+ha_cofvar1[tindx1].substep_base/100),INSERT_VALUES);
+                for(tindx1=vars[i].offset; tindx1<vars[i].nelem+vars[i].offset; tindx1++) {
+                  if(closure_vals[tindx1].is_exogenous) {
+                    varchange[tindx1]=elem_vals1[tindx1].substep_base;
+                    elem_vals1[tindx1].value*=(1+elem_vals1[tindx1].substep_base/100);
+                    VecSetValue(vece,closure_vals[tindx1].exo_index,elem_vals1[tindx1].substep_base/(1+elem_vals1[tindx1].substep_base/100),INSERT_VALUES);
                   }
                   else {
-                    varchange[tindx1]=x1[ha_cgeshock[tindx1].exo_index];
-                    ha_cofvar1[tindx1].substep_base=x1[ha_cgeshock[tindx1].exo_index];
-                    ha_cofvar1[tindx1].value*=(1+ha_cofvar1[tindx1].substep_base/100);
+                    varchange[tindx1]=x1[closure_vals[tindx1].exo_index];
+                    elem_vals1[tindx1].substep_base=x1[closure_vals[tindx1].exo_index];
+                    elem_vals1[tindx1].value*=(1+elem_vals1[tindx1].substep_base/100);
                     clag1[tindx1]=0;
                   }
                 }
@@ -1121,38 +1121,38 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
           }
           else {
             for(i=0; i<nvar; i++) {
-              if(ha_var[i].change_real) {
-                for(tindx1=ha_var[i].offset; tindx1<ha_var[i].nelem+ha_var[i].offset; tindx1++) {
-                  if(ha_cgeshock[tindx1].is_exogenous) {
-                    ha_cofvar1[tindx1].value+=ha_cofvar1[tindx1].substep_base;
-                    varchange[tindx1]+=ha_cofvar1[tindx1].substep_base;
-                    VecSetValue(vece,ha_cgeshock[tindx1].exo_index,ha_cofvar1[tindx1].substep_base,INSERT_VALUES);
+              if(vars[i].change_real) {
+                for(tindx1=vars[i].offset; tindx1<vars[i].nelem+vars[i].offset; tindx1++) {
+                  if(closure_vals[tindx1].is_exogenous) {
+                    elem_vals1[tindx1].value+=elem_vals1[tindx1].substep_base;
+                    varchange[tindx1]+=elem_vals1[tindx1].substep_base;
+                    VecSetValue(vece,closure_vals[tindx1].exo_index,elem_vals1[tindx1].substep_base,INSERT_VALUES);
                   }
                   else {
-                    temp1=ha_cofvar1[tindx1].value;//change;
-                    varchange[tindx1]=clag1[tindx1]+2*x1[ha_cgeshock[tindx1].exo_index];//+=x1[ha_cgeshock[ha_var[i].begadd+j].ExoIndx];//
-                    ha_cofvar1[tindx1].substep_base=x1[ha_cgeshock[tindx1].exo_index];//ha_cofvar[ncofele+ha_var[i].begadd+j].varchange-temp1;
-                    ha_cofvar1[tindx1].value=clag1[tindx1]+2*x1[ha_cgeshock[tindx1].exo_index];//ha_cofvar[ncofele+ha_var[i].begadd+j].varchange-temp1;//ha_cofvar[ncofele+ha_var[i].begadd+j].csolpupd;
+                    temp1=elem_vals1[tindx1].value;//change;
+                    varchange[tindx1]=clag1[tindx1]+2*x1[closure_vals[tindx1].exo_index];//+=x1[ha_cgeshock[ha_var[i].begadd+j].ExoIndx];//
+                    elem_vals1[tindx1].substep_base=x1[closure_vals[tindx1].exo_index];//ha_cofvar[ncofele+ha_var[i].begadd+j].varchange-temp1;
+                    elem_vals1[tindx1].value=clag1[tindx1]+2*x1[closure_vals[tindx1].exo_index];//ha_cofvar[ncofele+ha_var[i].begadd+j].varchange-temp1;//ha_cofvar[ncofele+ha_var[i].begadd+j].csolpupd;
                     clag1[tindx1]=temp1;
                   }
                 }
               }
               else {
-                for(tindx1=ha_var[i].offset; tindx1<ha_var[i].nelem+ha_var[i].offset; tindx1++) {
-                  if(ha_cgeshock[tindx1].is_exogenous) {
-                    temp2=ha_cgeshock[tindx1].shock_value;//subints;
+                for(tindx1=vars[i].offset; tindx1<vars[i].nelem+vars[i].offset; tindx1++) {
+                  if(closure_vals[tindx1].is_exogenous) {
+                    temp2=closure_vals[tindx1].shock_value;//subints;
                     temp1=(100+(subindx+1)*temp2)/(100+subindx*temp2)-1;
                     temp1*=vpercents;
-                    ha_cofvar1[tindx1].substep_base=temp1/(1+varchange[tindx1]/100);
+                    elem_vals1[tindx1].substep_base=temp1/(1+varchange[tindx1]/100);
                     varchange[tindx1]+=temp1;//*(1+ha_cofvar[ncofele+ha_var[i].begadd+j].varchange/100)
-                    ha_cofvar1[tindx1].value=(1+varchange[tindx1]/100)*ha_cofvar1[tindx1].initial;
-                    VecSetValue(vece,ha_cgeshock[tindx1].exo_index,temp1/(1+varchange[tindx1]/100),INSERT_VALUES);
+                    elem_vals1[tindx1].value=(1+varchange[tindx1]/100)*elem_vals1[tindx1].initial;
+                    VecSetValue(vece,closure_vals[tindx1].exo_index,temp1/(1+varchange[tindx1]/100),INSERT_VALUES);
                   }
                   else {
                     temp1=varchange[tindx1];
-                    varchange[tindx1]=clag1[tindx1]+2*x1[ha_cgeshock[tindx1].exo_index]*(100+temp1)/100;//+=x1[ha_cgeshock[ha_var[i].begadd+j].ExoIndx]*(1+temp1/100);//
-                    ha_cofvar1[tindx1].substep_base=x1[ha_cgeshock[tindx1].exo_index];//(ha_cofvar[ncofele+ha_var[i].begadd+j].varchange-temp1)/(1+temp1/100);
-                    ha_cofvar1[tindx1].value=(100+varchange[tindx1])/100*ha_cofvar1[tindx1].initial;
+                    varchange[tindx1]=clag1[tindx1]+2*x1[closure_vals[tindx1].exo_index]*(100+temp1)/100;//+=x1[ha_cgeshock[ha_var[i].begadd+j].ExoIndx]*(1+temp1/100);//
+                    elem_vals1[tindx1].substep_base=x1[closure_vals[tindx1].exo_index];//(ha_cofvar[ncofele+ha_var[i].begadd+j].varchange-temp1)/(1+temp1/100);
+                    elem_vals1[tindx1].value=(100+varchange[tindx1])/100*elem_vals1[tindx1].initial;
                     clag1[tindx1]=temp1;
                   }
                 }
@@ -1169,16 +1169,16 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
           CHKERRQ(ierr);
           if(rank==rank_hsl) {
             if(stepcount==0) {
-              updates_apply(tabfile,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,ha_cofvar,ncofele+nvarele,ncofele,0);
+              updates_apply(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,0);
             }
             else {
-              updates_apply(tabfile,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,ha_cofvar,ncofele+nvarele,ncofele,1);
+              updates_apply(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,1);
             }
-            if(Isbiupd==1)subinterval_update(rank,tabfile,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,ha_cofvar,ncofele+nvarele,ncofele,ha_cgeshock,nvarele,laA,subints,1,0,nsteps);
-            if(Isbiupd==2)subinterval_update(rank,tabfile,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,ha_cofvar,ncofele+nvarele,ncofele,ha_cgeshock,nvarele,laA,subints,1,2,nsteps);
+            if(Isbiupd==1)subinterval_update(rank,tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,closure_vals,nvarele,laA,subints,1,0,nsteps);
+            if(Isbiupd==2)subinterval_update(rank,tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,closure_vals,nvarele,laA,subints,1,2,nsteps);
             strcpy(commsyntax,"formula");
             IsIni=false;
-            formulas_execute(tabfile,commsyntax,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,ha_cofvar,ncofele+nvarele,ncofele,IsIni);
+            formulas_execute(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,IsIni);
           }
           MPI_Barrier(PETSC_COMM_WORLD);
           ierr = PetscGetCPUTime(&time1);
@@ -1266,7 +1266,7 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
         }
 
         if(rank==rank_hsl) {
-          jacobian_fill(tabfile,commsyntax,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,ha_cofvar,ncofele+nvarele,ncofele,ha_cgeshock,ndblock,alltimeset,allregset,ha_eqadd,counteq,nintraeq,A,B);
+          jacobian_fill(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,closure_vals,ndblock,alltimeset,allregset,eq_addr,counteq,nintraeq,A,B);
         }
 
         if(rank==rank_hsl) {
@@ -1278,11 +1278,11 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
           if ( (tempvar = fopen(tempfilenam, "wb")) == NULL ) {
             printf("Error opening file\n");
           }
-          fwrite(ha_cofvar, sizeof(elem_value),ncofele+nvarele, tempvar);
+          fwrite(elem_vals, sizeof(elem_value),ncofele+nvarele, tempvar);
           fclose(tempvar);
-          free(*ha_cofvar2);
-          *ha_cofvar2=NULL;
-          ha_cofvar=*ha_cofvar2;
+          free(*elem_vals2);
+          *elem_vals2=NULL;
+          elem_vals=*elem_vals2;
 
           strcpy(tempfilenam,scratch_dir);
           strcat(tempfilenam,"_tempshock");
@@ -1292,11 +1292,11 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
           if ( (tempvar = fopen(tempfilenam, "wb")) == NULL ) {
             printf("Error opening file\n");
           }
-          fwrite(ha_cgeshock, sizeof(closure_entry),nvarele, tempvar);
+          fwrite(closure_vals, sizeof(closure_entry),nvarele, tempvar);
           fclose(tempvar);
-          free(*ha_cgeshock2);
-          *ha_cgeshock2=NULL;
-          ha_cgeshock=*ha_cgeshock2;
+          free(*closure_vals2);
+          *closure_vals2=NULL;
+          closure_vals=*closure_vals2;
         }
 
         MPI_Barrier(PETSC_COMM_WORLD);
@@ -1323,15 +1323,15 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
         ierr = MatDestroy(&B);
         CHKERRQ(ierr);
         if(matsol>=MM_DBBD) {
-          int *ha_rows= (int *) calloc (VecSize,sizeof(int));
-          int *ha_cols= (int *) calloc (VecSize,sizeof(int));
-          int *ha_ndblocks= (int *) calloc (ndblock,sizeof(int));
+          int *row_order= (int *) calloc (VecSize,sizeof(int));
+          int *col_order= (int *) calloc (VecSize,sizeof(int));
+          int *block_sizes= (int *) calloc (ndblock,sizeof(int));
           time(&timestr);
 
           if(matsol==MM_DBBD) {
-            dbbd_order(A,VecSize,mpisize,rank,Istart,Iend,nvarele,ha_eqadd,ha_rows,ha_cols,ndblock,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,cntl6);
+            dbbd_order(A,VecSize,mpisize,rank,Istart,Iend,nvarele,eq_addr,row_order,col_order,ndblock,block_sizes,countvarintra1,counteq,counteqnoadd,laA,cntl6);
             x1=realloc (x1,VecSize*sizeof(solve_real));
-            dbbd_solve(A,vecb,x1,VecSize,mpisize,rank,Istart,Iend,ha_rows,ha_cols,ndblock,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,laD,cntl3);//,iter
+            dbbd_solve(A,vecb,x1,VecSize,mpisize,rank,Istart,Iend,row_order,col_order,ndblock,block_sizes,countvarintra1,counteq,counteqnoadd,laA,laD,cntl3);//,iter
           }
 
           if(matsol==MM_NDBBD) {
@@ -1339,12 +1339,12 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
             memcpy(counteq,counteqs,(ndblock+1)*sizeof(offset_t));
             memcpy(counteqnoadd,counteqnoadds,(ndblock)*sizeof(offset_t));
             memcpy(countvarintra1,countvarintra1s,(ndblock+1)*sizeof(offset_t));
-            ndbbd_order_presolve(A,VecSize,mpisize,rank,Istart,Iend,nreg,ntime,nvarele,ha_eqadd,ha_rows,ha_cols,ndblock,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,laDi,cntl6,ndbbddrank1,presol);
-            ndbbd_presolve(A,vecb,x1,VecSize,mpisize,rank,Istart,Iend,ha_rows,ha_cols,ndblock,nreg,ntime,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,presol);//,iter
+            ndbbd_order_presolve(A,VecSize,mpisize,rank,Istart,Iend,nreg,ntime,nvarele,eq_addr,row_order,col_order,ndblock,block_sizes,countvarintra1,counteq,counteqnoadd,laA,laDi,cntl6,ndbbddrank1,presol);
+            ndbbd_presolve(A,vecb,x1,VecSize,mpisize,rank,Istart,Iend,row_order,col_order,ndblock,nreg,ntime,block_sizes,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,presol);//,iter
             presol=0;
-            ndbbd_order(A,VecSize,mpisize,rank,Istart,Iend,nreg,ntime,nvarele,ha_eqadd,ha_rows,ha_cols,ndblock,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,laDi,cntl6,ndbbddrank1,presol);
+            ndbbd_order(A,VecSize,mpisize,rank,Istart,Iend,nreg,ntime,nvarele,eq_addr,row_order,col_order,ndblock,block_sizes,countvarintra1,counteq,counteqnoadd,laA,laDi,cntl6,ndbbddrank1,presol);
             x1=realloc (x1,VecSize*sizeof(solve_real));
-            ndbbd_solve(A,vecb,x1,VecSize,mpisize,rank,Istart,Iend,ha_rows,ha_cols,ndblock,nreg,ntime,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,presol);//,iter
+            ndbbd_solve(A,vecb,x1,VecSize,mpisize,rank,Istart,Iend,row_order,col_order,ndblock,nreg,ntime,block_sizes,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,presol);//,iter
           }
 
           time(&timeend);
@@ -1352,9 +1352,9 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
           ierr = PetscGetCPUTime(&time1);
           ierr = PetscPrintf(PETSC_COMM_WORLD,"One step solution %f\n",time1-time0);
           if(rank==0)printf("One step calculation time %f\n",difftime(timeend,timestr));
-          free(ha_rows);
-          free(ha_cols);
-          free(ha_ndblocks);
+          free(row_order);
+          free(col_order);
+          free(block_sizes);
           printf("rank %d\n",rank);
           MPI_Barrier(PETSC_COMM_WORLD);
         }
@@ -1515,11 +1515,11 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
           if ((tempvar = fopen(tempfilenam, "rb")) == NULL) {
             printf("Error opening file\n");
           }
-          *ha_cgeshock2=(closure_entry*)realloc (*ha_cgeshock2,(nvarele)*sizeof(closure_entry));
-          freadresult=fread(*ha_cgeshock2, sizeof(closure_entry),nvarele, tempvar);
+          *closure_vals2=(closure_entry*)realloc (*closure_vals2,(nvarele)*sizeof(closure_entry));
+          freadresult=fread(*closure_vals2, sizeof(closure_entry),nvarele, tempvar);
           fclose(tempvar);
           remove(tempfilenam);
-          ha_cgeshock=*ha_cgeshock2;
+          closure_vals=*closure_vals2;
 
           strcpy(tempfilenam,scratch_dir);
           strcat(tempfilenam,"_tempvar");
@@ -1529,11 +1529,11 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
           if ((tempvar = fopen(tempfilenam, "rb")) == NULL) {
             printf("Error opening file\n");
           }
-          *ha_cofvar2=(elem_value*)realloc (*ha_cofvar2,(ncofele+nvarele)*sizeof(elem_value));
-          freadresult=fread(*ha_cofvar2, sizeof(elem_value),ncofele+nvarele, tempvar);
+          *elem_vals2=(elem_value*)realloc (*elem_vals2,(ncofele+nvarele)*sizeof(elem_value));
+          freadresult=fread(*elem_vals2, sizeof(elem_value),ncofele+nvarele, tempvar);
           fclose(tempvar);
           remove(tempfilenam);
-          ha_cofvar=*ha_cofvar2;
+          elem_vals=*elem_vals2;
 
           strcpy(tempfilenam,scratch_dir);
           strcat(tempfilenam,"_tempclag1");
@@ -1562,28 +1562,28 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
           remove(tempfilenam);
 
         }
-        ha_cofvar1=ha_cofvar+ncofele;
+        elem_vals1=elem_vals+ncofele;
         for(i=0; i<nvar; i++) {
-          if(ha_var[i].change_real) {
-            for(tindx1=ha_var[i].offset; tindx1<ha_var[i].nelem+ha_var[i].offset; tindx1++) {
-              if(ha_cgeshock[tindx1].is_exogenous) {
-                ha_cofvar1[tindx1].value=0;
+          if(vars[i].change_real) {
+            for(tindx1=vars[i].offset; tindx1<vars[i].nelem+vars[i].offset; tindx1++) {
+              if(closure_vals[tindx1].is_exogenous) {
+                elem_vals1[tindx1].value=0;
               }
               else {
-                varchange[tindx1]=0.5*(varchange[tindx1]+clag1[tindx1]+x1[ha_cgeshock[tindx1].exo_index]);
-                ha_cofvar1[tindx1].value=0;//ha_cofvar[tindx2].var0+varchange[tindx1];//no distortion between steps
+                varchange[tindx1]=0.5*(varchange[tindx1]+clag1[tindx1]+x1[closure_vals[tindx1].exo_index]);
+                elem_vals1[tindx1].value=0;//ha_cofvar[tindx2].var0+varchange[tindx1];//no distortion between steps
                 clag1[tindx1]=0;
               }
             }
           }
           else {
-            for(tindx1=ha_var[i].offset; tindx1<ha_var[i].nelem+ha_var[i].offset; tindx1++) {
-              if(ha_cgeshock[tindx1].is_exogenous) {
-                ha_cofvar1[tindx1].value=0;
+            for(tindx1=vars[i].offset; tindx1<vars[i].nelem+vars[i].offset; tindx1++) {
+              if(closure_vals[tindx1].is_exogenous) {
+                elem_vals1[tindx1].value=0;
               }
               else {
-                varchange[tindx1]=0.5*(varchange[tindx1]+clag1[tindx1]+x1[ha_cgeshock[tindx1].exo_index]*(1+varchange[tindx1]/100));
-                ha_cofvar1[tindx1].value=0;//ha_cofvar[tindx2].varval*varchange[tindx1]/100;
+                varchange[tindx1]=0.5*(varchange[tindx1]+clag1[tindx1]+x1[closure_vals[tindx1].exo_index]*(1+varchange[tindx1]/100));
+                elem_vals1[tindx1].value=0;//ha_cofvar[tindx2].varval*varchange[tindx1]/100;
                 clag1[tindx1]=0;
               }
             }
@@ -1660,15 +1660,15 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
               extrap_w1=1.0/(step_ratio2*step_ratio2-1.0);
               extrap_w2=1.0/(1-step_ratio2*step_ratio2)/(1.0-step_ratio3*step_ratio3);
               for(i=0; i<nvar; i++) {
-                if(ha_var[i].change_real) {
-                  for(k=ha_var[i].offset; k<ha_var[i].nelem+ha_var[i].offset; k++) {
+                if(vars[i].change_real) {
+                  for(k=vars[i].offset; k<vars[i].nelem+vars[i].offset; k++) {
                     xc12[k]=xcf[k]-varchange[k]*extrap_w1;
                     xc24[k]=xcf[k];
                     xcf[k]+=varchange[k]*extrap_w2;
                   }
                 }
                 else {
-                  for(k=ha_var[i].offset; k<ha_var[i].nelem+ha_var[i].offset; k++) {
+                  for(k=vars[i].offset; k<vars[i].nelem+vars[i].offset; k++) {
                     xc24[k]=xcf[k];
                     xc12[k]=xcf[k]-varchange[k]*xc0[k]*extrap_w1;
                     xcf[k]+=varchange[k]*xc0[k]*extrap_w2;//(100+xc0[k])*(100+varchange[k]/45)/100-100;//varchange[k]/45;
@@ -1681,15 +1681,15 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
               extrap_w2=step_ratio2*step_ratio2/(step_ratio3*step_ratio3-step_ratio2*step_ratio2);
               extrap_w3=step_ratio2*step_ratio2*step_ratio2*step_ratio2/(step_ratio2*step_ratio2-step_ratio3*step_ratio3)/(1.0-step_ratio2*step_ratio2);
               for(i=0; i<nvar; i++) {
-                if(ha_var[i].change_real) {
-                  for(k=ha_var[i].offset; k<ha_var[i].nelem+ha_var[i].offset; k++) {
+                if(vars[i].change_real) {
+                  for(k=vars[i].offset; k<vars[i].nelem+vars[i].offset; k++) {
                     xc24[k]-=varchange[k]*extrap_w2;
                     xc12[k]+=varchange[k]*extrap_w1;
                     xcf[k]-=varchange[k]*extrap_w3;
                   }
                 }
                 else {
-                  for(k=ha_var[i].offset; k<ha_var[i].nelem+ha_var[i].offset; k++) {
+                  for(k=vars[i].offset; k<vars[i].nelem+vars[i].offset; k++) {
                     xc24[k]-=varchange[k]*xc0[k]*extrap_w2;
                     xc12[k]+=varchange[k]*xc0[k]*extrap_w1;
                     xcf[k]-=varchange[k]*xc0[k]*extrap_w3;//(100+xc0[k])*(100-20*varchange[k]/45)/100-100;
@@ -1701,14 +1701,14 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
               extrap_w2=step_ratio3*step_ratio3/(step_ratio3*step_ratio3-step_ratio2*step_ratio2);
               extrap_w3=step_ratio3*step_ratio3*step_ratio3*step_ratio3/(step_ratio2*step_ratio2-step_ratio3*step_ratio3)/(1.0-step_ratio3*step_ratio3);
               for(i=0; i<nvar; i++) {
-                if(ha_var[i].change_real) {
-                  for(k=ha_var[i].offset; k<ha_var[i].nelem+ha_var[i].offset; k++) {
+                if(vars[i].change_real) {
+                  for(k=vars[i].offset; k<vars[i].nelem+vars[i].offset; k++) {
                     xc24[k]+=varchange[k]*extrap_w2;
                     xcf[k]+=varchange[k]*extrap_w3;
                   }
                 }
                 else {
-                  for(k=ha_var[i].offset; k<ha_var[i].nelem+ha_var[i].offset; k++) {
+                  for(k=vars[i].offset; k<vars[i].nelem+vars[i].offset; k++) {
                     xc24[k]+=varchange[k]*xc0[k]*extrap_w2;
                     xcf[k]+=varchange[k]*xc0[k]*extrap_w3;//(100+xc0[k])*(100+64*varchange[k]/45)/100-100;
                   }
@@ -1748,27 +1748,27 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
           if(sol==maxsol-1){
           if(subindx==0){
           for(i=0; i<nvar; i++) {
-            for(tindx1=ha_var[i].offset; tindx1<ha_var[i].nelem+ha_var[i].offset; tindx1++) {
-               ha_cofvar1[tindx1].substep_base=xcf[tindx1];
+            for(tindx1=vars[i].offset; tindx1<vars[i].nelem+vars[i].offset; tindx1++) {
+               elem_vals1[tindx1].substep_base=xcf[tindx1];
             }
           }
           }else{
           for(i=0; i<nvar; i++) {
-            for(tindx1=ha_var[i].offset; tindx1<ha_var[i].nelem+ha_var[i].offset; tindx1++) {
-               ha_cofvar1[tindx1].substep_base=(100+xcf[tindx1])/xc0[tindx1]-100;
+            for(tindx1=vars[i].offset; tindx1<vars[i].nelem+vars[i].offset; tindx1++) {
+               elem_vals1[tindx1].substep_base=(100+xcf[tindx1])/xc0[tindx1]-100;
             }
           }
           }
-          for(i=0; i<ncofele; i++) ha_cofvar[i].value=ha_cofvar[i].initial;
-          updates_apply_product(tabfile,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,ha_cofvar,ncofele+nvarele,ncofele);
-          if(Isbiupd==1)subinterval_update(rank,tabfile,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,ha_cofvar,ncofele+nvarele,ncofele,ha_cgeshock,nvarele,laA,subints,1,0,nsteps);
-          if(Isbiupd==2)subinterval_update(rank,tabfile,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,ha_cofvar,ncofele+nvarele,ncofele,ha_cgeshock,nvarele,laA,subints,1,2,nsteps);
+          for(i=0; i<ncofele; i++) elem_vals[i].value=elem_vals[i].initial;
+          updates_apply_product(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele);
+          if(Isbiupd==1)subinterval_update(rank,tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,closure_vals,nvarele,laA,subints,1,0,nsteps);
+          if(Isbiupd==2)subinterval_update(rank,tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,closure_vals,nvarele,laA,subints,1,2,nsteps);
           strcpy(commsyntax,"formula");
           IsIni=false;
-          formulas_execute(tabfile,commsyntax,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,ha_cofvar,ncofele+nvarele,ncofele,IsIni);
+          formulas_execute(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,IsIni);
           for(i=0; i<nvar; i++) {
-            for(tindx1=ha_var[i].offset; tindx1<ha_var[i].nelem+ha_var[i].offset; tindx1++) {
-               ha_cofvar1[tindx1].substep_base=0;
+            for(tindx1=vars[i].offset; tindx1<vars[i].nelem+vars[i].offset; tindx1++) {
+               elem_vals1[tindx1].substep_base=0;
             }
           }
 
@@ -1971,7 +1971,7 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
               free(counteqs);
               free(counteqnoadds);
               free(countvarintra1s);
-              ha_cofvar1=NULL;
+              elem_vals1=NULL;
               if(x1!=NULL)free(x1);
   }
 

@@ -1,6 +1,6 @@
 #include <teems_solver.h>
 
-solve_real formula_subst_scalar(char *var2, elem_value *record, array_def *ha_cof,offset_t ncof) {
+solve_real formula_subst_scalar(char *var2, elem_value *record, array_def *coefs,offset_t ncof) {
   offset_t index;
   while (str_replace_all(var2," ", ""));
   solve_real eval=0;
@@ -10,8 +10,8 @@ solve_real formula_subst_scalar(char *var2, elem_value *record, array_def *ha_co
   }
   index=ncof-1;
   do {
-    if (strcmp(ha_cof[index].cofname,var2)==0) {
-      eval=record[ha_cof[index].offset].value;
+    if (strcmp(coefs[index].cofname,var2)==0) {
+      eval=record[coefs[index].offset].value;
       break;
     }
   } while (index--);
@@ -19,7 +19,7 @@ solve_real formula_subst_scalar(char *var2, elem_value *record, array_def *ha_co
 }
 
 
-int formula_bind_operand(char *var2, set_def *ha_set,array_def *ha_cof,offset_t ncof, array_def *ha_var,offset_t nvar,offset_t ncofele,sum_def *sum_cof,int totalsum,formula_op *ha_calvar,int ha_calvarsize,quantifier *arSet,dim_t fdim,int varindex) {
+int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t ncof, array_def *vars,offset_t nvar,offset_t ncofele,sum_def *sum_cof,int totalsum,formula_op *ops,int nops,quantifier *arSet,dim_t fdim,int varindex) {
   offset_t index;
   char *p=NULL;//,copyvar[TABREADLINE];//,*p1=NULL,*p2=NULL,*p3=NULL,*p4=NULL;
   dim_t l1,l,sup;//,svar2;//=0,i2=0,i3=0,i4=0,svar1,svar2,checkvar20=0,checkvar10=0,checkvar11=0,checkvar12=0,checkvar16=0,checkvar14=0,l;
@@ -36,22 +36,22 @@ int formula_bind_operand(char *var2, set_def *ha_set,array_def *ha_cof,offset_t 
   }
   index=ncof-1;
   do {
-    if (strcmp(ha_cof[index].cofname,p)==0) {
-      if(!ha_cof[index].suplval)printf("Warning!!!! coefficient %s has not been supplied with values!\n",ha_cof[index].cofname);
+    if (strcmp(coefs[index].cofname,p)==0) {
+      if(!coefs[index].suplval)printf("Warning!!!! coefficient %s has not been supplied with values!\n",coefs[index].cofname);
       if(varindex==2) {
-        ha_calvar[ha_calvarsize].Var2BegAdd=ha_cof[index].offset;
-        ha_calvar[ha_calvarsize].Var2Type=OT_ARRAY;
+        ops[nops].Var2BegAdd=coefs[index].offset;
+        ops[nops].Var2Type=OT_ARRAY;
       } else {
-        ha_calvar[ha_calvarsize].Var1BegAdd=ha_cof[index].offset;
-        ha_calvar[ha_calvarsize].Var1Type=OT_ARRAY;
+        ops[nops].Var1BegAdd=coefs[index].offset;
+        ops[nops].Var1Type=OT_ARRAY;
       }
-      switch(ha_cof[index].size) {
+      switch(coefs[index].size) {
       case 0:
         for (l=0; l<fdim; l++) {
           if(varindex==2) {
-            ha_calvar[ha_calvarsize].Var2ADims[l]=0;
+            ops[nops].Var2ADims[l]=0;
           } else {
-            ha_calvar[ha_calvarsize].Var1ADims[l]=0;
+            ops[nops].Var1ADims[l]=0;
           }
         }
         break;
@@ -61,29 +61,29 @@ int formula_bind_operand(char *var2, set_def *ha_set,array_def *ha_cof,offset_t 
         parse_index_leadlag(p,&leadlag);
        for (l=0; l<fdim; l++) {
              if(varindex==2) {
-              ha_calvar[ha_calvarsize].Var2ADims[l]=0;
-              ha_calvar[ha_calvarsize].Var2leadlag[l]=0;
-              ha_calvar[ha_calvarsize].Var2SupSet[l]=0;
+              ops[nops].Var2ADims[l]=0;
+              ops[nops].Var2leadlag[l]=0;
+              ops[nops].Var2SupSet[l]=0;
             } else {
-              ha_calvar[ha_calvarsize].Var1ADims[l]=0;
-              ha_calvar[ha_calvarsize].Var1leadlag[l]=0;
-              ha_calvar[ha_calvarsize].Var1SupSet[l]=0;
+              ops[nops].Var1ADims[l]=0;
+              ops[nops].Var1leadlag[l]=0;
+              ops[nops].Var1SupSet[l]=0;
             }
           if (strcmp(p,arSet[l].index_name)==0) {
             if(varindex==2) {
-              if (ha_set[ha_cof[index].setid[0]].size>ha_set[arSet[l].setid].size) {
-                ha_calvar[ha_calvarsize].Var2SupSet[l]=1;
-                for(sup=1;sup<MAXSUPSET;sup++)if(ha_set[arSet[l].setid].subsetid[sup]==ha_cof[index].setid[0]){ha_calvar[ha_calvarsize].Var2SSIndx[l]=sup;break;}
+              if (sets[coefs[index].setid[0]].size>sets[arSet[l].setid].size) {
+                ops[nops].Var2SupSet[l]=1;
+                for(sup=1;sup<MAXSUPSET;sup++)if(sets[arSet[l].setid].subsetid[sup]==coefs[index].setid[0]){ops[nops].Var2SSIndx[l]=sup;break;}
               }
-              ha_calvar[ha_calvarsize].Var2ADims[l]=ha_cof[index].strides[0];
-              ha_calvar[ha_calvarsize].Var2leadlag[l]=leadlag;
+              ops[nops].Var2ADims[l]=coefs[index].strides[0];
+              ops[nops].Var2leadlag[l]=leadlag;
             } else {
-              if (ha_set[ha_cof[index].setid[0]].size>ha_set[arSet[l].setid].size) {
-                ha_calvar[ha_calvarsize].Var1SupSet[l]=1;
-                for(sup=1;sup<MAXSUPSET;sup++)if(ha_set[arSet[l].setid].subsetid[sup]==ha_cof[index].setid[0]){ha_calvar[ha_calvarsize].Var1SSIndx[l]=sup;break;}
+              if (sets[coefs[index].setid[0]].size>sets[arSet[l].setid].size) {
+                ops[nops].Var1SupSet[l]=1;
+                for(sup=1;sup<MAXSUPSET;sup++)if(sets[arSet[l].setid].subsetid[sup]==coefs[index].setid[0]){ops[nops].Var1SSIndx[l]=sup;break;}
               }
-              ha_calvar[ha_calvarsize].Var1ADims[l]=ha_cof[index].strides[0];
-              ha_calvar[ha_calvarsize].Var1leadlag[l]=leadlag;
+              ops[nops].Var1ADims[l]=coefs[index].strides[0];
+              ops[nops].Var1leadlag[l]=leadlag;
             }
           }
         }
@@ -91,35 +91,35 @@ int formula_bind_operand(char *var2, set_def *ha_set,array_def *ha_cof,offset_t 
       default:
         for (l1=0; l1<fdim; l1++) {
           if(varindex==2) {
-            ha_calvar[ha_calvarsize].Var2ADims[l1]=0;
-            ha_calvar[ha_calvarsize].Var2leadlag[l1]=0;
-            ha_calvar[ha_calvarsize].Var2SupSet[l1]=0;
+            ops[nops].Var2ADims[l1]=0;
+            ops[nops].Var2leadlag[l1]=0;
+            ops[nops].Var2SupSet[l1]=0;
           } else {
-            ha_calvar[ha_calvarsize].Var1ADims[l1]=0;
-            ha_calvar[ha_calvarsize].Var1leadlag[l1]=0;
-            ha_calvar[ha_calvarsize].Var1SupSet[l1]=0;
+            ops[nops].Var1ADims[l1]=0;
+            ops[nops].Var1leadlag[l1]=0;
+            ops[nops].Var1SupSet[l1]=0;
           }
         }
-        for (l=0; l<ha_cof[index].size-1; l++) {
+        for (l=0; l<coefs[index].size-1; l++) {
           p=strtok(NULL,",");
           leadlag=0;
           parse_index_leadlag(p,&leadlag);
           for (l1=0; l1<fdim; l1++) {
             if (strcmp(p,arSet[l1].index_name)==0) {
               if(varindex==2) {
-                if (ha_set[ha_cof[index].setid[l]].size>ha_set[arSet[l1].setid].size) {
-                  ha_calvar[ha_calvarsize].Var2SupSet[l1]=1;
-                  for(sup=1;sup<MAXSUPSET;sup++)if(ha_set[arSet[l1].setid].subsetid[sup]==ha_cof[index].setid[l]){ha_calvar[ha_calvarsize].Var2SSIndx[l1]=sup;break;}
+                if (sets[coefs[index].setid[l]].size>sets[arSet[l1].setid].size) {
+                  ops[nops].Var2SupSet[l1]=1;
+                  for(sup=1;sup<MAXSUPSET;sup++)if(sets[arSet[l1].setid].subsetid[sup]==coefs[index].setid[l]){ops[nops].Var2SSIndx[l1]=sup;break;}
                 }
-                ha_calvar[ha_calvarsize].Var2ADims[l1]=ha_cof[index].strides[l];
-                ha_calvar[ha_calvarsize].Var2leadlag[l1]=leadlag;
+                ops[nops].Var2ADims[l1]=coefs[index].strides[l];
+                ops[nops].Var2leadlag[l1]=leadlag;
               } else {
-                if (ha_set[ha_cof[index].setid[l]].size>ha_set[arSet[l1].setid].size) {
-                  ha_calvar[ha_calvarsize].Var1SupSet[l1]=1;
-                  for(sup=1;sup<MAXSUPSET;sup++)if(ha_set[arSet[l1].setid].subsetid[sup]==ha_cof[index].setid[l]){ha_calvar[ha_calvarsize].Var1SSIndx[l1]=sup;break;}
+                if (sets[coefs[index].setid[l]].size>sets[arSet[l1].setid].size) {
+                  ops[nops].Var1SupSet[l1]=1;
+                  for(sup=1;sup<MAXSUPSET;sup++)if(sets[arSet[l1].setid].subsetid[sup]==coefs[index].setid[l]){ops[nops].Var1SSIndx[l1]=sup;break;}
                 }
-                ha_calvar[ha_calvarsize].Var1ADims[l1]=ha_cof[index].strides[l];
-                ha_calvar[ha_calvarsize].Var1leadlag[l1]=leadlag;
+                ops[nops].Var1ADims[l1]=coefs[index].strides[l];
+                ops[nops].Var1leadlag[l1]=leadlag;
               }
               break;
             }
@@ -131,19 +131,19 @@ int formula_bind_operand(char *var2, set_def *ha_set,array_def *ha_cof,offset_t 
         for (l1=0; l1<fdim; l1++) {
           if (strcmp(p,arSet[l1].index_name)==0) {
             if(varindex==2) {
-              if (ha_set[ha_cof[index].setid[l]].size>ha_set[arSet[l1].setid].size) {
-                ha_calvar[ha_calvarsize].Var2SupSet[l1]=1;
-                for(sup=1;sup<MAXSUPSET;sup++)if(ha_set[arSet[l1].setid].subsetid[sup]==ha_cof[index].setid[l]){ha_calvar[ha_calvarsize].Var2SSIndx[l1]=sup;break;}
+              if (sets[coefs[index].setid[l]].size>sets[arSet[l1].setid].size) {
+                ops[nops].Var2SupSet[l1]=1;
+                for(sup=1;sup<MAXSUPSET;sup++)if(sets[arSet[l1].setid].subsetid[sup]==coefs[index].setid[l]){ops[nops].Var2SSIndx[l1]=sup;break;}
               }
-              ha_calvar[ha_calvarsize].Var2ADims[l1]=ha_cof[index].strides[l];
-              ha_calvar[ha_calvarsize].Var2leadlag[l1]=leadlag;
+              ops[nops].Var2ADims[l1]=coefs[index].strides[l];
+              ops[nops].Var2leadlag[l1]=leadlag;
             } else {
-              if (ha_set[ha_cof[index].setid[l]].size>ha_set[arSet[l1].setid].size) {
-                ha_calvar[ha_calvarsize].Var1SupSet[l1]=1;
-                for(sup=1;sup<MAXSUPSET;sup++)if(ha_set[arSet[l1].setid].subsetid[sup]==ha_cof[index].setid[l]){ha_calvar[ha_calvarsize].Var1SSIndx[l1]=sup;break;}
+              if (sets[coefs[index].setid[l]].size>sets[arSet[l1].setid].size) {
+                ops[nops].Var1SupSet[l1]=1;
+                for(sup=1;sup<MAXSUPSET;sup++)if(sets[arSet[l1].setid].subsetid[sup]==coefs[index].setid[l]){ops[nops].Var1SSIndx[l1]=sup;break;}
               }
-              ha_calvar[ha_calvarsize].Var1ADims[l1]=ha_cof[index].strides[l];
-              ha_calvar[ha_calvarsize].Var1leadlag[l1]=leadlag;
+              ops[nops].Var1ADims[l1]=coefs[index].strides[l];
+              ops[nops].Var1leadlag[l1]=leadlag;
             }
             break;
           }
@@ -156,25 +156,25 @@ int formula_bind_operand(char *var2, set_def *ha_set,array_def *ha_cof,offset_t 
 
   index=nvar-1;
   do {
-    if (strcmp(ha_var[index].cofname,p)==0) {
+    if (strcmp(vars[index].cofname,p)==0) {
       if(varindex==2) {
-        ha_calvar[ha_calvarsize].Var2BegAdd=ha_var[index].offset+ncofele;
-        if(IsChange) ha_calvar[ha_calvarsize].Var2Type=OT_CHANGE;
-        else ha_calvar[ha_calvarsize].Var2Type=OT_ARRAY;
+        ops[nops].Var2BegAdd=vars[index].offset+ncofele;
+        if(IsChange) ops[nops].Var2Type=OT_CHANGE;
+        else ops[nops].Var2Type=OT_ARRAY;
       } else {
-        ha_calvar[ha_calvarsize].Var1BegAdd=ha_var[index].offset+ncofele;
-        if(IsChange) ha_calvar[ha_calvarsize].Var1Type=OT_CHANGE;
-        else ha_calvar[ha_calvarsize].Var1Type=OT_ARRAY;
+        ops[nops].Var1BegAdd=vars[index].offset+ncofele;
+        if(IsChange) ops[nops].Var1Type=OT_CHANGE;
+        else ops[nops].Var1Type=OT_ARRAY;
       }
-      switch(ha_var[index].size) {
+      switch(vars[index].size) {
       case 0:
         for (l=0; l<fdim; l++) {
           if(varindex==2) {
-            ha_calvar[ha_calvarsize].Var2ADims[l]=0;
-            ha_calvar[ha_calvarsize].Var2leadlag[l]=0;
+            ops[nops].Var2ADims[l]=0;
+            ops[nops].Var2leadlag[l]=0;
           } else {
-            ha_calvar[ha_calvarsize].Var1ADims[l]=0;
-            ha_calvar[ha_calvarsize].Var1leadlag[l]=0;
+            ops[nops].Var1ADims[l]=0;
+            ops[nops].Var1leadlag[l]=0;
           }
         }
         break;
@@ -184,29 +184,29 @@ int formula_bind_operand(char *var2, set_def *ha_set,array_def *ha_cof,offset_t 
         parse_index_leadlag(p,&leadlag);
         for (l=0; l<fdim; l++) {
              if(varindex==2) {
-              ha_calvar[ha_calvarsize].Var2ADims[l]=0;
-              ha_calvar[ha_calvarsize].Var2leadlag[l]=0;
-              ha_calvar[ha_calvarsize].Var2SupSet[l]=0;
+              ops[nops].Var2ADims[l]=0;
+              ops[nops].Var2leadlag[l]=0;
+              ops[nops].Var2SupSet[l]=0;
             } else {
-              ha_calvar[ha_calvarsize].Var1ADims[l]=0;
-              ha_calvar[ha_calvarsize].Var1leadlag[l]=0;
-              ha_calvar[ha_calvarsize].Var1SupSet[l]=0;
+              ops[nops].Var1ADims[l]=0;
+              ops[nops].Var1leadlag[l]=0;
+              ops[nops].Var1SupSet[l]=0;
             }
           if (strcmp(p,arSet[l].index_name)==0) {
             if(varindex==2) {
-              if (ha_set[ha_var[index].setid[0]].size>ha_set[arSet[l].setid].size) {
-                ha_calvar[ha_calvarsize].Var2SupSet[l]=1;
-                for(sup=1;sup<MAXSUPSET;sup++)if(ha_set[arSet[l].setid].subsetid[sup]==ha_var[index].setid[0]){ha_calvar[ha_calvarsize].Var2SSIndx[l]=sup;break;}
+              if (sets[vars[index].setid[0]].size>sets[arSet[l].setid].size) {
+                ops[nops].Var2SupSet[l]=1;
+                for(sup=1;sup<MAXSUPSET;sup++)if(sets[arSet[l].setid].subsetid[sup]==vars[index].setid[0]){ops[nops].Var2SSIndx[l]=sup;break;}
               }
-              ha_calvar[ha_calvarsize].Var2ADims[l]=ha_var[index].strides[0];
-              ha_calvar[ha_calvarsize].Var2leadlag[l]=leadlag;
+              ops[nops].Var2ADims[l]=vars[index].strides[0];
+              ops[nops].Var2leadlag[l]=leadlag;
             } else {
-              if (ha_set[ha_var[index].setid[0]].size>ha_set[arSet[l].setid].size) {
-                ha_calvar[ha_calvarsize].Var1SupSet[l]=1;
-                for(sup=1;sup<MAXSUPSET;sup++)if(ha_set[arSet[l].setid].subsetid[sup]==ha_var[index].setid[0]){ha_calvar[ha_calvarsize].Var1SSIndx[l]=sup;break;}
+              if (sets[vars[index].setid[0]].size>sets[arSet[l].setid].size) {
+                ops[nops].Var1SupSet[l]=1;
+                for(sup=1;sup<MAXSUPSET;sup++)if(sets[arSet[l].setid].subsetid[sup]==vars[index].setid[0]){ops[nops].Var1SSIndx[l]=sup;break;}
               }
-              ha_calvar[ha_calvarsize].Var1ADims[l]=ha_var[index].strides[0];
-              ha_calvar[ha_calvarsize].Var1leadlag[l]=leadlag;
+              ops[nops].Var1ADims[l]=vars[index].strides[0];
+              ops[nops].Var1leadlag[l]=leadlag;
             }
           }
         }
@@ -214,35 +214,35 @@ int formula_bind_operand(char *var2, set_def *ha_set,array_def *ha_cof,offset_t 
       default:
         for (l1=0; l1<fdim; l1++) {
           if(varindex==2) {
-            ha_calvar[ha_calvarsize].Var2ADims[l1]=0;
-            ha_calvar[ha_calvarsize].Var2leadlag[l1]=0;
-            ha_calvar[ha_calvarsize].Var2SupSet[l1]=0;
+            ops[nops].Var2ADims[l1]=0;
+            ops[nops].Var2leadlag[l1]=0;
+            ops[nops].Var2SupSet[l1]=0;
           } else {
-            ha_calvar[ha_calvarsize].Var1ADims[l1]=0;
-            ha_calvar[ha_calvarsize].Var1leadlag[l1]=0;
-            ha_calvar[ha_calvarsize].Var1SupSet[l1]=0;
+            ops[nops].Var1ADims[l1]=0;
+            ops[nops].Var1leadlag[l1]=0;
+            ops[nops].Var1SupSet[l1]=0;
           }
         }
-        for (l=0; l<ha_var[index].size-1; l++) {
+        for (l=0; l<vars[index].size-1; l++) {
           p=strtok(NULL,",");
           leadlag=0;
           parse_index_leadlag(p,&leadlag);
           for (l1=0; l1<fdim; l1++) {
             if (strcmp(p,arSet[l1].index_name)==0) {
               if(varindex==2) {
-                if (ha_set[ha_var[index].setid[l]].size>ha_set[arSet[l1].setid].size) {
-                  ha_calvar[ha_calvarsize].Var2SupSet[l1]=1;
-                  for(sup=1;sup<MAXSUPSET;sup++)if(ha_set[arSet[l1].setid].subsetid[sup]==ha_var[index].setid[l]){ha_calvar[ha_calvarsize].Var2SSIndx[l1]=sup;break;}
+                if (sets[vars[index].setid[l]].size>sets[arSet[l1].setid].size) {
+                  ops[nops].Var2SupSet[l1]=1;
+                  for(sup=1;sup<MAXSUPSET;sup++)if(sets[arSet[l1].setid].subsetid[sup]==vars[index].setid[l]){ops[nops].Var2SSIndx[l1]=sup;break;}
                 }
-                ha_calvar[ha_calvarsize].Var2ADims[l1]=ha_var[index].strides[l];
-                ha_calvar[ha_calvarsize].Var2leadlag[l1]=leadlag;
+                ops[nops].Var2ADims[l1]=vars[index].strides[l];
+                ops[nops].Var2leadlag[l1]=leadlag;
               } else {
-                if (ha_set[ha_var[index].setid[l]].size>ha_set[arSet[l1].setid].size) {
-                  ha_calvar[ha_calvarsize].Var1SupSet[l1]=1;
-                  for(sup=1;sup<MAXSUPSET;sup++)if(ha_set[arSet[l1].setid].subsetid[sup]==ha_var[index].setid[l]){ha_calvar[ha_calvarsize].Var1SSIndx[l1]=sup;break;}
+                if (sets[vars[index].setid[l]].size>sets[arSet[l1].setid].size) {
+                  ops[nops].Var1SupSet[l1]=1;
+                  for(sup=1;sup<MAXSUPSET;sup++)if(sets[arSet[l1].setid].subsetid[sup]==vars[index].setid[l]){ops[nops].Var1SSIndx[l1]=sup;break;}
                 }
-                ha_calvar[ha_calvarsize].Var1ADims[l1]=ha_var[index].strides[l];
-                ha_calvar[ha_calvarsize].Var1leadlag[l1]=leadlag;
+                ops[nops].Var1ADims[l1]=vars[index].strides[l];
+                ops[nops].Var1leadlag[l1]=leadlag;
               }
               break;
             }
@@ -254,19 +254,19 @@ int formula_bind_operand(char *var2, set_def *ha_set,array_def *ha_cof,offset_t 
         for (l1=0; l1<fdim; l1++) {
           if (strcmp(p,arSet[l1].index_name)==0) {
             if(varindex==2) {
-              if (ha_set[ha_var[index].setid[l]].size>ha_set[arSet[l1].setid].size) {
-                ha_calvar[ha_calvarsize].Var2SupSet[l1]=1;
-                for(sup=1;sup<MAXSUPSET;sup++)if(ha_set[arSet[l1].setid].subsetid[sup]==ha_var[index].setid[l]){ha_calvar[ha_calvarsize].Var2SSIndx[l1]=sup;break;}
+              if (sets[vars[index].setid[l]].size>sets[arSet[l1].setid].size) {
+                ops[nops].Var2SupSet[l1]=1;
+                for(sup=1;sup<MAXSUPSET;sup++)if(sets[arSet[l1].setid].subsetid[sup]==vars[index].setid[l]){ops[nops].Var2SSIndx[l1]=sup;break;}
               }
-              ha_calvar[ha_calvarsize].Var2ADims[l1]=ha_var[index].strides[l];
-              ha_calvar[ha_calvarsize].Var2leadlag[l1]=leadlag;
+              ops[nops].Var2ADims[l1]=vars[index].strides[l];
+              ops[nops].Var2leadlag[l1]=leadlag;
             } else {
-              if (ha_set[ha_var[index].setid[l]].size>ha_set[arSet[l1].setid].size) {
-                ha_calvar[ha_calvarsize].Var1SupSet[l1]=1;
-                for(sup=1;sup<MAXSUPSET;sup++)if(ha_set[arSet[l1].setid].subsetid[sup]==ha_var[index].setid[l]){ha_calvar[ha_calvarsize].Var1SSIndx[l1]=sup;break;}
+              if (sets[vars[index].setid[l]].size>sets[arSet[l1].setid].size) {
+                ops[nops].Var1SupSet[l1]=1;
+                for(sup=1;sup<MAXSUPSET;sup++)if(sets[arSet[l1].setid].subsetid[sup]==vars[index].setid[l]){ops[nops].Var1SSIndx[l1]=sup;break;}
               }
-              ha_calvar[ha_calvarsize].Var1ADims[l1]=ha_var[index].strides[l];
-              ha_calvar[ha_calvarsize].Var1leadlag[l1]=leadlag;
+              ops[nops].Var1ADims[l1]=vars[index].strides[l];
+              ops[nops].Var1leadlag[l1]=leadlag;
             }
             break;
           }
@@ -280,19 +280,19 @@ int formula_bind_operand(char *var2, set_def *ha_set,array_def *ha_cof,offset_t 
   for (index=totalsum-1; index>-1; index--) {
     if (strcmp(sum_cof[index].sumname,p)==0) {
       if(varindex==2) {
-        ha_calvar[ha_calvarsize].Var2BegAdd=sum_cof[index].offset;
-        ha_calvar[ha_calvarsize].Var2Type=OT_SUM;
-        for (l1=0; l1<sum_cof[index].size; l1++)ha_calvar[ha_calvarsize].Var2SSIndx[l1]=0;
+        ops[nops].Var2BegAdd=sum_cof[index].offset;
+        ops[nops].Var2Type=OT_SUM;
+        for (l1=0; l1<sum_cof[index].size; l1++)ops[nops].Var2SSIndx[l1]=0;
       } else {
-        ha_calvar[ha_calvarsize].Var1BegAdd=sum_cof[index].offset;
-        ha_calvar[ha_calvarsize].Var1Type=OT_SUM;
-        for (l1=0; l1<sum_cof[index].size; l1++)ha_calvar[ha_calvarsize].Var1SSIndx[l1]=0;
+        ops[nops].Var1BegAdd=sum_cof[index].offset;
+        ops[nops].Var1Type=OT_SUM;
+        for (l1=0; l1<sum_cof[index].size; l1++)ops[nops].Var1SSIndx[l1]=0;
       }
       switch(sum_cof[index].size) {
       case 0:
         for (l1=0; l1<fdim; l1++) {
-          if(varindex==2) ha_calvar[ha_calvarsize].Var2ADims[l1]=0;
-          else ha_calvar[ha_calvarsize].Var1ADims[l1]=0;
+          if(varindex==2) ops[nops].Var2ADims[l1]=0;
+          else ops[nops].Var1ADims[l1]=0;
         }
         break;
       case 1:
@@ -300,32 +300,32 @@ int formula_bind_operand(char *var2, set_def *ha_set,array_def *ha_cof,offset_t 
         for (l=0; l<fdim; l++) {
           if (strcmp(p,arSet[l].index_name)==0) {
             if(varindex==2) {
-              ha_calvar[ha_calvarsize].Var2ADims[l]=sum_cof[index].strides[0];
+              ops[nops].Var2ADims[l]=sum_cof[index].strides[0];
             } else {
-              ha_calvar[ha_calvarsize].Var1ADims[l]=sum_cof[index].strides[0];
+              ops[nops].Var1ADims[l]=sum_cof[index].strides[0];
             }
           } else {
             if(varindex==2) {
-              ha_calvar[ha_calvarsize].Var2ADims[l]=0;
+              ops[nops].Var2ADims[l]=0;
             } else {
-              ha_calvar[ha_calvarsize].Var1ADims[l]=0;
+              ops[nops].Var1ADims[l]=0;
             }
           }
         }
         break;
       default:
         for (l1=0; l1<fdim; l1++) {
-          if(varindex==2) ha_calvar[ha_calvarsize].Var2ADims[l1]=0;
-          else ha_calvar[ha_calvarsize].Var1ADims[l1]=0;
+          if(varindex==2) ops[nops].Var2ADims[l1]=0;
+          else ops[nops].Var1ADims[l1]=0;
         }
         for (l=0; l<sum_cof[index].size-1; l++) {
           p=strtok(NULL,",");
           for (l1=0; l1<fdim; l1++) {
             if (strcmp(p,arSet[l1].index_name)==0) {
               if(varindex==2) {
-                ha_calvar[ha_calvarsize].Var2ADims[l1]=sum_cof[index].strides[l];
+                ops[nops].Var2ADims[l1]=sum_cof[index].strides[l];
               } else {
-                ha_calvar[ha_calvarsize].Var1ADims[l1]=sum_cof[index].strides[l];
+                ops[nops].Var1ADims[l1]=sum_cof[index].strides[l];
               }
               break;
             }
@@ -335,9 +335,9 @@ int formula_bind_operand(char *var2, set_def *ha_set,array_def *ha_cof,offset_t 
         for (l1=0; l1<fdim; l1++) {
           if (strcmp(p,arSet[l1].index_name)==0) {
             if(varindex==2) {
-              ha_calvar[ha_calvarsize].Var2ADims[l1]=sum_cof[index].strides[l];
+              ops[nops].Var2ADims[l1]=sum_cof[index].strides[l];
             } else {
-              ha_calvar[ha_calvarsize].Var1ADims[l1]=sum_cof[index].strides[l];
+              ops[nops].Var1ADims[l1]=sum_cof[index].strides[l];
             }
             break;
           }
@@ -348,25 +348,25 @@ int formula_bind_operand(char *var2, set_def *ha_set,array_def *ha_cof,offset_t 
     }
   }
 
-  for (l1=0; l1<ha_calvarsize; l1++) {
-    if (strcmp(var2,ha_calvar[l1].TmpVarName)==0) {
+  for (l1=0; l1<nops; l1++) {
+    if (strcmp(var2,ops[l1].TmpVarName)==0) {
       if(varindex==2) {
-        ha_calvar[ha_calvarsize].Var2Type=OT_TEMP;
-        ha_calvar[ha_calvarsize].Var2BegAdd=l1;
+        ops[nops].Var2Type=OT_TEMP;
+        ops[nops].Var2BegAdd=l1;
       } else {
-        ha_calvar[ha_calvarsize].Var1Type=OT_TEMP;
-        ha_calvar[ha_calvarsize].Var1BegAdd=l1;
+        ops[nops].Var1Type=OT_TEMP;
+        ops[nops].Var1BegAdd=l1;
       }
       return 1;
     }
   }
   if (var2[0]>='0'&&var2[0]<='9') {
     if(varindex==2) {
-      ha_calvar[ha_calvarsize].Var2Type=OT_CONST;
-      ha_calvar[ha_calvarsize].Var2Val=atof(var2);
+      ops[nops].Var2Type=OT_CONST;
+      ops[nops].Var2Val=atof(var2);
     } else {
-      ha_calvar[ha_calvarsize].Var1Type=OT_CONST;
-      ha_calvar[ha_calvarsize].Var1Val=atof(var2);
+      ops[nops].Var1Type=OT_CONST;
+      ops[nops].Var1Val=atof(var2);
     }
     return 1;
   }
@@ -414,31 +414,31 @@ int parse_index_leadlag(char *p,int *leadlag) {
   return 1;
 }
 
-int formula_compile(char *fomulain, set_def *ha_set,array_def *ha_cof, offset_t ncof, array_def *ha_var,offset_t nvar,offset_t ncofele,sum_def *sum_cof,dim_t totalsum,formula_op *ha_calvar,dim_t *ha_calvarsize,quantifier *arSet,dim_t fdim) {
+int formula_compile(char *fomulain, set_def *sets,array_def *coefs, offset_t ncof, array_def *vars,offset_t nvar,offset_t ncofele,sum_def *sum_cof,dim_t totalsum,formula_op *ops,dim_t *nops,quantifier *arSet,dim_t fdim) {
   int npar=0,npow=0,nmul=0,ndiv=0,nplu=0,nmin=0,j;
-  *ha_calvarsize=0;
+  *nops=0;
   npar=str_count_char(fomulain, ')');
   if (npar==0) {
     npow=str_count_char(fomulain, '^');
     if (npow>0) {
-      formula_compile_pow(fomulain,ha_set,npow,0,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,ha_calvarsize,arSet,fdim);
+      formula_compile_pow(fomulain,sets,npow,0,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,nops,arSet,fdim);
     }
     nmul=str_count_char(fomulain, '*');
     ndiv=str_count_char(fomulain, '/');
     nmul=nmul+ndiv;
     if (nmul>0) {
-      formula_compile_muldiv(fomulain,ha_set,nmul,0,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,ha_calvarsize,arSet,fdim);
+      formula_compile_muldiv(fomulain,sets,nmul,0,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,nops,arSet,fdim);
     }
     nplu=str_count_char(fomulain, '+');
     nmin=str_count_char(fomulain, '-');
     nplu=nplu+nmin;
     if (nplu>0) {
-      formula_compile_addsub(fomulain,ha_set,nplu,0,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,ha_calvarsize,arSet,fdim);
+      formula_compile_addsub(fomulain,sets,nplu,0,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,nops,arSet,fdim);
     }
-      formula_bind_operand(fomulain,ha_set,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,*ha_calvarsize,arSet,fdim,1);
-      ha_calvar[*ha_calvarsize].Oper=OP_LOAD;
-      ha_calvar[*ha_calvarsize].TmpVarName[0]='\0';
-      *ha_calvarsize=*ha_calvarsize+1;
+      formula_bind_operand(fomulain,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,*nops,arSet,fdim,1);
+      ops[*nops].Oper=OP_LOAD;
+      ops[*nops].TmpVarName[0]='\0';
+      *nops=*nops+1;
     return 1;
   }
   int i;
@@ -468,75 +468,75 @@ int formula_compile(char *fomulain, set_def *ha_set,array_def *ha_cof, offset_t 
     }
     npow=str_count_char(fpart2, '^');
     if (npow>0) {
-      formula_compile_pow(fpart2,ha_set,npow,i,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,ha_calvarsize,arSet,fdim);
+      formula_compile_pow(fpart2,sets,npow,i,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,nops,arSet,fdim);
     }
     nmul=str_count_char(fpart2, '*');
     ndiv=str_count_char(fpart2, '/');
     nmul=nmul+ndiv;
     if (nmul>0) {
-      formula_compile_muldiv(fpart2,ha_set,nmul,i,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,ha_calvarsize,arSet,fdim);
+      formula_compile_muldiv(fpart2,sets,nmul,i,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,nops,arSet,fdim);
     }
     nplu=str_count_char(fpart2, '+');
     nmin=str_count_char(fpart2, '-');
     nplu=nplu+nmin;
     if (nplu>0) {
-      formula_compile_addsub(fpart2,ha_set,nplu,i,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,ha_calvarsize,arSet,fdim);
+      formula_compile_addsub(fpart2,sets,nplu,i,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,nops,arSet,fdim);
     }
       if(strpbrk(fpart2,"=<>")==NULL){
-      formula_bind_operand(fpart2,ha_set,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,*ha_calvarsize,arSet,fdim,1);
-      ha_calvar[*ha_calvarsize].Oper=OP_LOAD;
-      ha_calvar[*ha_calvarsize].TmpVarName[0]='\0';
-      *ha_calvarsize=*ha_calvarsize+1;
+      formula_bind_operand(fpart2,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,*nops,arSet,fdim,1);
+      ops[*nops].Oper=OP_LOAD;
+      ops[*nops].TmpVarName[0]='\0';
+      *nops=*nops+1;
       }
     sprintf(interchar1, "%d", i);
     interchar[0]='\0';
     if (i<10) {
-      strcat(interchar,"ha_cgepar000");
+      strcat(interchar,"gen_par000");
     }
     if (9<i&&i<100) {
-      strcat(interchar,"ha_cgepar00");
+      strcat(interchar,"gen_par00");
     }
     if (99<i&&i<1000) {
-      strcat(interchar,"ha_cgepar0");
+      strcat(interchar,"gen_par0");
     }
     if (999<i&&i<10000) {
-      strcat(interchar,"ha_cgepar");
+      strcat(interchar,"gen_par");
     }
     if (i>10000) {
-      strcat(interchar,"ha_cgepar");
+      strcat(interchar,"gen_par");
       printf("Warning: Too many parenthesises\n");
     }
     strcat(interchar,interchar1);
-    strcpy(ha_calvar[*ha_calvarsize].TmpVarName,interchar);
-    ha_calvar[*ha_calvarsize].Oper=OP_LOAD;
-    ha_calvar[*ha_calvarsize].Var1BegAdd=*ha_calvarsize-1;
+    strcpy(ops[*nops].TmpVarName,interchar);
+    ops[*nops].Oper=OP_LOAD;
+    ops[*nops].Var1BegAdd=*nops-1;
     j=strlen(fpart1);
-    ha_calvar[*ha_calvarsize].Var1Type=OT_TEMP;
+    ops[*nops].Var1Type=OT_TEMP;
     if (j>3) if (fpart1[j-1]=='1'&&fpart1[j-2]=='0'&&tolower((int)fpart1[j-3])=='d'&&tolower((int)fpart1[j-4])=='i') {
-        ha_calvar[*ha_calvarsize].Var1Type=OT_TEMP_ID01;
+        ops[*nops].Var1Type=OT_TEMP_ID01;
         fpart1[j-4]='\0';
       }
     if (j>3) if (fpart1[j-1]=='e'&&fpart1[j-2]=='g'&&fpart1[j-3]=='o'&&fpart1[j-4]=='l') {
-        ha_calvar[*ha_calvarsize].Var1Type=OT_TEMP_LOG;
+        ops[*nops].Var1Type=OT_TEMP_LOG;
         fpart1[j-4]='\0';
       }
     if (j==3) if (fpart1[j-1]=='s'&&fpart1[j-2]=='b'&&fpart1[j-3]=='a') {
-        ha_calvar[*ha_calvarsize].Var1Type=OT_TEMP_ABS;
+        ops[*nops].Var1Type=OT_TEMP_ABS;
         fpart1[j-3]='\0';
       }
     if (j>3) if (fpart1[j-1]=='s'&&fpart1[j-2]=='b'&&fpart1[j-3]=='a') if(j==3||fpart1[j-4]==' '||fpart1[j-4]=='('||fpart1[j-4]=='+'||fpart1[j-4]=='-'||fpart1[j-4]=='*'||fpart1[j-4]=='/'||fpart1[j-4]=='^'||fpart1[j-4]==',') {
-          ha_calvar[*ha_calvarsize].Var1Type=OT_TEMP_ABS;
+          ops[*nops].Var1Type=OT_TEMP_ABS;
           fpart1[j-3]='\0';
         }
     if (j==2) if (fpart1[j-1]=='f'&&fpart1[j-2]=='i') {
-        formula_compile_if(fpart2,ha_set,2,i,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,ha_calvarsize,arSet,fdim);
+        formula_compile_if(fpart2,sets,2,i,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,nops,arSet,fdim);
         fpart1[j-2]='\0';
       }
     if (j>2) if (fpart1[j-1]=='f'&&fpart1[j-2]=='i') if(j==2||fpart1[j-3]==' '||fpart1[j-3]=='('||fpart1[j-3]=='+'||fpart1[j-3]=='-'||fpart1[j-3]=='*'||fpart1[j-3]=='/'||fpart1[j-3]=='^'||fpart1[j-3]==',') {
-          formula_compile_if(fpart2,ha_set,2,i,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,ha_calvarsize,arSet,fdim);
+          formula_compile_if(fpart2,sets,2,i,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,nops,arSet,fdim);
           fpart1[j-2]='\0';
         }
-    *ha_calvarsize=*ha_calvarsize+1;
+    *nops=*nops+1;
     strcat(fpart1, interchar);
     strcat(fpart1, fpart3);
     strcpy(fomulain,fpart1);
@@ -544,475 +544,475 @@ int formula_compile(char *fomulain, set_def *ha_set,array_def *ha_cof, offset_t 
   return 1;
 }
 
-solve_real formula_eval(elem_value *record,set_def *ha_set,set_element *ha_setele,sum_value *ha_sumele,formula_op *ha_calvar,int ha_calvarsize,quantifier *arSet,dim_t fdim, solve_real zerodivide) {
+solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,sum_value *sum_vals,formula_op *ops,int nops,quantifier *arSet,dim_t fdim, solve_real zerodivide) {
   int i;
   dim_t j;
   offset_t l=0,l1=0;
   solve_real eval1=0,eval2=0,eval3=0;
-  for (i=0; i<ha_calvarsize; i++) {
-    switch(ha_calvar[i].Oper) {
+  for (i=0; i<nops; i++) {
+    switch(ops[i].Oper) {
     case OP_LOAD:
-      if (ha_calvar[i].Var1Type==OT_ARRAY) {
+      if (ops[i].Var1Type==OT_ARRAY) {
         l=0;
         for (j=0; j<fdim; j++) {
-          if(ha_calvar[i].Var1SupSet[j]==1) {
-            l+=ha_calvar[i].Var1ADims[j]*(ha_setele[ha_set[arSet[j].setid].offset+arSet[j].indx].superset_pos[ha_calvar[i].Var1SSIndx[j]]+ha_calvar[i].Var1leadlag[j]);
+          if(ops[i].Var1SupSet[j]==1) {
+            l+=ops[i].Var1ADims[j]*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var1SSIndx[j]]+ops[i].Var1leadlag[j]);
           } else {
-            l+=ha_calvar[i].Var1ADims[j]*(arSet[j].indx+ha_calvar[i].Var1leadlag[j]);
+            l+=ops[i].Var1ADims[j]*(arSet[j].indx+ops[i].Var1leadlag[j]);
           }
         }
-        ha_calvar[i].TmpVarVal=record[ha_calvar[i].Var1BegAdd+l].value;
+        ops[i].TmpVarVal=record[ops[i].Var1BegAdd+l].value;
         break;
       }
-      if (ha_calvar[i].Var1Type==OT_SUM) {
+      if (ops[i].Var1Type==OT_SUM) {
         l=0;
         for (j=0; j<fdim; j++) {
-          l+=ha_calvar[i].Var1ADims[j]*arSet[j].indx;
+          l+=ops[i].Var1ADims[j]*arSet[j].indx;
         }
-        ha_calvar[i].TmpVarVal=ha_sumele[ha_calvar[i].Var1BegAdd+l].value;
+        ops[i].TmpVarVal=sum_vals[ops[i].Var1BegAdd+l].value;
         break;
       }
-      if (ha_calvar[i].Var1Type==OT_TEMP) {
-        ha_calvar[i].TmpVarVal=ha_calvar[ha_calvar[i].Var1BegAdd].TmpVarVal;
+      if (ops[i].Var1Type==OT_TEMP) {
+        ops[i].TmpVarVal=ops[ops[i].Var1BegAdd].TmpVarVal;
         break;
       }
-      if (ha_calvar[i].Var1Type==OT_TEMP_ID01) {
-        if(ha_calvar[ha_calvar[i].Var1BegAdd].TmpVarVal==0)ha_calvar[i].TmpVarVal=1;
-        else ha_calvar[i].TmpVarVal=ha_calvar[ha_calvar[i].Var1BegAdd].TmpVarVal;
+      if (ops[i].Var1Type==OT_TEMP_ID01) {
+        if(ops[ops[i].Var1BegAdd].TmpVarVal==0)ops[i].TmpVarVal=1;
+        else ops[i].TmpVarVal=ops[ops[i].Var1BegAdd].TmpVarVal;
         break;
       }
-      if (ha_calvar[i].Var1Type==OT_TEMP_ABS) {
-        if(ha_calvar[ha_calvar[i].Var1BegAdd].TmpVarVal<0)ha_calvar[i].TmpVarVal=-ha_calvar[ha_calvar[i].Var1BegAdd].TmpVarVal;
-        else ha_calvar[i].TmpVarVal=ha_calvar[ha_calvar[i].Var1BegAdd].TmpVarVal;
+      if (ops[i].Var1Type==OT_TEMP_ABS) {
+        if(ops[ops[i].Var1BegAdd].TmpVarVal<0)ops[i].TmpVarVal=-ops[ops[i].Var1BegAdd].TmpVarVal;
+        else ops[i].TmpVarVal=ops[ops[i].Var1BegAdd].TmpVarVal;
         break;
       }
-      if (ha_calvar[i].Var1Type==OT_TEMP_LOG) {
-        ha_calvar[i].TmpVarVal=log(ha_calvar[ha_calvar[i].Var1BegAdd].TmpVarVal);
+      if (ops[i].Var1Type==OT_TEMP_LOG) {
+        ops[i].TmpVarVal=log(ops[ops[i].Var1BegAdd].TmpVarVal);
         break;
       }
-      if (ha_calvar[i].Var1Type==OT_CONST) {
-        ha_calvar[i].TmpVarVal=ha_calvar[i].Var1Val;
+      if (ops[i].Var1Type==OT_CONST) {
+        ops[i].TmpVarVal=ops[i].Var1Val;
         break;
       }
-      if (ha_calvar[i].Var1Type==OT_CHANGE) {
+      if (ops[i].Var1Type==OT_CHANGE) {
         l=0;
         for (j=0; j<fdim; j++) {
-          if(ha_calvar[i].Var1SupSet[j]==1) {
-            l+=ha_calvar[i].Var1ADims[j]*(ha_setele[ha_set[arSet[j].setid].offset+arSet[j].indx].superset_pos[ha_calvar[i].Var1SSIndx[j]]+ha_calvar[i].Var1leadlag[j]);
+          if(ops[i].Var1SupSet[j]==1) {
+            l+=ops[i].Var1ADims[j]*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var1SSIndx[j]]+ops[i].Var1leadlag[j]);
           } else {
-            l+=ha_calvar[i].Var1ADims[j]*(arSet[j].indx+ha_calvar[i].Var1leadlag[j]);
+            l+=ops[i].Var1ADims[j]*(arSet[j].indx+ops[i].Var1leadlag[j]);
           }
         }
-        ha_calvar[i].TmpVarVal=record[ha_calvar[i].Var1BegAdd+l].substep_base;
+        ops[i].TmpVarVal=record[ops[i].Var1BegAdd+l].substep_base;
         break;
       }
       break;
     case OP_MUL:
-      if(ha_calvar[i].Var1Type<3||ha_calvar[i].Var1Type==OT_CHANGE) {
+      if(ops[i].Var1Type<3||ops[i].Var1Type==OT_CHANGE) {
         l=0;
         for (j=0; j<fdim; j++) {
-          if(ha_calvar[i].Var1SupSet[j]==1) {
-            l+=ha_calvar[i].Var1ADims[j]*(ha_setele[ha_set[arSet[j].setid].offset+arSet[j].indx].superset_pos[ha_calvar[i].Var1SSIndx[j]]+ha_calvar[i].Var1leadlag[j]);
+          if(ops[i].Var1SupSet[j]==1) {
+            l+=ops[i].Var1ADims[j]*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var1SSIndx[j]]+ops[i].Var1leadlag[j]);
           } else {
-            l+=ha_calvar[i].Var1ADims[j]*(arSet[j].indx+ha_calvar[i].Var1leadlag[j]);
+            l+=ops[i].Var1ADims[j]*(arSet[j].indx+ops[i].Var1leadlag[j]);
           }
         }
       }
-      if(ha_calvar[i].Var2Type<3||ha_calvar[i].Var2Type==OT_CHANGE) {
+      if(ops[i].Var2Type<3||ops[i].Var2Type==OT_CHANGE) {
         l1=0;
         for (j=0; j<fdim; j++) {
-          if(ha_calvar[i].Var2SupSet[j]==1) {
-            l1+=ha_calvar[i].Var2ADims[j]*(ha_setele[ha_set[arSet[j].setid].offset+arSet[j].indx].superset_pos[ha_calvar[i].Var2SSIndx[j]]+ha_calvar[i].Var2leadlag[j]);
+          if(ops[i].Var2SupSet[j]==1) {
+            l1+=ops[i].Var2ADims[j]*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var2SSIndx[j]]+ops[i].Var2leadlag[j]);
           } else {
-            l1+=ha_calvar[i].Var2ADims[j]*(arSet[j].indx+ha_calvar[i].Var2leadlag[j]);
+            l1+=ops[i].Var2ADims[j]*(arSet[j].indx+ops[i].Var2leadlag[j]);
           }
         }
       }
-      if(ha_calvar[i].Var1Type==OT_ARRAY) eval1=record[ha_calvar[i].Var1BegAdd+l].value;
-      if(ha_calvar[i].Var1Type==OT_SUM) eval1=ha_sumele[ha_calvar[i].Var1BegAdd+l].value;
-      if(ha_calvar[i].Var1Type==OT_TEMP) eval1=ha_calvar[ha_calvar[i].Var1BegAdd].TmpVarVal;
-      if(ha_calvar[i].Var1Type==OT_CONST) eval1=ha_calvar[i].Var1Val;
-      if(ha_calvar[i].Var1Type==OT_CHANGE) eval1=record[ha_calvar[i].Var1BegAdd+l].substep_base;
-      if(ha_calvar[i].Var2Type==OT_ARRAY) eval2=record[ha_calvar[i].Var2BegAdd+l1].value;
-      if(ha_calvar[i].Var2Type==OT_SUM) eval2=ha_sumele[ha_calvar[i].Var2BegAdd+l1].value;
-      if(ha_calvar[i].Var2Type==OT_TEMP) eval2=ha_calvar[ha_calvar[i].Var2BegAdd].TmpVarVal;
-      if(ha_calvar[i].Var2Type==OT_CONST) eval2=ha_calvar[i].Var2Val;
-      if(ha_calvar[i].Var2Type==OT_CHANGE) eval2=record[ha_calvar[i].Var2BegAdd+l1].substep_base;
-      ha_calvar[i].TmpVarVal=eval1*eval2;
+      if(ops[i].Var1Type==OT_ARRAY) eval1=record[ops[i].Var1BegAdd+l].value;
+      if(ops[i].Var1Type==OT_SUM) eval1=sum_vals[ops[i].Var1BegAdd+l].value;
+      if(ops[i].Var1Type==OT_TEMP) eval1=ops[ops[i].Var1BegAdd].TmpVarVal;
+      if(ops[i].Var1Type==OT_CONST) eval1=ops[i].Var1Val;
+      if(ops[i].Var1Type==OT_CHANGE) eval1=record[ops[i].Var1BegAdd+l].substep_base;
+      if(ops[i].Var2Type==OT_ARRAY) eval2=record[ops[i].Var2BegAdd+l1].value;
+      if(ops[i].Var2Type==OT_SUM) eval2=sum_vals[ops[i].Var2BegAdd+l1].value;
+      if(ops[i].Var2Type==OT_TEMP) eval2=ops[ops[i].Var2BegAdd].TmpVarVal;
+      if(ops[i].Var2Type==OT_CONST) eval2=ops[i].Var2Val;
+      if(ops[i].Var2Type==OT_CHANGE) eval2=record[ops[i].Var2BegAdd+l1].substep_base;
+      ops[i].TmpVarVal=eval1*eval2;
       break;
     case OP_DIV:
-      if(ha_calvar[i].Var1Type<3||ha_calvar[i].Var1Type==OT_CHANGE) {
+      if(ops[i].Var1Type<3||ops[i].Var1Type==OT_CHANGE) {
         l=0;
         for (j=0; j<fdim; j++) {
-          if(ha_calvar[i].Var1SupSet[j]==1) {
-            l+=ha_calvar[i].Var1ADims[j]*(ha_setele[ha_set[arSet[j].setid].offset+arSet[j].indx].superset_pos[ha_calvar[i].Var1SSIndx[j]]+ha_calvar[i].Var1leadlag[j]);
+          if(ops[i].Var1SupSet[j]==1) {
+            l+=ops[i].Var1ADims[j]*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var1SSIndx[j]]+ops[i].Var1leadlag[j]);
           } else {
-            l+=ha_calvar[i].Var1ADims[j]*(arSet[j].indx+ha_calvar[i].Var1leadlag[j]);
+            l+=ops[i].Var1ADims[j]*(arSet[j].indx+ops[i].Var1leadlag[j]);
           }
         }
       }
-      if(ha_calvar[i].Var2Type<3||ha_calvar[i].Var2Type==OT_CHANGE) {
+      if(ops[i].Var2Type<3||ops[i].Var2Type==OT_CHANGE) {
         l1=0;
         for (j=0; j<fdim; j++) {
-          if(ha_calvar[i].Var2SupSet[j]==1) {
-            l1+=ha_calvar[i].Var2ADims[j]*(ha_setele[ha_set[arSet[j].setid].offset+arSet[j].indx].superset_pos[ha_calvar[i].Var2SSIndx[j]]+ha_calvar[i].Var2leadlag[j]);
+          if(ops[i].Var2SupSet[j]==1) {
+            l1+=ops[i].Var2ADims[j]*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var2SSIndx[j]]+ops[i].Var2leadlag[j]);
           } else {
-            l1+=ha_calvar[i].Var2ADims[j]*(arSet[j].indx+ha_calvar[i].Var2leadlag[j]);
+            l1+=ops[i].Var2ADims[j]*(arSet[j].indx+ops[i].Var2leadlag[j]);
           }
         }
       }
-      if(ha_calvar[i].Var1Type==OT_ARRAY) eval1=record[ha_calvar[i].Var1BegAdd+l].value;
-      if(ha_calvar[i].Var1Type==OT_SUM) eval1=ha_sumele[ha_calvar[i].Var1BegAdd+l].value;
-      if(ha_calvar[i].Var1Type==OT_TEMP) eval1=ha_calvar[ha_calvar[i].Var1BegAdd].TmpVarVal;
-      if(ha_calvar[i].Var1Type==OT_CONST) eval1=ha_calvar[i].Var1Val;
-      if(ha_calvar[i].Var1Type==OT_CHANGE) eval1=record[ha_calvar[i].Var1BegAdd+l].substep_base;
-      if(ha_calvar[i].Var2Type==OT_ARRAY) eval2=record[ha_calvar[i].Var2BegAdd+l1].value;
-      if(ha_calvar[i].Var2Type==OT_SUM) eval2=ha_sumele[ha_calvar[i].Var2BegAdd+l1].value;
-      if(ha_calvar[i].Var2Type==OT_TEMP) eval2=ha_calvar[ha_calvar[i].Var2BegAdd].TmpVarVal;
-      if(ha_calvar[i].Var2Type==OT_CONST) eval2=ha_calvar[i].Var2Val;
-      if(ha_calvar[i].Var2Type==OT_CHANGE) eval2=record[ha_calvar[i].Var2BegAdd+l1].substep_base;
+      if(ops[i].Var1Type==OT_ARRAY) eval1=record[ops[i].Var1BegAdd+l].value;
+      if(ops[i].Var1Type==OT_SUM) eval1=sum_vals[ops[i].Var1BegAdd+l].value;
+      if(ops[i].Var1Type==OT_TEMP) eval1=ops[ops[i].Var1BegAdd].TmpVarVal;
+      if(ops[i].Var1Type==OT_CONST) eval1=ops[i].Var1Val;
+      if(ops[i].Var1Type==OT_CHANGE) eval1=record[ops[i].Var1BegAdd+l].substep_base;
+      if(ops[i].Var2Type==OT_ARRAY) eval2=record[ops[i].Var2BegAdd+l1].value;
+      if(ops[i].Var2Type==OT_SUM) eval2=sum_vals[ops[i].Var2BegAdd+l1].value;
+      if(ops[i].Var2Type==OT_TEMP) eval2=ops[ops[i].Var2BegAdd].TmpVarVal;
+      if(ops[i].Var2Type==OT_CONST) eval2=ops[i].Var2Val;
+      if(ops[i].Var2Type==OT_CHANGE) eval2=record[ops[i].Var2BegAdd+l1].substep_base;
       if(eval2==0) {
-        ha_calvar[i].TmpVarVal=zerodivide;
+        ops[i].TmpVarVal=zerodivide;
       } else {
-        ha_calvar[i].TmpVarVal=eval1/eval2;
+        ops[i].TmpVarVal=eval1/eval2;
       }
       break;
     case OP_ADD:
-      if(ha_calvar[i].Var1Type==OT_ARRAY) {
+      if(ops[i].Var1Type==OT_ARRAY) {
         l=0;
         for (j=0; j<fdim; j++) {
-          if(ha_calvar[i].Var1SupSet[j]==1) {
-            l+=ha_calvar[i].Var1ADims[j]*(ha_setele[ha_set[arSet[j].setid].offset+arSet[j].indx].superset_pos[ha_calvar[i].Var1SSIndx[j]]+ha_calvar[i].Var1leadlag[j]);
+          if(ops[i].Var1SupSet[j]==1) {
+            l+=ops[i].Var1ADims[j]*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var1SSIndx[j]]+ops[i].Var1leadlag[j]);
           } else {
-            l+=ha_calvar[i].Var1ADims[j]*(arSet[j].indx+ha_calvar[i].Var1leadlag[j]);
+            l+=ops[i].Var1ADims[j]*(arSet[j].indx+ops[i].Var1leadlag[j]);
           }
         }
-        eval1=record[ha_calvar[i].Var1BegAdd+l].value;
+        eval1=record[ops[i].Var1BegAdd+l].value;
       }
-      if(ha_calvar[i].Var1Type==OT_SUM) {
+      if(ops[i].Var1Type==OT_SUM) {
         l=0;
         for (j=0; j<fdim; j++) {
-          if(ha_calvar[i].Var1SupSet[j]==1) {
-            l+=ha_calvar[i].Var1ADims[j]*ha_setele[ha_set[arSet[j].setid].offset+arSet[j].indx].superset_pos[ha_calvar[i].Var1SSIndx[j]];
+          if(ops[i].Var1SupSet[j]==1) {
+            l+=ops[i].Var1ADims[j]*set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var1SSIndx[j]];
           } else {
-            l+=ha_calvar[i].Var1ADims[j]*arSet[j].indx;
+            l+=ops[i].Var1ADims[j]*arSet[j].indx;
           }
         }
-        eval1=ha_sumele[ha_calvar[i].Var1BegAdd+l].value;
+        eval1=sum_vals[ops[i].Var1BegAdd+l].value;
       }
-      if (ha_calvar[i].Var1Type==OT_TEMP) {
-        eval1=ha_calvar[ha_calvar[i].Var1BegAdd].TmpVarVal;
+      if (ops[i].Var1Type==OT_TEMP) {
+        eval1=ops[ops[i].Var1BegAdd].TmpVarVal;
       }
-      if (ha_calvar[i].Var1Type==OT_CONST) {
-        eval1=ha_calvar[i].Var1Val;
+      if (ops[i].Var1Type==OT_CONST) {
+        eval1=ops[i].Var1Val;
       }
-      if(ha_calvar[i].Var1Type==OT_CHANGE) {
+      if(ops[i].Var1Type==OT_CHANGE) {
         l=0;
         for (j=0; j<fdim; j++) {
-          if(ha_calvar[i].Var1SupSet[j]==1) {
-            l+=ha_calvar[i].Var1ADims[j]*(ha_setele[ha_set[arSet[j].setid].offset+arSet[j].indx].superset_pos[ha_calvar[i].Var1SSIndx[j]]+ha_calvar[i].Var1leadlag[j]);
+          if(ops[i].Var1SupSet[j]==1) {
+            l+=ops[i].Var1ADims[j]*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var1SSIndx[j]]+ops[i].Var1leadlag[j]);
           } else {
-            l+=ha_calvar[i].Var1ADims[j]*(arSet[j].indx+ha_calvar[i].Var1leadlag[j]);
+            l+=ops[i].Var1ADims[j]*(arSet[j].indx+ops[i].Var1leadlag[j]);
           }
         }
-        eval1=record[ha_calvar[i].Var1BegAdd+l].substep_base;
+        eval1=record[ops[i].Var1BegAdd+l].substep_base;
       }
-      if(ha_calvar[i].Var2Type==OT_ARRAY) {
+      if(ops[i].Var2Type==OT_ARRAY) {
         l=0;
         for (j=0; j<fdim; j++) {
-          if(ha_calvar[i].Var2SupSet[j]==1) {
-            l+=ha_calvar[i].Var2ADims[j]*(ha_setele[ha_set[arSet[j].setid].offset+arSet[j].indx].superset_pos[ha_calvar[i].Var2SSIndx[j]]+ha_calvar[i].Var2leadlag[j]);
+          if(ops[i].Var2SupSet[j]==1) {
+            l+=ops[i].Var2ADims[j]*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var2SSIndx[j]]+ops[i].Var2leadlag[j]);
           } else {
-            l+=ha_calvar[i].Var2ADims[j]*(arSet[j].indx+ha_calvar[i].Var2leadlag[j]);
+            l+=ops[i].Var2ADims[j]*(arSet[j].indx+ops[i].Var2leadlag[j]);
           }
         }
-        eval2=record[ha_calvar[i].Var2BegAdd+l].value;
+        eval2=record[ops[i].Var2BegAdd+l].value;
       }
-      if(ha_calvar[i].Var2Type==OT_SUM) {
+      if(ops[i].Var2Type==OT_SUM) {
         l=0;
         for (j=0; j<fdim; j++) {
             l1=l;
-          if(ha_calvar[i].Var2SupSet[j]==1) {
-            l+=ha_calvar[i].Var2ADims[j]*ha_setele[ha_set[arSet[j].setid].offset+arSet[j].indx].superset_pos[ha_calvar[i].Var2SSIndx[j]];
+          if(ops[i].Var2SupSet[j]==1) {
+            l+=ops[i].Var2ADims[j]*set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var2SSIndx[j]];
           } else {
-            l+=ha_calvar[i].Var2ADims[j]*arSet[j].indx;
+            l+=ops[i].Var2ADims[j]*arSet[j].indx;
           }
         }
-        eval2=ha_sumele[ha_calvar[i].Var2BegAdd+l].value;
+        eval2=sum_vals[ops[i].Var2BegAdd+l].value;
       }
-      if (ha_calvar[i].Var2Type==OT_TEMP) {
-        eval2=ha_calvar[ha_calvar[i].Var2BegAdd].TmpVarVal;
+      if (ops[i].Var2Type==OT_TEMP) {
+        eval2=ops[ops[i].Var2BegAdd].TmpVarVal;
       }
-      if (ha_calvar[i].Var2Type==OT_CONST) {
-        eval2=ha_calvar[i].Var2Val;
+      if (ops[i].Var2Type==OT_CONST) {
+        eval2=ops[i].Var2Val;
       }
-      if(ha_calvar[i].Var2Type==OT_CHANGE) {
+      if(ops[i].Var2Type==OT_CHANGE) {
         l=0;
         for (j=0; j<fdim; j++) {
-          if(ha_calvar[i].Var2SupSet[j]==1) {
-            l+=ha_calvar[i].Var2ADims[j]*(ha_setele[ha_set[arSet[j].setid].offset+arSet[j].indx].superset_pos[ha_calvar[i].Var2SSIndx[j]]+ha_calvar[i].Var2leadlag[j]);
+          if(ops[i].Var2SupSet[j]==1) {
+            l+=ops[i].Var2ADims[j]*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var2SSIndx[j]]+ops[i].Var2leadlag[j]);
           } else {
-            l+=ha_calvar[i].Var2ADims[j]*(arSet[j].indx+ha_calvar[i].Var2leadlag[j]);
+            l+=ops[i].Var2ADims[j]*(arSet[j].indx+ops[i].Var2leadlag[j]);
           }
         }
-        eval2=record[ha_calvar[i].Var2BegAdd+l].substep_base;
+        eval2=record[ops[i].Var2BegAdd+l].substep_base;
       }
-      ha_calvar[i].TmpVarVal=eval1+eval2;
+      ops[i].TmpVarVal=eval1+eval2;
       break;
     case OP_SUB:
-      if(ha_calvar[i].Var1Type==OT_ARRAY) {
+      if(ops[i].Var1Type==OT_ARRAY) {
         l=0;
         for (j=0; j<fdim; j++) {
-          if(ha_calvar[i].Var1SupSet[j]==1) {
-            l+=ha_calvar[i].Var1ADims[j]*(ha_setele[ha_set[arSet[j].setid].offset+arSet[j].indx].superset_pos[ha_calvar[i].Var1SSIndx[j]]+ha_calvar[i].Var1leadlag[j]);
+          if(ops[i].Var1SupSet[j]==1) {
+            l+=ops[i].Var1ADims[j]*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var1SSIndx[j]]+ops[i].Var1leadlag[j]);
           } else {
-            l+=ha_calvar[i].Var1ADims[j]*(arSet[j].indx+ha_calvar[i].Var1leadlag[j]);
+            l+=ops[i].Var1ADims[j]*(arSet[j].indx+ops[i].Var1leadlag[j]);
           }
         }
-        eval1=record[ha_calvar[i].Var1BegAdd+l].value;
+        eval1=record[ops[i].Var1BegAdd+l].value;
       }
-      if(ha_calvar[i].Var1Type==OT_SUM) {
+      if(ops[i].Var1Type==OT_SUM) {
         l=0;
         for (j=0; j<fdim; j++) {
-          if(ha_calvar[i].Var1SupSet[j]==1) {
-            l+=ha_calvar[i].Var1ADims[j]*ha_setele[ha_set[arSet[j].setid].offset+arSet[j].indx].superset_pos[ha_calvar[i].Var1SSIndx[j]];
+          if(ops[i].Var1SupSet[j]==1) {
+            l+=ops[i].Var1ADims[j]*set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var1SSIndx[j]];
           } else {
-            l+=ha_calvar[i].Var1ADims[j]*arSet[j].indx;
+            l+=ops[i].Var1ADims[j]*arSet[j].indx;
           }
         }
-        eval1=ha_sumele[ha_calvar[i].Var1BegAdd+l].value;
+        eval1=sum_vals[ops[i].Var1BegAdd+l].value;
       }
-      if (ha_calvar[i].Var1Type==OT_TEMP) {
-        eval1=ha_calvar[ha_calvar[i].Var1BegAdd].TmpVarVal;
+      if (ops[i].Var1Type==OT_TEMP) {
+        eval1=ops[ops[i].Var1BegAdd].TmpVarVal;
       }
-      if (ha_calvar[i].Var1Type==OT_CONST) {
-        eval1=ha_calvar[i].Var1Val;
+      if (ops[i].Var1Type==OT_CONST) {
+        eval1=ops[i].Var1Val;
       }
-      if(ha_calvar[i].Var1Type==OT_CHANGE) {
+      if(ops[i].Var1Type==OT_CHANGE) {
         l=0;
         for (j=0; j<fdim; j++) {
-          if(ha_calvar[i].Var1SupSet[j]==1) {
-            l+=ha_calvar[i].Var1ADims[j]*(ha_setele[ha_set[arSet[j].setid].offset+arSet[j].indx].superset_pos[ha_calvar[i].Var1SSIndx[j]]+ha_calvar[i].Var1leadlag[j]);
+          if(ops[i].Var1SupSet[j]==1) {
+            l+=ops[i].Var1ADims[j]*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var1SSIndx[j]]+ops[i].Var1leadlag[j]);
           } else {
-            l+=ha_calvar[i].Var1ADims[j]*(arSet[j].indx+ha_calvar[i].Var1leadlag[j]);
+            l+=ops[i].Var1ADims[j]*(arSet[j].indx+ops[i].Var1leadlag[j]);
           }
         }
-        eval1=record[ha_calvar[i].Var1BegAdd+l].substep_base;
+        eval1=record[ops[i].Var1BegAdd+l].substep_base;
       }
-      if(ha_calvar[i].Var2Type==OT_ARRAY) {
+      if(ops[i].Var2Type==OT_ARRAY) {
         l=0;
         for (j=0; j<fdim; j++) {
-          if(ha_calvar[i].Var2SupSet[j]==1) {
-            l+=ha_calvar[i].Var2ADims[j]*(ha_setele[ha_set[arSet[j].setid].offset+arSet[j].indx].superset_pos[ha_calvar[i].Var2SSIndx[j]]+ha_calvar[i].Var2leadlag[j]);
+          if(ops[i].Var2SupSet[j]==1) {
+            l+=ops[i].Var2ADims[j]*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var2SSIndx[j]]+ops[i].Var2leadlag[j]);
           } else {
-            l+=ha_calvar[i].Var2ADims[j]*(arSet[j].indx+ha_calvar[i].Var2leadlag[j]);
+            l+=ops[i].Var2ADims[j]*(arSet[j].indx+ops[i].Var2leadlag[j]);
           }
         }
-        eval2=record[ha_calvar[i].Var2BegAdd+l].value;
+        eval2=record[ops[i].Var2BegAdd+l].value;
       }
-      if(ha_calvar[i].Var2Type==OT_SUM) {
+      if(ops[i].Var2Type==OT_SUM) {
         l=0;
         for (j=0; j<fdim; j++) {
-          if(ha_calvar[i].Var2SupSet[j]==1) {
-            l+=ha_calvar[i].Var2ADims[j]*ha_setele[ha_set[arSet[j].setid].offset+arSet[j].indx].superset_pos[ha_calvar[i].Var2SSIndx[j]];
+          if(ops[i].Var2SupSet[j]==1) {
+            l+=ops[i].Var2ADims[j]*set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var2SSIndx[j]];
           } else {
-            l+=ha_calvar[i].Var2ADims[j]*arSet[j].indx;
+            l+=ops[i].Var2ADims[j]*arSet[j].indx;
           }
         }
-        eval2=ha_sumele[ha_calvar[i].Var2BegAdd+l].value;
+        eval2=sum_vals[ops[i].Var2BegAdd+l].value;
       }
-      if (ha_calvar[i].Var2Type==OT_TEMP) {
-        eval2=ha_calvar[ha_calvar[i].Var2BegAdd].TmpVarVal;
+      if (ops[i].Var2Type==OT_TEMP) {
+        eval2=ops[ops[i].Var2BegAdd].TmpVarVal;
       }
-      if (ha_calvar[i].Var2Type==OT_CONST) {
-        eval2=ha_calvar[i].Var2Val;
+      if (ops[i].Var2Type==OT_CONST) {
+        eval2=ops[i].Var2Val;
       }
-      if(ha_calvar[i].Var2Type==OT_CHANGE) {
+      if(ops[i].Var2Type==OT_CHANGE) {
         l=0;
         for (j=0; j<fdim; j++) {
-          if(ha_calvar[i].Var2SupSet[j]==1) {
-            l+=ha_calvar[i].Var2ADims[j]*(ha_setele[ha_set[arSet[j].setid].offset+arSet[j].indx].superset_pos[ha_calvar[i].Var2SSIndx[j]]+ha_calvar[i].Var2leadlag[j]);
+          if(ops[i].Var2SupSet[j]==1) {
+            l+=ops[i].Var2ADims[j]*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var2SSIndx[j]]+ops[i].Var2leadlag[j]);
           } else {
-            l+=ha_calvar[i].Var2ADims[j]*(arSet[j].indx+ha_calvar[i].Var2leadlag[j]);
+            l+=ops[i].Var2ADims[j]*(arSet[j].indx+ops[i].Var2leadlag[j]);
           }
         }
-        eval2=record[ha_calvar[i].Var2BegAdd+l].substep_base;
+        eval2=record[ops[i].Var2BegAdd+l].substep_base;
       }
-      ha_calvar[i].TmpVarVal=eval1-eval2;
+      ops[i].TmpVarVal=eval1-eval2;
       break;
     case OP_POW:
-      if(ha_calvar[i].Var1Type<3||ha_calvar[i].Var1Type==OT_CHANGE) {
+      if(ops[i].Var1Type<3||ops[i].Var1Type==OT_CHANGE) {
         l=0;
         for (j=0; j<fdim; j++) {
-          if(ha_calvar[i].Var1SupSet[j]==1) {
-            l+=ha_calvar[i].Var1ADims[j]*(ha_setele[ha_set[arSet[j].setid].offset+arSet[j].indx].superset_pos[ha_calvar[i].Var1SSIndx[j]]+ha_calvar[i].Var1leadlag[j]);
+          if(ops[i].Var1SupSet[j]==1) {
+            l+=ops[i].Var1ADims[j]*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var1SSIndx[j]]+ops[i].Var1leadlag[j]);
           } else {
-            l+=ha_calvar[i].Var1ADims[j]*(arSet[j].indx+ha_calvar[i].Var1leadlag[j]);
+            l+=ops[i].Var1ADims[j]*(arSet[j].indx+ops[i].Var1leadlag[j]);
           }
         }
       }
-      if(ha_calvar[i].Var2Type<3||ha_calvar[i].Var2Type==OT_CHANGE) {
+      if(ops[i].Var2Type<3||ops[i].Var2Type==OT_CHANGE) {
         l1=0;
         for (j=0; j<fdim; j++) {
-          if(ha_calvar[i].Var2SupSet[j]==1) {
-            l1+=ha_calvar[i].Var2ADims[j]*(ha_setele[ha_set[arSet[j].setid].offset+arSet[j].indx].superset_pos[ha_calvar[i].Var2SSIndx[j]]+ha_calvar[i].Var2leadlag[j]);
+          if(ops[i].Var2SupSet[j]==1) {
+            l1+=ops[i].Var2ADims[j]*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var2SSIndx[j]]+ops[i].Var2leadlag[j]);
           } else {
-            l1+=ha_calvar[i].Var2ADims[j]*(arSet[j].indx+ha_calvar[i].Var2leadlag[j]);
+            l1+=ops[i].Var2ADims[j]*(arSet[j].indx+ops[i].Var2leadlag[j]);
           }
         }
       }
-      if(ha_calvar[i].Var1Type==OT_ARRAY) eval1=record[ha_calvar[i].Var1BegAdd+l].value;
-      if(ha_calvar[i].Var1Type==OT_SUM) eval1=ha_sumele[ha_calvar[i].Var1BegAdd+l].value;
-      if(ha_calvar[i].Var1Type==OT_TEMP) eval1=ha_calvar[ha_calvar[i].Var1BegAdd].TmpVarVal;
-      if(ha_calvar[i].Var1Type==OT_CONST) eval1=ha_calvar[i].Var1Val;
-      if(ha_calvar[i].Var1Type==OT_CHANGE) eval1=record[ha_calvar[i].Var1BegAdd+l].substep_base;
-      if(ha_calvar[i].Var2Type==OT_ARRAY) eval2=record[ha_calvar[i].Var2BegAdd+l1].value;
-      if(ha_calvar[i].Var2Type==OT_SUM) eval2=ha_sumele[ha_calvar[i].Var2BegAdd+l1].value;
-      if(ha_calvar[i].Var2Type==OT_TEMP) eval2=ha_calvar[ha_calvar[i].Var2BegAdd].TmpVarVal;
-      if(ha_calvar[i].Var2Type==OT_CONST) eval2=ha_calvar[i].Var2Val;
-      if(ha_calvar[i].Var2Type==OT_CHANGE) eval2=record[ha_calvar[i].Var2BegAdd+l1].substep_base;
+      if(ops[i].Var1Type==OT_ARRAY) eval1=record[ops[i].Var1BegAdd+l].value;
+      if(ops[i].Var1Type==OT_SUM) eval1=sum_vals[ops[i].Var1BegAdd+l].value;
+      if(ops[i].Var1Type==OT_TEMP) eval1=ops[ops[i].Var1BegAdd].TmpVarVal;
+      if(ops[i].Var1Type==OT_CONST) eval1=ops[i].Var1Val;
+      if(ops[i].Var1Type==OT_CHANGE) eval1=record[ops[i].Var1BegAdd+l].substep_base;
+      if(ops[i].Var2Type==OT_ARRAY) eval2=record[ops[i].Var2BegAdd+l1].value;
+      if(ops[i].Var2Type==OT_SUM) eval2=sum_vals[ops[i].Var2BegAdd+l1].value;
+      if(ops[i].Var2Type==OT_TEMP) eval2=ops[ops[i].Var2BegAdd].TmpVarVal;
+      if(ops[i].Var2Type==OT_CONST) eval2=ops[i].Var2Val;
+      if(ops[i].Var2Type==OT_CHANGE) eval2=record[ops[i].Var2BegAdd+l1].substep_base;
       if(eval1==0&&eval2<0) {
-        ha_calvar[i].TmpVarVal=zerodivide;
+        ops[i].TmpVarVal=zerodivide;
       } else {
         if(eval1<0&&eval2-floor(eval2)!=0)printf("Serious errors: fraction power of negative number!!!!!!!");
-        ha_calvar[i].TmpVarVal=pow(eval1,eval2);
+        ops[i].TmpVarVal=pow(eval1,eval2);
       }
       break;
     default:
-      if(ha_calvar[i].Var1Type==OT_ARRAY) {
+      if(ops[i].Var1Type==OT_ARRAY) {
         l=0;
         for (j=0; j<fdim; j++) {
-          if(ha_calvar[i].Var1SupSet[j]==1) {
-            l+=ha_calvar[i].Var1ADims[j]*(ha_setele[ha_set[arSet[j].setid].offset+arSet[j].indx].superset_pos[ha_calvar[i].Var1SSIndx[j]]+ha_calvar[i].Var1leadlag[j]);
+          if(ops[i].Var1SupSet[j]==1) {
+            l+=ops[i].Var1ADims[j]*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var1SSIndx[j]]+ops[i].Var1leadlag[j]);
           } else {
-            l+=ha_calvar[i].Var1ADims[j]*(arSet[j].indx+ha_calvar[i].Var1leadlag[j]);
+            l+=ops[i].Var1ADims[j]*(arSet[j].indx+ops[i].Var1leadlag[j]);
           }
         }
-        eval1=record[ha_calvar[i].Var1BegAdd+l].value;
+        eval1=record[ops[i].Var1BegAdd+l].value;
       }
-      if(ha_calvar[i].Var1Type==OT_SUM) {
+      if(ops[i].Var1Type==OT_SUM) {
         l=0;
         for (j=0; j<fdim; j++) {
-          if(ha_calvar[i].Var1SupSet[j]==1) {
-            l+=ha_calvar[i].Var1ADims[j]*ha_setele[ha_set[arSet[j].setid].offset+arSet[j].indx].superset_pos[ha_calvar[i].Var1SSIndx[j]];
+          if(ops[i].Var1SupSet[j]==1) {
+            l+=ops[i].Var1ADims[j]*set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var1SSIndx[j]];
           } else {
-            l+=ha_calvar[i].Var1ADims[j]*arSet[j].indx;
+            l+=ops[i].Var1ADims[j]*arSet[j].indx;
           }
         }
-        eval1=ha_sumele[ha_calvar[i].Var1BegAdd+l].value;
+        eval1=sum_vals[ops[i].Var1BegAdd+l].value;
       }
-      if (ha_calvar[i].Var1Type==OT_TEMP) {
-        eval1=ha_calvar[ha_calvar[i].Var1BegAdd].TmpVarVal;
+      if (ops[i].Var1Type==OT_TEMP) {
+        eval1=ops[ops[i].Var1BegAdd].TmpVarVal;
       }
-      if (ha_calvar[i].Var1Type==OT_CONST) {
-        eval1=ha_calvar[i].Var1Val;
+      if (ops[i].Var1Type==OT_CONST) {
+        eval1=ops[i].Var1Val;
       }
-      if(ha_calvar[i].Var1Type==OT_CHANGE) {
+      if(ops[i].Var1Type==OT_CHANGE) {
         l=0;
         for (j=0; j<fdim; j++) {
-          if(ha_calvar[i].Var1SupSet[j]==1) {
-            l+=ha_calvar[i].Var1ADims[j]*(ha_setele[ha_set[arSet[j].setid].offset+arSet[j].indx].superset_pos[ha_calvar[i].Var1SSIndx[j]]+ha_calvar[i].Var1leadlag[j]);
+          if(ops[i].Var1SupSet[j]==1) {
+            l+=ops[i].Var1ADims[j]*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var1SSIndx[j]]+ops[i].Var1leadlag[j]);
           } else {
-            l+=ha_calvar[i].Var1ADims[j]*(arSet[j].indx+ha_calvar[i].Var1leadlag[j]);
+            l+=ops[i].Var1ADims[j]*(arSet[j].indx+ops[i].Var1leadlag[j]);
           }
         }
-        eval1=record[ha_calvar[i].Var1BegAdd+l].substep_base;
+        eval1=record[ops[i].Var1BegAdd+l].substep_base;
       }
-      if(ha_calvar[i].Var2Type==OT_ARRAY) {
+      if(ops[i].Var2Type==OT_ARRAY) {
         l=0;
         for (j=0; j<fdim; j++) {
-          if(ha_calvar[i].Var2SupSet[j]==1) {
-            l+=ha_calvar[i].Var2ADims[j]*(ha_setele[ha_set[arSet[j].setid].offset+arSet[j].indx].superset_pos[ha_calvar[i].Var2SSIndx[j]]+ha_calvar[i].Var2leadlag[j]);
+          if(ops[i].Var2SupSet[j]==1) {
+            l+=ops[i].Var2ADims[j]*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var2SSIndx[j]]+ops[i].Var2leadlag[j]);
           } else {
-            l+=ha_calvar[i].Var2ADims[j]*(arSet[j].indx+ha_calvar[i].Var2leadlag[j]);
+            l+=ops[i].Var2ADims[j]*(arSet[j].indx+ops[i].Var2leadlag[j]);
           }
         }
-        eval2=record[ha_calvar[i].Var2BegAdd+l].value;
+        eval2=record[ops[i].Var2BegAdd+l].value;
       }
-      if(ha_calvar[i].Var2Type==OT_SUM) {
+      if(ops[i].Var2Type==OT_SUM) {
         l=0;
         for (j=0; j<fdim; j++) {
-          if(ha_calvar[i].Var2SupSet[j]==1) {
-            l+=ha_calvar[i].Var2ADims[j]*ha_setele[ha_set[arSet[j].setid].offset+arSet[j].indx].superset_pos[ha_calvar[i].Var2SSIndx[j]];
+          if(ops[i].Var2SupSet[j]==1) {
+            l+=ops[i].Var2ADims[j]*set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var2SSIndx[j]];
           } else {
-            l+=ha_calvar[i].Var2ADims[j]*arSet[j].indx;
+            l+=ops[i].Var2ADims[j]*arSet[j].indx;
           }
         }
-        eval2=ha_sumele[ha_calvar[i].Var2BegAdd+l].value;
+        eval2=sum_vals[ops[i].Var2BegAdd+l].value;
       }
-      if (ha_calvar[i].Var2Type==OT_TEMP) {
-        eval2=ha_calvar[ha_calvar[i].Var2BegAdd].TmpVarVal;
+      if (ops[i].Var2Type==OT_TEMP) {
+        eval2=ops[ops[i].Var2BegAdd].TmpVarVal;
       }
-      if (ha_calvar[i].Var2Type==OT_CONST) {
-        eval2=ha_calvar[i].Var2Val;
+      if (ops[i].Var2Type==OT_CONST) {
+        eval2=ops[i].Var2Val;
       }
-      if(ha_calvar[i].Var2Type==OT_CHANGE) {
+      if(ops[i].Var2Type==OT_CHANGE) {
         l=0;
         for (j=0; j<fdim; j++) {
-          if(ha_calvar[i].Var2SupSet[j]==1) {
-            l+=ha_calvar[i].Var2ADims[j]*(ha_setele[ha_set[arSet[j].setid].offset+arSet[j].indx].superset_pos[ha_calvar[i].Var2SSIndx[j]]+ha_calvar[i].Var2leadlag[j]);
+          if(ops[i].Var2SupSet[j]==1) {
+            l+=ops[i].Var2ADims[j]*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var2SSIndx[j]]+ops[i].Var2leadlag[j]);
           } else {
-            l+=ha_calvar[i].Var2ADims[j]*(arSet[j].indx+ha_calvar[i].Var2leadlag[j]);
+            l+=ops[i].Var2ADims[j]*(arSet[j].indx+ops[i].Var2leadlag[j]);
           }
         }
-        eval2=record[ha_calvar[i].Var2BegAdd+l].substep_base;
+        eval2=record[ops[i].Var2BegAdd+l].substep_base;
       }
 
-      if(ha_calvar[i].Var3Type==OT_ARRAY) {
+      if(ops[i].Var3Type==OT_ARRAY) {
         l=0;
         for (j=0; j<fdim; j++) {
-          if(ha_calvar[i].Var3SupSet[j]==1) {
-            l+=ha_calvar[i].Var3ADims[j]*(ha_setele[ha_set[arSet[j].setid].offset+arSet[j].indx].superset_pos[ha_calvar[i].Var3SSIndx[j]]+ha_calvar[i].Var3leadlag[j]);
+          if(ops[i].Var3SupSet[j]==1) {
+            l+=ops[i].Var3ADims[j]*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var3SSIndx[j]]+ops[i].Var3leadlag[j]);
           } else {
-            l+=ha_calvar[i].Var3ADims[j]*(arSet[j].indx+ha_calvar[i].Var3leadlag[j]);
+            l+=ops[i].Var3ADims[j]*(arSet[j].indx+ops[i].Var3leadlag[j]);
           }
         }
-        eval3=record[ha_calvar[i].Var3BegAdd+l].value;
+        eval3=record[ops[i].Var3BegAdd+l].value;
       }
-      if(ha_calvar[i].Var3Type==OT_SUM) {
+      if(ops[i].Var3Type==OT_SUM) {
         l=0;
         for (j=0; j<fdim; j++) {
-          if(ha_calvar[i].Var3SupSet[j]==1) {
-            l+=ha_calvar[i].Var3ADims[j]*ha_setele[ha_set[arSet[j].setid].offset+arSet[j].indx].superset_pos[ha_calvar[i].Var3SSIndx[j]];
+          if(ops[i].Var3SupSet[j]==1) {
+            l+=ops[i].Var3ADims[j]*set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var3SSIndx[j]];
           } else {
-            l+=ha_calvar[i].Var3ADims[j]*arSet[j].indx;
+            l+=ops[i].Var3ADims[j]*arSet[j].indx;
           }
         }
-        eval3=ha_sumele[ha_calvar[i].Var3BegAdd+l].value;
+        eval3=sum_vals[ops[i].Var3BegAdd+l].value;
       }
-      if (ha_calvar[i].Var3Type==OT_TEMP) {
-        eval3=ha_calvar[ha_calvar[i].Var3BegAdd].TmpVarVal;
+      if (ops[i].Var3Type==OT_TEMP) {
+        eval3=ops[ops[i].Var3BegAdd].TmpVarVal;
       }
-      if (ha_calvar[i].Var3Type==OT_CONST) {
-        eval3=ha_calvar[i].Var3Val;
+      if (ops[i].Var3Type==OT_CONST) {
+        eval3=ops[i].Var3Val;
       }
-      if(ha_calvar[i].Var3Type==OT_CHANGE) {
+      if(ops[i].Var3Type==OT_CHANGE) {
         l=0;
         for (j=0; j<fdim; j++) {
-          if(ha_calvar[i].Var3SupSet[j]==1) {
-            l+=ha_calvar[i].Var3ADims[j]*(ha_setele[ha_set[arSet[j].setid].offset+arSet[j].indx].superset_pos[ha_calvar[i].Var3SSIndx[j]]+ha_calvar[i].Var3leadlag[j]);
+          if(ops[i].Var3SupSet[j]==1) {
+            l+=ops[i].Var3ADims[j]*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var3SSIndx[j]]+ops[i].Var3leadlag[j]);
           } else {
-            l+=ha_calvar[i].Var3ADims[j]*(arSet[j].indx+ha_calvar[i].Var3leadlag[j]);
+            l+=ops[i].Var3ADims[j]*(arSet[j].indx+ops[i].Var3leadlag[j]);
           }
         }
-        eval3=record[ha_calvar[i].Var3BegAdd+l].substep_base;
+        eval3=record[ops[i].Var3BegAdd+l].substep_base;
       }
-      if(ha_calvar[i].Oper==OP_IF_EQ)if(eval1==eval2)ha_calvar[i].TmpVarVal=eval3;else ha_calvar[i].TmpVarVal=0;
-      if(ha_calvar[i].Oper==OP_IF_GT)if(eval1>eval2)ha_calvar[i].TmpVarVal=eval3;else ha_calvar[i].TmpVarVal=0;
-      if(ha_calvar[i].Oper==OP_IF_LT)if(eval1<eval2)ha_calvar[i].TmpVarVal=eval3;else ha_calvar[i].TmpVarVal=0;
-      if(ha_calvar[i].Oper==OP_IF_NE)if(eval1!=eval2)ha_calvar[i].TmpVarVal=eval3;else ha_calvar[i].TmpVarVal=0;
-      if(ha_calvar[i].Oper==OP_IF_LE)if(eval1<=eval2)ha_calvar[i].TmpVarVal=eval3;else ha_calvar[i].TmpVarVal=0;
-      if(ha_calvar[i].Oper==OP_IF_GE)if(eval1>=eval2)ha_calvar[i].TmpVarVal=eval3;else ha_calvar[i].TmpVarVal=0;
+      if(ops[i].Oper==OP_IF_EQ)if(eval1==eval2)ops[i].TmpVarVal=eval3;else ops[i].TmpVarVal=0;
+      if(ops[i].Oper==OP_IF_GT)if(eval1>eval2)ops[i].TmpVarVal=eval3;else ops[i].TmpVarVal=0;
+      if(ops[i].Oper==OP_IF_LT)if(eval1<eval2)ops[i].TmpVarVal=eval3;else ops[i].TmpVarVal=0;
+      if(ops[i].Oper==OP_IF_NE)if(eval1!=eval2)ops[i].TmpVarVal=eval3;else ops[i].TmpVarVal=0;
+      if(ops[i].Oper==OP_IF_LE)if(eval1<=eval2)ops[i].TmpVarVal=eval3;else ops[i].TmpVarVal=0;
+      if(ops[i].Oper==OP_IF_GE)if(eval1>=eval2)ops[i].TmpVarVal=eval3;else ops[i].TmpVarVal=0;
       break;
     }
   }
-  return ha_calvar[i-1].TmpVarVal;
+  return ops[i-1].TmpVarVal;
 }
 
 
 
 
-int formula_compile_pow(char *fomulain, set_def *ha_set,int npow,int ipar,array_def *ha_cof,offset_t ncof, array_def *ha_var,offset_t nvar,offset_t ncofele,sum_def *sum_cof,int totalsum,formula_op *ha_calvar,int *ha_calvarsize,quantifier *arSet,dim_t fdim) {
+int formula_compile_pow(char *fomulain, set_def *sets,int npow,int ipar,array_def *coefs,offset_t ncof, array_def *vars,offset_t nvar,offset_t ncofele,sum_def *sum_cof,int totalsum,formula_op *ops,int *nops,quantifier *arSet,dim_t fdim) {
   int i,i1,i2,i3,i4,i0,ibar=0,index,j,j1,i5,p1;
   char *p=NULL;//,*p1=NULL,*p2=NULL,*p3=NULL,*p4=NULL;
   char fpart1[TABREADLINE],fpart2[TABREADLINE],fpart3[TABREADLINE],var1[TABREADLINE],var2[TABREADLINE],interchar[TABREADLINE],interchar1[TABREADLINE];
@@ -1067,42 +1067,42 @@ int formula_compile_pow(char *fomulain, set_def *ha_set,int npow,int ipar,array_
     var2[index] = '\0';
     strcpy(fpart2,fpart3+index);
 
-    formula_bind_operand(var1,ha_set,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,*ha_calvarsize,arSet,fdim,1);
-    formula_bind_operand(var2,ha_set,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,*ha_calvarsize,arSet,fdim,2);
+    formula_bind_operand(var1,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,*nops,arSet,fdim,1);
+    formula_bind_operand(var2,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,*nops,arSet,fdim,2);
 
     sprintf(interchar1, "%d", ipar);
     interchar[0]='\0';
     if (i<10) {
-      strcat(interchar,"ha_cgepow");
+      strcat(interchar,"gen_pow");
       strcat(interchar,interchar1);
       strcat(interchar,"000");
     }
     if (9<i&&i<100) {
-      strcat(interchar,"ha_cgepow");
+      strcat(interchar,"gen_pow");
       strcat(interchar,interchar1);
       strcat(interchar,"00");
     }
     if (99<i&&i<1000) {
-      strcat(interchar,"ha_cgepow");
+      strcat(interchar,"gen_pow");
       strcat(interchar,interchar1);
       strcat(interchar,"0");
     }
     if (999<i&&i<10000) {
-      strcat(interchar,"ha_cgepow");
+      strcat(interchar,"gen_pow");
       strcat(interchar,interchar1);
     }
     sprintf(interchar1, "%d", i);
     strcat(interchar,interchar1);
-    strcpy(ha_calvar[*ha_calvarsize].TmpVarName,interchar);
-    ha_calvar[*ha_calvarsize].Oper=OP_POW;
-    *ha_calvarsize=*ha_calvarsize+1;
+    strcpy(ops[*nops].TmpVarName,interchar);
+    ops[*nops].Oper=OP_POW;
+    *nops=*nops+1;
     strcat(fpart1, interchar);
     strcat(fpart1, fpart2);
     strcpy(fomulain,fpart1);
   }
   return 1;
 }
-int formula_compile_muldiv(char *fomulain, set_def *ha_set,int nmul,int ipar,array_def *ha_cof,offset_t ncof, array_def *ha_var,offset_t nvar,offset_t ncofele,sum_def *sum_cof,int totalsum,formula_op *ha_calvar,int *ha_calvarsize,quantifier *arSet,dim_t fdim) {
+int formula_compile_muldiv(char *fomulain, set_def *sets,int nmul,int ipar,array_def *coefs,offset_t ncof, array_def *vars,offset_t nvar,offset_t ncofele,sum_def *sum_cof,int totalsum,formula_op *ops,int *nops,quantifier *arSet,dim_t fdim) {
   int i,i1,i2,i3,i4,i5,ibar=0,index,j,j1,p1;
   char *p=NULL;//,*p1=NULL,*p2=NULL,*p3=NULL,*p4=NULL;
   char fpart1[TABREADLINE],fpart2[TABREADLINE],fpart3[TABREADLINE],var1[TABREADLINE],var2[TABREADLINE],interchar[TABREADLINE],interchar1[TABREADLINE];
@@ -1111,9 +1111,9 @@ int formula_compile_muldiv(char *fomulain, set_def *ha_set,int nmul,int ipar,arr
     index=0;
     p=strpbrk(fomulain,"*/");
     if (*p=='/') {
-      ha_calvar[*ha_calvarsize].Oper=OP_DIV;
+      ops[*nops].Oper=OP_DIV;
     } else {
-      ha_calvar[*ha_calvarsize].Oper=OP_MUL;
+      ops[*nops].Oper=OP_MUL;
     }
     index=p-fomulain;
 
@@ -1163,34 +1163,34 @@ int formula_compile_muldiv(char *fomulain, set_def *ha_set,int nmul,int ipar,arr
     var2[index] = '\0';
     strcpy(fpart2,fpart3+index);
 
-    formula_bind_operand(var1,ha_set,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,*ha_calvarsize,arSet,fdim,1);
-    formula_bind_operand(var2,ha_set,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,*ha_calvarsize,arSet,fdim,2);
+    formula_bind_operand(var1,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,*nops,arSet,fdim,1);
+    formula_bind_operand(var2,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,*nops,arSet,fdim,2);
 
     sprintf(interchar1, "%d", ipar);
     interchar[0]='\0';
     if (i<10) {
-      strcat(interchar,"ha_cgemul");
+      strcat(interchar,"gen_mul");
       strcat(interchar,interchar1);
       strcat(interchar,"000");
     }
     if (9<i&&i<100) {
-      strcat(interchar,"ha_cgemul");
+      strcat(interchar,"gen_mul");
       strcat(interchar,interchar1);
       strcat(interchar,"00");
     }
     if (99<i&&i<1000) {
-      strcat(interchar,"ha_cgemul");
+      strcat(interchar,"gen_mul");
       strcat(interchar,interchar1);
       strcat(interchar,"0");
     }
     if (999<i&&i<10000) {
-      strcat(interchar,"ha_cgemul");
+      strcat(interchar,"gen_mul");
       strcat(interchar,interchar1);
     }
     sprintf(interchar1, "%d", i);
     strcat(interchar,interchar1);
-    strcpy(ha_calvar[*ha_calvarsize].TmpVarName,interchar);
-    *ha_calvarsize=*ha_calvarsize+1;
+    strcpy(ops[*nops].TmpVarName,interchar);
+    *nops=*nops+1;
     strcat(fpart1, interchar);
     strcat(fpart1, fpart2);
     strcpy(fomulain,fpart1);
@@ -1198,7 +1198,7 @@ int formula_compile_muldiv(char *fomulain, set_def *ha_set,int nmul,int ipar,arr
   return 1;
 }
 
-int formula_compile_addsub(char *fomulain, set_def *ha_set,int nplu,int ipar,array_def *ha_cof,offset_t ncof, array_def *ha_var,offset_t nvar,offset_t ncofele,sum_def *sum_cof,int totalsum,formula_op *ha_calvar,int *ha_calvarsize,quantifier *arSet,dim_t fdim) {
+int formula_compile_addsub(char *fomulain, set_def *sets,int nplu,int ipar,array_def *coefs,offset_t ncof, array_def *vars,offset_t nvar,offset_t ncofele,sum_def *sum_cof,int totalsum,formula_op *ops,int *nops,quantifier *arSet,dim_t fdim) {
   int i,i1,i3,i4,i5,ibar=0,index,j,j1,p1;
   char *p=NULL;//,*p1=NULL,*p2=NULL,*p3=NULL,*p4=NULL;
   char fpart1[TABREADLINE],fpart2[TABREADLINE],fpart3[TABREADLINE],var1[TABREADLINE],var2[TABREADLINE],interchar[TABREADLINE],interchar1[TABREADLINE];
@@ -1207,9 +1207,9 @@ int formula_compile_addsub(char *fomulain, set_def *ha_set,int nplu,int ipar,arr
     index=0;
     p=strpbrk(fomulain,"+-");
     if (*p=='+') {
-      ha_calvar[*ha_calvarsize].Oper=OP_ADD;
+      ops[*nops].Oper=OP_ADD;
     } else {
-      ha_calvar[*ha_calvarsize].Oper=OP_SUB;
+      ops[*nops].Oper=OP_SUB;
     }
     index=p-fomulain;
 
@@ -1260,41 +1260,41 @@ int formula_compile_addsub(char *fomulain, set_def *ha_set,int nplu,int ipar,arr
     strcpy(fpart2,fpart3+index);
 
     if(i==1&&var1[0]=='\0'){
-        ha_calvar[*ha_calvarsize].Var1Type=OT_CONST;
-        ha_calvar[*ha_calvarsize].Var1Val=0;
+        ops[*nops].Var1Type=OT_CONST;
+        ops[*nops].Var1Val=0;
     }
-    else formula_bind_operand(var1,ha_set,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,*ha_calvarsize,arSet,fdim,1);
+    else formula_bind_operand(var1,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,*nops,arSet,fdim,1);
     if(i==1&&var2[0]=='\0'){
-        ha_calvar[*ha_calvarsize].Var2Type=OT_CONST;
-        ha_calvar[*ha_calvarsize].Var2Val=0;
+        ops[*nops].Var2Type=OT_CONST;
+        ops[*nops].Var2Val=0;
     }
-    else formula_bind_operand(var2,ha_set,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,*ha_calvarsize,arSet,fdim,2);
+    else formula_bind_operand(var2,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,*nops,arSet,fdim,2);
 
     sprintf(interchar1, "%d", ipar);
     interchar[0]='\0';
     if (i<10) {
-      strcat(interchar,"ha_cgeplu");
+      strcat(interchar,"gen_add");
       strcat(interchar,interchar1);
       strcat(interchar,"000");
     }
     if (9<i&&i<100) {
-      strcat(interchar,"ha_cgeplu");
+      strcat(interchar,"gen_add");
       strcat(interchar,interchar1);
       strcat(interchar,"00");
     }
     if (99<i&&i<1000) {
-      strcat(interchar,"ha_cgeplu");
+      strcat(interchar,"gen_add");
       strcat(interchar,interchar1);
       strcat(interchar,"0");
     }
     if (999<i&&i<10000) {
-      strcat(interchar,"ha_cgeplu");
+      strcat(interchar,"gen_add");
       strcat(interchar,interchar1);
     }
     sprintf(interchar1, "%d", i);
     strcat(interchar,interchar1);
-    strcpy(ha_calvar[*ha_calvarsize].TmpVarName,interchar);
-    *ha_calvarsize=*ha_calvarsize+1;
+    strcpy(ops[*nops].TmpVarName,interchar);
+    *nops=*nops+1;
     strcat(fpart1, interchar);
     strcat(fpart1, fpart2);
     strcpy(fomulain,fpart1);
@@ -1303,7 +1303,7 @@ int formula_compile_addsub(char *fomulain, set_def *ha_set,int nplu,int ipar,arr
 }
 
 
-int formula_compile_if(char *fomulain, set_def *ha_set,int nif,int ipar,array_def *ha_cof,offset_t ncof, array_def *ha_var,offset_t nvar,offset_t ncofele,sum_def *sum_cof,int totalsum,formula_op *ha_calvar,int *ha_calvarsize,quantifier *arSet,dim_t fdim) {
+int formula_compile_if(char *fomulain, set_def *sets,int nif,int ipar,array_def *coefs,offset_t ncof, array_def *vars,offset_t nvar,offset_t ncofele,sum_def *sum_cof,int totalsum,formula_op *ops,int *nops,quantifier *arSet,dim_t fdim) {
   char *p=NULL,*p1,*p3,var1[NAMESIZE],var2[NAMESIZE],var3[NAMESIZE];
   int i,j1,j2,j3,l;//,varindex;
   p1=fomulain;
@@ -1312,18 +1312,18 @@ int formula_compile_if(char *fomulain, set_def *ha_set,int nif,int ipar,array_de
   var1[p-p1]='\0';
   p3=p+1;
   if(*p3=='='){
-    if(*p=='<')ha_calvar[*ha_calvarsize].Oper=OP_IF_LE;
-    if(*p=='>')ha_calvar[*ha_calvarsize].Oper=OP_IF_GE;
+    if(*p=='<')ops[*nops].Oper=OP_IF_LE;
+    if(*p=='>')ops[*nops].Oper=OP_IF_GE;
     p++;
     p++;
   }else if(*p3=='>'){
-          ha_calvar[*ha_calvarsize].Oper=OP_IF_NE;
+          ops[*nops].Oper=OP_IF_NE;
           p++;
           p++;
           }else{
-          if(*p=='=')ha_calvar[*ha_calvarsize].Oper=OP_IF_EQ;
-          if(*p=='>')ha_calvar[*ha_calvarsize].Oper=OP_IF_GT;
-          if(*p=='<')ha_calvar[*ha_calvarsize].Oper=OP_IF_LT;
+          if(*p=='=')ops[*nops].Oper=OP_IF_EQ;
+          if(*p=='>')ops[*nops].Oper=OP_IF_GT;
+          if(*p=='<')ops[*nops].Oper=OP_IF_LT;
           p++;
         }
   l=strlen(p);
@@ -1338,37 +1338,37 @@ int formula_compile_if(char *fomulain, set_def *ha_set,int nif,int ipar,array_de
   strncpy(var2,p,j1);
   var2[j1]='\0';
   strcpy(var3,p+j1+1);
-  formula_bind_operand(var1,ha_set,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,*ha_calvarsize,arSet,fdim,1);
-  formula_bind_operand(var3,ha_set,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,*ha_calvarsize,arSet,fdim,2);
-  ha_calvar[*ha_calvarsize].Var3Type=ha_calvar[*ha_calvarsize].Var2Type;
-  ha_calvar[*ha_calvarsize].Var3BegAdd=ha_calvar[*ha_calvarsize].Var2BegAdd;
+  formula_bind_operand(var1,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,*nops,arSet,fdim,1);
+  formula_bind_operand(var3,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,*nops,arSet,fdim,2);
+  ops[*nops].Var3Type=ops[*nops].Var2Type;
+  ops[*nops].Var3BegAdd=ops[*nops].Var2BegAdd;
   for(i=0;i<fdim;i++){
-  ha_calvar[*ha_calvarsize].Var3leadlag[i]=ha_calvar[*ha_calvarsize].Var2leadlag[i];
-  ha_calvar[*ha_calvarsize].Var3SupSet[i]=ha_calvar[*ha_calvarsize].Var3SupSet[i];
-  ha_calvar[*ha_calvarsize].Var3SSIndx[i]=ha_calvar[*ha_calvarsize].Var2SSIndx[i];
-  ha_calvar[*ha_calvarsize].Var3ADims[i]=ha_calvar[*ha_calvarsize].Var2ADims[i];
+  ops[*nops].Var3leadlag[i]=ops[*nops].Var2leadlag[i];
+  ops[*nops].Var3SupSet[i]=ops[*nops].Var3SupSet[i];
+  ops[*nops].Var3SSIndx[i]=ops[*nops].Var2SSIndx[i];
+  ops[*nops].Var3ADims[i]=ops[*nops].Var2ADims[i];
   }
-  ha_calvar[*ha_calvarsize].Var3Val=ha_calvar[*ha_calvarsize].Var2Val;
-  formula_bind_operand(var2,ha_set,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,*ha_calvarsize,arSet,fdim,2);
+  ops[*nops].Var3Val=ops[*nops].Var2Val;
+  formula_bind_operand(var2,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,*nops,arSet,fdim,2);
   return 1;
 }
 
-offset_t formulas_execute(char *fname, char *commsyntax,set_def *ha_set,dim_t nset, set_element *ha_setele, array_def *ha_cof,offset_t ncof,array_def *ha_var,offset_t nvar, elem_value *ha_cofvar,offset_t ncofvar,offset_t ncofele,bool IsIni) {
+offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset, set_element *set_elems, array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar, elem_value *elem_vals,offset_t ncofvar,offset_t ncofele,bool IsIni) {
   FILE * filehandle;
   char line[TABREADLINE],line1[TABREADLINE],line2[TABREADLINE],linecopy[TABREADLINE],condvar[MAXVARDIM][NAMESIZE];
   char vname[NAMESIZE],sumsyntax[NAMESIZE],argu[NAMESIZE],tempset[NAMESIZE];
   char *readitem=NULL,*p=NULL,*p1=NULL;
   offset_t i,i1,i3,i4,l,l2=0,j=0,nsumele,dcountdim1[4*MAXVARDIM],ncond,nloops,logioper[MAXVARDIM],logi,logiantidim[MAXVARDIM][MAXVARDIM],logisup[MAXVARDIM][MAXVARDIM],logivarindx[MAXVARDIM],logivartype[MAXVARDIM],index;//m,
   dim_t fdim,dcount,neqsign=0,sup,varsupsetid[MAXVARDIM];
-  int ha_calvarsize=0,totalsum,sumcount=1,npow,nmul,ndiv,nplu,nmin,npar,sumindx,b=0;
+  int nops=0,totalsum,sumcount=1,npow,nmul,ndiv,nplu,nmin,npar,sumindx,b=0;
   offset_t varantidim[MAXVARDIM],varsubset[MAXVARDIM],vararset[MAXVARDIM];
   solve_real zerodivide=0,cond[MAXVARDIM],eval;
   bool IsFomIni=false,IsDefFomIni=false;
   quantifier *arSet1=NULL;
-  formula_op *ha_calvar1= NULL;
+  formula_op *ops1= NULL;
 
   filehandle = fopen(fname,"r");
-  while (tab_next_statement_resolved(commsyntax,filehandle,line,ha_cofvar,ha_cof,ncof,&zerodivide,TABREADLINE)) {
+  while (tab_next_statement_resolved(commsyntax,filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
     if (strstr(line,"(default=initial)")!=NULL) IsDefFomIni=true;
     if (strstr(line,"(default")==NULL) {
       IsFomIni=IsDefFomIni;
@@ -1488,16 +1488,16 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *ha_set,dim_t ns
               }
               ncond++;
             }
-            for (i4=0; i4<nset; i4++) if(strcmp(tempset,ha_set[i4].setname)==0) {
+            for (i4=0; i4<nset; i4++) if(strcmp(tempset,sets[i4].setname)==0) {
                 arSet[i].setid=i4;
                 break;
               }
-            nloops=nloops*ha_set[arSet[i].setid].size;
+            nloops=nloops*sets[arSet[i].setid].size;
           }
           readitem = strtok(NULL,"=");
           dcountdim1[fdim-2]=1;
           for (i=fdim-3; i>-1; i--) {
-            dcountdim1[i]=ha_set[arSet[i+1].setid].size*dcountdim1[i+1];
+            dcountdim1[i]=sets[arSet[i+1].setid].size*dcountdim1[i+1];
           }
         }
         strcpy(vname,readitem);
@@ -1515,7 +1515,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *ha_set,dim_t ns
         strcpy(line1,readitem);
         strcpy(line2,line1);
         readitem=line2;
-        while (sum_parse(readitem,sumsyntax,sum_cof,arSet,ha_set,nset,fdim,sumcount)==1) {
+        while (sum_parse(readitem,sumsyntax,sum_cof,arSet,sets,nset,fdim,sumcount)==1) {
           sumcount++;
         }
         totalsum=sumcount;
@@ -1523,7 +1523,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *ha_set,dim_t ns
         for (i=0; i<totalsum; i++) {
           i1=1;
           for(j=0; j<sum_cof[i].size; j++) {
-            i1=i1*ha_set[sum_cof[i].setid[j]].size;
+            i1=i1*sets[sum_cof[i].setid[j]].size;
           }
           sum_cof[i].offset=i3;
           sum_cof[i].summatsize=i1;
@@ -1534,16 +1534,16 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *ha_set,dim_t ns
           i1=1;
           sum_cof[i].strides[sum_cof[i].size-1]=1;
           for(j=sum_cof[i].size-2; j>-1; j--) {
-            sum_cof[i].strides[j]=sum_cof[i].strides[j+1]*ha_set[sum_cof[i].setid[j+1]].size;
+            sum_cof[i].strides[j]=sum_cof[i].strides[j+1]*sets[sum_cof[i].setid[j+1]].size;
           }
         }
-        formula_op *ha_calvar= (formula_op *) calloc (npow+nmul+nplu+2*(npar+2),sizeof(formula_op));
-        sum_value *ha_sumele= (sum_value *) calloc (nsumele,sizeof(sum_value));
+        formula_op *ops= (formula_op *) calloc (npow+nmul+nplu+2*(npar+2),sizeof(formula_op));
+        sum_value *sum_vals= (sum_value *) calloc (nsumele,sizeof(sum_value));
         sumcount=0;
         strcpy(line2,line1);
         readitem=line2;
         sumindx=0;
-        while (sum_eval(readitem,sumsyntax,ha_set,nset,ha_setele,ha_cofvar,ncofvar,ncofele,ha_cof,ncof,ha_var,nvar,sum_cof,totalsum,ha_sumele,nsumele,ha_calvar,arSet,fdim,&sumindx,sumcount,zerodivide)==1) {
+        while (sum_eval(readitem,sumsyntax,sets,nset,set_elems,elem_vals,ncofvar,ncofele,coefs,ncof,vars,nvar,sum_cof,totalsum,sum_vals,nsumele,ops,arSet,fdim,&sumindx,sumcount,zerodivide)==1) {
           sumcount++;
         }
         strcpy(line1,readitem);
@@ -1552,11 +1552,11 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *ha_set,dim_t ns
         offset_t varsize=0;
         p=strtok(vname,"(");
         do {
-          if (strcmp(ha_cof[index].cofname,p)==0) {
-            ha_cof[index].suplval=true;
-            offset=ha_cof[index].offset;
-            varsize=ha_cof[index].size;
-            if(ha_cof[index].size>0){strcpy(argu,strtok(NULL,")"));strcat(argu,",");}
+          if (strcmp(coefs[index].cofname,p)==0) {
+            coefs[index].suplval=true;
+            offset=coefs[index].offset;
+            varsize=coefs[index].size;
+            if(coefs[index].size>0){strcpy(argu,strtok(NULL,")"));strcat(argu,",");}
             check10=false;
             break;
           }
@@ -1564,46 +1564,46 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *ha_set,dim_t ns
         if (check10) {
           index=nvar-1;
           do {
-            if (strcmp(ha_var[index].cofname,p)==0) {
-              offset=ncofele+ha_var[index].offset;
-              varsize=ha_var[index].size;
-              ha_var[index].suplval=true;
-              if(ha_var[index].size>0){strcpy(argu,strtok(NULL,")"));strcat(argu,",");}
+            if (strcmp(vars[index].cofname,p)==0) {
+              offset=ncofele+vars[index].offset;
+              varsize=vars[index].size;
+              vars[index].suplval=true;
+              if(vars[index].size>0){strcpy(argu,strtok(NULL,")"));strcat(argu,",");}
               break;
             }
           } while (index--);
         }
         for (l=0; l<MAXVARDIM; l++){varantidim[l]=0;varsubset[l]=0;varsupsetid[l]=0;}
         if (check10) {
-            for (dcount=0; dcount<ha_var[index].size; dcount++) {
+            for (dcount=0; dcount<vars[index].size; dcount++) {
               if(dcount==0)p=strtok(argu,",");
               else p=strtok(NULL,",");
               for (l=0; l<fdim-1; l++) if (strcmp(arSet[l].index_name,p)==0) {
-                  varantidim[dcount]=ha_var[index].strides[dcount];
+                  varantidim[dcount]=vars[index].strides[dcount];
                   vararset[dcount]=l+1;
-                  if (ha_set[arSet[l].setid].size!=ha_set[ha_var[index].setid[dcount]].size){
+                  if (sets[arSet[l].setid].size!=sets[vars[index].setid[dcount]].size){
                     varsubset[dcount]=1;
-                    for(sup=1;sup<MAXSUPSET;sup++)if(ha_set[arSet[l].setid].subsetid[sup]==ha_var[index].setid[dcount]){varsupsetid[dcount]=sup;break;}
+                    for(sup=1;sup<MAXSUPSET;sup++)if(sets[arSet[l].setid].subsetid[sup]==vars[index].setid[dcount]){varsupsetid[dcount]=sup;break;}
                   }
                   break;
                 }
             }
         } else {
-            for (dcount=0; dcount<ha_cof[index].size; dcount++) {
+            for (dcount=0; dcount<coefs[index].size; dcount++) {
               if(dcount==0)p=strtok(argu,",");
               else p=strtok(NULL,",");
               for (l=0; l<fdim-1; l++) if (strcmp(arSet[l].index_name,p)==0) {
-                  varantidim[dcount]=ha_cof[index].strides[dcount];
+                  varantidim[dcount]=coefs[index].strides[dcount];
                   vararset[dcount]=l+1;
-                  if (ha_set[arSet[l].setid].size!=ha_set[ha_cof[index].setid[dcount]].size){
+                  if (sets[arSet[l].setid].size!=sets[coefs[index].setid[dcount]].size){
                     varsubset[dcount]=1;
-                    for(sup=1;sup<MAXSUPSET;sup++)if(ha_set[arSet[l].setid].subsetid[sup]==ha_cof[index].setid[dcount]){varsupsetid[dcount]=sup;break;}
+                    for(sup=1;sup<MAXSUPSET;sup++)if(sets[arSet[l].setid].subsetid[sup]==coefs[index].setid[dcount]){varsupsetid[dcount]=sup;break;}
                   }
                   break;
                 }
             }
         }
-        formula_compile(line1,ha_set,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,&ha_calvarsize,arSet,fdim-1);
+        formula_compile(line1,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,&nops,arSet,fdim-1);
         if(ncond>0) {
           for(i=0; i<MAXVARDIM; i++)for(j=0; j<MAXVARDIM; j++){
             logiantidim[i][j]=0;
@@ -1614,21 +1614,21 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *ha_set,dim_t ns
             p=strtok(condvar[i1],"(");
             b=0;
             do {
-              if (strcmp(ha_cof[index].cofname,condvar[i1])==0) {
-                if(!ha_cof[index].suplval)printf("Warning!!!! coefficient %s has not been supplied with values!\n",ha_cof[index].cofname);
+              if (strcmp(coefs[index].cofname,condvar[i1])==0) {
+                if(!coefs[index].suplval)printf("Warning!!!! coefficient %s has not been supplied with values!\n",coefs[index].cofname);
                 logivarindx[i1]=index;
                 logivartype[i1]=0;
                 b++;
                 if(p!=NULL)p=strtok(NULL,")");
                 strcpy(argu,p);
                 strcat(argu,",");
-                for(i=0; i<ha_cof[index].size; i++) {
+                for(i=0; i<coefs[index].size; i++) {
                   if(i==0)p=strtok(argu,",");
                   else p=strtok(NULL,",");
                   for(j=0; j<fdim; j++) {
                     if(strcmp(arSet[j].index_name,p)==0) {
-                      logiantidim[i1][j]=ha_cof[index].strides[i];
-                      for(sup=1; sup<MAXSUPSET; sup++)if(ha_set[arSet[j].setid].subsetid[sup]==ha_cof[index].setid[i]){logisup[i1][j]=sup;break;}
+                      logiantidim[i1][j]=coefs[index].strides[i];
+                      for(sup=1; sup<MAXSUPSET; sup++)if(sets[arSet[j].setid].subsetid[sup]==coefs[index].setid[i]){logisup[i1][j]=sup;break;}
                       break;
                     }
                   }
@@ -1640,20 +1640,20 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *ha_set,dim_t ns
               index=nvar-1;
               p=strtok(condvar[i1],"(");
               do {
-                if (strcmp(ha_var[index].cofname,condvar[i1])==0) {
-                if(!ha_var[index].suplval)printf("Warning!!!! coefficient %s has not been supplied with values!\n",ha_var[index].cofname);
+                if (strcmp(vars[index].cofname,condvar[i1])==0) {
+                if(!vars[index].suplval)printf("Warning!!!! coefficient %s has not been supplied with values!\n",vars[index].cofname);
                   logivarindx[i1]=index;
                   logivartype[i1]=1;
                   if(p!=NULL)p=strtok(NULL,")");
                   strcpy(argu,p);
                   strcat(argu,",");
-                  for(i=0; i<ha_var[index].size; i++) {
+                  for(i=0; i<vars[index].size; i++) {
                     if(i==0)p=strtok(argu,",");
                     else p=strtok(NULL,",");
                     for(j=0; j<fdim-1; j++) {
                       if(strcmp(arSet[j].index_name,p)==0) {
-                        logiantidim[i1][j]=ha_var[index].strides[i];
-                        for(sup=1; sup<MAXSUPSET; sup++)if(ha_set[arSet[j].setid].subsetid[sup]==ha_var[index].setid[i]){logisup[i1][j]=sup;break;}
+                        logiantidim[i1][j]=vars[index].strides[i];
+                        for(sup=1; sup<MAXSUPSET; sup++)if(sets[arSet[j].setid].subsetid[sup]==vars[index].setid[i]){logisup[i1][j]=sup;break;}
                         break;
                       }
                     }
@@ -1663,15 +1663,15 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *ha_set,dim_t ns
               } while (index--);
             }
           }
-        #pragma omp parallel private(l,l2,i4,dcount,i3,i1,arSet1,logi,index,eval,ha_calvar1) shared(ha_cofvar,arSet)
+        #pragma omp parallel private(l,l2,i4,dcount,i3,i1,arSet1,logi,index,eval,ops1) shared(elem_vals,arSet)
         {
         if(omp_get_thread_num()!=0){
           arSet1=realloc(arSet1,(fdim+1)*sizeof(quantifier));
           memcpy (arSet1,arSet,(fdim+1)*sizeof(quantifier));
-          ha_calvar1=realloc(ha_calvar1,(npow+nmul+nplu+2*(npar+2))*sizeof(formula_op));
-          memcpy (ha_calvar1,ha_calvar,(npow+nmul+nplu+2*(npar+2))*sizeof(formula_op));
+          ops1=realloc(ops1,(npow+nmul+nplu+2*(npar+2))*sizeof(formula_op));
+          memcpy (ops1,ops,(npow+nmul+nplu+2*(npar+2))*sizeof(formula_op));
         }else{
-          ha_calvar1=ha_calvar;
+          ops1=ops;
           arSet1=arSet;
         }
         #pragma omp for
@@ -1686,7 +1686,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *ha_set,dim_t ns
                 for(i1=0; i1<varsize; i1++) {
                   if(vararset[i1]-1==dcount) {
                     if(varsubset[i1]==1) {
-                      l2=l2+ha_setele[ha_set[arSet1[dcount].setid].offset+i3].superset_pos[varsupsetid[i1]]*varantidim[i1];
+                      l2=l2+set_elems[sets[arSet1[dcount].setid].offset+i3].superset_pos[varsupsetid[i1]]*varantidim[i1];
                     } else {
                       l2=l2+i3*varantidim[i1];
                     }
@@ -1697,7 +1697,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *ha_set,dim_t ns
                 for(i1=0; i1<varsize; i1++) {
                   if(vararset[i1]-1==dcount) {
                     if(varsubset[i1]==1) {
-                      l2=l2+ha_setele[ha_set[arSet1[dcount].setid].offset+i3].superset_pos[varsupsetid[i1]]*varantidim[i1];
+                      l2=l2+set_elems[sets[arSet1[dcount].setid].offset+i3].superset_pos[varsupsetid[i1]]*varantidim[i1];
                     } else {
                       l2=l2+i3*varantidim[i1];
                     }
@@ -1710,10 +1710,10 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *ha_set,dim_t ns
             for(i1=0; i1<fdim-1; i1++) {
               if(logioper[i1]>0){
               for(i=0; i<fdim-1; i++){
-                index+=ha_setele[ha_set[arSet1[i].setid].offset+arSet1[i].indx].superset_pos[logisup[i1][i]]*logiantidim[i1][i];
+                index+=set_elems[sets[arSet1[i].setid].offset+arSet1[i].indx].superset_pos[logisup[i1][i]]*logiantidim[i1][i];
               }
-              if(logivartype[i1]==0)eval=ha_cofvar[ha_cof[logivarindx[i1]].offset+index].value;
-              else eval=ha_cofvar[ncofele+ha_var[logivarindx[i1]].offset+index].value;
+              if(logivartype[i1]==0)eval=elem_vals[coefs[logivarindx[i1]].offset+index].value;
+              else eval=elem_vals[ncofele+vars[logivarindx[i1]].offset+index].value;
               if(logioper[i1]==1)if(eval==cond[i1])logi++;
               if(logioper[i1]==2)if(eval>cond[i1])logi++;
               if(logioper[i1]==3)if(eval<cond[i1])logi++;
@@ -1722,28 +1722,28 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *ha_set,dim_t ns
               if(logioper[i1]==6)if(eval>=cond[i1])logi++;
               }
             }
-            if(logi==ncond)ha_cofvar[offset+l2].value=formula_eval(ha_cofvar,ha_set,ha_setele,ha_sumele,ha_calvar1,ha_calvarsize,arSet1,fdim-1,zerodivide);
+            if(logi==ncond)elem_vals[offset+l2].value=formula_eval(elem_vals,sets,set_elems,sum_vals,ops1,nops,arSet1,fdim-1,zerodivide);
           }
         if(omp_get_thread_num()!=0){
           free(arSet1);
           arSet1=NULL;
-          free(ha_calvar1);
-          ha_calvar1=NULL;
+          free(ops1);
+          ops1=NULL;
         }else{
-          ha_calvar1=NULL;
+          ops1=NULL;
           arSet1=NULL;
         }
         }
         } else {
-        #pragma omp parallel private(l,l2,i4,dcount,i3,i1,arSet1,ha_calvar1) shared(ha_cofvar,arSet)
+        #pragma omp parallel private(l,l2,i4,dcount,i3,i1,arSet1,ops1) shared(elem_vals,arSet)
         {
         if(omp_get_thread_num()!=0){
           arSet1=realloc(arSet1,(fdim+1)*sizeof(quantifier));
           memcpy (arSet1,arSet,(fdim+1)*sizeof(quantifier));
-          ha_calvar1=realloc(ha_calvar1,(npow+nmul+nplu+2*(npar+2))*sizeof(formula_op));
-          memcpy (ha_calvar1,ha_calvar,(npow+nmul+nplu+2*(npar+2))*sizeof(formula_op));
+          ops1=realloc(ops1,(npow+nmul+nplu+2*(npar+2))*sizeof(formula_op));
+          memcpy (ops1,ops,(npow+nmul+nplu+2*(npar+2))*sizeof(formula_op));
         }else{
-          ha_calvar1=ha_calvar;
+          ops1=ops;
           arSet1=arSet;
         }
         #pragma omp for
@@ -1758,7 +1758,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *ha_set,dim_t ns
                 for(i1=0; i1<varsize; i1++) {
                   if(vararset[i1]-1==dcount) {
                     if(varsubset[i1]==1) {
-                      l2=l2+ha_setele[ha_set[arSet1[dcount].setid].offset+i3].superset_pos[varsupsetid[i1]]*varantidim[i1];
+                      l2=l2+set_elems[sets[arSet1[dcount].setid].offset+i3].superset_pos[varsupsetid[i1]]*varantidim[i1];
                     } else {
                       l2=l2+i3*varantidim[i1];
                     }
@@ -1769,7 +1769,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *ha_set,dim_t ns
                 for(i1=0; i1<varsize; i1++) {
                   if(vararset[i1]-1==dcount) {
                     if(varsubset[i1]==1) {
-                      l2=l2+ha_setele[ha_set[arSet1[dcount].setid].offset+i3].superset_pos[varsupsetid[i1]]*varantidim[i1];
+                      l2=l2+set_elems[sets[arSet1[dcount].setid].offset+i3].superset_pos[varsupsetid[i1]]*varantidim[i1];
                     } else {
                       l2=l2+i3*varantidim[i1];
                     }
@@ -1777,55 +1777,55 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *ha_set,dim_t ns
                 }
               }
             }
-            ha_cofvar[offset+l2].value=formula_eval(ha_cofvar,ha_set,ha_setele,ha_sumele,ha_calvar1,ha_calvarsize,arSet1,fdim-1,zerodivide);
+            elem_vals[offset+l2].value=formula_eval(elem_vals,sets,set_elems,sum_vals,ops1,nops,arSet1,fdim-1,zerodivide);
           }
         if(omp_get_thread_num()!=0){
           free(arSet1);
           arSet1=NULL;
-          free(ha_calvar1);
-          ha_calvar1=NULL;
+          free(ops1);
+          ops1=NULL;
         }else{
-          ha_calvar1=NULL;
+          ops1=NULL;
           arSet1=NULL;
         }
         }
         }
 
-        if(ha_cof[index].gltype>0){
-        #pragma omp parallel private(l) shared(ha_cofvar,ha_cof,ncof,offset,index)
+        if(coefs[index].gltype>0){
+        #pragma omp parallel private(l) shared(elem_vals,coefs,ncof,offset,index)
         {
-          if(ha_cof[index].gltype==BT_GE){
+          if(coefs[index].gltype==BT_GE){
           #pragma omp for
           for (l=0; l<varsize; l++) {
-            if(ha_cofvar[offset+l].value<ha_cof[index].glval){
-              printf("Error!!! Condition not met var %s type 1!\n",ha_cof[index].cofname);
+            if(elem_vals[offset+l].value<coefs[index].glval){
+              printf("Error!!! Condition not met var %s type 1!\n",coefs[index].cofname);
               l=varsize;
             }
           }
           }
-          if(ha_cof[index].gltype==BT_GT){
+          if(coefs[index].gltype==BT_GT){
           #pragma omp for
           for (l=0; l<varsize; l++) {
-            if(ha_cofvar[offset+l].value<=ha_cof[index].glval){
-              printf("Error!!! Condition not met var %s type 2!\n",ha_cof[index].cofname);
+            if(elem_vals[offset+l].value<=coefs[index].glval){
+              printf("Error!!! Condition not met var %s type 2!\n",coefs[index].cofname);
               l=varsize;
             }
           }
           }
-          if(ha_cof[index].gltype==BT_LE){
+          if(coefs[index].gltype==BT_LE){
           #pragma omp for
           for (l=0; l<varsize; l++) {
-            if(ha_cofvar[offset+l].value>ha_cof[index].glval){
-              printf("Error!!! Condition not met var %s type 3!\n",ha_cof[index].cofname);
+            if(elem_vals[offset+l].value>coefs[index].glval){
+              printf("Error!!! Condition not met var %s type 3!\n",coefs[index].cofname);
               l=varsize;
             }
           }
           }
-          if(ha_cof[index].gltype==BT_LT){
+          if(coefs[index].gltype==BT_LT){
           #pragma omp for
           for (l=0; l<varsize; l++) {
-            if(ha_cofvar[offset+l].value>=ha_cof[index].glval){
-              printf("Error!!! Condition not met var %s type 4!\n",ha_cof[index].cofname);
+            if(elem_vals[offset+l].value>=coefs[index].glval){
+              printf("Error!!! Condition not met var %s type 4!\n",coefs[index].cofname);
               l=varsize;
             }
           }
@@ -1836,9 +1836,9 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *ha_set,dim_t ns
         
         
         free(sum_cof);
-        free(ha_sumele);
+        free(sum_vals);
         free(arSet);
-        free(ha_calvar);
+        free(ops);
       }
     }
   }
@@ -1850,22 +1850,22 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *ha_set,dim_t ns
    midpoint!=0 the modified-midpoint correction is used: the value is
    advanced from the sub-step base (csolpupd) by twice the computed
    change, and csolpupd retains the pre-update value. */
-offset_t updates_apply(char *fname,set_def *ha_set,dim_t nset, set_element *ha_setele, array_def *ha_cof,offset_t ncof,array_def *ha_var,offset_t nvar, elem_value *ha_cofvar,offset_t ncofvar,offset_t ncofele,int midpoint) {
+offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_elems, array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar, elem_value *elem_vals,offset_t ncofvar,offset_t ncofele,int midpoint) {
   FILE * filehandle;
   char commsyntax[NAMESIZE],line[TABREADLINE],line1[TABREADLINE],line2[TABREADLINE],linecopy[TABREADLINE];
   char vname[NAMESIZE],sumsyntax[NAMESIZE],argu[NAMESIZE];
   char *readitem=NULL,*p=NULL;
   offset_t i,i1,i3,i4,l,l2=0,j=0,nsumele,dcountdim1[4*MAXVARDIM],nloops;//m,
   dim_t fdim,dcount,sup,varsupsetid[MAXVARDIM];
-  int ha_calvarsize=0,totalsum,sumcount=1,npow,nmul,ndiv,nplu,nmin,npar,sumindx;
+  int nops=0,totalsum,sumcount=1,npow,nmul,ndiv,nplu,nmin,npar,sumindx;
   bool IsChange=false,IsExplicit=false;
   solve_real zerodivide=0,temp1,temp2;
   offset_t varantidim[MAXVARDIM],varsubset[MAXVARDIM],vararset[MAXVARDIM];
   quantifier *arSet1=NULL;
-  formula_op *ha_calvar1= NULL;
+  formula_op *ops1= NULL;
   strcpy(commsyntax,"update");
   filehandle = fopen(fname,"r");
-  while (tab_next_statement_resolved(commsyntax,filehandle,line,ha_cofvar,ha_cof,ncof,&zerodivide,TABREADLINE)) {
+  while (tab_next_statement_resolved(commsyntax,filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
     IsChange=false;
     IsExplicit=false;
     if(strstr(line, "(change)")!=NULL) {
@@ -1903,16 +1903,16 @@ offset_t updates_apply(char *fname,set_def *ha_set,dim_t nset, set_element *ha_s
         readitem = strtok(NULL,",");
         strcpy(arSet[i].index_name,readitem);
         readitem = strtok(NULL,")");
-        for (i4=0; i4<nset; i4++) if(strcmp(readitem,ha_set[i4].setname)==0) {
+        for (i4=0; i4<nset; i4++) if(strcmp(readitem,sets[i4].setname)==0) {
             arSet[i].setid=i4;
             break;
           }
-        nloops=nloops*ha_set[arSet[i].setid].size;
+        nloops=nloops*sets[arSet[i].setid].size;
       }
       readitem = strtok(NULL,"=");
       dcountdim1[fdim-2]=1;
       for (i=fdim-3; i>-1; i--) {
-        dcountdim1[i]=ha_set[arSet[i+1].setid].size*dcountdim1[i+1];
+        dcountdim1[i]=sets[arSet[i+1].setid].size*dcountdim1[i+1];
       }
     }
     strcpy(vname,readitem);
@@ -1951,7 +1951,7 @@ offset_t updates_apply(char *fname,set_def *ha_set,dim_t nset, set_element *ha_s
     strcpy(line1,readitem);
     strcpy(line2,line1);
     readitem=line2;
-    while (sum_parse(readitem,sumsyntax,sum_cof,arSet,ha_set,nset,fdim,sumcount)==1) {
+    while (sum_parse(readitem,sumsyntax,sum_cof,arSet,sets,nset,fdim,sumcount)==1) {
       sumcount++;
     }
     totalsum=sumcount;
@@ -1959,7 +1959,7 @@ offset_t updates_apply(char *fname,set_def *ha_set,dim_t nset, set_element *ha_s
     for (i=0; i<totalsum; i++) {
       i1=1;
       for(j=0; j<sum_cof[i].size; j++) {
-        i1=i1*ha_set[sum_cof[i].setid[j]].size;
+        i1=i1*sets[sum_cof[i].setid[j]].size;
       }
       sum_cof[i].offset=i3;
       i3=i3+i1;
@@ -1969,16 +1969,16 @@ offset_t updates_apply(char *fname,set_def *ha_set,dim_t nset, set_element *ha_s
       i1=1;
       sum_cof[i].strides[sum_cof[i].size-1]=1;
       for(j=sum_cof[i].size-2; j>-1; j--) {
-        sum_cof[i].strides[j]=sum_cof[i].strides[j+1]*ha_set[sum_cof[i].setid[j+1]].size;
+        sum_cof[i].strides[j]=sum_cof[i].strides[j+1]*sets[sum_cof[i].setid[j+1]].size;
       }
     }
-    formula_op *ha_calvar= (formula_op *) calloc (npow+nmul+nplu+2*npar+2,sizeof(formula_op));
-    sum_value *ha_sumele= (sum_value *) calloc (nsumele,sizeof(sum_value));
+    formula_op *ops= (formula_op *) calloc (npow+nmul+nplu+2*npar+2,sizeof(formula_op));
+    sum_value *sum_vals= (sum_value *) calloc (nsumele,sizeof(sum_value));
     sumcount=0;
     strcpy(line2,line1);
     readitem=line2;
     sumindx=0;
-    while (sum_eval(readitem,sumsyntax,ha_set,nset,ha_setele,ha_cofvar,ncofvar,ncofele,ha_cof,ncof,ha_var,nvar,sum_cof,totalsum,ha_sumele,nsumele,ha_calvar,arSet,fdim,&sumindx,sumcount,zerodivide)==1) {
+    while (sum_eval(readitem,sumsyntax,sets,nset,set_elems,elem_vals,ncofvar,ncofele,coefs,ncof,vars,nvar,sum_cof,totalsum,sum_vals,nsumele,ops,arSet,fdim,&sumindx,sumcount,zerodivide)==1) {
       sumcount++;
     }
     strcpy(line1,readitem);
@@ -1987,10 +1987,10 @@ offset_t updates_apply(char *fname,set_def *ha_set,dim_t nset, set_element *ha_s
         offset_t varsize=0;
         p=strtok(vname,"(");
         do {
-          if (strcmp(ha_cof[index].cofname,p)==0) {
-            offset=ha_cof[index].offset;
-            varsize=ha_cof[index].size;
-            if(ha_cof[index].size>0){strcpy(argu,strtok(NULL,")"));strcat(argu,",");}
+          if (strcmp(coefs[index].cofname,p)==0) {
+            offset=coefs[index].offset;
+            varsize=coefs[index].size;
+            if(coefs[index].size>0){strcpy(argu,strtok(NULL,")"));strcat(argu,",");}
             check10=false;
             break;
           }
@@ -1998,54 +1998,54 @@ offset_t updates_apply(char *fname,set_def *ha_set,dim_t nset, set_element *ha_s
         if (check10) {
           index=nvar-1;
           do {
-            if (strcmp(ha_var[index].cofname,p)==0) {
-              offset=ncofele+ha_var[index].offset;
-              varsize=ha_var[index].size;
-              if(ha_var[index].size>0){strcpy(argu,strtok(NULL,")"));strcat(argu,",");}
+            if (strcmp(vars[index].cofname,p)==0) {
+              offset=ncofele+vars[index].offset;
+              varsize=vars[index].size;
+              if(vars[index].size>0){strcpy(argu,strtok(NULL,")"));strcat(argu,",");}
               break;
             }
           } while (index--);
         }
         for (l=0; l<MAXVARDIM; l++){varantidim[l]=0;varsubset[l]=0;varsupsetid[l]=0;}
         if (check10) {
-            for (dcount=0; dcount<ha_var[index].size; dcount++) {
+            for (dcount=0; dcount<vars[index].size; dcount++) {
               if(dcount==0)p=strtok(argu,",");
               else p=strtok(NULL,",");
               for (l=0; l<fdim-1; l++) if (strcmp(arSet[l].index_name,p)==0) {
-                  varantidim[dcount]=ha_var[index].strides[dcount];
+                  varantidim[dcount]=vars[index].strides[dcount];
                   vararset[dcount]=l+1;
-                  if (ha_set[arSet[l].setid].size!=ha_set[ha_var[index].setid[dcount]].size){
+                  if (sets[arSet[l].setid].size!=sets[vars[index].setid[dcount]].size){
                     varsubset[dcount]=1;
-                    for(sup=1;sup<MAXSUPSET;sup++)if(ha_set[arSet[l].setid].subsetid[sup]==ha_var[index].setid[dcount]){varsupsetid[dcount]=sup;break;}
+                    for(sup=1;sup<MAXSUPSET;sup++)if(sets[arSet[l].setid].subsetid[sup]==vars[index].setid[dcount]){varsupsetid[dcount]=sup;break;}
                   }
                   break;
                 }
             }
         } else {
-            for (dcount=0; dcount<ha_cof[index].size; dcount++) {
+            for (dcount=0; dcount<coefs[index].size; dcount++) {
               if(dcount==0)p=strtok(argu,",");
               else p=strtok(NULL,",");
               for (l=0; l<fdim-1; l++) if (strcmp(arSet[l].index_name,p)==0) {
-                  varantidim[dcount]=ha_cof[index].strides[dcount];
+                  varantidim[dcount]=coefs[index].strides[dcount];
                   vararset[dcount]=l+1;
-                  if (ha_set[arSet[l].setid].size!=ha_set[ha_cof[index].setid[dcount]].size){
+                  if (sets[arSet[l].setid].size!=sets[coefs[index].setid[dcount]].size){
                     varsubset[dcount]=1;
-                    for(sup=1;sup<MAXSUPSET;sup++)if(ha_set[arSet[l].setid].subsetid[sup]==ha_cof[index].setid[dcount]){varsupsetid[dcount]=sup;break;}
+                    for(sup=1;sup<MAXSUPSET;sup++)if(sets[arSet[l].setid].subsetid[sup]==coefs[index].setid[dcount]){varsupsetid[dcount]=sup;break;}
                   }
                   break;
                 }
             }
         }
-    formula_compile(line1,ha_set,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,&ha_calvarsize,arSet,fdim-1);
-        #pragma omp parallel private(l,l2,i4,dcount,i3,i1,temp1,temp2,arSet1,ha_calvar1) shared(ha_cofvar,arSet)
+    formula_compile(line1,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,&nops,arSet,fdim-1);
+        #pragma omp parallel private(l,l2,i4,dcount,i3,i1,temp1,temp2,arSet1,ops1) shared(elem_vals,arSet)
         {
         if(omp_get_thread_num()!=0){
           arSet1=realloc(arSet1,(fdim+1)*sizeof(quantifier));
           memcpy (arSet1,arSet,(fdim+1)*sizeof(quantifier));
-          ha_calvar1=realloc(ha_calvar1,ha_calvarsize*sizeof(formula_op));
-          memcpy (ha_calvar1,ha_calvar,ha_calvarsize*sizeof(formula_op));
+          ops1=realloc(ops1,nops*sizeof(formula_op));
+          memcpy (ops1,ops,nops*sizeof(formula_op));
         }else{
-          ha_calvar1=ha_calvar;
+          ops1=ops;
           arSet1=arSet;
         }
         #pragma omp for
@@ -2060,7 +2060,7 @@ offset_t updates_apply(char *fname,set_def *ha_set,dim_t nset, set_element *ha_s
                 for(i1=0; i1<varsize; i1++) {
                   if(vararset[i1]-1==dcount) {
                     if(varsubset[i1]==1) {
-                      l2=l2+ha_setele[ha_set[arSet1[dcount].setid].offset+i3].superset_pos[varsupsetid[i1]]*varantidim[i1];
+                      l2=l2+set_elems[sets[arSet1[dcount].setid].offset+i3].superset_pos[varsupsetid[i1]]*varantidim[i1];
                     } else {
                       l2=l2+i3*varantidim[i1];
                     }
@@ -2071,7 +2071,7 @@ offset_t updates_apply(char *fname,set_def *ha_set,dim_t nset, set_element *ha_s
                 for(i1=0; i1<varsize; i1++) {
                   if(vararset[i1]-1==dcount) {
                     if(varsubset[i1]==1) {
-                      l2=l2+ha_setele[ha_set[arSet1[dcount].setid].offset+i3].superset_pos[varsupsetid[i1]]*varantidim[i1];
+                      l2=l2+set_elems[sets[arSet1[dcount].setid].offset+i3].superset_pos[varsupsetid[i1]]*varantidim[i1];
                     } else {
                       l2=l2+i3*varantidim[i1];
                     }
@@ -2080,66 +2080,66 @@ offset_t updates_apply(char *fname,set_def *ha_set,dim_t nset, set_element *ha_s
               }
             }
       if(midpoint){
-        temp2=ha_cofvar[offset+l2].value;
-        temp1=formula_eval(ha_cofvar,ha_set,ha_setele,ha_sumele,ha_calvar1,ha_calvarsize,arSet1,fdim-1,zerodivide);
-        if(temp1-ha_cofvar[offset+l2].value>0.000000001||temp1-ha_cofvar[offset+l2].value<-0.000000001)ha_cofvar[offset+l2].value=ha_cofvar[offset+l2].substep_base+2*(temp1-ha_cofvar[offset+l2].value);
-        ha_cofvar[offset+l2].substep_base=temp2;
+        temp2=elem_vals[offset+l2].value;
+        temp1=formula_eval(elem_vals,sets,set_elems,sum_vals,ops1,nops,arSet1,fdim-1,zerodivide);
+        if(temp1-elem_vals[offset+l2].value>0.000000001||temp1-elem_vals[offset+l2].value<-0.000000001)elem_vals[offset+l2].value=elem_vals[offset+l2].substep_base+2*(temp1-elem_vals[offset+l2].value);
+        elem_vals[offset+l2].substep_base=temp2;
       }else{
-        ha_cofvar[offset+l2].substep_base=ha_cofvar[offset+l2].value;
-        temp1=formula_eval(ha_cofvar,ha_set,ha_setele,ha_sumele,ha_calvar1,ha_calvarsize,arSet1,fdim-1,zerodivide);
-        if(temp1-ha_cofvar[offset+l2].value>0.000000001||temp1-ha_cofvar[offset+l2].value<-0.000000001)ha_cofvar[offset+l2].value=temp1;
+        elem_vals[offset+l2].substep_base=elem_vals[offset+l2].value;
+        temp1=formula_eval(elem_vals,sets,set_elems,sum_vals,ops1,nops,arSet1,fdim-1,zerodivide);
+        if(temp1-elem_vals[offset+l2].value>0.000000001||temp1-elem_vals[offset+l2].value<-0.000000001)elem_vals[offset+l2].value=temp1;
       }
     }
         if(omp_get_thread_num()!=0){
           free(arSet1);
           arSet1=NULL;
-          free(ha_calvar1);
-          ha_calvar1=NULL;
+          free(ops1);
+          ops1=NULL;
         }else{
-          ha_calvar1=NULL;
+          ops1=NULL;
           arSet1=NULL;
         }
         }
     free(sum_cof);
-    free(ha_sumele);
+    free(sum_vals);
     free(arSet);
-    free(ha_calvar);
+    free(ops);
 
-        if(ha_cof[index].gltype>0){
-        #pragma omp parallel private(l) shared(ha_cofvar,ha_cof,ncof,offset,index)
+        if(coefs[index].gltype>0){
+        #pragma omp parallel private(l) shared(elem_vals,coefs,ncof,offset,index)
         {
-          if(ha_cof[index].gltype==BT_GE){
+          if(coefs[index].gltype==BT_GE){
           #pragma omp for
           for (l=0; l<varsize; l++) {
-            if(ha_cofvar[offset+l].value<ha_cof[index].glval){
-              printf("Error!!! Condition not met var %s type 1!\n",ha_cof[index].cofname);
+            if(elem_vals[offset+l].value<coefs[index].glval){
+              printf("Error!!! Condition not met var %s type 1!\n",coefs[index].cofname);
               l=varsize;
             }
           }
           }
-          if(ha_cof[index].gltype==BT_GT){
+          if(coefs[index].gltype==BT_GT){
           #pragma omp for
           for (l=0; l<varsize; l++) {
-            if(ha_cofvar[offset+l].value<=ha_cof[index].glval){
-              printf("Error!!! Condition not met var %s type 2!\n",ha_cof[index].cofname);
+            if(elem_vals[offset+l].value<=coefs[index].glval){
+              printf("Error!!! Condition not met var %s type 2!\n",coefs[index].cofname);
               l=varsize;
             }
           }
           }
-          if(ha_cof[index].gltype==BT_LE){
+          if(coefs[index].gltype==BT_LE){
           #pragma omp for
           for (l=0; l<varsize; l++) {
-            if(ha_cofvar[offset+l].value>ha_cof[index].glval){
-              printf("Error!!! Condition not met var %s type 3!\n",ha_cof[index].cofname);
+            if(elem_vals[offset+l].value>coefs[index].glval){
+              printf("Error!!! Condition not met var %s type 3!\n",coefs[index].cofname);
               l=varsize;
             }
           }
           }
-          if(ha_cof[index].gltype==BT_LT){
+          if(coefs[index].gltype==BT_LT){
           #pragma omp for
           for (l=0; l<varsize; l++) {
-            if(ha_cofvar[offset+l].value>=ha_cof[index].glval){
-              printf("Error!!! Condition not met var %s type 4!\n",ha_cof[index].cofname);
+            if(elem_vals[offset+l].value>=coefs[index].glval){
+              printf("Error!!! Condition not met var %s type 4!\n",coefs[index].cofname);
               l=varsize;
             }
           }
@@ -2154,22 +2154,22 @@ offset_t updates_apply(char *fname,set_def *ha_set,dim_t nset, set_element *ha_s
 
 
 
-offset_t updates_apply_product(char *fname,set_def *ha_set,dim_t nset, set_element *ha_setele, array_def *ha_cof,offset_t ncof,array_def *ha_var,offset_t nvar, elem_value *ha_cofvar,offset_t ncofvar,offset_t ncofele) {
+offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element *set_elems, array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar, elem_value *elem_vals,offset_t ncofvar,offset_t ncofele) {
   FILE * filehandle;
   char commsyntax[NAMESIZE],line[TABREADLINE],line1[TABREADLINE],line2[TABREADLINE],linecopy[TABREADLINE];
   char vname[NAMESIZE],sumsyntax[NAMESIZE],argu[NAMESIZE];
   char *readitem=NULL,*p=NULL;
   offset_t i,i1,i3,i4,l,l2=0,j=0,nsumele,dcountdim1[4*MAXVARDIM],nloops;//m,
   dim_t fdim,dcount,sup,varsupsetid[MAXVARDIM];
-  int ha_calvarsize=0,totalsum,sumcount=1,npow,nmul,ndiv,nplu,nmin,npar,sumindx;
+  int nops=0,totalsum,sumcount=1,npow,nmul,ndiv,nplu,nmin,npar,sumindx;
   bool IsChange=false,IsExplicit=false;
   solve_real zerodivide=0,temp1;
   offset_t varantidim[MAXVARDIM],varsubset[MAXVARDIM],vararset[MAXVARDIM];
   quantifier *arSet1=NULL;
-  formula_op *ha_calvar1= NULL;
+  formula_op *ops1= NULL;
   strcpy(commsyntax,"update");
   filehandle = fopen(fname,"r");
-  while (tab_next_statement_resolved(commsyntax,filehandle,line,ha_cofvar,ha_cof,ncof,&zerodivide,TABREADLINE)) {
+  while (tab_next_statement_resolved(commsyntax,filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
     IsChange=false;
     IsExplicit=false;
     if(strstr(line, "(change)")!=NULL) {
@@ -2207,16 +2207,16 @@ offset_t updates_apply_product(char *fname,set_def *ha_set,dim_t nset, set_eleme
         readitem = strtok(NULL,",");
         strcpy(arSet[i].index_name,readitem);
         readitem = strtok(NULL,")");
-        for (i4=0; i4<nset; i4++) if(strcmp(readitem,ha_set[i4].setname)==0) {
+        for (i4=0; i4<nset; i4++) if(strcmp(readitem,sets[i4].setname)==0) {
             arSet[i].setid=i4;
             break;
           }
-        nloops=nloops*ha_set[arSet[i].setid].size;
+        nloops=nloops*sets[arSet[i].setid].size;
       }
       readitem = strtok(NULL,"=");
       dcountdim1[fdim-2]=1;
       for (i=fdim-3; i>-1; i--) {
-        dcountdim1[i]=ha_set[arSet[i+1].setid].size*dcountdim1[i+1];
+        dcountdim1[i]=sets[arSet[i+1].setid].size*dcountdim1[i+1];
       }
     }
     strcpy(vname,readitem);
@@ -2256,7 +2256,7 @@ offset_t updates_apply_product(char *fname,set_def *ha_set,dim_t nset, set_eleme
     strcpy(line1,readitem);
     strcpy(line2,line1);
     readitem=line2;
-    while (sum_parse(readitem,sumsyntax,sum_cof,arSet,ha_set,nset,fdim,sumcount)==1) {
+    while (sum_parse(readitem,sumsyntax,sum_cof,arSet,sets,nset,fdim,sumcount)==1) {
       sumcount++;
     }
     totalsum=sumcount;
@@ -2264,7 +2264,7 @@ offset_t updates_apply_product(char *fname,set_def *ha_set,dim_t nset, set_eleme
     for (i=0; i<totalsum; i++) {
       i1=1;
       for(j=0; j<sum_cof[i].size; j++) {
-        i1=i1*ha_set[sum_cof[i].setid[j]].size;
+        i1=i1*sets[sum_cof[i].setid[j]].size;
       }
       sum_cof[i].offset=i3;
       i3=i3+i1;
@@ -2274,16 +2274,16 @@ offset_t updates_apply_product(char *fname,set_def *ha_set,dim_t nset, set_eleme
       i1=1;
       sum_cof[i].strides[sum_cof[i].size-1]=1;
       for(j=sum_cof[i].size-2; j>-1; j--) {
-        sum_cof[i].strides[j]=sum_cof[i].strides[j+1]*ha_set[sum_cof[i].setid[j+1]].size;
+        sum_cof[i].strides[j]=sum_cof[i].strides[j+1]*sets[sum_cof[i].setid[j+1]].size;
       }
     }
-    formula_op *ha_calvar= (formula_op *) calloc (npow+nmul+nplu+2*npar+2,sizeof(formula_op));
-    sum_value *ha_sumele= (sum_value *) calloc (nsumele,sizeof(sum_value));
+    formula_op *ops= (formula_op *) calloc (npow+nmul+nplu+2*npar+2,sizeof(formula_op));
+    sum_value *sum_vals= (sum_value *) calloc (nsumele,sizeof(sum_value));
     sumcount=0;
     strcpy(line2,line1);
     readitem=line2;
     sumindx=0;
-    while (sum_eval(readitem,sumsyntax,ha_set,nset,ha_setele,ha_cofvar,ncofvar,ncofele,ha_cof,ncof,ha_var,nvar,sum_cof,totalsum,ha_sumele,nsumele,ha_calvar,arSet,fdim,&sumindx,sumcount,zerodivide)==1) {
+    while (sum_eval(readitem,sumsyntax,sets,nset,set_elems,elem_vals,ncofvar,ncofele,coefs,ncof,vars,nvar,sum_cof,totalsum,sum_vals,nsumele,ops,arSet,fdim,&sumindx,sumcount,zerodivide)==1) {
       sumcount++;
     }
     strcpy(line1,readitem);
@@ -2292,10 +2292,10 @@ offset_t updates_apply_product(char *fname,set_def *ha_set,dim_t nset, set_eleme
         offset_t varsize=0;
         p=strtok(vname,"(");
         do {
-          if (strcmp(ha_cof[index].cofname,p)==0) {
-            offset=ha_cof[index].offset;
-            varsize=ha_cof[index].size;
-            if(ha_cof[index].size>0){strcpy(argu,strtok(NULL,")"));strcat(argu,",");}
+          if (strcmp(coefs[index].cofname,p)==0) {
+            offset=coefs[index].offset;
+            varsize=coefs[index].size;
+            if(coefs[index].size>0){strcpy(argu,strtok(NULL,")"));strcat(argu,",");}
             check10=false;
             break;
           }
@@ -2303,54 +2303,54 @@ offset_t updates_apply_product(char *fname,set_def *ha_set,dim_t nset, set_eleme
         if (check10) {
           index=nvar-1;
           do {
-            if (strcmp(ha_var[index].cofname,p)==0) {
-              offset=ncofele+ha_var[index].offset;
-              varsize=ha_var[index].size;
-              if(ha_var[index].size>0){strcpy(argu,strtok(NULL,")"));strcat(argu,",");}
+            if (strcmp(vars[index].cofname,p)==0) {
+              offset=ncofele+vars[index].offset;
+              varsize=vars[index].size;
+              if(vars[index].size>0){strcpy(argu,strtok(NULL,")"));strcat(argu,",");}
               break;
             }
           } while (index--);
         }
         for (l=0; l<MAXVARDIM; l++){varantidim[l]=0;varsubset[l]=0;varsupsetid[l]=0;}
         if (check10) {
-            for (dcount=0; dcount<ha_var[index].size; dcount++) {
+            for (dcount=0; dcount<vars[index].size; dcount++) {
               if(dcount==0)p=strtok(argu,",");
               else p=strtok(NULL,",");
               for (l=0; l<fdim-1; l++) if (strcmp(arSet[l].index_name,p)==0) {
-                  varantidim[dcount]=ha_var[index].strides[dcount];
+                  varantidim[dcount]=vars[index].strides[dcount];
                   vararset[dcount]=l+1;
-                  if (ha_set[arSet[l].setid].size!=ha_set[ha_var[index].setid[dcount]].size){
+                  if (sets[arSet[l].setid].size!=sets[vars[index].setid[dcount]].size){
                     varsubset[dcount]=1;
-                    for(sup=1;sup<MAXSUPSET;sup++)if(ha_set[arSet[l].setid].subsetid[sup]==ha_var[index].setid[dcount]){varsupsetid[dcount]=sup;break;}
+                    for(sup=1;sup<MAXSUPSET;sup++)if(sets[arSet[l].setid].subsetid[sup]==vars[index].setid[dcount]){varsupsetid[dcount]=sup;break;}
                   }
                   break;
                 }
             }
         } else {
-            for (dcount=0; dcount<ha_cof[index].size; dcount++) {
+            for (dcount=0; dcount<coefs[index].size; dcount++) {
               if(dcount==0)p=strtok(argu,",");
               else p=strtok(NULL,",");
               for (l=0; l<fdim-1; l++) if (strcmp(arSet[l].index_name,p)==0) {
-                  varantidim[dcount]=ha_cof[index].strides[dcount];
+                  varantidim[dcount]=coefs[index].strides[dcount];
                   vararset[dcount]=l+1;
-                  if (ha_set[arSet[l].setid].size!=ha_set[ha_cof[index].setid[dcount]].size){
+                  if (sets[arSet[l].setid].size!=sets[coefs[index].setid[dcount]].size){
                     varsubset[dcount]=1;
-                    for(sup=1;sup<MAXSUPSET;sup++)if(ha_set[arSet[l].setid].subsetid[sup]==ha_cof[index].setid[dcount]){varsupsetid[dcount]=sup;break;}
+                    for(sup=1;sup<MAXSUPSET;sup++)if(sets[arSet[l].setid].subsetid[sup]==coefs[index].setid[dcount]){varsupsetid[dcount]=sup;break;}
                   }
                   break;
                 }
             }
         }
-    formula_compile(line1,ha_set,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,&ha_calvarsize,arSet,fdim-1);
-        #pragma omp parallel private(l,l2,i4,dcount,i3,i1,temp1,arSet1,ha_calvar1) shared(ha_cofvar,arSet)
+    formula_compile(line1,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,&nops,arSet,fdim-1);
+        #pragma omp parallel private(l,l2,i4,dcount,i3,i1,temp1,arSet1,ops1) shared(elem_vals,arSet)
         {
         if(omp_get_thread_num()!=0){
           arSet1=realloc(arSet1,(fdim+1)*sizeof(quantifier));
           memcpy (arSet1,arSet,(fdim+1)*sizeof(quantifier));
-          ha_calvar1=realloc(ha_calvar1,ha_calvarsize*sizeof(formula_op));
-          memcpy (ha_calvar1,ha_calvar,ha_calvarsize*sizeof(formula_op));
+          ops1=realloc(ops1,nops*sizeof(formula_op));
+          memcpy (ops1,ops,nops*sizeof(formula_op));
         }else{
-          ha_calvar1=ha_calvar;
+          ops1=ops;
           arSet1=arSet;
         }
         #pragma omp for
@@ -2365,7 +2365,7 @@ offset_t updates_apply_product(char *fname,set_def *ha_set,dim_t nset, set_eleme
                 for(i1=0; i1<varsize; i1++) {
                   if(vararset[i1]-1==dcount) {
                     if(varsubset[i1]==1) {
-                      l2=l2+ha_setele[ha_set[arSet1[dcount].setid].offset+i3].superset_pos[varsupsetid[i1]]*varantidim[i1];
+                      l2=l2+set_elems[sets[arSet1[dcount].setid].offset+i3].superset_pos[varsupsetid[i1]]*varantidim[i1];
                     } else {
                       l2=l2+i3*varantidim[i1];
                     }
@@ -2376,7 +2376,7 @@ offset_t updates_apply_product(char *fname,set_def *ha_set,dim_t nset, set_eleme
                 for(i1=0; i1<varsize; i1++) {
                   if(vararset[i1]-1==dcount) {
                     if(varsubset[i1]==1) {
-                      l2=l2+ha_setele[ha_set[arSet1[dcount].setid].offset+i3].superset_pos[varsupsetid[i1]]*varantidim[i1];
+                      l2=l2+set_elems[sets[arSet1[dcount].setid].offset+i3].superset_pos[varsupsetid[i1]]*varantidim[i1];
                     } else {
                       l2=l2+i3*varantidim[i1];
                     }
@@ -2384,59 +2384,59 @@ offset_t updates_apply_product(char *fname,set_def *ha_set,dim_t nset, set_eleme
                 }
               }
             }
-      temp1=formula_eval(ha_cofvar,ha_set,ha_setele,ha_sumele,ha_calvar1,ha_calvarsize,arSet1,fdim-1,zerodivide);
-      if(temp1-ha_cofvar[offset+l2].value>0.000000001||temp1-ha_cofvar[offset+l2].value<-0.000000001)ha_cofvar[offset+l2].value=temp1;
+      temp1=formula_eval(elem_vals,sets,set_elems,sum_vals,ops1,nops,arSet1,fdim-1,zerodivide);
+      if(temp1-elem_vals[offset+l2].value>0.000000001||temp1-elem_vals[offset+l2].value<-0.000000001)elem_vals[offset+l2].value=temp1;
     }
         if(omp_get_thread_num()!=0){
           free(arSet1);
           arSet1=NULL;
-          free(ha_calvar1);
-          ha_calvar1=NULL;
+          free(ops1);
+          ops1=NULL;
         }else{
-          ha_calvar1=NULL;
+          ops1=NULL;
           arSet1=NULL;
         }
         }
     free(sum_cof);
-    free(ha_sumele);
+    free(sum_vals);
     free(arSet);
-    free(ha_calvar);
+    free(ops);
 
-        if(ha_cof[index].gltype>0){
-        #pragma omp parallel private(l) shared(ha_cofvar,ha_cof,ncof,offset,index)
+        if(coefs[index].gltype>0){
+        #pragma omp parallel private(l) shared(elem_vals,coefs,ncof,offset,index)
         {
-          if(ha_cof[index].gltype==BT_GE){
+          if(coefs[index].gltype==BT_GE){
           #pragma omp for
           for (l=0; l<varsize; l++) {
-            if(ha_cofvar[offset+l].value<ha_cof[index].glval){
-              printf("Error!!! Condition not met var %s type 1!\n",ha_cof[index].cofname);
+            if(elem_vals[offset+l].value<coefs[index].glval){
+              printf("Error!!! Condition not met var %s type 1!\n",coefs[index].cofname);
               l=varsize;
             }
           }
           }
-          if(ha_cof[index].gltype==BT_GT){
+          if(coefs[index].gltype==BT_GT){
           #pragma omp for
           for (l=0; l<varsize; l++) {
-            if(ha_cofvar[offset+l].value<=ha_cof[index].glval){
-              printf("Error!!! Condition not met var %s type 2!\n",ha_cof[index].cofname);
+            if(elem_vals[offset+l].value<=coefs[index].glval){
+              printf("Error!!! Condition not met var %s type 2!\n",coefs[index].cofname);
               l=varsize;
             }
           }
           }
-          if(ha_cof[index].gltype==BT_LE){
+          if(coefs[index].gltype==BT_LE){
           #pragma omp for
           for (l=0; l<varsize; l++) {
-            if(ha_cofvar[offset+l].value>ha_cof[index].glval){
-              printf("Error!!! Condition not met var %s type 3!\n",ha_cof[index].cofname);
+            if(elem_vals[offset+l].value>coefs[index].glval){
+              printf("Error!!! Condition not met var %s type 3!\n",coefs[index].cofname);
               l=varsize;
             }
           }
           }
-          if(ha_cof[index].gltype==BT_LT){
+          if(coefs[index].gltype==BT_LT){
           #pragma omp for
           for (l=0; l<varsize; l++) {
-            if(ha_cofvar[offset+l].value>=ha_cof[index].glval){
-              printf("Error!!! Condition not met var %s type 4!\n",ha_cof[index].cofname);
+            if(elem_vals[offset+l].value>=coefs[index].glval){
+              printf("Error!!! Condition not met var %s type 4!\n",coefs[index].cofname);
               l=varsize;
             }
           }
@@ -2449,15 +2449,15 @@ offset_t updates_apply_product(char *fname,set_def *ha_set,dim_t nset, set_eleme
   return j;
 }
 
-int sum_eval(char *formulain, char *commsyntax,set_def *ha_set,dim_t nset, set_element *ha_setele,elem_value *ha_cofvar,offset_t ncofvar,offset_t ncofele, array_def *ha_cof,offset_t ncof, array_def *ha_var,offset_t nvar,sum_def *sum_cof,int totalsum,sum_value *ha_sumele,offset_t nsumele,formula_op *ha_calvar,quantifier *arSet1,dim_t fdim,int *sumindx,int j, solve_real zerodivide) {
+int sum_eval(char *formulain, char *commsyntax,set_def *sets,dim_t nset, set_element *set_elems,elem_value *elem_vals,offset_t ncofvar,offset_t ncofele, array_def *coefs,offset_t ncof, array_def *vars,offset_t nvar,sum_def *sum_cof,int totalsum,sum_value *sum_vals,offset_t nsumele,formula_op *ops,quantifier *arSet1,dim_t fdim,int *sumindx,int j, solve_real zerodivide) {
   char *readitem,*p;//,*p1,interchar2[NAMESIZE],line5[TABREADLINE];
   char interchar[NAMESIZE],line[TABREADLINE],line1[TABREADLINE],line2[TABREADLINE];//,line3[TABREADLINE],line4[TABREADLINE];//,interchar1[NAMESIZE]
-  int ha_calvarsize,length,k=0,k1=0,i=0;
+  int nops,length,k=0,k1=0,i=0;
   dim_t fdimsumcof,superset_pos,dcount;
   offset_t l,l1,l2,nloops,dcountdim1[4*MAXVARDIM];
   solve_real vval;
   quantifier *arSet2=NULL;
-  formula_op *ha_calvar1= NULL;
+  formula_op *ops1= NULL;
   offset_t arsetsize;
   length=strlen(formulain);
   readitem=formulain;
@@ -2489,28 +2489,28 @@ int sum_eval(char *formulain, char *commsyntax,set_def *ha_set,dim_t nset, set_e
         }
         nloops=1;
         for (l=0; l<sum_cof[j].size; l++) {
-          nloops=nloops*ha_set[arSet[l].setid].size;
+          nloops=nloops*sets[arSet[l].setid].size;
           dcount=sum_cof[j].size-l;
           if(dcount==sum_cof[j].size) {
             dcountdim1[dcount-1]=1;
           } else {
-            dcountdim1[dcount-1]=dcountdim1[dcount]*ha_set[arSet[dcount].setid].size;
+            dcountdim1[dcount-1]=dcountdim1[dcount]*sets[arSet[dcount].setid].size;
           }
         }
         arSet[sum_cof[j].size].setid=sum_cof[j].sumsetid;
         strcpy(arSet[sum_cof[j].size].index_name,sum_cof[j].sumindx);
         fdimsumcof=sum_cof[j].size+1;
-        ha_calvarsize=0;
-        formula_compile(p,ha_set,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,&ha_calvarsize,arSet,fdimsumcof);
-        #pragma omp parallel private(l,l1,l2,dcount,superset_pos,vval,arSet2,ha_calvar1) shared(ha_cofvar,arSet,ha_sumele)
+        nops=0;
+        formula_compile(p,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,&nops,arSet,fdimsumcof);
+        #pragma omp parallel private(l,l1,l2,dcount,superset_pos,vval,arSet2,ops1) shared(elem_vals,arSet,sum_vals)
         {
         if(omp_get_thread_num()!=0){
           arSet2=realloc(arSet2,arsetsize*sizeof(quantifier));
           memcpy(arSet2,arSet,arsetsize*sizeof(quantifier));
-          ha_calvar1=realloc(ha_calvar1,ha_calvarsize*sizeof(formula_op));
-          memcpy(ha_calvar1,ha_calvar,ha_calvarsize*sizeof(formula_op));
+          ops1=realloc(ops1,nops*sizeof(formula_op));
+          memcpy(ops1,ops,nops*sizeof(formula_op));
         }else{
-          ha_calvar1=ha_calvar;
+          ops1=ops;
           arSet2=arSet;
         }
         #pragma omp for
@@ -2522,19 +2522,19 @@ int sum_eval(char *formulain, char *commsyntax,set_def *ha_set,dim_t nset, set_e
             l2=l2-superset_pos*dcountdim1[dcount];
           }
           vval=0;
-          for (l1=0; l1<ha_set[sum_cof[j].sumsetid].size; l1++) {
+          for (l1=0; l1<sets[sum_cof[j].sumsetid].size; l1++) {
             arSet2[sum_cof[j].size].indx=l1;
-            vval+=formula_eval(ha_cofvar,ha_set,ha_setele,ha_sumele,ha_calvar1,ha_calvarsize,arSet2,fdimsumcof,zerodivide);
+            vval+=formula_eval(elem_vals,sets,set_elems,sum_vals,ops1,nops,arSet2,fdimsumcof,zerodivide);
           }
-          ha_sumele[*sumindx+l].value=vval;
+          sum_vals[*sumindx+l].value=vval;
         }
         if(omp_get_thread_num()!=0){
           free(arSet2);
           arSet2=NULL;
-          free(ha_calvar1);
-          ha_calvar1=NULL;
+          free(ops1);
+          ops1=NULL;
         }else{
-          ha_calvar1=NULL;
+          ops1=NULL;
           arSet2=NULL;
         }
         }
@@ -2580,28 +2580,28 @@ int sum_eval(char *formulain, char *commsyntax,set_def *ha_set,dim_t nset, set_e
         }
         nloops=1;
         for (l=0; l<sum_cof[j].size; l++) {
-          nloops=nloops*ha_set[arSet[l].setid].size;//sum_cof[j].dims[l];
+          nloops=nloops*sets[arSet[l].setid].size;//sum_cof[j].dims[l];
           dcount=sum_cof[j].size-l;
           if(dcount==sum_cof[j].size) {
             dcountdim1[dcount-1]=1;
           } else {
-            dcountdim1[dcount-1]=dcountdim1[dcount]*ha_set[arSet[dcount].setid].size;
+            dcountdim1[dcount-1]=dcountdim1[dcount]*sets[arSet[dcount].setid].size;
           }
         }
         arSet[sum_cof[j].size].setid=sum_cof[j].sumsetid;
         strcpy(arSet[sum_cof[j].size].index_name,sum_cof[j].sumindx);
         fdimsumcof=sum_cof[j].size+1;
-        ha_calvarsize=0;
-        formula_compile(p,ha_set,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,&ha_calvarsize,arSet,fdimsumcof);
-        #pragma omp parallel private(l,l1,l2,dcount,superset_pos,vval,arSet2,ha_calvar1) shared(ha_cofvar,arSet,ha_sumele)
+        nops=0;
+        formula_compile(p,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,&nops,arSet,fdimsumcof);
+        #pragma omp parallel private(l,l1,l2,dcount,superset_pos,vval,arSet2,ops1) shared(elem_vals,arSet,sum_vals)
         {
         if(omp_get_thread_num()!=0){
           arSet2=realloc(arSet2,arsetsize*sizeof(quantifier));
           memcpy(arSet2,arSet,arsetsize*sizeof(quantifier));
-          ha_calvar1=realloc(ha_calvar1,ha_calvarsize*sizeof(formula_op));
-          memcpy(ha_calvar1,ha_calvar,ha_calvarsize*sizeof(formula_op));
+          ops1=realloc(ops1,nops*sizeof(formula_op));
+          memcpy(ops1,ops,nops*sizeof(formula_op));
         }else{
-          ha_calvar1=ha_calvar;
+          ops1=ops;
           arSet2=arSet;
         }
         #pragma omp for
@@ -2613,19 +2613,19 @@ int sum_eval(char *formulain, char *commsyntax,set_def *ha_set,dim_t nset, set_e
             l2=l2-superset_pos*dcountdim1[dcount];
           }
           vval=0;
-          for (l1=0; l1<ha_set[sum_cof[j].sumsetid].size; l1++) {
+          for (l1=0; l1<sets[sum_cof[j].sumsetid].size; l1++) {
             arSet2[sum_cof[j].size].indx=l1;
-            vval+=formula_eval(ha_cofvar,ha_set,ha_setele,ha_sumele,ha_calvar1,ha_calvarsize,arSet2,fdimsumcof,zerodivide);
+            vval+=formula_eval(elem_vals,sets,set_elems,sum_vals,ops1,nops,arSet2,fdimsumcof,zerodivide);
           }
-          ha_sumele[*sumindx+l].value=vval;//ha_sumele[*sumindx+l2].varval=vval;
+          sum_vals[*sumindx+l].value=vval;//ha_sumele[*sumindx+l2].varval=vval;
         }
         if(omp_get_thread_num()!=0){
           free(arSet2);
           arSet2=NULL;
-          free(ha_calvar1);
-          ha_calvar1=NULL;
+          free(ops1);
+          ops1=NULL;
         }else{
-          ha_calvar1=NULL;
+          ops1=NULL;
           arSet2=NULL;
         }
         }
@@ -2657,7 +2657,7 @@ int sum_eval(char *formulain, char *commsyntax,set_def *ha_set,dim_t nset, set_e
   return 0;
 }
 
-offset_t subinterval_update(PetscInt rank,char *fname,set_def *ha_set,dim_t nset, set_element *ha_setele, array_def *ha_cof,offset_t ncof,array_def *ha_var,offset_t nvar, elem_value *ha_cofvar,offset_t ncofvar,offset_t ncofele,closure_entry *ha_cgeshock,offset_t nvarele,int laA,dim_t subints,bool IsIni,int IsSplint,int nsteps) {
+offset_t subinterval_update(PetscInt rank,char *fname,set_def *sets,dim_t nset, set_element *set_elems, array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar, elem_value *elem_vals,offset_t ncofvar,offset_t ncofele,closure_entry *closure_vals,offset_t nvarele,int laA,dim_t subints,bool IsIni,int IsSplint,int nsteps) {
   FILE * filehandle,*fout;
   char commsyntax[NAMESIZE],line[TABREADLINE],line1[TABREADLINE],line2[TABREADLINE],linecopy[TABREADLINE];
   char vname[NAMESIZE],sumsyntax[NAMESIZE],argu[NAMESIZE];
@@ -2680,7 +2680,7 @@ offset_t subinterval_update(PetscInt rank,char *fname,set_def *ha_set,dim_t nset
   offset_t mwantidim[MAXVARDIM],mwsubset[MAXVARDIM],mwarset[MAXVARDIM],mwsupsetid[MAXVARDIM];
   size_t freadresult;
   quantifier *arSet1=NULL;
-  formula_op *ha_calvar1= NULL;
+  formula_op *ops1= NULL;
   strcpy(commsyntax,"splinter");
       if(rank<10)strcpy(j1name,"000");
       if(rank<100&&rank>9)strcpy(j1name,"00");
@@ -2692,7 +2692,7 @@ offset_t subinterval_update(PetscInt rank,char *fname,set_def *ha_set,dim_t nset
       strcat(filename,j1name);
       strcat(filename,".bin");
   filehandle = fopen(fname,"r");
-  while (tab_next_statement_resolved(commsyntax,filehandle,line,ha_cofvar,ha_cof,ncof,&zerodivide,TABREADLINE)) {
+  while (tab_next_statement_resolved(commsyntax,filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
     IsChange=false;
     if(strstr(line, "(change)")!=NULL) {
       IsChange=true;
@@ -2727,17 +2727,17 @@ offset_t subinterval_update(PetscInt rank,char *fname,set_def *ha_set,dim_t nset
         readitem = strtok(NULL,",");
         strcpy(arSet[i].index_name,readitem);
         readitem = strtok(NULL,")");
-        for (i4=0; i4<nset; i4++) if(strcmp(readitem,ha_set[i4].setname)==0) {
+        for (i4=0; i4<nset; i4++) if(strcmp(readitem,sets[i4].setname)==0) {
             arSet[i].setid=i4;
             break;
           }
-        if(i<fdim-3)nloops=nloops*ha_set[arSet[i].setid].size;
-        if(i>=fdim-3)nloops1=nloops1*ha_set[arSet[i].setid].size;
+        if(i<fdim-3)nloops=nloops*sets[arSet[i].setid].size;
+        if(i>=fdim-3)nloops1=nloops1*sets[arSet[i].setid].size;
       }
       readitem = strtok(NULL,"=");
       dcountdim1[fdim-4]=1;
       for (i=fdim-5; i>-1; i--) {
-        dcountdim1[i]=ha_set[arSet[i+1].setid].size*dcountdim1[i+1];
+        dcountdim1[i]=sets[arSet[i+1].setid].size*dcountdim1[i+1];
       }
     }
     printf("nloop %ld nloop1 %ld\n",nloops,nloops1);
@@ -2745,22 +2745,22 @@ offset_t subinterval_update(PetscInt rank,char *fname,set_def *ha_set,dim_t nset
         index=ncof-1;
         p=strtok(vname,"(");
         do {
-          if (strcmp(ha_cof[index].cofname,p)==0) {
+          if (strcmp(coefs[index].cofname,p)==0) {
             vvar=index;
-            if(ha_cof[index].size>0){strcpy(argu,strtok(NULL,")"));strcat(argu,",");}
+            if(coefs[index].size>0){strcpy(argu,strtok(NULL,")"));strcat(argu,",");}
             break;
           }
         } while (index--);
         for (l=0; l<MAXVARDIM; l++){varantidim[l]=0;varsubset[l]=0;varsupsetid[l]=0;}
-            for (dcount=0; dcount<ha_cof[index].size; dcount++) {
+            for (dcount=0; dcount<coefs[index].size; dcount++) {
               if(dcount==0)p=strtok(argu,",");
               else p=strtok(NULL,",");
               for (l=0; l<fdim-1; l++) if (strcmp(arSet[l].index_name,p)==0) {
-                  varantidim[dcount]=ha_cof[index].strides[dcount];
+                  varantidim[dcount]=coefs[index].strides[dcount];
                   vararset[dcount]=l+1;
-                  if (ha_set[arSet[l].setid].size!=ha_set[ha_cof[index].setid[dcount]].size){
+                  if (sets[arSet[l].setid].size!=sets[coefs[index].setid[dcount]].size){
                     varsubset[dcount]=1;
-                    for(sup=1;sup<MAXSUPSET;sup++)if(ha_set[arSet[l].setid].subsetid[sup]==ha_cof[index].setid[dcount]){varsupsetid[dcount]=sup;break;}
+                    for(sup=1;sup<MAXSUPSET;sup++)if(sets[arSet[l].setid].subsetid[sup]==coefs[index].setid[dcount]){varsupsetid[dcount]=sup;break;}
                   }
                   break;
                 }
@@ -2780,22 +2780,22 @@ offset_t subinterval_update(PetscInt rank,char *fname,set_def *ha_set,dim_t nset
         index=ncof-1;
         p=strtok(vname,"(");
         do {
-          if (strcmp(ha_cof[index].cofname,p)==0) {
+          if (strcmp(coefs[index].cofname,p)==0) {
             xvar=index;
-            if(ha_cof[index].size>0){strcpy(argu,strtok(NULL,")"));strcat(argu,",");}
+            if(coefs[index].size>0){strcpy(argu,strtok(NULL,")"));strcat(argu,",");}
             break;
           }
         } while (index--);
         for (l=0; l<MAXVARDIM; l++){xantidim[l]=0;xsubset[l]=0;xsupsetid[l]=0;}
-            for (dcount=0; dcount<ha_cof[index].size; dcount++) {
+            for (dcount=0; dcount<coefs[index].size; dcount++) {
               if(dcount==0)p=strtok(argu,",");
               else p=strtok(NULL,",");
               for (l=0; l<fdim-1; l++) if (strcmp(arSet[l].index_name,p)==0) {
-                  xantidim[dcount]=ha_cof[index].strides[dcount];
+                  xantidim[dcount]=coefs[index].strides[dcount];
                   xarset[dcount]=l+1;
-                  if (ha_set[arSet[l].setid].size!=ha_set[ha_cof[index].setid[dcount]].size){
+                  if (sets[arSet[l].setid].size!=sets[coefs[index].setid[dcount]].size){
                     xsubset[dcount]=1;
-                    for(sup=1;sup<MAXSUPSET;sup++)if(ha_set[arSet[l].setid].subsetid[sup]==ha_cof[index].setid[dcount]){xsupsetid[dcount]=sup;break;}
+                    for(sup=1;sup<MAXSUPSET;sup++)if(sets[arSet[l].setid].subsetid[sup]==coefs[index].setid[dcount]){xsupsetid[dcount]=sup;break;}
                   }
                   break;
                 }
@@ -2808,22 +2808,22 @@ offset_t subinterval_update(PetscInt rank,char *fname,set_def *ha_set,dim_t nset
         index=ncof-1;
         p=strtok(vname,"(");
         do {
-          if (strcmp(ha_cof[index].cofname,p)==0) {
+          if (strcmp(coefs[index].cofname,p)==0) {
             yvar=index;
-            if(ha_cof[index].size>0){strcpy(argu,strtok(NULL,")"));strcat(argu,",");}
+            if(coefs[index].size>0){strcpy(argu,strtok(NULL,")"));strcat(argu,",");}
             break;
           }
         } while (index--);
         for (l=0; l<MAXVARDIM; l++){yantidim[l]=0;ysubset[l]=0;ysupsetid[l]=0;}
-            for (dcount=0; dcount<ha_cof[index].size; dcount++) {
+            for (dcount=0; dcount<coefs[index].size; dcount++) {
               if(dcount==0)p=strtok(argu,",");
               else p=strtok(NULL,",");
               for (l=0; l<fdim-1; l++) if (strcmp(arSet[l].index_name,p)==0) {
-                  yantidim[dcount]=ha_cof[index].strides[dcount];
+                  yantidim[dcount]=coefs[index].strides[dcount];
                   yarset[dcount]=l+1;
-                  if (ha_set[arSet[l].setid].size!=ha_set[ha_cof[index].setid[dcount]].size){
+                  if (sets[arSet[l].setid].size!=sets[coefs[index].setid[dcount]].size){
                     ysubset[dcount]=1;
-                    for(sup=1;sup<MAXSUPSET;sup++)if(ha_set[arSet[l].setid].subsetid[sup]==ha_cof[index].setid[dcount]){ysupsetid[dcount]=sup;break;}
+                    for(sup=1;sup<MAXSUPSET;sup++)if(sets[arSet[l].setid].subsetid[sup]==coefs[index].setid[dcount]){ysupsetid[dcount]=sup;break;}
                   }
                   break;
                 }
@@ -2838,33 +2838,33 @@ offset_t subinterval_update(PetscInt rank,char *fname,set_def *ha_set,dim_t nset
         index=ncof-1;
         p=strtok(vname,"(");
         do {
-          if (strcmp(ha_cof[index].cofname,p)==0) {
+          if (strcmp(coefs[index].cofname,p)==0) {
             jvar=index;
-            if(ha_cof[index].size>0){strcpy(argu,strtok(NULL,")"));strcat(argu,",");}
+            if(coefs[index].size>0){strcpy(argu,strtok(NULL,")"));strcat(argu,",");}
             break;
           }
         } while (index--);
         for (l=0; l<MAXVARDIM; l++){jantidim[l]=0;jsubset[l]=0;jsupsetid[l]=0;}
-            for (dcount=0; dcount<ha_cof[index].size; dcount++) {
+            for (dcount=0; dcount<coefs[index].size; dcount++) {
               if(dcount==0)p=strtok(argu,",");
               else p=strtok(NULL,",");
               for (l=0; l<fdim-1; l++) if (strcmp(arSet[l].index_name,p)==0) {
-                  jantidim[dcount]=ha_cof[index].strides[dcount];
+                  jantidim[dcount]=coefs[index].strides[dcount];
                   jarset[dcount]=l+1;
-                  if (ha_set[arSet[l].setid].size!=ha_set[ha_cof[index].setid[dcount]].size){
+                  if (sets[arSet[l].setid].size!=sets[coefs[index].setid[dcount]].size){
                     jsubset[dcount]=1;
-                    for(sup=1;sup<MAXSUPSET;sup++)if(ha_set[arSet[l].setid].subsetid[sup]==ha_cof[index].setid[dcount]){jsupsetid[dcount]=sup;break;}
+                    for(sup=1;sup<MAXSUPSET;sup++)if(sets[arSet[l].setid].subsetid[sup]==coefs[index].setid[dcount]){jsupsetid[dcount]=sup;break;}
                   }
                   break;
                 }
             }
-    if(ha_cof[vvar].size!=ha_cof[jvar].size){
-      printf("Syntax Error!!! %s and %s must have the same size\n",ha_cof[vvar].cofname,ha_cof[jvar].cofname);
+    if(coefs[vvar].size!=coefs[jvar].size){
+      printf("Syntax Error!!! %s and %s must have the same size\n",coefs[vvar].cofname,coefs[jvar].cofname);
       return 0;
     }
-    for(l=0;l<ha_cof[vvar].size;l++){
+    for(l=0;l<coefs[vvar].size;l++){
       if(vararset[l]!=jarset[l]){
-        printf("Syntax Error!!! %s and %s must have the same arguments\n",ha_cof[vvar].cofname,ha_cof[jvar].cofname);
+        printf("Syntax Error!!! %s and %s must have the same arguments\n",coefs[vvar].cofname,coefs[jvar].cofname);
         return 0;
       }
     }
@@ -2880,22 +2880,22 @@ offset_t subinterval_update(PetscInt rank,char *fname,set_def *ha_set,dim_t nset
         index=ncof-1;
         p=strtok(vname,"(");
         do {
-          if (strcmp(ha_cof[index].cofname,p)==0) {
+          if (strcmp(coefs[index].cofname,p)==0) {
             wvar=index;
-            if(ha_cof[index].size>0){strcpy(argu,strtok(NULL,")"));strcat(argu,",");}
+            if(coefs[index].size>0){strcpy(argu,strtok(NULL,")"));strcat(argu,",");}
             break;
           }
         } while (index--);
         for (l=0; l<MAXVARDIM; l++){wantidim[l]=0;wsubset[l]=0;wsupsetid[l]=0;}
-            for (dcount=0; dcount<ha_cof[index].size; dcount++) {
+            for (dcount=0; dcount<coefs[index].size; dcount++) {
               if(dcount==0)p=strtok(argu,",");
               else p=strtok(NULL,",");
               for (l=0; l<fdim-1; l++) if (strcmp(arSet[l].index_name,p)==0) {
-                  wantidim[dcount]=ha_cof[index].strides[dcount];
+                  wantidim[dcount]=coefs[index].strides[dcount];
                   warset[dcount]=l+1;
-                  if (ha_set[arSet[l].setid].size!=ha_set[ha_cof[index].setid[dcount]].size){
+                  if (sets[arSet[l].setid].size!=sets[coefs[index].setid[dcount]].size){
                     wsubset[dcount]=1;
-                    for(sup=1;sup<MAXSUPSET;sup++)if(ha_set[arSet[l].setid].subsetid[sup]==ha_cof[index].setid[dcount]){wsupsetid[dcount]=sup;break;}
+                    for(sup=1;sup<MAXSUPSET;sup++)if(sets[arSet[l].setid].subsetid[sup]==coefs[index].setid[dcount]){wsupsetid[dcount]=sup;break;}
                   }
                   break;
                 }
@@ -2913,35 +2913,35 @@ offset_t subinterval_update(PetscInt rank,char *fname,set_def *ha_set,dim_t nset
         index=nvar-1;
         p=strtok(vname,"(");
         do {
-          if (strcmp(ha_var[index].cofname,p)==0) {
+          if (strcmp(vars[index].cofname,p)==0) {
             svar=index;
-            if(ha_var[index].size>0){strcpy(argu,strtok(NULL,")"));strcat(argu,",");}
+            if(vars[index].size>0){strcpy(argu,strtok(NULL,")"));strcat(argu,",");}
             break;
           }
         } while (index--);
-        sbegadd=ncofele+ha_var[svar].offset;
+        sbegadd=ncofele+vars[svar].offset;
     printf("read %s\n",argu);
         for (l=0; l<MAXVARDIM; l++){santidim[l]=0;ssubset[l]=0;ssupsetid[l]=0;}
-            for (dcount=0; dcount<ha_var[index].size; dcount++) {
+            for (dcount=0; dcount<vars[index].size; dcount++) {
               if(dcount==0)p=strtok(argu,",");
               else p=strtok(NULL,",");
               for (l=0; l<fdim-1; l++) if (strcmp(arSet[l].index_name,p)==0) {
-                  santidim[dcount]=ha_var[index].strides[dcount];
+                  santidim[dcount]=vars[index].strides[dcount];
                   sarset[dcount]=l+1;
-                  if (ha_set[arSet[l].setid].size!=ha_set[ha_var[index].setid[dcount]].size){
+                  if (sets[arSet[l].setid].size!=sets[vars[index].setid[dcount]].size){
                     ssubset[dcount]=1;
-                    for(sup=1;sup<MAXSUPSET;sup++)if(ha_set[arSet[l].setid].subsetid[sup]==ha_var[index].setid[dcount]){ssupsetid[dcount]=sup;break;}
+                    for(sup=1;sup<MAXSUPSET;sup++)if(sets[arSet[l].setid].subsetid[sup]==vars[index].setid[dcount]){ssupsetid[dcount]=sup;break;}
                   }
                   break;
                 }
             }
-    if(ha_cof[vvar].size!=ha_cof[svar].size){
-      printf("Syntax Error!!! %s and %s must have the same size\n",ha_cof[vvar].cofname,ha_cof[svar].cofname);
+    if(coefs[vvar].size!=coefs[svar].size){
+      printf("Syntax Error!!! %s and %s must have the same size\n",coefs[vvar].cofname,coefs[svar].cofname);
       return 0;
     }
-    for(l=0;l<ha_cof[vvar].size;l++){
+    for(l=0;l<coefs[vvar].size;l++){
       if(vararset[l]!=sarset[l]){
-        printf("Syntax Error!!! %s and %s must have the same arguments\n",ha_cof[vvar].cofname,ha_cof[svar].cofname);
+        printf("Syntax Error!!! %s and %s must have the same arguments\n",coefs[vvar].cofname,coefs[svar].cofname);
         return 0;
       }
     }
@@ -2959,22 +2959,22 @@ offset_t subinterval_update(PetscInt rank,char *fname,set_def *ha_set,dim_t nset
         index=ncof-1;
         p=strtok(vname,"(");
         do {
-          if (strcmp(ha_cof[index].cofname,p)==0) {
+          if (strcmp(coefs[index].cofname,p)==0) {
             vlmu=index;
-            if(ha_cof[index].size>0){strcpy(argu,strtok(NULL,")"));strcat(argu,",");}
+            if(coefs[index].size>0){strcpy(argu,strtok(NULL,")"));strcat(argu,",");}
             break;
           }
         } while (index--);
         for (l=0; l<MAXVARDIM; l++){mvantidim[l]=0;mvsubset[l]=0;mvsupsetid[l]=0;}
-            for (dcount=0; dcount<ha_cof[index].size; dcount++) {
+            for (dcount=0; dcount<coefs[index].size; dcount++) {
               if(dcount==0)p=strtok(argu,",");
               else p=strtok(NULL,",");
               for (l=0; l<fdim-1; l++) if (strcmp(arSet[l].index_name,p)==0) {
-                  mvantidim[dcount]=ha_cof[index].strides[dcount];
+                  mvantidim[dcount]=coefs[index].strides[dcount];
                   mvarset[dcount]=l+1;
-                  if (ha_set[arSet[l].setid].size!=ha_set[ha_cof[index].setid[dcount]].size){
+                  if (sets[arSet[l].setid].size!=sets[coefs[index].setid[dcount]].size){
                     mvsubset[dcount]=1;
-                    for(sup=1;sup<MAXSUPSET;sup++)if(ha_set[arSet[l].setid].subsetid[sup]==ha_cof[index].setid[dcount]){mvsupsetid[dcount]=sup;break;}
+                    for(sup=1;sup<MAXSUPSET;sup++)if(sets[arSet[l].setid].subsetid[sup]==coefs[index].setid[dcount]){mvsupsetid[dcount]=sup;break;}
                   }
                   break;
                 }
@@ -2993,28 +2993,28 @@ offset_t subinterval_update(PetscInt rank,char *fname,set_def *ha_set,dim_t nset
         index=ncof-1;
         p=strtok(vname,"(");
         do {
-          if (strcmp(ha_cof[index].cofname,p)==0) {
+          if (strcmp(coefs[index].cofname,p)==0) {
             dlmu=index;
-            if(ha_cof[index].size>0){strcpy(argu,strtok(NULL,")"));strcat(argu,",");}
+            if(coefs[index].size>0){strcpy(argu,strtok(NULL,")"));strcat(argu,",");}
             break;
           }
         } while (index--);
         for (l=0; l<MAXVARDIM; l++){mdantidim[l]=0;mdsubset[l]=0;mdsupsetid[l]=0;}
-            for (dcount=0; dcount<ha_cof[index].size; dcount++) {
+            for (dcount=0; dcount<coefs[index].size; dcount++) {
               if(dcount==0)p=strtok(argu,",");
               else p=strtok(NULL,",");
               for (l=0; l<fdim-1; l++) if (strcmp(arSet[l].index_name,p)==0) {
-                  mdantidim[dcount]=ha_cof[index].strides[dcount];
+                  mdantidim[dcount]=coefs[index].strides[dcount];
                   mdarset[dcount]=l+1;
-                  if (ha_set[arSet[l].setid].size!=ha_set[ha_cof[index].setid[dcount]].size){
+                  if (sets[arSet[l].setid].size!=sets[coefs[index].setid[dcount]].size){
                     mdsubset[dcount]=1;
-                    for(sup=1;sup<MAXSUPSET;sup++)if(ha_set[arSet[l].setid].subsetid[sup]==ha_cof[index].setid[dcount]){mdsupsetid[dcount]=sup;break;}
+                    for(sup=1;sup<MAXSUPSET;sup++)if(sets[arSet[l].setid].subsetid[sup]==coefs[index].setid[dcount]){mdsupsetid[dcount]=sup;break;}
                   }
                   break;
                 }
             }
-        for(l=0;l<4;l++)printf("var2 %lf dmlu %ldbeg %ld\n",ha_cofvar[ha_cof[dlmu].offset+l].value,dlmu,ha_cof[dlmu].offset);
-        for(l=10;l<14;l++)printf("var2 %lf\n",ha_cofvar[ha_cof[dlmu].offset+l].value);
+        for(l=0;l<4;l++)printf("var2 %lf dmlu %ldbeg %ld\n",elem_vals[coefs[dlmu].offset+l].value,dlmu,coefs[dlmu].offset);
+        for(l=10;l<14;l++)printf("var2 %lf\n",elem_vals[coefs[dlmu].offset+l].value);
 
     ///wlmu
     strcpy(line,line1);
@@ -3030,31 +3030,31 @@ offset_t subinterval_update(PetscInt rank,char *fname,set_def *ha_set,dim_t nset
         index=ncof-1;
         p=strtok(vname,"(");
         do {
-          if (strcmp(ha_cof[index].cofname,p)==0) {
+          if (strcmp(coefs[index].cofname,p)==0) {
             wlmu=index;
-            if(ha_var[index].size>0){strcpy(argu,strtok(NULL,")"));strcat(argu,",");}
+            if(vars[index].size>0){strcpy(argu,strtok(NULL,")"));strcat(argu,",");}
             break;
           }
         } while (index--);
         for (l=0; l<MAXVARDIM; l++){mwantidim[l]=0;mwsubset[l]=0;mwsupsetid[l]=0;}
-            for (dcount=0; dcount<ha_cof[index].size; dcount++) {
+            for (dcount=0; dcount<coefs[index].size; dcount++) {
               if(dcount==0)p=strtok(argu,",");
               else p=strtok(NULL,",");
               for (l=0; l<fdim-1; l++) if (strcmp(arSet[l].index_name,p)==0) {
-                  mwantidim[dcount]=ha_cof[index].strides[dcount];
+                  mwantidim[dcount]=coefs[index].strides[dcount];
                   mwarset[dcount]=l+1;
-                  if (ha_set[arSet[l].setid].size!=ha_set[ha_cof[index].setid[dcount]].size){
+                  if (sets[arSet[l].setid].size!=sets[coefs[index].setid[dcount]].size){
                     mwsubset[dcount]=1;
-                    for(sup=1;sup<MAXSUPSET;sup++)if(ha_set[arSet[l].setid].subsetid[sup]==ha_cof[index].setid[dcount]){mwsupsetid[dcount]=sup;break;}
+                    for(sup=1;sup<MAXSUPSET;sup++)if(sets[arSet[l].setid].subsetid[sup]==coefs[index].setid[dcount]){mwsupsetid[dcount]=sup;break;}
                   }
                   break;
                 }
             }
     
-    rsize=ha_set[arSet[fdim1-5].setid].size;
-    tsize=ha_set[arSet[fdim1-4].setid].size;
-    stosize=ha_set[arSet[fdim1-2].setid].size;
-    bsize=ha_set[arSet[fdim1-1].setid].size;
+    rsize=sets[arSet[fdim1-5].setid].size;
+    tsize=sets[arSet[fdim1-4].setid].size;
+    stosize=sets[arSet[fdim1-2].setid].size;
+    bsize=sets[arSet[fdim1-1].setid].size;
     printf("rsize %ld tsize %ld stosize %ld bsize %ld\n",rsize,tsize,stosize,bsize);
     if(bsize!=4)printf("Errors!!! Splinter set with wrong size or in wrong position!!!\n");
     solve_real ***array = (solve_real ***) malloc(sizeof(solve_real **)*rsize);
@@ -3071,9 +3071,9 @@ offset_t subinterval_update(PetscInt rank,char *fname,set_def *ha_set,dim_t nset
     solve_real *curx= (solve_real *) calloc (stosize,sizeof(solve_real));
     solve_real *cury= (solve_real *) calloc (stosize,sizeof(solve_real));
     solve_real *curw= (solve_real *) calloc (stosize*bsize,sizeof(solve_real));
-    solve_real *vecwf= (solve_real *) calloc (ha_cof[wvar].nelem,sizeof(solve_real));
+    solve_real *vecwf= (solve_real *) calloc (coefs[wvar].nelem,sizeof(solve_real));
     solve_real *vecw=NULL,*vecwold=NULL;
-    solve_real *vecwoldf= (solve_real *) calloc (ha_cof[wvar].nelem,sizeof(solve_real));
+    solve_real *vecwoldf= (solve_real *) calloc (coefs[wvar].nelem,sizeof(solve_real));
     vecw=vecwf;
     vecwold=vecwoldf;
     if(IsChange==false){
@@ -3091,10 +3091,10 @@ offset_t subinterval_update(PetscInt rank,char *fname,set_def *ha_set,dim_t nset
               //dmlu
               l2=0;
               for (dcount=0; dcount<fdim-1; dcount++){
-                for(i1=0; i1<ha_cof[dlmu].size; i1++) {
+                for(i1=0; i1<coefs[dlmu].size; i1++) {
                   if(mvarset[i1]-1==dcount) {
                     if(mvsubset[i1]==1) {
-                      l2=l2+ha_setele[ha_set[ha_cof[dlmu].setid[i1]].offset+arSet[dcount].indx].superset_pos[mdsupsetid[i1]]*mdantidim[i1];
+                      l2=l2+set_elems[sets[coefs[dlmu].setid[i1]].offset+arSet[dcount].indx].superset_pos[mdsupsetid[i1]]*mdantidim[i1];
                     } else {
                       l2=l2+arSet[dcount].indx*mdantidim[i1];
                     }
@@ -3102,17 +3102,17 @@ offset_t subinterval_update(PetscInt rank,char *fname,set_def *ha_set,dim_t nset
                   }
                 }
               }
-              matuk[l*stosize+i]=ha_cofvar[ha_cof[dlmu].offset+l2].value;
-              printf("k1 %lf v %lf l2 %ld\n",ha_cofvar[ha_cof[dlmu].offset+l2].value,ha_cofvar[ha_cof[vlmu].offset+l2].value,l2);
+              matuk[l*stosize+i]=elem_vals[coefs[dlmu].offset+l2].value;
+              printf("k1 %lf v %lf l2 %ld\n",elem_vals[coefs[dlmu].offset+l2].value,elem_vals[coefs[vlmu].offset+l2].value,l2);
               for (j=0; j<stosize; j++){
                 arSet[3].indx=j;
                 //vlmu
               l2=0;
               for (dcount=0; dcount<fdim-1; dcount++){
-                for(i1=0; i1<ha_cof[vlmu].size; i1++) {
+                for(i1=0; i1<coefs[vlmu].size; i1++) {
                   if(mvarset[i1]-1==dcount) {
                     if(mvsubset[i1]==1) {
-                      l2=l2+ha_setele[ha_set[ha_cof[vlmu].setid[i1]].offset+arSet[dcount].indx].superset_pos[mvsupsetid[i1]]*mvantidim[i1];
+                      l2=l2+set_elems[sets[coefs[vlmu].setid[i1]].offset+arSet[dcount].indx].superset_pos[mvsupsetid[i1]]*mvantidim[i1];
                     } else {
                       l2=l2+arSet[dcount].indx*mvantidim[i1];
                     }
@@ -3120,7 +3120,7 @@ offset_t subinterval_update(PetscInt rank,char *fname,set_def *ha_set,dim_t nset
                   }
                 }
               }
-              matuv[l*stosize*stosize+i*stosize+j]=ha_cofvar[ha_cof[vlmu].offset+l2].value;
+              matuv[l*stosize*stosize+i*stosize+j]=elem_vals[coefs[vlmu].offset+l2].value;
               }
             }
             for(i4=0;i4<tsize;i4++){
@@ -3128,10 +3128,10 @@ offset_t subinterval_update(PetscInt rank,char *fname,set_def *ha_set,dim_t nset
               //x
               l2=0;
               for (dcount=0; dcount<fdim-1; dcount++){
-                for(i1=0; i1<ha_cof[xvar].size; i1++) {
+                for(i1=0; i1<coefs[xvar].size; i1++) {
                   if(xarset[i1]-1==dcount) {
                     if(xsubset[i1]==1) {
-                      l2=l2+ha_setele[ha_set[ha_cof[xvar].setid[i1]].offset+arSet[dcount].indx].superset_pos[xsupsetid[i1]]*xantidim[i1];
+                      l2=l2+set_elems[sets[coefs[xvar].setid[i1]].offset+arSet[dcount].indx].superset_pos[xsupsetid[i1]]*xantidim[i1];
                     } else {
                       l2=l2+arSet[dcount].indx*xantidim[i1];
                     }
@@ -3139,14 +3139,14 @@ offset_t subinterval_update(PetscInt rank,char *fname,set_def *ha_set,dim_t nset
                   }
                 }
               }
-              vecx[l*tsize+i4]=ha_cofvar[ha_cof[xvar].offset+l2].value;
+              vecx[l*tsize+i4]=elem_vals[coefs[xvar].offset+l2].value;
               //y
               l2=0;
               for (dcount=0; dcount<fdim-2; dcount++){
-                for(i1=0; i1<ha_cof[yvar].size; i1++) {
+                for(i1=0; i1<coefs[yvar].size; i1++) {
                   if(yarset[i1]-1==dcount) {
                     if(ysubset[i1]==1) {
-                      l2=l2+ha_setele[ha_set[ha_cof[yvar].setid[i1]].offset+arSet[dcount].indx].superset_pos[ysupsetid[i1]]*yantidim[i1];
+                      l2=l2+set_elems[sets[coefs[yvar].setid[i1]].offset+arSet[dcount].indx].superset_pos[ysupsetid[i1]]*yantidim[i1];
                     } else {
                       l2=l2+arSet[dcount].indx*yantidim[i1];
                     }
@@ -3154,8 +3154,8 @@ offset_t subinterval_update(PetscInt rank,char *fname,set_def *ha_set,dim_t nset
                   }
                 }
               }
-              vecy[l*tsize+i4]=ha_cofvar[ha_cof[yvar].offset+l2].value;
-              printf("var %s l %ld l2 %ld vecy %lf vecx %lf\n",ha_cof[yvar].cofname,l,l2,vecy[l*tsize+i4],vecx[l*tsize+i4]);
+              vecy[l*tsize+i4]=elem_vals[coefs[yvar].offset+l2].value;
+              printf("var %s l %ld l2 %ld vecy %lf vecx %lf\n",coefs[yvar].cofname,l,l2,vecy[l*tsize+i4],vecx[l*tsize+i4]);
             }
           }
           for (l=0; l<fdim+1; l++)arSet[l].indx=0;
@@ -3177,10 +3177,10 @@ offset_t subinterval_update(PetscInt rank,char *fname,set_def *ha_set,dim_t nset
               arSet[1].indx=i4;
               l2=0;
               for (dcount=0; dcount<fdim-2; dcount++){
-                for(i1=0; i1<ha_cof[jvar].size; i1++) {
+                for(i1=0; i1<coefs[jvar].size; i1++) {
                   if(jarset[i1]-1==dcount) {
                     if(jsubset[i1]==1) {
-                      l2=l2+ha_setele[ha_set[ha_cof[jvar].setid[i1]].offset+arSet[dcount].indx].superset_pos[jsupsetid[i1]]*jantidim[i1];
+                      l2=l2+set_elems[sets[coefs[jvar].setid[i1]].offset+arSet[dcount].indx].superset_pos[jsupsetid[i1]]*jantidim[i1];
                     } else {
                       l2=l2+arSet[dcount].indx*jantidim[i1];
                     }
@@ -3188,7 +3188,7 @@ offset_t subinterval_update(PetscInt rank,char *fname,set_def *ha_set,dim_t nset
                   }
                 }
               }
-              temp3=(1+ha_cofvar[ha_cof[jvar].offset+l2].value/100)*vecy[l*tsize+i4];
+              temp3=(1+elem_vals[coefs[jvar].offset+l2].value/100)*vecy[l*tsize+i4];
               printf("temp3 %lf\n",temp3);
               for (i1=0; i1<rsize; i1++)curk[i1]=vecy[i1*tsize+i4];
               curk[l]=temp3;
@@ -3237,10 +3237,10 @@ offset_t subinterval_update(PetscInt rank,char *fname,set_def *ha_set,dim_t nset
 
               l2=0;
               for (dcount=0; dcount<fdim-1; dcount++){
-                for(i1=0; i1<ha_cof[vvar].size; i1++) {
+                for(i1=0; i1<coefs[vvar].size; i1++) {
                   if(vararset[i1]-1==dcount) {
                     if(varsubset[i1]==1) {
-                      l2=l2+ha_setele[ha_set[ha_cof[vvar].setid[i1]].offset+arSet[dcount].indx].superset_pos[varsupsetid[i1]]*varantidim[i1];
+                      l2=l2+set_elems[sets[coefs[vvar].setid[i1]].offset+arSet[dcount].indx].superset_pos[varsupsetid[i1]]*varantidim[i1];
                     } else {
                       l2=l2+arSet[dcount].indx*varantidim[i1];
                     }
@@ -3248,11 +3248,11 @@ offset_t subinterval_update(PetscInt rank,char *fname,set_def *ha_set,dim_t nset
                   }
                 }
               }
-                address=ha_cof[vvar].offset+l2;
-                temp2=temp1/ha_cofvar[address].value;
+                address=coefs[vvar].offset+l2;
+                temp2=temp1/elem_vals[address].value;
                 temp2=temp2*100-100;
-                ha_cgeshock[ha_var[svar].offset+l2].shock_value=temp2/subints;//shock, linear only, mup must be exo
-                printf("l2 %ld shock %lf var %s temp1 %lf vval %lf shock %lf vvar %lf\n",l2,ha_cgeshock[ha_var[svar].offset+l2].shock_value,ha_var[svar].cofname,temp1,ha_cofvar[address].value,ha_cgeshock[ha_var[svar].offset+l2].shock_value,ha_cofvar[ha_cof[vvar].offset+l2].value);
+                closure_vals[vars[svar].offset+l2].shock_value=temp2/subints;//shock, linear only, mup must be exo
+                printf("l2 %ld shock %lf var %s temp1 %lf vval %lf shock %lf vvar %lf\n",l2,closure_vals[vars[svar].offset+l2].shock_value,vars[svar].cofname,temp1,elem_vals[address].value,closure_vals[vars[svar].offset+l2].shock_value,elem_vals[coefs[vvar].offset+l2].value);
               
             }
           }

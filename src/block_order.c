@@ -1,7 +1,7 @@
 #include <teems_solver.h>
 #include <hsl_kernels.h>
 
-int dbbd_order(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscInt Istart, PetscInt Iend, offset_t nvarele, offset_t *ha_eqadd,int *ha_rows,int *ha_cols, offset_t ndblock,int *ha_ndblocks, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,solve_real cntl6) {
+int dbbd_order(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscInt Istart, PetscInt Iend, offset_t nvarele, offset_t *eq_addr,int *row_order,int *col_order, offset_t ndblock,int *block_sizes, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,solve_real cntl6) {
   IS *rowindices,*colindices;//,isrow,iscol;
   PetscInt bfirst,bend,sblockin,nmatin,nmatinplus,nrowcolin,sumrowcolin;
   Mat *submatA;
@@ -10,9 +10,9 @@ int dbbd_order(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscIn
   PetscErrorCode ierr;
   PetscViewer viewer;
   offset_t lasize;
-  int *ha_rows1= (int *) calloc (VecSize,sizeof(int));
-  int *ha_cols1= (int *) calloc (VecSize,sizeof(int));
-  int *ha_ndblocks1= (int *) calloc (ndblock,sizeof(int));
+  int *row_order1= (int *) calloc (VecSize,sizeof(int));
+  int *col_order1= (int *) calloc (VecSize,sizeof(int));
+  int *block_sizes1= (int *) calloc (ndblock,sizeof(int));
 
   //*****New order test**********//
   nmatin=(offset_t)ndblock/mpisize;
@@ -103,13 +103,13 @@ int dbbd_order(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscIn
     j=0;
     spec51m_rank_(insize,&cntl6,irn,jcn,values,irn1,jcn1,keep,w51,iw51);
     for(i=0; i<nrow; i++) {
-      ha_rows1[i+counteq[j1+begblock[rank]]]=irn1[i]-1;
+      row_order1[i+counteq[j1+begblock[rank]]]=irn1[i]-1;
     }
     for(i=0; i<ncol; i++) {
-      ha_cols1[i+countvarintra1[j1+begblock[rank]]]=jcn1[i]-1;
+      col_order1[i+countvarintra1[j1+begblock[rank]]]=jcn1[i]-1;
     }
     printf("rank %d j1 %d proc %d\n",insize[3],j1,rank);
-    ha_ndblocks1[j1+begblock[rank]]=insize[3];
+    block_sizes1[j1+begblock[rank]]=insize[3];
     free(insize);
     free(irn);
     free(jcn);
@@ -124,19 +124,19 @@ int dbbd_order(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscIn
   }
   PetscFree(submatA);
   MPI_Barrier(PETSC_COMM_WORLD);
-  MPI_Allreduce(ha_cols1,ha_cols,VecSize, MPI_INT, MPI_SUM,PETSC_COMM_WORLD);
-  free(ha_cols1);
-  MPI_Allreduce(ha_rows1,ha_rows,VecSize, MPI_INT, MPI_SUM,PETSC_COMM_WORLD);
-  free(ha_rows1);
-  MPI_Allreduce(ha_ndblocks1,ha_ndblocks,ndblock, MPI_INT, MPI_SUM,PETSC_COMM_WORLD);
-  free(ha_ndblocks1);
+  MPI_Allreduce(col_order1,col_order,VecSize, MPI_INT, MPI_SUM,PETSC_COMM_WORLD);
+  free(col_order1);
+  MPI_Allreduce(row_order1,row_order,VecSize, MPI_INT, MPI_SUM,PETSC_COMM_WORLD);
+  free(row_order1);
+  MPI_Allreduce(block_sizes1,block_sizes,ndblock, MPI_INT, MPI_SUM,PETSC_COMM_WORLD);
+  free(block_sizes1);
   free(begblock);
   MPI_Barrier(PETSC_COMM_WORLD);
   return 1;
 }
 
 
-int ndbbd_order_presolve(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscInt Istart, PetscInt Iend,int nreg, int ntime, offset_t nvarele, offset_t *ha_eqadd,int *ha_rows,int *ha_cols, offset_t ndblock,int *ha_ndblocks, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laDi,solve_real cntl6,PetscInt* ndbbdrank,PetscBool presol) {
+int ndbbd_order_presolve(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscInt Istart, PetscInt Iend,int nreg, int ntime, offset_t nvarele, offset_t *eq_addr,int *row_order,int *col_order, offset_t ndblock,int *block_sizes, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laDi,solve_real cntl6,PetscInt* ndbbdrank,PetscBool presol) {
   FILE *presolfile;
   char j1name[1024],filename[1024],rankname[1024];
   size_t frd;
@@ -152,7 +152,7 @@ int ndbbd_order_presolve(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt ran
   MatInfo           matinfo;
   MatGetInfo(A,MAT_LOCAL,&matinfo);
   printf("rank %d matinfo.nz_used %g\n",rank,matinfo.nz_used);
-  int *ha_ndblocks1= (int *) calloc (ndblock,sizeof(int));
+  int *block_sizes1= (int *) calloc (ndblock,sizeof(int));
   offset_t *counteq2= (offset_t *) calloc (ndblock+1,sizeof(offset_t));
   offset_t *counteqnoadd1= (offset_t *) calloc (ndblock,sizeof(offset_t));
   offset_t *counteqnoadd2= (offset_t *) calloc (ndblock,sizeof(offset_t));
@@ -218,11 +218,11 @@ int ndbbd_order_presolve(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt ran
   PetscFree(rowindices);
   PetscFree(colindices);
   MPI_Barrier(PETSC_COMM_WORLD);
-  int *ha_rows2= (int *) calloc (VecSize,sizeof(int));
-  int *ha_cols2= (int *) calloc (VecSize,sizeof(int));
+  int *row_order2= (int *) calloc (VecSize,sizeof(int));
+  int *col_order2= (int *) calloc (VecSize,sizeof(int));
   if(cntl6==0&&SORD==0)cntl6in=1e-5;
   else cntl6in=cntl6;
-  #pragma omp parallel private(j1,j2,j3,j4,j5,j6,j7,j8,ai,aj,vals,nz,nrow,ncol,nz1,i,j,bfirst,lasize) shared(cntl6in,ha_rows2,ha_cols2,ha_ndblocks1,counteqnoadd1,countvarintra2,countvarintra1,submatA)
+  #pragma omp parallel private(j1,j2,j3,j4,j5,j6,j7,j8,ai,aj,vals,nz,nrow,ncol,nz1,i,j,bfirst,lasize) shared(cntl6in,row_order2,col_order2,block_sizes1,counteqnoadd1,countvarintra2,countvarintra1,submatA)
   {
   long int lasizemax=0,nrowmax=0,ncolmax=0;
   #pragma omp for schedule (static)
@@ -296,14 +296,14 @@ int ndbbd_order_presolve(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt ran
       spec51m_rank_(insize,&cntl6in,irn,jcn,values,irn1,jcn1,keep,w51,iw51);
       bfirst=counteq[j3+begblock[rank]];
       for(i=0; i<nrow; i++) {
-        ha_rows2[i+counteq[j3+begblock[rank]]]=irn1[i]-1+bfirst;
+        row_order2[i+counteq[j3+begblock[rank]]]=irn1[i]-1+bfirst;
       }
       bfirst=countvarintra1[j3+begblock[rank]];
       for(i=0; i<ncol; i++) {
-        ha_cols2[i+countvarintra1[j3+begblock[rank]]]=jcn1[i]-1+bfirst;
+        col_order2[i+countvarintra1[j3+begblock[rank]]]=jcn1[i]-1+bfirst;
       }
       printf("rank %d mat rank %d nrow %d ncol %d j3 %d proc %d\n",rank,insize[3],nrow,ncol,j3,rank);
-      ha_ndblocks1[j3+begblock[rank]]=insize[3];
+      block_sizes1[j3+begblock[rank]]=insize[3];
       counteqnoadd1[j3+begblock[rank]]=insize[3];
       countvarintra2[j3+begblock[rank]]=insize[3];
       j4+=counteqnoadd1[j3+begblock[rank]];
@@ -338,18 +338,18 @@ int ndbbd_order_presolve(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt ran
   counteq2[i]=VecSize;//Not change
   countvarintra4[i]=countvarintra4[i-1]+countvarintra6[i-1];
 
-  int *ha_rows1= (int *) calloc (VecSize,sizeof(int));
-  int *ha_cols1= (int *) calloc (VecSize,sizeof(int));
+  int *row_order1= (int *) calloc (VecSize,sizeof(int));
+  int *col_order1= (int *) calloc (VecSize,sizeof(int));
   for(j1=0; j1<nmatint; j1++) {
     for(j2=0; j2<nreg; j2++) {
       j3=j1*(nreg+1)+j2;
       bfirst=counteq2[j3+begblock[rank]];
       for(i=bfirst; i<counteq2[j3+begblock[rank]]+counteqnoadd2[j3+begblock[rank]]; i++) {
-        ha_rows1[i]=ha_rows2[i-bfirst+counteq[j3+begblock[rank]]];
+        row_order1[i]=row_order2[i-bfirst+counteq[j3+begblock[rank]]];
       }
       bfirst=countvarintra4[j3+begblock[rank]];
       for(i=bfirst; i<countvarintra4[j3+1+begblock[rank]]; i++) {
-        ha_cols1[i]=ha_cols2[i-bfirst+countvarintra1[j3+begblock[rank]]];
+        col_order1[i]=col_order2[i-bfirst+countvarintra1[j3+begblock[rank]]];
       }
     }
     j3=j1*(nreg+1)+j2;
@@ -358,23 +358,23 @@ int ndbbd_order_presolve(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt ran
     for(j2=0; j2<nreg; j2++) {
       j6=j1*(nreg+1)+j2;
       for(i=counteqnoadd[j6+begblock[rank]]+counteq[j6+begblock[rank]]-1; i>counteqnoadd2[j6+begblock[rank]]+counteq[j6+begblock[rank]]-1; i--) {
-        ha_rows1[j4]=ha_rows2[i];
+        row_order1[j4]=row_order2[i];
         j4++;
       }
       for(i=countvarintra1[j6+1+begblock[rank]]-1; i>countvarintra1[j6+begblock[rank]]+countvarintra6[j6+begblock[rank]]-1; i--) {
-        ha_cols1[j5]=ha_cols2[i];
+        col_order1[j5]=col_order2[i];
         j5++;
       }
     }
     for(i=j4; i<j4+counteqnoadd[j3+begblock[rank]]; i++) {
-      ha_rows1[i]=i-j4+counteq[j3+begblock[rank]];
+      row_order1[i]=i-j4+counteq[j3+begblock[rank]];
     }
     for(i=j5; i<j5+countvarintra1[j3+1+begblock[rank]]-countvarintra1[j3+begblock[rank]]; i++) {
-      ha_cols1[i]=i-j5+countvarintra1[j3+begblock[rank]];
+      col_order1[i]=i-j5+countvarintra1[j3+begblock[rank]];
     }
   }
-  free(ha_cols2);
-  free(ha_rows2);
+  free(col_order2);
+  free(row_order2);
   for(j1=0; j1<nmatint; j1++) {
     j3=j1*(nreg+1)+nreg;
     nrow=counteqnoadd2[j3+begblock[rank]];
@@ -385,7 +385,7 @@ int ndbbd_order_presolve(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt ran
     else ndbbdrank[j4]=ncol;
 
     if(ndbbdrank[j4]>0) {
-      ha_ndblocks1[j3+begblock[rank]]=ndbbdrank[j4];
+      block_sizes1[j3+begblock[rank]]=ndbbdrank[j4];
     }
 
   }
@@ -393,12 +393,12 @@ int ndbbd_order_presolve(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt ran
   memcpy(counteqnoadd,counteqnoadd2,(ndblock)*sizeof(offset_t));
   memcpy(countvarintra1,countvarintra4,(ndblock+1)*sizeof(offset_t));
   MPI_Barrier(PETSC_COMM_WORLD);
-  MPI_Allreduce(ha_cols1,ha_cols,VecSize, MPI_INT, MPI_SUM,PETSC_COMM_WORLD);
-  MPI_Allreduce(ha_rows1,ha_rows,VecSize, MPI_INT, MPI_SUM,PETSC_COMM_WORLD);
-  MPI_Allreduce(ha_ndblocks1,ha_ndblocks,ndblock, MPI_INT, MPI_SUM,PETSC_COMM_WORLD);
-  free(ha_cols1);
-  free(ha_rows1);
-  free(ha_ndblocks1);
+  MPI_Allreduce(col_order1,col_order,VecSize, MPI_INT, MPI_SUM,PETSC_COMM_WORLD);
+  MPI_Allreduce(row_order1,row_order,VecSize, MPI_INT, MPI_SUM,PETSC_COMM_WORLD);
+  MPI_Allreduce(block_sizes1,block_sizes,ndblock, MPI_INT, MPI_SUM,PETSC_COMM_WORLD);
+  free(col_order1);
+  free(row_order1);
+  free(block_sizes1);
   free(begblock);
   free(counteq2);
   free(counteqnoadd1);
@@ -409,7 +409,7 @@ int ndbbd_order_presolve(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt ran
   return 1;
 }
 
-int ndbbd_order(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscInt Istart, PetscInt Iend,int nreg, int ntime, offset_t nvarele, offset_t *ha_eqadd,int *ha_rows,int *ha_cols, offset_t ndblock,int *ha_ndblocks, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laDi,solve_real cntl6,PetscInt* ndbbdrank,PetscBool presol) {
+int ndbbd_order(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscInt Istart, PetscInt Iend,int nreg, int ntime, offset_t nvarele, offset_t *eq_addr,int *row_order,int *col_order, offset_t ndblock,int *block_sizes, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laDi,solve_real cntl6,PetscInt* ndbbdrank,PetscBool presol) {
   FILE *presolfile;
   char j1name[1024],filename[1024],rankname[1024];
   size_t frd;
@@ -443,18 +443,18 @@ int ndbbd_order(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscI
     j2=j1;
   }
 
-  int *ha_rows3= (int *) calloc (VecSize,sizeof(int));
-  int *ha_cols3= (int *) calloc (VecSize,sizeof(int));
+  int *row_order3= (int *) calloc (VecSize,sizeof(int));
+  int *col_order3= (int *) calloc (VecSize,sizeof(int));
   for(i=0; i<nmatin; i++) {
     bfirst=counteq[i+begblock[rank]];
     bend=counteqnoadd[i+begblock[rank]]+counteq[i+begblock[rank]];
-    for(j=bfirst; j<bend; j++)ha_rows3[j]=ha_rows[j];
+    for(j=bfirst; j<bend; j++)row_order3[j]=row_order[j];
     bfirst=countvarintra1[i+begblock[rank]];
     bend=countvarintra1[i+1+begblock[rank]];
-    for(j=bfirst; j<bend; j++)ha_cols3[j]=ha_cols[j];
+    for(j=bfirst; j<bend; j++)col_order3[j]=col_order[j];
   }
-  int *ha_ndblocks2= (int *) calloc (ndblock,sizeof(int));
-  for(j1=0; j1<nmatin; j1++)ha_ndblocks2[j1+begblock[rank]]=ha_ndblocks[j1+begblock[rank]];
+  int *block_sizes2= (int *) calloc (ndblock,sizeof(int));
+  for(j1=0; j1<nmatin; j1++)block_sizes2[j1+begblock[rank]]=block_sizes[j1+begblock[rank]];
 
   for(j1=0; j1<nmatint; j1++) {
     j3=j1*(nreg+1)+nreg;
@@ -505,13 +505,13 @@ int ndbbd_order(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscI
         fclose(presolfile);
         int *indices= (int *) calloc (insized[0],sizeof(int));
         for(i=0; i<insized[0]; i++) {
-          indices[i]=ha_rows3[counteq[j3+begblock[rank]]+irn1[i]-1];
+          indices[i]=row_order3[counteq[j3+begblock[rank]]+irn1[i]-1];
         }
-        memcpy(&ha_rows3[counteq[j3+begblock[rank]]],indices,insized[0]*sizeof(int));
+        memcpy(&row_order3[counteq[j3+begblock[rank]]],indices,insized[0]*sizeof(int));
         for(i=0; i<insized[0]; i++) {
-          indices[i]=ha_cols3[countvarintra1[j3+begblock[rank]]+jcn1[i]-1];
+          indices[i]=col_order3[countvarintra1[j3+begblock[rank]]+jcn1[i]-1];
         }
-        memcpy(&ha_cols3[countvarintra1[j3+begblock[rank]]],indices,insized[0]*sizeof(int));
+        memcpy(&col_order3[countvarintra1[j3+begblock[rank]]],indices,insized[0]*sizeof(int));
         ndbbdrank[j4]=insized[3];
         free(indices);
         free(irn1);
@@ -521,18 +521,18 @@ int ndbbd_order(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscI
     }
 
     if(ndbbdrank[j4]>0) {
-      ha_ndblocks2[j3+begblock[rank]]=ndbbdrank[j4];
+      block_sizes2[j3+begblock[rank]]=ndbbdrank[j4];
     }
 
   }
   MPI_Barrier(PETSC_COMM_WORLD);
-  MPI_Allreduce(ha_cols3,ha_cols,VecSize, MPI_INT, MPI_SUM,PETSC_COMM_WORLD);
-  MPI_Allreduce(ha_rows3,ha_rows,VecSize, MPI_INT, MPI_SUM,PETSC_COMM_WORLD);
-  MPI_Allreduce(ha_ndblocks2,ha_ndblocks,ndblock, MPI_INT, MPI_SUM,PETSC_COMM_WORLD);
+  MPI_Allreduce(col_order3,col_order,VecSize, MPI_INT, MPI_SUM,PETSC_COMM_WORLD);
+  MPI_Allreduce(row_order3,row_order,VecSize, MPI_INT, MPI_SUM,PETSC_COMM_WORLD);
+  MPI_Allreduce(block_sizes2,block_sizes,ndblock, MPI_INT, MPI_SUM,PETSC_COMM_WORLD);
   printf("OK\n");
-  free(ha_cols3);
-  free(ha_rows3);
-  free(ha_ndblocks2);
+  free(col_order3);
+  free(row_order3);
+  free(block_sizes2);
   free(begblock);
   return 1;
 }

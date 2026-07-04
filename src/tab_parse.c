@@ -372,7 +372,7 @@ int eq_zero_linvar(char *formulain,int linindx) {
   return 1;
 }
 
-offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char *commsyntax,set_def *ha_set,dim_t nset, set_element *ha_setele,array_def *ha_cof,offset_t ncof, elem_store *ha_cofele,offset_t ncofele,array_def *ha_var,offset_t nvar, elem_store *ha_varele,offset_t nvarele) {
+offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char *commsyntax,set_def *sets,dim_t nset, set_element *set_elems,array_def *coefs,offset_t ncof, elem_store *coef_store,offset_t ncofele,array_def *vars,offset_t nvar, elem_store *var_store,offset_t nvarele) {
   FILE * filehandle, * filehandle1;
   char line[DATREADLINE]="\0",linecopy[DATREADLINE],line1[TABREADLINE],*p,*p1;//,line1[DATREADLINE]
   char vname[NAMESIZE],setindx[NAMESIZE],header[NAMESIZE],*vname1=NULL,argu[TABREADLINE],varset[MAXVARDIM][NAMESIZE];//,varindx[MAXVARDIM][NAMESIZE],varindx1[MAXVARDIM][NAMESIZE];
@@ -420,19 +420,19 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
       }
       count2=0;
       for (i=0; i<nvar; i++) {
-        vname1= strtok(ha_var[i].cofname,"(");
+        vname1= strtok(vars[i].cofname,"(");
         if (strcmp(vname1,vname)==0) { //,vsize ha_var[i].cofname
-          ha_var[i].suplval=true;
+          vars[i].suplval=true;
           dims=1;
-          for (n1=0; n1<ha_var[i].size; n1++) {
-            dims=dims*ha_set[ha_var[i].setid[n1]].size;
+          for (n1=0; n1<vars[i].size; n1++) {
+            dims=dims*sets[vars[i].setid[n1]].size;
           }
-          antidim[0]=ha_set[ha_var[i].setid[1]].size;
+          antidim[0]=sets[vars[i].setid[1]].size;
           antidim[1]=1;
-          antidim[2]=antidim[0]*ha_set[ha_var[i].setid[0]].size;
-          if (ha_var[i].size>3) {
-            for (n1=3; n1<ha_var[i].size; n1++) {
-              antidim[n1]=antidim[n1-1]*ha_set[ha_var[i].setid[n1-1]].size;
+          antidim[2]=antidim[0]*sets[vars[i].setid[0]].size;
+          if (vars[i].size>3) {
+            for (n1=3; n1<vars[i].size; n1++) {
+              antidim[n1]=antidim[n1-1]*sets[vars[i].setid[n1-1]].size;
             }
           }
           strcpy(vname,readitem);
@@ -474,8 +474,8 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
                       readitem = strtok(line,"\n");
                       val=atof(readitem);//sscanf(readitem, "%lf", &val);
                       l1=recount;
-                      if(ha_var[i].size>1) {
-                        for (n1=ha_var[i].size-1; n1>1; n1--) {
+                      if(vars[i].size>1) {
+                        for (n1=vars[i].size-1; n1>1; n1--) {
                           index[n1]=(offset_t) l1/antidim[n1];
                           l1=l1-antidim[n1]*index[n1];
                         }
@@ -487,10 +487,10 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
                         index[0]=recount;
                       }
                       recount1=0;
-                      for (n1=0; n1<ha_var[i].size; n1++) {
-                        recount1=recount1+index[n1]*ha_var[i].strides[n1];
+                      for (n1=0; n1<vars[i].size; n1++) {
+                        recount1=recount1+index[n1]*vars[i].strides[n1];
                       }
-                      ha_varele[ha_var[i].offset+recount1].value=val;
+                      var_store[vars[i].offset+recount1].value=val;
                       recount++;
                       if (recount>=dims) {
                         break;
@@ -504,8 +504,8 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
                         }
                         val=atof(readitem);//sscanf(readitem, "%lf", &val);
                         l1=recount;
-                        if(ha_var[i].size>1) {
-                          for (n1=ha_var[i].size-1; n1>1; n1--) {
+                        if(vars[i].size>1) {
+                          for (n1=vars[i].size-1; n1>1; n1--) {
                             index[n1]=(offset_t) l1/antidim[n1];
                             l1=l1-antidim[n1]*index[n1];
                           }
@@ -517,17 +517,17 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
                           index[0]=recount;
                         }
                         recount1=0;
-                        for (n1=0; n1<ha_var[i].size; n1++) {
-                          recount1=recount1+index[n1]*ha_var[i].strides[n1];
+                        for (n1=0; n1<vars[i].size; n1++) {
+                          recount1=recount1+index[n1]*vars[i].strides[n1];
                         }
-                        ha_varele[ha_var[i].offset+recount1].value=val;
+                        var_store[vars[i].offset+recount1].value=val;
                         recount++;
                       }
                       readitem = strtok(NULL,"\n");
                       val=atof(readitem);//sscanf(readitem, "%lf", &val);
                       l1=recount;
-                      if(ha_var[i].size>1) {
-                        for (n1=ha_var[i].size-1; n1>1; n1--) {
+                      if(vars[i].size>1) {
+                        for (n1=vars[i].size-1; n1>1; n1--) {
                           index[n1]=(offset_t) l1/antidim[n1];
                           l1=l1-antidim[n1]*index[n1];
                         }
@@ -539,10 +539,10 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
                         index[0]=recount;
                       }
                       recount1=0;
-                      for (n1=0; n1<ha_var[i].size; n1++) {
-                        recount1=recount1+index[n1]*ha_var[i].strides[n1];
+                      for (n1=0; n1<vars[i].size; n1++) {
+                        recount1=recount1+index[n1]*vars[i].strides[n1];
                       }
-                      ha_varele[ha_var[i].offset+recount1].value=val;
+                      var_store[vars[i].offset+recount1].value=val;
                       recount++;
                       if (recount>=dims) {
                         break;
@@ -569,19 +569,19 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
       }
       if(i<nvar)count2=1;
       for (i=0; i<ncof; i++) {
-        vname1= strtok(ha_cof[i].cofname,"(");
+        vname1= strtok(coefs[i].cofname,"(");
         if (strcmp(vname1,vname)==0) { //,vsize ha_cof[i].cofname
-          ha_cof[i].suplval=true;
+          coefs[i].suplval=true;
           dims=1;
-          for (n1=0; n1<ha_cof[i].size; n1++) {
-            dims=dims*ha_set[ha_cof[i].setid[n1]].size;
+          for (n1=0; n1<coefs[i].size; n1++) {
+            dims=dims*sets[coefs[i].setid[n1]].size;
           }
-          antidim[0]=ha_set[ha_cof[i].setid[1]].size;
+          antidim[0]=sets[coefs[i].setid[1]].size;
           antidim[1]=1;
-          antidim[2]=antidim[0]*ha_set[ha_cof[i].setid[0]].size;
-          if (ha_cof[i].size>3) {
-            for (n1=3; n1<ha_cof[i].size; n1++) {
-              antidim[n1]=antidim[n1-1]*ha_set[ha_cof[i].setid[n1-1]].size;
+          antidim[2]=antidim[0]*sets[coefs[i].setid[0]].size;
+          if (coefs[i].size>3) {
+            for (n1=3; n1<coefs[i].size; n1++) {
+              antidim[n1]=antidim[n1-1]*sets[coefs[i].setid[n1-1]].size;
             }
           }
           filehandle1 = fopen(iodata[k0].filname,"r");
@@ -623,8 +623,8 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
                       readitem = strtok(line,"\n");
                       val=atof(readitem);//sscanf(readitem, "%lf", &val);
                       l1=recount;
-                      if(ha_cof[i].size>1) {
-                        for (n1=ha_cof[i].size-1; n1>1; n1--) {
+                      if(coefs[i].size>1) {
+                        for (n1=coefs[i].size-1; n1>1; n1--) {
                           index[n1]=(offset_t) l1/antidim[n1];
                           l1=l1-antidim[n1]*index[n1];
                         }
@@ -636,10 +636,10 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
                         index[0]=recount;
                       }
                       recount1=0;
-                      for (n1=0; n1<ha_cof[i].size; n1++) {
-                        recount1=recount1+index[n1]*ha_cof[i].strides[n1];
+                      for (n1=0; n1<coefs[i].size; n1++) {
+                        recount1=recount1+index[n1]*coefs[i].strides[n1];
                       }
-                      ha_cofele[ha_cof[i].offset+recount1].value=val;
+                      coef_store[coefs[i].offset+recount1].value=val;
                       recount++;
                       if (recount>=dims) {
                         break;
@@ -653,8 +653,8 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
                         }
                         val=atof(readitem);//sscanf(readitem, "%lf", &val);
                         l1=recount;
-                        if(ha_cof[i].size>1) {
-                          for (n1=ha_cof[i].size-1; n1>1; n1--) {
+                        if(coefs[i].size>1) {
+                          for (n1=coefs[i].size-1; n1>1; n1--) {
                             index[n1]=(offset_t) l1/antidim[n1];
                             l1=l1-antidim[n1]*index[n1];
                           }
@@ -666,17 +666,17 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
                           index[0]=recount;
                         }
                         recount1=0;
-                        for (n1=0; n1<ha_cof[i].size; n1++) {
-                          recount1=recount1+index[n1]*ha_cof[i].strides[n1];
+                        for (n1=0; n1<coefs[i].size; n1++) {
+                          recount1=recount1+index[n1]*coefs[i].strides[n1];
                         }
-                        ha_cofele[ha_cof[i].offset+recount1].value=val;
+                        coef_store[coefs[i].offset+recount1].value=val;
                         recount++;
                       }
                       readitem = strtok(NULL,"\n");
                       val=atof(readitem);//sscanf(readitem, "%lf", &val);
                       l1=recount;
-                      if(ha_cof[i].size>1) {
-                        for (n1=ha_cof[i].size-1; n1>1; n1--) {
+                      if(coefs[i].size>1) {
+                        for (n1=coefs[i].size-1; n1>1; n1--) {
                           index[n1]=(offset_t) l1/antidim[n1];
                           l1=l1-antidim[n1]*index[n1];
                         }
@@ -688,10 +688,10 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
                         index[0]=recount;
                       }
                       recount1=0;
-                      for (n1=0; n1<ha_cof[i].size; n1++) {
-                        recount1=recount1+index[n1]*ha_cof[i].strides[n1];
+                      for (n1=0; n1<coefs[i].size; n1++) {
+                        recount1=recount1+index[n1]*coefs[i].strides[n1];
                       }
-                      ha_cofele[ha_cof[i].offset+recount1].value=val;
+                      coef_store[coefs[i].offset+recount1].value=val;
                       recount++;
                       if (recount>=dims) {
                         break;
@@ -762,22 +762,22 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
       }
       count2=0;
       for (i=0; i<ncof; i++) {
-        vname1= strtok(ha_cof[i].cofname,"(");
+        vname1= strtok(coefs[i].cofname,"(");
         if (strcmp(vname1,vname)==0) { //,vsize ha_var[i].cofname
           dims=1;
-          for (n1=0; n1<ha_cof[i].size; n1++) {
-            if (strcmp(varset[n1],ha_set[ha_cof[i].setid[n1]].setname)==0) {
-              dims=dims*ha_set[ha_cof[i].setid[n1]].size;
-              dim[n1]=ha_set[ha_cof[i].setid[n1]].size;
-              offset[n1]=ha_set[ha_cof[i].setid[n1]].offset;
+          for (n1=0; n1<coefs[i].size; n1++) {
+            if (strcmp(varset[n1],sets[coefs[i].setid[n1]].setname)==0) {
+              dims=dims*sets[coefs[i].setid[n1]].size;
+              dim[n1]=sets[coefs[i].setid[n1]].size;
+              offset[n1]=sets[coefs[i].setid[n1]].offset;
               supsetid[n1]=0;
             } else {
               for (n=0; n<nset; n++) {
-                if (strcmp(varset[n1],ha_set[n].setname)==0) {
-                  dims=dims*ha_set[n].size;
-                  dim[n1]=ha_set[n].size;
-                  offset[n1]=ha_set[n].offset;
-                  for(l1=0; l1<MAXSUPSET; l1++)if(strcmp(ha_set[ha_set[n].subsetid[l1]].setname,ha_set[ha_cof[i].setid[n1]].setname)==0) {
+                if (strcmp(varset[n1],sets[n].setname)==0) {
+                  dims=dims*sets[n].size;
+                  dim[n1]=sets[n].size;
+                  offset[n1]=sets[n].offset;
+                  for(l1=0; l1<MAXSUPSET; l1++)if(strcmp(sets[sets[n].subsetid[l1]].setname,sets[coefs[i].setid[n1]].setname)==0) {
                       supsetid[n1]=l1;
                       break;
                     }
@@ -790,8 +790,8 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
           antidim[0]=dim[1];
           antidim[1]=1;
           antidim[2]=antidim[0]*dim[0];
-          if (ha_cof[i].size>3) {
-            for (n1=3; n1<ha_cof[i].size; n1++) {
+          if (coefs[i].size>3) {
+            for (n1=3; n1<coefs[i].size; n1++) {
               antidim[n1]=antidim[n1-1]*dim[n1-1];
             }
           }
@@ -835,8 +835,8 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
                       readitem = strtok(line,"\n");
                       val=atof(readitem);//sscanf(readitem, "%lf", &val);
                       l1=recount;
-                      if (ha_cof[i].size>1) {
-                        for (n1=ha_cof[i].size-1; n1>1; n1--) {
+                      if (coefs[i].size>1) {
+                        for (n1=coefs[i].size-1; n1>1; n1--) {
                           index[n1]=(offset_t) l1/antidim[n1];
                           l1=l1-antidim[n1]*index[n1];
                         }
@@ -848,10 +848,10 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
                         index[0]=recount;
                       }
                       recount1=0;
-                      for (n1=0; n1<ha_cof[i].size; n1++) {
-                        recount1=recount1+ha_setele[offset[n1]+index[n1]].superset_pos[supsetid[n1]]*ha_cof[i].strides[n1];
+                      for (n1=0; n1<coefs[i].size; n1++) {
+                        recount1=recount1+set_elems[offset[n1]+index[n1]].superset_pos[supsetid[n1]]*coefs[i].strides[n1];
                       }
-                      ha_cofele[ha_cof[i].offset+recount1].value=val;
+                      coef_store[coefs[i].offset+recount1].value=val;
                       recount++;
                       if (recount>=dims) {
                         break;
@@ -865,8 +865,8 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
                         }
                         val=atof(readitem);//sscanf(readitem, "%lf", &val);
                         l1=recount;
-                        if (ha_cof[i].size>1) {
-                          for (n1=ha_cof[i].size-1; n1>1; n1--) {
+                        if (coefs[i].size>1) {
+                          for (n1=coefs[i].size-1; n1>1; n1--) {
                             index[n1]=(offset_t) l1/antidim[n1];
                             l1=l1-antidim[n1]*index[n1];
                           }
@@ -878,17 +878,17 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
                           index[0]=recount;
                         }
                         recount1=0;
-                        for (n1=0; n1<ha_cof[i].size; n1++) {
-                          recount1=recount1+ha_setele[offset[n1]+index[n1]].superset_pos[supsetid[n1]]*ha_cof[i].strides[n1];
+                        for (n1=0; n1<coefs[i].size; n1++) {
+                          recount1=recount1+set_elems[offset[n1]+index[n1]].superset_pos[supsetid[n1]]*coefs[i].strides[n1];
                         }
-                        ha_cofele[ha_cof[i].offset+recount1].value=val;
+                        coef_store[coefs[i].offset+recount1].value=val;
                         recount++;
                       }
                       readitem = strtok(NULL,"\n");
                       val=atof(readitem);//sscanf(readitem, "%lf", &val);
                       l1=recount;
-                      if (ha_cof[i].size>1) {
-                        for (n1=ha_cof[i].size-1; n1>1; n1--) {
+                      if (coefs[i].size>1) {
+                        for (n1=coefs[i].size-1; n1>1; n1--) {
                           index[n1]=(offset_t) l1/antidim[n1];
                           l1=l1-antidim[n1]*index[n1];
                         }
@@ -900,10 +900,10 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
                         index[0]=recount;
                       }
                       recount1=0;
-                      for (n1=0; n1<ha_cof[i].size; n1++) {
-                        recount1=recount1+ha_setele[offset[n1]+index[n1]].superset_pos[supsetid[n1]]*ha_cof[i].strides[n1];
+                      for (n1=0; n1<coefs[i].size; n1++) {
+                        recount1=recount1+set_elems[offset[n1]+index[n1]].superset_pos[supsetid[n1]]*coefs[i].strides[n1];
                       }
-                      ha_cofele[ha_cof[i].offset+recount1].value=val;
+                      coef_store[coefs[i].offset+recount1].value=val;
                       recount++;
                       if (recount>=dims) {
                         break;
@@ -929,22 +929,22 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
       }
       if(i<ncof)count2=1;
       for (i=0; i<nvar; i++) {
-        vname1= strtok(ha_var[i].cofname,"(");
+        vname1= strtok(vars[i].cofname,"(");
         if (strcmp(vname1,vname)==0) { //,vsize ha_var[i].cofname
           dims=1;
-          for (n1=0; n1<ha_var[i].size; n1++) {
-            if (strcmp(varset[n1],ha_set[ha_var[i].setid[n1]].setname)==0) {
-              dims=dims*ha_set[ha_var[i].setid[n1]].size;
-              dim[n1]=ha_set[ha_var[i].setid[n1]].size;
-              offset[n1]=ha_set[ha_var[i].setid[n1]].offset;
+          for (n1=0; n1<vars[i].size; n1++) {
+            if (strcmp(varset[n1],sets[vars[i].setid[n1]].setname)==0) {
+              dims=dims*sets[vars[i].setid[n1]].size;
+              dim[n1]=sets[vars[i].setid[n1]].size;
+              offset[n1]=sets[vars[i].setid[n1]].offset;
               supsetid[n1]=0;
             } else {
               for (n=0; n<nset; n++) {
-                if (strcmp(varset[n1],ha_set[n].setname)==0) {
-                  dims=dims*ha_set[n].size;
-                  dim[n1]=ha_set[n].size;
-                  offset[n1]=ha_set[n].offset;
-                  for(l1=0; l1<MAXSUPSET; l1++)if(strcmp(ha_set[ha_set[n].subsetid[l1]].setname,ha_set[ha_var[i].setid[n1]].setname)==0) {
+                if (strcmp(varset[n1],sets[n].setname)==0) {
+                  dims=dims*sets[n].size;
+                  dim[n1]=sets[n].size;
+                  offset[n1]=sets[n].offset;
+                  for(l1=0; l1<MAXSUPSET; l1++)if(strcmp(sets[sets[n].subsetid[l1]].setname,sets[vars[i].setid[n1]].setname)==0) {
                       supsetid[n1]=l1;
                       break;
                     }
@@ -957,8 +957,8 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
           antidim[0]=dim[1];
           antidim[1]=1;
           antidim[2]=antidim[0]*dim[0];
-          if (ha_var[i].size>3) {
-            for (n1=3; n1<ha_var[i].size; n1++) {
+          if (vars[i].size>3) {
+            for (n1=3; n1<vars[i].size; n1++) {
               antidim[n1]=antidim[n1-1]*dim[n1-1];
             }
           }
@@ -1001,8 +1001,8 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
                       readitem = strtok(line,"\n");
                       val=atof(readitem);//sscanf(readitem, "%lf", &val);
                       l1=recount;
-                      if (ha_var[i].size>1) {
-                        for (n1=ha_var[i].size-1; n1>1; n1--) {
+                      if (vars[i].size>1) {
+                        for (n1=vars[i].size-1; n1>1; n1--) {
                           index[n1]=(offset_t) l1/antidim[n1];
                           l1=l1-antidim[n1]*index[n1];
                         }
@@ -1014,10 +1014,10 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
                         index[0]=recount;
                       }
                       recount1=0;
-                      for (n1=0; n1<ha_var[i].size; n1++) {
-                        recount1=recount1+ha_setele[offset[n1]+index[n1]].superset_pos[supsetid[n1]]*ha_var[i].strides[n1];
+                      for (n1=0; n1<vars[i].size; n1++) {
+                        recount1=recount1+set_elems[offset[n1]+index[n1]].superset_pos[supsetid[n1]]*vars[i].strides[n1];
                       }
-                      ha_varele[ha_var[i].offset+recount1].value=val;
+                      var_store[vars[i].offset+recount1].value=val;
                       recount++;
                       if (recount>=dims) {
                         break;
@@ -1031,8 +1031,8 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
                         }
                         val=atof(readitem);//sscanf(readitem, "%lf", &val);
                         l1=recount;
-                        if (ha_var[i].size>1) {
-                          for (n1=ha_var[i].size-1; n1>1; n1--) {
+                        if (vars[i].size>1) {
+                          for (n1=vars[i].size-1; n1>1; n1--) {
                             index[n1]=(offset_t) l1/antidim[n1];
                             l1=l1-antidim[n1]*index[n1];
                           }
@@ -1044,17 +1044,17 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
                           index[0]=recount;
                         }
                         recount1=0;
-                        for (n1=0; n1<ha_var[i].size; n1++) {
-                          recount1=recount1+ha_setele[offset[n1]+index[n1]].superset_pos[supsetid[n1]]*ha_var[i].strides[n1];
+                        for (n1=0; n1<vars[i].size; n1++) {
+                          recount1=recount1+set_elems[offset[n1]+index[n1]].superset_pos[supsetid[n1]]*vars[i].strides[n1];
                         }
-                        ha_varele[ha_var[i].offset+recount1].value=val;
+                        var_store[vars[i].offset+recount1].value=val;
                         recount++;
                       }
                       readitem = strtok(NULL,"\n");
                       val=atof(readitem);//sscanf(readitem, "%lf", &val);
                       l1=recount;
-                      if (ha_var[i].size>1) {
-                        for (n1=ha_var[i].size-1; n1>1; n1--) {
+                      if (vars[i].size>1) {
+                        for (n1=vars[i].size-1; n1>1; n1--) {
                           index[n1]=(offset_t) l1/antidim[n1];
                           l1=l1-antidim[n1]*index[n1];
                         }
@@ -1066,10 +1066,10 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
                         index[0]=recount;
                       }
                       recount1=0;
-                      for (n1=0; n1<ha_var[i].size; n1++) {
-                        recount1=recount1+ha_setele[offset[n1]+index[n1]].superset_pos[supsetid[n1]]*ha_var[i].strides[n1];
+                      for (n1=0; n1<vars[i].size; n1++) {
+                        recount1=recount1+set_elems[offset[n1]+index[n1]].superset_pos[supsetid[n1]]*vars[i].strides[n1];
                       }
-                      ha_varele[ha_var[i].offset+recount1].value=val;
+                      var_store[vars[i].offset+recount1].value=val;
                       recount++;
                       if (recount>=dims) {
                         break;
@@ -1104,7 +1104,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
 }
 
 
-offset_t sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifier *arSet,set_def *ha_set,dim_t nset,dim_t fdim,int j) {
+offset_t sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifier *arSet,set_def *sets,dim_t nset,dim_t fdim,int j) {
   char *readitem,*p,*p1,*p2,interchar2[TABREADLINE],argu[TABREADLINE];//,line5[TABREADLINE]
   char interchar[TABREADLINE],interchar1[TABREADLINE],line[TABREADLINE],line1[TABREADLINE],line2[TABREADLINE],line3[TABREADLINE],line4[TABREADLINE],tempname[NAMESIZE];
   offset_t i=0,k=0,k1=0,length,ncur=0,ncuri,l,l1,l2,l3,l4,l5,l6,l7,sup;
@@ -1130,19 +1130,19 @@ offset_t sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
         sprintf(interchar1, "%d", j);
         interchar[0]='\0';
         if (j<10) {
-          strcat(interchar,"ha_cgesum000");
+          strcat(interchar,"gen_sum000");
         }
         if (9<j&&j<100) {
-          strcat(interchar,"ha_cgesum00");
+          strcat(interchar,"gen_sum00");
         }
         if (99<j&&j<1000) {
-          strcat(interchar,"ha_cgesum0");
+          strcat(interchar,"gen_sum0");
         }
         if (999<j&&j<10000) {
-          strcat(interchar,"ha_cgesum");
+          strcat(interchar,"gen_sum");
         }
         if (i>10000) {
-          strcat(interchar,"ha_cgesum");
+          strcat(interchar,"gen_sum");
           printf("Error: Too many sum\n");
         }
         strcat(interchar,interchar1);
@@ -1154,7 +1154,7 @@ offset_t sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
         p = strtok(NULL,",");
         strcpy(sum_cof[j].sumindx,p);
         p = strtok(NULL,",");
-        for (l7=0; l7<nset; l7++) if(strcmp(p,ha_set[l7].setname)==0) {
+        for (l7=0; l7<nset; l7++) if(strcmp(p,sets[l7].setname)==0) {
             sum_cof[j].sumsetid=l7;
             break;
           }
@@ -1195,7 +1195,7 @@ offset_t sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
                   l7=str_rfind_ci(line3,interchar1);
                   p1=&line3[l7+2];
                   p1 = strtok(p1,",");
-                  for (l7=0; l7<nset; l7++) if(strcmp(p1,ha_set[l7].setname)==0) {
+                  for (l7=0; l7<nset; l7++) if(strcmp(p1,sets[l7].setname)==0) {
                       sum_cof[j].setid[l3]=l7;
                       break;
                     }
@@ -1236,7 +1236,7 @@ offset_t sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
                     p2=strchr(p1,',');
                     strncpy(tempname,p1,p2-p1);
                     tempname[p2-p1]='\0';
-                    for (l7=0; l7<nset; l7++) if(strcmp(tempname,ha_set[l7].setname)==0) {
+                    for (l7=0; l7<nset; l7++) if(strcmp(tempname,sets[l7].setname)==0) {
                         sum_cof[j].setid[l3]=l7;
                         break;
                       }
@@ -1275,19 +1275,19 @@ offset_t sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
         sprintf(interchar1, "%d", j);
         interchar[0]='\0';
         if (j<10) {
-          strcat(interchar,"ha_cgesum000");
+          strcat(interchar,"gen_sum000");
         }
         if (9<j&&j<100) {
-          strcat(interchar,"ha_cgesum00");
+          strcat(interchar,"gen_sum00");
         }
         if (99<j&&j<1000) {
-          strcat(interchar,"ha_cgesum0");
+          strcat(interchar,"gen_sum0");
         }
         if (999<j&&j<10000) {
-          strcat(interchar,"ha_cgesum");
+          strcat(interchar,"gen_sum");
         }
         if (i>10000) {
-          strcat(interchar,"ha_cgesum");
+          strcat(interchar,"gen_sum");
           printf("Error: Too many sum\n");
         }
         strcat(interchar,interchar1);
@@ -1299,7 +1299,7 @@ offset_t sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
         p = strtok(NULL,",");
         strcpy(sum_cof[j].sumindx,p);
         p = strtok(NULL,",");
-        for (l7=0; l7<nset; l7++) if(strcmp(p,ha_set[l7].setname)==0) {
+        for (l7=0; l7<nset; l7++) if(strcmp(p,sets[l7].setname)==0) {
             sum_cof[j].sumsetid=l7;
             break;
           }
@@ -1340,7 +1340,7 @@ offset_t sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
                   l7=str_rfind_ci(line3,interchar1);
                   p1=&line3[l7+2];
                   p1 = strtok(p1,",");
-                  for (l7=0; l7<nset; l7++) if(strcmp(p1,ha_set[l7].setname)==0) {
+                  for (l7=0; l7<nset; l7++) if(strcmp(p1,sets[l7].setname)==0) {
                       sum_cof[j].setid[l3]=l7;
                       break;
                     }
@@ -1381,7 +1381,7 @@ offset_t sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
                     p2=strchr(p1,',');
                     strncpy(tempname,p1,p2-p1);
                     tempname[p2-p1]='\0';
-                    for (l7=0; l7<nset; l7++) if(strcmp(tempname,ha_set[l7].setname)==0) {
+                    for (l7=0; l7<nset; l7++) if(strcmp(tempname,sets[l7].setname)==0) {
                         sum_cof[j].setid[l3]=l7;
                         break;
                       }
@@ -1453,7 +1453,7 @@ offset_t tab_count_statements(char *fname, char *commsyntax) {
   return j;
 }
 
-offset_t closure_read(char *fname, char *commsyntax,closure_entry *ha_cgeshock, array_def *ha_var,offset_t nvar,set_def *ha_set,dim_t nset, set_element *ha_setele) {
+offset_t closure_read(char *fname, char *commsyntax,closure_entry *closure_vals, array_def *vars,offset_t nvar,set_def *sets,dim_t nset, set_element *set_elems) {
   FILE * filehandle;
   char line[TABREADLINE]="\0",*readitem=NULL,*p=NULL,*p1=NULL,vname[TABREADLINE],argu[TABREADLINE];//,linecopy[TABREADLINE]
   offset_t i,j,n=0,l=0,l1,l2,n1,m,dims,dcount,exodims,supsetid[MAXSUPSET],sup,doublepr[MAXSUPSET];
@@ -1501,13 +1501,13 @@ offset_t closure_read(char *fname, char *commsyntax,closure_entry *ha_cgeshock, 
       readitem++;
       check=true;
       if (strchr(vname,'(')==NULL) {
-        for (j=0; j<nvar; j++) if (strcmp(vname,ha_var[j].cofname)==0) {
-            dims=ha_var[j].nelem;
+        for (j=0; j<nvar; j++) if (strcmp(vname,vars[j].cofname)==0) {
+            dims=vars[j].nelem;
             if (dims==0) {
-              ha_cgeshock[ha_var[j].offset].is_exogenous=true;
+              closure_vals[vars[j].offset].is_exogenous=true;
               n=n+1;
             } else for (l=0; l<dims; l++) {
-                ha_cgeshock[ha_var[j].offset+l].is_exogenous=true;
+                closure_vals[vars[j].offset+l].is_exogenous=true;
                 n=n+1;
               }
             check=false;
@@ -1518,10 +1518,10 @@ offset_t closure_read(char *fname, char *commsyntax,closure_entry *ha_cgeshock, 
         dims=1;
         p = strtok(vname,"(");
         for(sup=0; sup<MAXSUPSET; sup++)supsetid[sup]=0;
-        for (j=0; j<nvar; j++) if (strcmp(p,ha_var[j].cofname)==0) {
-            quantifier *arSet= (quantifier *) calloc (ha_var[j].size,sizeof(quantifier));
-            offset_t *exoantidim= (offset_t *) calloc (ha_var[j].size,sizeof(offset_t));
-            switch (ha_var[j].size) {
+        for (j=0; j<nvar; j++) if (strcmp(p,vars[j].cofname)==0) {
+            quantifier *arSet= (quantifier *) calloc (vars[j].size,sizeof(quantifier));
+            offset_t *exoantidim= (offset_t *) calloc (vars[j].size,sizeof(offset_t));
+            switch (vars[j].size) {
             case 1:
               p = strtok(NULL,")");//p = strtok(vname,")");
               if (strchr(p,'"')!=NULL) {
@@ -1530,36 +1530,36 @@ offset_t closure_read(char *fname, char *commsyntax,closure_entry *ha_cgeshock, 
                 p+=1;
                 p1=strchr(p,'"');
                 *p1='\0';
-                for (l1=0; l1<ha_set[ha_var[j].setid[0]].size; l1++)
-                  if (strcmp(p,ha_setele[ha_set[ha_var[j].setid[0]].offset+l1].setele)==0) {
-                    ha_cgeshock[ha_var[j].offset+l1].is_exogenous=true;
+                for (l1=0; l1<sets[vars[j].setid[0]].size; l1++)
+                  if (strcmp(p,set_elems[sets[vars[j].setid[0]].offset+l1].setele)==0) {
+                    closure_vals[vars[j].offset+l1].is_exogenous=true;
                     n=n+1;
                     check=false;
                     break;
                   }
-                  if(l1==ha_set[ha_var[j].setid[0]].size)printf("Error!!! There is no element %s in the set %s in cof/var %s\n",p,ha_set[ha_var[j].setid[0]].setname,ha_var[j].cofname);
+                  if(l1==sets[vars[j].setid[0]].size)printf("Error!!! There is no element %s in the set %s in cof/var %s\n",p,sets[vars[j].setid[0]].setname,vars[j].cofname);
               } else {
-                if(strcmp(p,ha_set[ha_var[j].setid[0]].setname)==0) {
-                  arSet[0].setid=ha_var[j].setid[0];
+                if(strcmp(p,sets[vars[j].setid[0]].setname)==0) {
+                  arSet[0].setid=vars[j].setid[0];
                   supsetid[0]=0;
                   exoantidim[0]=1;//arSet[0].SetSize;
-                  dims=ha_set[arSet[0].setid].size;
+                  dims=sets[arSet[0].setid].size;
                 } else {
-                  for (l1=0; l1<nset; l1++) if (strcmp(p,ha_set[l1].setname)==0) {
+                  for (l1=0; l1<nset; l1++) if (strcmp(p,sets[l1].setname)==0) {
                       arSet[0].setid=l1;
-                      for(sup=1; sup<MAXSUPSET; sup++)if(ha_set[l1].subsetid[sup]==ha_var[j].setid[0])supsetid[0]=sup;
+                      for(sup=1; sup<MAXSUPSET; sup++)if(sets[l1].subsetid[sup]==vars[j].setid[0])supsetid[0]=sup;
                       exoantidim[0]=1;//arSet[0].SetSize;
-                      dims=ha_set[arSet[0].setid].size;
+                      dims=sets[arSet[0].setid].size;
                       break;
                     }
-                    if(l1==nset)printf("Error!!! There is no set %s in cof/var %s\n",p,ha_var[j].cofname);
+                    if(l1==nset)printf("Error!!! There is no set %s in cof/var %s\n",p,vars[j].cofname);
                 }
               }
               break;
             default:
               p = strtok(NULL,")");
               strcat(p,",");
-              for (l=0; l<ha_var[j].size; l++) {
+              for (l=0; l<vars[j].size; l++) {
                 if (l==0) {
                   p = strtok(p,",");
                 } else {
@@ -1568,30 +1568,30 @@ offset_t closure_read(char *fname, char *commsyntax,closure_entry *ha_cgeshock, 
                 if (*p=='"') {
                   strcpy(argu,p+1);
                   str_replace_char(argu,'"','\0');
-                  for(l1=0; l1<ha_set[ha_var[j].setid[l]].size; l1++) if (strcmp(argu,ha_setele[ha_set[ha_var[j].setid[l]].offset+l1].setele)==0) {
+                  for(l1=0; l1<sets[vars[j].setid[l]].size; l1++) if (strcmp(argu,set_elems[sets[vars[j].setid[l]].offset+l1].setele)==0) {
                       doublepr[l]=l1;
                       supsetid[l]=-2;
                       break;
                     }
-                    if(l1==ha_set[ha_var[j].setid[l]].size)printf("Error!!! There is no element %s in the set %s in cof/var %s\n",argu,ha_set[ha_var[j].setid[l]].setname,ha_var[j].cofname);
+                    if(l1==sets[vars[j].setid[l]].size)printf("Error!!! There is no element %s in the set %s in cof/var %s\n",argu,sets[vars[j].setid[l]].setname,vars[j].cofname);
                 } else {
-                  if(strcmp(p,ha_set[ha_var[j].setid[l]].setname)==0) {
-                    arSet[l].setid=ha_var[j].setid[l];
-                    dims=dims*ha_set[arSet[l].setid].size;
+                  if(strcmp(p,sets[vars[j].setid[l]].setname)==0) {
+                    arSet[l].setid=vars[j].setid[l];
+                    dims=dims*sets[arSet[l].setid].size;
                   } else {
-                    for(l1=0; l1<nset; l1++) if (strcmp(p,ha_set[l1].setname)==0) {
+                    for(l1=0; l1<nset; l1++) if (strcmp(p,sets[l1].setname)==0) {
                         arSet[l].setid=l1;
-                        for(sup=1; sup<MAXSUPSET; sup++)if(ha_set[l1].subsetid[sup]==ha_var[j].setid[l])supsetid[l]=sup;
-                        dims=dims*ha_set[arSet[l].setid].size;
+                        for(sup=1; sup<MAXSUPSET; sup++)if(sets[l1].subsetid[sup]==vars[j].setid[l])supsetid[l]=sup;
+                        dims=dims*sets[arSet[l].setid].size;
                         break;
                       }
-                      if(l1==nset)printf("Error!!! There is no set %s in cof/var %s\n",p,ha_var[j].cofname);
+                      if(l1==nset)printf("Error!!! There is no set %s in cof/var %s\n",p,vars[j].cofname);
                   }
                 }
               }
-              exoantidim[ha_var[j].size-1]=1;
-              for (l1=ha_var[j].size-2; l1>-1; l1--) {
-                if(supsetid[l1+1]>-2)exoantidim[l1]=exoantidim[l1+1]*ha_set[arSet[l1+1].setid].size;
+              exoantidim[vars[j].size-1]=1;
+              for (l1=vars[j].size-2; l1>-1; l1--) {
+                if(supsetid[l1+1]>-2)exoantidim[l1]=exoantidim[l1+1]*sets[arSet[l1+1].setid].size;
                 else exoantidim[l1]=exoantidim[l1+1];
               }
               break;
@@ -1599,17 +1599,17 @@ offset_t closure_read(char *fname, char *commsyntax,closure_entry *ha_cgeshock, 
             if(check) for (l=0; l<dims; l++) {
                 m=l;
                 exodims=0;
-                for (dcount=0; dcount<ha_var[j].size; dcount++) {
+                for (dcount=0; dcount<vars[j].size; dcount++) {
                   l1=(offset_t) m/exoantidim[dcount];
                   m=m-l1*exoantidim[dcount];
                   if(supsetid[dcount]==-2) {
                     l2=doublepr[dcount];//ha_set[arSet[dcount].setid].begadd;  //Special case
                   } else {
-                    l2=ha_setele[ha_set[arSet[dcount].setid].offset+l1].superset_pos[supsetid[dcount]];
+                    l2=set_elems[sets[arSet[dcount].setid].offset+l1].superset_pos[supsetid[dcount]];
                   }
-                  exodims=exodims+l2*ha_var[j].strides[dcount];
+                  exodims=exodims+l2*vars[j].strides[dcount];
                 }
-                ha_cgeshock[ha_var[j].offset+exodims].is_exogenous=true;
+                closure_vals[vars[j].offset+exodims].is_exogenous=true;
                 n=n+1;
               }
             free(arSet);
@@ -1624,7 +1624,7 @@ offset_t closure_read(char *fname, char *commsyntax,closure_entry *ha_cgeshock, 
   return n;
 }
 
-offset_t shocks_read(char *fname, char *commsyntax,closure_entry *ha_cgeshock,offset_t nvarele, array_def *ha_var,offset_t nvar,set_def *ha_set,dim_t nset, set_element *ha_setele,dim_t subints) {
+offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,offset_t nvarele, array_def *vars,offset_t nvar,set_def *sets,dim_t nset, set_element *set_elems,dim_t subints) {
   FILE * filehandle;
   char line[DATREADLINE],linecopy[DATREADLINE],argu[TABREADLINE];
   line[0]='\0';
@@ -1673,13 +1673,13 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *ha_cgeshock,of
     }
     if (varnset==0) {
       readitem = strtok(NULL,"=");
-      for (j=0; j<nvar; j++) if (strcmp(readitem,ha_var[j].cofname)==0) {
+      for (j=0; j<nvar; j++) if (strcmp(readitem,vars[j].cofname)==0) {
           readitem = strtok(NULL,";");
           k1=str_rfind_ci(readitem,"uniform");
           if(k1!=-1){
-            ha_cgeshock[ha_var[j].offset].shock_value=atof(readitem+k1+1)/subints;
+            closure_vals[vars[j].offset].shock_value=atof(readitem+k1+1)/subints;
           }else{
-            ha_cgeshock[ha_var[j].offset].shock_value=atof(readitem)/subints;
+            closure_vals[vars[j].offset].shock_value=atof(readitem)/subints;
           }
           l=l+1;
           break;
@@ -1687,7 +1687,7 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *ha_cgeshock,of
     } else {
       readitem = strtok(NULL,"(");
       for (j=0; j<nvar; j++) {
-        if (strcmp(readitem,ha_var[j].cofname)==0) {
+        if (strcmp(readitem,vars[j].cofname)==0) {
           dims=1;
           readitem = strtok(NULL,")");
           strcpy(argu,readitem);
@@ -1704,35 +1704,35 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *ha_cgeshock,of
             arSet[n1]=0;
             antidim[n1]=0;
           }
-          for (n1=0; n1<ha_var[j].size; n1++) {
+          for (n1=0; n1<vars[j].size; n1++) {
             if(n1==0) {
               p=strtok(argu,",");
             } else {
               p=strtok(NULL,",");
             }
             if(strchr(p,'\"')==NULL) {
-              if((strcmp(ha_set[ha_var[j].setid[n1]].setname,p)==0)) {
-                dimbegadd[n1]=ha_set[ha_var[j].setid[n1]].offset;//ha_set[k1].begadd;
-                dimssize[n1]=ha_set[ha_var[j].setid[n1]].size;//ha_set[k1].size;
+              if((strcmp(sets[vars[j].setid[n1]].setname,p)==0)) {
+                dimbegadd[n1]=sets[vars[j].setid[n1]].offset;//ha_set[k1].begadd;
+                dimssize[n1]=sets[vars[j].setid[n1]].size;//ha_set[k1].size;
                 dims=dims*dimssize[n1];
                 supsetid[n1]=0;
               } else {
-                for (k1=0; k1<nset; k1++)if (strcmp(ha_set[k1].setname,p)==0) {
-                    dimbegadd[n1]=ha_set[k1].offset;
-                    dimssize[n1]=ha_set[k1].size;
-                    dims=dims*ha_set[k1].size;
-                    for(sup=0; sup<MAXSUPSET; sup++)if(ha_set[k1].subsetid[sup]==ha_var[j].setid[n1]) {
+                for (k1=0; k1<nset; k1++)if (strcmp(sets[k1].setname,p)==0) {
+                    dimbegadd[n1]=sets[k1].offset;
+                    dimssize[n1]=sets[k1].size;
+                    dims=dims*sets[k1].size;
+                    for(sup=0; sup<MAXSUPSET; sup++)if(sets[k1].subsetid[sup]==vars[j].setid[n1]) {
                         supsetid[n1]=sup;
                         break;
                       }
                     if(sup==MAXSUPSET){
-                      printf("Error!!!! %s in variable %s in shock file is not a correct set at that position!\n",p,ha_var[j].cofname);
+                      printf("Error!!!! %s in variable %s in shock file is not a correct set at that position!\n",p,vars[j].cofname);
                       return -1;
                     }
                     break;
                   }
                   if(k1==nset){
-                    printf("Error!!!! %s in variable %s in shock file is not a set!\n",p,ha_var[j].cofname);
+                    printf("Error!!!! %s in variable %s in shock file is not a set!\n",p,vars[j].cofname);
                     return -1;
                   }
               }
@@ -1741,23 +1741,23 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *ha_cgeshock,of
               while (p[k2] != '\0') {
                 k2++;
               }
-              for (k1=0; k1<ha_set[ha_var[j].setid[n1]].size; k1++)if (strncmp(ha_setele[ha_set[ha_var[j].setid[n1]].offset+k1].setele,p+1,k2-2)==0&&ha_setele[ha_set[ha_var[j].setid[n1]].offset+k1].setele[k2-2]=='\0') {
-                  dimindx[n1]=ha_setele[ha_set[ha_var[j].setid[n1]].offset+k1].superset_pos[0];
+              for (k1=0; k1<sets[vars[j].setid[n1]].size; k1++)if (strncmp(set_elems[sets[vars[j].setid[n1]].offset+k1].setele,p+1,k2-2)==0&&set_elems[sets[vars[j].setid[n1]].offset+k1].setele[k2-2]=='\0') {
+                  dimindx[n1]=set_elems[sets[vars[j].setid[n1]].offset+k1].superset_pos[0];
                   dimssize[n1]=1;
                   supsetid[n1]=-2;
                   break;
                 }
-              if(k1==ha_set[ha_var[j].setid[n1]].size){
-                printf("Error!!!! %s in variable %s in shock file is not a set element!\n",p,ha_var[j].cofname);
+              if(k1==sets[vars[j].setid[n1]].size){
+                printf("Error!!!! %s in variable %s in shock file is not a set element!\n",p,vars[j].cofname);
                 return -1;
               }
             }
           }
-          if (ha_var[j].size>0)antidim[0]=dimssize[1];
-          if (ha_var[j].size>1)antidim[1]=1;
-          if (ha_var[j].size>2)antidim[2]=antidim[0]*dimssize[0];
-          if (ha_var[j].size>3) {
-            for (n1=3; n1<ha_var[j].size; n1++) {
+          if (vars[j].size>0)antidim[0]=dimssize[1];
+          if (vars[j].size>1)antidim[1]=1;
+          if (vars[j].size>2)antidim[2]=antidim[0]*dimssize[0];
+          if (vars[j].size>3) {
+            for (n1=3; n1<vars[j].size; n1++) {
               antidim[n1]=antidim[n1-1]*dimssize[n1-1];
             }
           }
@@ -1766,13 +1766,13 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *ha_cgeshock,of
             val=atof(linecopy+k1+1);//sscanf(readitem, "%lf", &val);
             for (n1=0; n1<dims; n1++) {
               l2=n1;
-              if(ha_var[j].size>1) {
-                for (dcount=ha_var[j].size-1; dcount>1; dcount--) {
+              if(vars[j].size>1) {
+                for (dcount=vars[j].size-1; dcount>1; dcount--) {
                   if(dimindx[dcount]>-1) {
                     arSet[dcount]=dimindx[dcount];//ha_setele[dimbegadd[dcount]+l1].setsh;
                   } else {
                     l1=(offset_t) l2/antidim[dcount];
-                    if(supsetid[dcount]>-2)arSet[dcount]=ha_setele[dimbegadd[dcount]+l1].superset_pos[supsetid[dcount]];
+                    if(supsetid[dcount]>-2)arSet[dcount]=set_elems[dimbegadd[dcount]+l1].superset_pos[supsetid[dcount]];
                     else arSet[dcount]=dimindx[dcount];
                     l2=l2-l1*antidim[dcount];
                   }
@@ -1781,25 +1781,25 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *ha_cgeshock,of
                   arSet[0]=dimindx[0];
                 } else {
                   l1=(offset_t) l2/antidim[0];
-                  if(supsetid[0]>-2)arSet[0]=ha_setele[dimbegadd[0]+l1].superset_pos[supsetid[0]];
-                  else arSet[0]=ha_setele[dimbegadd[0]+l1].superset_pos[0];//dimindx[0];
+                  if(supsetid[0]>-2)arSet[0]=set_elems[dimbegadd[0]+l1].superset_pos[supsetid[0]];
+                  else arSet[0]=set_elems[dimbegadd[0]+l1].superset_pos[0];//dimindx[0];
                   l2=l2-l1*antidim[0];
                 }
                 if(dimindx[1]>-1) {
                   arSet[1]=dimindx[1];
                 } else {
                   l1=(offset_t) l2/antidim[1];
-                  if(supsetid[1]>-2)arSet[1]=ha_setele[dimbegadd[1]+l1].superset_pos[supsetid[1]];
-                  else arSet[1]=ha_setele[dimbegadd[1]+l1].superset_pos[0];//l1;//dimindx[1];
+                  if(supsetid[1]>-2)arSet[1]=set_elems[dimbegadd[1]+l1].superset_pos[supsetid[1]];
+                  else arSet[1]=set_elems[dimbegadd[1]+l1].superset_pos[0];//l1;//dimindx[1];
                 }
               } else {
                 arSet[0]=l2;
               }
               l2=0;
-              for (dcount=0; dcount<ha_var[j].size; dcount++) {
-                l2=l2+arSet[dcount]*ha_var[j].strides[dcount];
+              for (dcount=0; dcount<vars[j].size; dcount++) {
+                l2=l2+arSet[dcount]*vars[j].strides[dcount];
               }
-              ha_cgeshock[ha_var[j].offset+l2].shock_value=val/subints;
+              closure_vals[vars[j].offset+l2].shock_value=val/subints;
               l=l+1;
             }
           } else {
@@ -1815,59 +1815,59 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *ha_cgeshock,of
               }
               val=atof(readitem);
               l2=n1;
-              if(ha_var[j].size>1) {
-                for (dcount=ha_var[j].size-1; dcount>1; dcount--) {
+              if(vars[j].size>1) {
+                for (dcount=vars[j].size-1; dcount>1; dcount--) {
                   if(dimindx[dcount]>-1) {
                     arSet[dcount]=dimindx[dcount];//ha_setele[dimbegadd[dcount]+l1].setsh;
                   } else {
                     l1=(offset_t) l2/antidim[dcount];
-                    if(supsetid[dcount]>-2)arSet[dcount]=ha_setele[dimbegadd[dcount]+l1].superset_pos[supsetid[dcount]];
+                    if(supsetid[dcount]>-2)arSet[dcount]=set_elems[dimbegadd[dcount]+l1].superset_pos[supsetid[dcount]];
                     else arSet[dcount]=dimindx[dcount];
                     l2=l2-l1*antidim[dcount];
                   }
                 }
-                if(ha_var[j].size==2){//compliance
+                if(vars[j].size==2){//compliance
                 if(dimindx[1]>-1) {
                   arSet[1]=dimindx[1];
                 } else {
                   l1=(offset_t) l2/dimssize[0];
-                  if(supsetid[1]>-2)arSet[1]=ha_setele[dimbegadd[1]+l1].superset_pos[supsetid[1]];
-                  else arSet[1]=ha_setele[dimbegadd[1]+l1].superset_pos[0];//dimindx[1];
+                  if(supsetid[1]>-2)arSet[1]=set_elems[dimbegadd[1]+l1].superset_pos[supsetid[1]];
+                  else arSet[1]=set_elems[dimbegadd[1]+l1].superset_pos[0];//dimindx[1];
                   l2=l2-l1*dimssize[0];
                 }
                 if(dimindx[0]>-1) {
                   arSet[0]=dimindx[0];
                 } else {
                   l1=(offset_t) l2;
-                  if(supsetid[0]>-2)arSet[0]=ha_setele[dimbegadd[0]+l1].superset_pos[supsetid[0]];
-                  else arSet[0]=ha_setele[dimbegadd[0]+l1].superset_pos[0];//l1;//dimindx[0];
+                  if(supsetid[0]>-2)arSet[0]=set_elems[dimbegadd[0]+l1].superset_pos[supsetid[0]];
+                  else arSet[0]=set_elems[dimbegadd[0]+l1].superset_pos[0];//l1;//dimindx[0];
                 }
                 }else{
                 if(dimindx[0]>-1) {
                   arSet[0]=dimindx[0];//ha_setele[dimbegadd[dcount]+l1].setsh;
                 } else {
                   l1=(offset_t) l2/antidim[0];
-                  if(supsetid[0]>-2)arSet[0]=ha_setele[dimbegadd[0]+l1].superset_pos[supsetid[0]];
-                  else arSet[0]=ha_setele[dimbegadd[0]+l1].superset_pos[0];//dimindx[0];
+                  if(supsetid[0]>-2)arSet[0]=set_elems[dimbegadd[0]+l1].superset_pos[supsetid[0]];
+                  else arSet[0]=set_elems[dimbegadd[0]+l1].superset_pos[0];//dimindx[0];
                   l2=l2-l1*antidim[0];
                 }
                 if(dimindx[1]>-1) {
                   arSet[1]=dimindx[1];//ha_setele[dimbegadd[dcount]+l1].setsh;
                 } else {
                   l1=(offset_t) l2/antidim[1];
-                  if(supsetid[1]>-2)arSet[1]=ha_setele[dimbegadd[1]+l1].superset_pos[supsetid[1]];
-                  else arSet[1]=ha_setele[dimbegadd[1]+l1].superset_pos[0];//dimindx[0];
+                  if(supsetid[1]>-2)arSet[1]=set_elems[dimbegadd[1]+l1].superset_pos[supsetid[1]];
+                  else arSet[1]=set_elems[dimbegadd[1]+l1].superset_pos[0];//dimindx[0];
                 }
                 }
               } else {
-                if(supsetid[0]>-2)arSet[0]=ha_setele[dimbegadd[0]+l2].superset_pos[supsetid[0]];
+                if(supsetid[0]>-2)arSet[0]=set_elems[dimbegadd[0]+l2].superset_pos[supsetid[0]];
                 else arSet[0]=dimindx[0];
               }
               l2=0;
-              for (dcount=0; dcount<ha_var[j].size; dcount++) {
-                l2=l2+arSet[dcount]*ha_var[j].strides[dcount];
+              for (dcount=0; dcount<vars[j].size; dcount++) {
+                l2=l2+arSet[dcount]*vars[j].strides[dcount];
               }
-              ha_cgeshock[ha_var[j].offset+l2].shock_value=val/subints;
+              closure_vals[vars[j].offset+l2].shock_value=val/subints;
               l=l+1;
             }
           }
@@ -1905,7 +1905,7 @@ int variables_read_defaults(char *fname, array_def *record, offset_t ncof) {
   return 1;
 }
 
-offset_t variables_read(char *fname, char *commsyntax, array_def *record, offset_t ncof, set_def *ha_set,dim_t nset) {
+offset_t variables_read(char *fname, char *commsyntax, array_def *record, offset_t ncof, set_def *sets,dim_t nset) {
   FILE * filehandle;
   char line[TABREADLINE]="\0",linecopy[TABREADLINE],setname1[NAMESIZE],setname[NAMESIZE],setname2[NAMESIZE],setname3[NAMESIZE],finditem[NAMESIZE],finditem1[NAMESIZE],finditem2[NAMESIZE],finditem3[NAMESIZE],vname[NAMESIZE];//,vnamecopy[NAMESIZE];
   char *tpnt=NULL;
@@ -2122,8 +2122,8 @@ offset_t variables_read(char *fname, char *commsyntax, array_def *record, offset
             readitem = strtok(NULL,",");
           }
           for (l=0; l<nset; l++) {
-            if (strcmp(ha_set[l].setname,readitem)==0) {
-              add=add*ha_set[l].size;
+            if (strcmp(sets[l].setname,readitem)==0) {
+              add=add*sets[l].size;
               record[j].setid[m]=l;
               break;
             }
@@ -2134,7 +2134,7 @@ offset_t variables_read(char *fname, char *commsyntax, array_def *record, offset
         record[j].nelem=add;
         record[j].strides[dcount-1]=1;
         for (l=record[j].size-2; l>-1; l--) {
-          record[j].strides[l]=record[j].strides[l+1]*ha_set[record[j].setid[l+1]].size;
+          record[j].strides[l]=record[j].strides[l+1]*sets[record[j].setid[l+1]].size;
         }
         addi=addi+add;
       } else {
@@ -2171,10 +2171,10 @@ offset_t variables_read(char *fname, char *commsyntax, array_def *record, offset
   return addi;
 }
 
-offset_t set_find_alltime(set_def *ha_set,dim_t nset) {
+offset_t set_find_alltime(set_def *sets,dim_t nset) {
   dim_t i;
   for(i=0; i<nset; i++) {
-    if(ha_set[i].intertemp&&ha_set[i].subsetid[1]==-1) {
+    if(sets[i].intertemp&&sets[i].subsetid[1]==-1) {
       break;
     }
   }
@@ -2186,7 +2186,7 @@ offset_t set_find_alltime(set_def *ha_set,dim_t nset) {
 }
 
 
-offset_t coefficients_read(char *fname, char *commsyntax, array_def *record, offset_t ncof, set_def *ha_set,offset_t nset) {
+offset_t coefficients_read(char *fname, char *commsyntax, array_def *record, offset_t ncof, set_def *sets,offset_t nset) {
   FILE * filehandle;
   char line[TABREADLINE]="\0",linecopy[TABREADLINE],setname1[TABREADLINE],setname[TABREADLINE],setname2[TABREADLINE],setname3[TABREADLINE],finditem[TABREADLINE],finditem1[TABREADLINE],finditem2[TABREADLINE],finditem3[TABREADLINE],vname[TABREADLINE];//,vnamecopy[NAMESIZE];
   offset_t n,m,l,ncommsyntax=0,i=0,j=0,addi=0,add=0;
@@ -2369,8 +2369,8 @@ offset_t coefficients_read(char *fname, char *commsyntax, array_def *record, off
             readitem = strtok(NULL,",");
           }
           for (l=0; l<nset; l++) {
-            if (strcmp(ha_set[l].setname,readitem)==0) {
-              add=add*ha_set[l].size;
+            if (strcmp(sets[l].setname,readitem)==0) {
+              add=add*sets[l].size;
               record[j].setid[m]=l;
               break;
             }
@@ -2381,7 +2381,7 @@ offset_t coefficients_read(char *fname, char *commsyntax, array_def *record, off
         record[j].nelem=add;
         record[j].strides[dcount-1]=1;
         for (l=record[j].size-2; l>-1; l--) {
-          record[j].strides[l]=record[j].strides[l+1]*ha_set[record[j].setid[l+1]].size;
+          record[j].strides[l]=record[j].strides[l+1]*sets[record[j].setid[l+1]].size;
         }
         addi=addi+add;
       } else {
@@ -2408,14 +2408,14 @@ offset_t coefficients_read(char *fname, char *commsyntax, array_def *record, off
 }
 
 
-int coef_resolve_sets(array_def *ha_cof,offset_t ncof, set_def *ha_set,dim_t nset, elem_store *ha_cofele) {
+int coef_resolve_sets(array_def *coefs,offset_t ncof, set_def *sets,dim_t nset, elem_store *coef_store) {
   dim_t l,m,dcount;//,dcount1;//,l3=0,l4=0,ld2=0,ld3=0,ld4=0
   offset_t l1=0,i;//,sizeele,dcountdim1[MAXVARDIM],l2=0,dcountdim[MAXVARDIM];//,ld1=0
   for (i=0; i<ncof; i++) {
-    for (dcount=0; dcount<ha_cof[i].size; dcount++) {
+    for (dcount=0; dcount<coefs[i].size; dcount++) {
       for (l=0; l<nset; l++) {
-        if (strcmp(ha_set[l].setname,ha_set[ha_cof[i].setid[dcount]].setname)==0) {
-          ha_set[ha_cof[i].setid[dcount]].offset=ha_set[l].offset;
+        if (strcmp(sets[l].setname,sets[coefs[i].setid[dcount]].setname)==0) {
+          sets[coefs[i].setid[dcount]].offset=sets[l].offset;
           break;
         }
       }
@@ -3072,17 +3072,17 @@ int sets_read(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,
   return 0;
 }
 
-dim_t set_union_named(set_element *ha_setele, set_def *ha_set,dim_t nset,dim_t i) {
+dim_t set_union_named(set_element *set_elems, set_def *sets,dim_t nset,dim_t i) {
   dim_t j,l,n,m,dim1=0,dim2=0,j1,sup1,sup2;
   char line[TABREADLINE],*readitem;
-  strcpy(line,ha_set[i].readele);
+  strcpy(line,sets[i].readele);
   readitem = strtok(line,",");
   readitem = strtok(NULL,",");
   for (l=0; l<nset; l++) {
-    if (strcmp(readitem,ha_set[l].setname)==0) {
-      dim1=ha_set[l].size;
-      for (sup1=1; sup1<MAXSUPSET; sup1++)if(ha_set[l].subsetid[sup1]==-1) {
-          ha_set[l].subsetid[sup1]=i;
+    if (strcmp(readitem,sets[l].setname)==0) {
+      dim1=sets[l].size;
+      for (sup1=1; sup1<MAXSUPSET; sup1++)if(sets[l].subsetid[sup1]==-1) {
+          sets[l].subsetid[sup1]=i;
           break;
         }
       break;
@@ -3090,47 +3090,47 @@ dim_t set_union_named(set_element *ha_setele, set_def *ha_set,dim_t nset,dim_t i
   }
   m=0;
   for (n=0; n<dim1; n++) {
-    strcpy(ha_setele[ha_set[i].offset+m].setele,ha_setele[ha_set[l].offset+n].setele);
-    ha_setele[ha_set[i].offset+m].superset_pos[0]=n;
-    ha_setele[ha_set[l].offset+m].superset_pos[sup1]=n;
+    strcpy(set_elems[sets[i].offset+m].setele,set_elems[sets[l].offset+n].setele);
+    set_elems[sets[i].offset+m].superset_pos[0]=n;
+    set_elems[sets[l].offset+m].superset_pos[sup1]=n;
     m++;
   }
   readitem = strtok(NULL,",");
   for (j=0; j<nset; j++) {
-    if (strcmp(readitem,ha_set[j].setname)==0) {
-      dim2=ha_set[j].size;
-      for (sup2=1; sup2<MAXSUPSET; sup2++)if(ha_set[j].subsetid[sup2]==-1) {
-          ha_set[j].subsetid[sup2]=i;
+    if (strcmp(readitem,sets[j].setname)==0) {
+      dim2=sets[j].size;
+      for (sup2=1; sup2<MAXSUPSET; sup2++)if(sets[j].subsetid[sup2]==-1) {
+          sets[j].subsetid[sup2]=i;
           break;
         }
       break;
     }
   }
   for (n=0; n<dim2; n++) {
-    for (j1=0; j1<dim1; j1++) if(strcmp(ha_setele[ha_set[l].offset+j1].setele,ha_setele[ha_set[j].offset+n].setele)==0) break;
+    for (j1=0; j1<dim1; j1++) if(strcmp(set_elems[sets[l].offset+j1].setele,set_elems[sets[j].offset+n].setele)==0) break;
     if(j1==dim1) {
-      strcpy(ha_setele[ha_set[i].offset+m].setele,ha_setele[ha_set[j].offset+n].setele);
-      ha_setele[ha_set[i].offset+m].superset_pos[0]=m;
-      ha_setele[ha_set[j].offset+n].superset_pos[sup2]=m;
+      strcpy(set_elems[sets[i].offset+m].setele,set_elems[sets[j].offset+n].setele);
+      set_elems[sets[i].offset+m].superset_pos[0]=m;
+      set_elems[sets[j].offset+n].superset_pos[sup2]=m;
       m++;
     } else {
-      ha_setele[ha_set[j].offset+n].superset_pos[sup2]=j1;
+      set_elems[sets[j].offset+n].superset_pos[sup2]=j1;
     }
   }
-  ha_set[i].size=m;
+  sets[i].size=m;
   return m;
 }
-dim_t set_union_op(set_element *ha_setele, set_def *ha_set,dim_t nset,dim_t i) {
+dim_t set_union_op(set_element *set_elems, set_def *sets,dim_t nset,dim_t i) {
   dim_t j,l,n,m,dim1=0,dim2=0,j1,sup1,sup2;
   char line[TABREADLINE],*readitem;
-  strcpy(line,ha_set[i].readele);
+  strcpy(line,sets[i].readele);
   readitem = strtok(line,",");
   readitem = strtok(NULL,",");
   for (l=0; l<nset; l++) {
-    if (strcmp(readitem,ha_set[l].setname)==0) {
-      dim1=ha_set[l].size;
-      for (sup1=1; sup1<MAXSUPSET; sup1++)if(ha_set[l].subsetid[sup1]==-1) {
-          ha_set[l].subsetid[sup1]=i;
+    if (strcmp(readitem,sets[l].setname)==0) {
+      dim1=sets[l].size;
+      for (sup1=1; sup1<MAXSUPSET; sup1++)if(sets[l].subsetid[sup1]==-1) {
+          sets[l].subsetid[sup1]=i;
           break;
         }
       break;
@@ -3138,41 +3138,41 @@ dim_t set_union_op(set_element *ha_setele, set_def *ha_set,dim_t nset,dim_t i) {
   }
   m=0;
   for (n=0; n<dim1; n++) {
-    strcpy(ha_setele[ha_set[i].offset+m].setele,ha_setele[ha_set[l].offset+n].setele);
-    ha_setele[ha_set[i].offset+m].superset_pos[0]=n;
-    ha_setele[ha_set[l].offset+m].superset_pos[sup1]=n;
+    strcpy(set_elems[sets[i].offset+m].setele,set_elems[sets[l].offset+n].setele);
+    set_elems[sets[i].offset+m].superset_pos[0]=n;
+    set_elems[sets[l].offset+m].superset_pos[sup1]=n;
     m++;
   }
   readitem = strtok(NULL,",");
   for (j=0; j<nset; j++) {
-    if (strcmp(readitem,ha_set[j].setname)==0) {
-      dim2=ha_set[j].size;
-      for (sup2=1; sup2<MAXSUPSET; sup2++)if(ha_set[j].subsetid[sup2]==-1) {
-          ha_set[j].subsetid[sup2]=i;
+    if (strcmp(readitem,sets[j].setname)==0) {
+      dim2=sets[j].size;
+      for (sup2=1; sup2<MAXSUPSET; sup2++)if(sets[j].subsetid[sup2]==-1) {
+          sets[j].subsetid[sup2]=i;
           break;
         }
       break;
     }
   }
   for (n=0; n<dim2; n++) {
-    strcpy(ha_setele[ha_set[i].offset+m].setele,ha_setele[ha_set[j].offset+n].setele);
-    ha_setele[ha_set[i].offset+m].superset_pos[0]=m;
-    ha_setele[ha_set[j].offset+n].superset_pos[sup2]=m;
+    strcpy(set_elems[sets[i].offset+m].setele,set_elems[sets[j].offset+n].setele);
+    set_elems[sets[i].offset+m].superset_pos[0]=m;
+    set_elems[sets[j].offset+n].superset_pos[sup2]=m;
     m++;
   }
   return m;
 }
-dim_t set_difference(set_element *ha_setele, set_def *ha_set,dim_t nset,dim_t i) {
+dim_t set_difference(set_element *set_elems, set_def *sets,dim_t nset,dim_t i) {
   dim_t j,l,n,m,v,indi,dim1=0,dim2=0,sup1;
   char line[TABREADLINE],*readitem;
-  strcpy(line,ha_set[i].readele);
+  strcpy(line,sets[i].readele);
   readitem = strtok(line,",");
   readitem = strtok(NULL,",");
   for (l=0; l<nset; l++) {
-    if (strcmp(readitem,ha_set[l].setname)==0) {
-      dim1=ha_set[l].size;
-      for (sup1=1; sup1<MAXSUPSET; sup1++)if(ha_set[i].subsetid[sup1]==-1) {
-          ha_set[i].subsetid[sup1]=l;
+    if (strcmp(readitem,sets[l].setname)==0) {
+      dim1=sets[l].size;
+      for (sup1=1; sup1<MAXSUPSET; sup1++)if(sets[i].subsetid[sup1]==-1) {
+          sets[i].subsetid[sup1]=l;
           break;
         }
       break;
@@ -3180,8 +3180,8 @@ dim_t set_difference(set_element *ha_setele, set_def *ha_set,dim_t nset,dim_t i)
   }
   readitem = strtok(NULL,",");
   for (j=0; j<nset; j++) {
-    if (strcmp(readitem,ha_set[j].setname)==0) {
-      dim2=ha_set[j].size;
+    if (strcmp(readitem,sets[j].setname)==0) {
+      dim2=sets[j].size;
       break;
     }
   }
@@ -3189,21 +3189,21 @@ dim_t set_difference(set_element *ha_setele, set_def *ha_set,dim_t nset,dim_t i)
   for (n=0; n<dim1; n++) {
     indi=0;
     for (v=0; v<dim2; v++) {
-      if (strcmp(ha_setele[ha_set[l].offset+n].setele,ha_setele[ha_set[j].offset+v].setele)==0) {
+      if (strcmp(set_elems[sets[l].offset+n].setele,set_elems[sets[j].offset+v].setele)==0) {
         indi=1;
         break;
       }
     }
     if(indi==0) {
-      strcpy(ha_setele[ha_set[i].offset+m].setele,ha_setele[ha_set[l].offset+n].setele);
-      ha_setele[ha_set[i].offset+m].superset_pos[sup1]=n;
-      ha_setele[ha_set[i].offset+m].superset_pos[0]=m;
+      strcpy(set_elems[sets[i].offset+m].setele,set_elems[sets[l].offset+n].setele);
+      set_elems[sets[i].offset+m].superset_pos[sup1]=n;
+      set_elems[sets[i].offset+m].superset_pos[0]=m;
       m++;
     }
   }
   return m;
 }
-offset_t subsets_read(char *fname, set_element *ha_setele, set_def *ha_set,dim_t nset) {
+offset_t subsets_read(char *fname, set_element *set_elems, set_def *sets,dim_t nset) {
   FILE * filehandle;//, *fileout;
   char line[TABREADLINE]="\0";
   char set[NAMESIZE],subset[NAMESIZE];
@@ -3226,19 +3226,19 @@ offset_t subsets_read(char *fname, set_element *ha_setele, set_def *ha_set,dim_t
     strcpy(set,readitem);
     succ=0;
     for (i=0; i<nset; i++) {
-      if (strcmp(ha_set[i].setname,subset)==0) { //,subsetd)==0) {
+      if (strcmp(sets[i].setname,subset)==0) { //,subsetd)==0) {
         for (j=0; j<nset; j++) {
-          if (strcmp(ha_set[j].setname,set)==0) { //,setd)==0) {
-            ssize=ha_set[j].size;
-            for (sup1=1; sup1<MAXSUPSET; sup1++)if(ha_set[i].subsetid[sup1]==-1) {
-                ha_set[i].subsetid[sup1]=j;
+          if (strcmp(sets[j].setname,set)==0) { //,setd)==0) {
+            ssize=sets[j].size;
+            for (sup1=1; sup1<MAXSUPSET; sup1++)if(sets[i].subsetid[sup1]==-1) {
+                sets[i].subsetid[sup1]=j;
                 break;
               }
             if(sup1==MAXSUPSET)printf("Error!!! Number of superset exceeded! Increase MAXSUPSET!\n");
-            for (jj=ha_set[j].offset; jj<ha_set[j].offset+ha_set[j].size; jj++) {
-              for (jjj=ha_set[i].offset; jjj<ha_set[i].offset+ha_set[i].size; jjj++) {
-                if (strcmp(ha_setele[jj].setele,ha_setele[jjj].setele)==0) {
-                  ha_setele[jjj].superset_pos[sup1]=ha_setele[jj].superset_pos[0];
+            for (jj=sets[j].offset; jj<sets[j].offset+sets[j].size; jj++) {
+              for (jjj=sets[i].offset; jjj<sets[i].offset+sets[i].size; jjj++) {
+                if (strcmp(set_elems[jj].setele,set_elems[jjj].setele)==0) {
+                  set_elems[jjj].superset_pos[sup1]=set_elems[jj].superset_pos[0];
                   succ++;
                   break;
                 }
@@ -3253,13 +3253,13 @@ offset_t subsets_read(char *fname, set_element *ha_setele, set_def *ha_set,dim_t
       j++;
     }
     if(i==nset)printf("Error!!! No such set %s\n",subset);
-    if(succ-ha_set[i].size!=0)printf("Error!!! No set or some elements of set %s are not elements of set %s\n",subset,set);
+    if(succ-sets[i].size!=0)printf("Error!!! No set or some elements of set %s are not elements of set %s\n",subset,set);
   }
   fclose(filehandle);
   return j;
 }
 
-dim_t subset_map_build(set_element *ha_setele, set_def *ha_set,dim_t nset,offset_t* contin) {
+dim_t subset_map_build(set_element *set_elems, set_def *sets,dim_t nset,offset_t* contin) {
   dim_t i,setd,subsetd,sup1,sup2,sup3,b;//,nlength;
   offset_t jj,jjj,j=0;
   *contin=0;
@@ -3268,18 +3268,18 @@ dim_t subset_map_build(set_element *ha_setele, set_def *ha_set,dim_t nset,offset
     while(b==1) {
       for (sup1=1; sup1<MAXSUPSET; sup1++) {
         b=0;
-        if(ha_set[i].subsetid[sup1]==-1) {
+        if(sets[i].subsetid[sup1]==-1) {
           b=2;
           break;
         }
         for (sup2=1; sup2<MAXSUPSET; sup2++) {
           b=0;
-          if(ha_set[ha_set[i].subsetid[sup1]].subsetid[sup2]==-1) {
+          if(sets[sets[i].subsetid[sup1]].subsetid[sup2]==-1) {
             b=2;
             break;
           }
           for (sup3=1; sup3<MAXSUPSET; sup3++){
-            if(ha_set[ha_set[i].subsetid[sup1]].subsetid[sup2]==ha_set[i].subsetid[sup3]) {
+            if(sets[sets[i].subsetid[sup1]].subsetid[sup2]==sets[i].subsetid[sup3]) {
               b=2;
               break;
             }
@@ -3290,20 +3290,20 @@ dim_t subset_map_build(set_element *ha_setele, set_def *ha_set,dim_t nset,offset
       }
       if(b==0) {
         *contin=1;
-        j=ha_set[ha_set[i].subsetid[sup1]].subsetid[sup2];
+        j=sets[sets[i].subsetid[sup1]].subsetid[sup2];
         for (sup1=1; sup1<MAXSUPSET; sup1++){
-          if(ha_set[i].subsetid[sup1]==-1)break;
+          if(sets[i].subsetid[sup1]==-1)break;
         }
         if(sup1==MAXSUPSET){
           printf("Error!!!! Superset size exceeded!!\n");
           *contin=0;
           return 0;
         }
-        ha_set[i].subsetid[sup1]=j;
-        for (jj=ha_set[j].offset; jj<ha_set[j].offset+ha_set[j].size; jj++) {
-          for (jjj=ha_set[i].offset; jjj<ha_set[i].offset+ha_set[i].size; jjj++) {
-            if (strcmp(ha_setele[jj].setele,ha_setele[jjj].setele)==0) {
-              ha_setele[jjj].superset_pos[sup1]=ha_setele[jj].superset_pos[0];
+        sets[i].subsetid[sup1]=j;
+        for (jj=sets[j].offset; jj<sets[j].offset+sets[j].size; jj++) {
+          for (jjj=sets[i].offset; jjj<sets[i].offset+sets[i].size; jjj++) {
+            if (strcmp(set_elems[jj].setele,set_elems[jjj].setele)==0) {
+              set_elems[jjj].superset_pos[sup1]=set_elems[jj].superset_pos[0];
               break;
             }
           }
@@ -3317,18 +3317,18 @@ dim_t subset_map_build(set_element *ha_setele, set_def *ha_set,dim_t nset,offset
     while(b==1) {
       for (sup1=1; sup1<MAXSUPSET; sup1++) {
         b=0;
-        if(ha_set[i].subsetid[sup1]==-1) {
+        if(sets[i].subsetid[sup1]==-1) {
           b=2;
           break;
         }
         for (sup2=1; sup2<MAXSUPSET; sup2++) {
           b=0;
-          if(ha_set[ha_set[i].subsetid[sup1]].subsetid[sup2]==-1) {
+          if(sets[sets[i].subsetid[sup1]].subsetid[sup2]==-1) {
             b=2;
             break;
           }
           for (sup3=1; sup3<MAXSUPSET; sup3++){
-            if(ha_set[ha_set[i].subsetid[sup1]].subsetid[sup2]==ha_set[i].subsetid[sup3]) {
+            if(sets[sets[i].subsetid[sup1]].subsetid[sup2]==sets[i].subsetid[sup3]) {
               b=2;
               break;
             }
@@ -3339,20 +3339,20 @@ dim_t subset_map_build(set_element *ha_setele, set_def *ha_set,dim_t nset,offset
       }
       if(b==0) {
         *contin=1;
-        j=ha_set[ha_set[i].subsetid[sup1]].subsetid[sup2];
+        j=sets[sets[i].subsetid[sup1]].subsetid[sup2];
         for (sup1=1; sup1<MAXSUPSET; sup1++){
-          if(ha_set[i].subsetid[sup1]==-1)break;
+          if(sets[i].subsetid[sup1]==-1)break;
         }
         if(sup1==MAXSUPSET){
           printf("Error!!!! Superset size exceeded!!\n");
           *contin=0;
           return 0;
         }
-        ha_set[i].subsetid[sup1]=j;
-        for (jj=ha_set[j].offset; jj<ha_set[j].offset+ha_set[j].size; jj++) {
-          for (jjj=ha_set[i].offset; jjj<ha_set[i].offset+ha_set[i].size; jjj++) {
-            if (strcmp(ha_setele[jj].setele,ha_setele[jjj].setele)==0) {
-              ha_setele[jjj].superset_pos[sup1]=ha_setele[jj].superset_pos[0];
+        sets[i].subsetid[sup1]=j;
+        for (jj=sets[j].offset; jj<sets[j].offset+sets[j].size; jj++) {
+          for (jjj=sets[i].offset; jjj<sets[i].offset+sets[i].size; jjj++) {
+            if (strcmp(set_elems[jj].setele,set_elems[jjj].setele)==0) {
+              set_elems[jjj].superset_pos[sup1]=set_elems[jj].superset_pos[0];
               break;
             }
           }
@@ -3447,7 +3447,7 @@ char *tab_next_statement(char *commsyntax, FILE *filehandle, char *readline,offs
         strcpy(readline,line);
       } else {
         strcpy(readline,line);
-          if(strlen(readline)>=((size_t)(9*rlinesize/10)))printf("Warning!!!! Overflow may happen in function ha_cgertabl. Increase TABREADLINE or DATREADLINE may help!%ld %ld\n",strlen(readline),rlinesize);
+          if(strlen(readline)>=((size_t)(9*rlinesize/10)))printf("Warning!!!! Overflow may happen in function tab_next_statement. Increase TABREADLINE or DATREADLINE may help!%ld %ld\n",strlen(readline),rlinesize);
         return readline;
       }
       while (fgets(line,TABLINESIZE,filehandle)) {
@@ -3456,7 +3456,7 @@ char *tab_next_statement(char *commsyntax, FILE *filehandle, char *readline,offs
           strcat(readline, line);
         } else {
           strcat(readline, line);
-          if(strlen(readline)>=((size_t)(9*rlinesize/10)))printf("Warning!!!! Overflow may happen in function ha_cgertabl. Increase TABREADLINE or DATREADLINE may help! %ld %ld\n",strlen(readline),rlinesize);
+          if(strlen(readline)>=((size_t)(9*rlinesize/10)))printf("Warning!!!! Overflow may happen in function tab_next_statement. Increase TABREADLINE or DATREADLINE may help! %ld %ld\n",strlen(readline),rlinesize);
           return readline;
         }
       }
@@ -3465,7 +3465,7 @@ char *tab_next_statement(char *commsyntax, FILE *filehandle, char *readline,offs
   }
   return NULL;
 }
-char *tab_next_statement_resolved(char *commsyntax, FILE *filehandle, char *readline, elem_value *record, array_def *ha_cof,offset_t ncof,solve_real *zerodivide,offset_t rlinesize) {
+char *tab_next_statement_resolved(char *commsyntax, FILE *filehandle, char *readline, elem_value *record, array_def *coefs,offset_t ncof,solve_real *zerodivide,offset_t rlinesize) {
   int check1=0,count1=0;
   char *zerosyntax="zerodivide default",*p,*zerosyntax1="zerodivide (",*zerosyntax2="zerodivide(";
   while (commsyntax[count1] != '\0') {
@@ -3485,7 +3485,7 @@ char *tab_next_statement_resolved(char *commsyntax, FILE *filehandle, char *read
         strcpy(readline,line);
       } else {
         strcpy(readline,line);
-          if(strlen(readline)>=((size_t)(9*rlinesize/10)))printf("Warning!!!! Overflow may happen in function ha_cgertabl1. Increase TABREADLINE or DATREADLINE may help! %ld %ld\n",strlen(readline),rlinesize);
+          if(strlen(readline)>=((size_t)(9*rlinesize/10)))printf("Warning!!!! Overflow may happen in function tab_next_statement_resolved. Increase TABREADLINE or DATREADLINE may help! %ld %ld\n",strlen(readline),rlinesize);
         return readline;
       }
       while (fgets(line,TABLINESIZE,filehandle)) {
@@ -3494,7 +3494,7 @@ char *tab_next_statement_resolved(char *commsyntax, FILE *filehandle, char *read
           strcat(readline, line);
         } else {
           strcat(readline, line);
-          if(strlen(readline)>=((size_t)(9*rlinesize/10)))printf("Warning!!!! Overflow may happen in function ha_cgertabl1. Increase TABREADLINE or DATREADLINE may help! %ld %ld\n",strlen(readline),rlinesize);
+          if(strlen(readline)>=((size_t)(9*rlinesize/10)))printf("Warning!!!! Overflow may happen in function tab_next_statement_resolved. Increase TABREADLINE or DATREADLINE may help! %ld %ld\n",strlen(readline),rlinesize);
           return readline;
         }
       }
@@ -3503,14 +3503,14 @@ char *tab_next_statement_resolved(char *commsyntax, FILE *filehandle, char *read
     if (strncmp(line,commsyntax,count1) != 0) {
       if (strncmp(line,zerosyntax,18) == 0) {
         p=strtok(&line[18],";");
-        *zerodivide=formula_subst_scalar(p,record,ha_cof,ncof);//atof(p);
+        *zerodivide=formula_subst_scalar(p,record,coefs,ncof);//atof(p);
       }
       if (strncmp(line,zerosyntax1,12) == 0||strncmp(line,zerosyntax2,11) == 0) {
         p=strtok(line,")");
         p=strtok(NULL,"default");
         p=strtok(NULL," ");
         p=strtok(NULL,";");
-        *zerodivide=formula_subst_scalar(p,record,ha_cof,ncof);//atof(p);
+        *zerodivide=formula_subst_scalar(p,record,coefs,ncof);//atof(p);
       }
     }
   }
