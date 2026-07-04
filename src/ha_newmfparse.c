@@ -1,4 +1,4 @@
-#include <ha_cgeglobal.h>
+#include <teems_solver.h>
 
 extern void spec51m_rank_(int *INSIZE,solve_real *cntl6,int *IRN, int *JCN, solve_real *VA,int *IRNA, int *JCNA, int *KEEP,solve_real *w51, int *iw51);
 extern void spec48_ssol2la_(int *INSIZE,int *IRN, int *JCN, solve_real *VA, solve_real *B, solve_real *X);

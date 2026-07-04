@@ -1,6 +1,6 @@
 /* Single definitions of the program-wide globals declared extern in
- * ha_cgeglobal.h. */
-#include <ha_cgeglobal.h>
+ * teems_solver.h. */
+#include <teems_solver.h>
 
 int isLinux;
 int section_threads;

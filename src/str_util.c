@@ -1,4 +1,4 @@
-#include <ha_cgeglobal.h>
+#include <teems_solver.h>
 int str_replace_char_all(char *line, int finditem, int replitem)
 {
   long int i=0;

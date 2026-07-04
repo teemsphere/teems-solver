@@ -1,4 +1,4 @@
-#include <ha_cgeglobal.h>
+#include <teems_solver.h>
 
 solve_real formula_subst_scalar(char *var2, elem_value *record, array_def *ha_cof,offset_t ncof) {
   offset_t index;

@@ -3,7 +3,7 @@
 // If otherwise switch back to normal MC66
 // Currently no sub-reg set, can try different varreg to get opt: comment break in nestedmatvarread
 // Currently logic fdim <> only in formula
-#include <ha_cgeglobal.h>
+#include <teems_solver.h>
 
 static char help[] = "Solves a CGE model in parallel with KSP.\n\
            Input parameters include:\n\

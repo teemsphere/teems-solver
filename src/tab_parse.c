@@ -1,4 +1,4 @@
-#include <ha_cgeglobal.h>
+#include <teems_solver.h>
 
 int formula_normalize(char *fomulain) {
   int index,i,i1,j;

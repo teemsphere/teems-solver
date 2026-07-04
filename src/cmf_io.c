@@ -1,4 +1,4 @@
-#include <ha_cgeglobal.h>
+#include <teems_solver.h>
 
 
 int cmf_count_files(char *fname,char *comsyntax) {

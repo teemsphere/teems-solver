@@ -1,5 +1,5 @@
-#ifndef HA_CGEGLOBAL_H_INCLUDED
-#define HA_CGEGLOBAL_H_INCLUDED
+#ifndef TEEMS_SOLVER_H_INCLUDED
+#define TEEMS_SOLVER_H_INCLUDED
 
 #include <stdio.h>
 #include <string.h>
@@ -277,5 +277,5 @@ bool cubic_spline(solve_real* y,solve_real* x,solve_real sx0,solve_real sxn,int 
 
 bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt* dnnz,PetscInt onz,PetscInt* onnz,Mat B,PetscInt dnzB,PetscInt* dnnzB,PetscInt onzB,PetscInt* onnzB,Vec vecb,Vec vece,PetscInt rank,PetscInt rank_hsl,PetscInt mpisize,char* tabfile, char *commsyntax,set_def *ha_set,dim_t nset, set_element *ha_setele, array_def *ha_cof,offset_t ncof,array_def *ha_var,offset_t nvar, elem_value **ha_cofvar2,offset_t ncofvar,offset_t ncofele,offset_t nvarele,closure_entry **ha_cgeshock2,offset_t alltimeset,offset_t allregset,offset_t nintraeq,dim_t matsol,PetscInt Istart,PetscInt Iend,  offset_t nreg, offset_t ntime, offset_t *ha_eqadd, offset_t ndblock, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laDi,dim_t laD,PetscReal cntl3,PetscReal cntl6,PetscBool presol,dim_t nesteddbbd,int localsize,PetscInt *ndbbddrank1,fortran_int* indata,dim_t mc66,fortran_int *ptx,struct timeval begintime,solve_real **xcf2);
 bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A,PetscInt dnz,PetscInt* dnnz,PetscInt onz,PetscInt* onnz,Mat* B,PetscInt dnzB,PetscInt* dnnzB,PetscInt onzB,PetscInt* onnzB,Vec* vecb,Vec *vece,PetscInt rank,PetscInt rank_hsl,PetscInt mpisize,char* tabfile, char *commsyntax,set_def *ha_set,dim_t nset, set_element *ha_setele, array_def *ha_cof,offset_t ncof,array_def *ha_var,offset_t nvar, elem_value **ha_cofvar2,offset_t ncofvar,offset_t ncofele,offset_t nvarele,closure_entry **ha_cgeshock2,offset_t alltimeset,offset_t allregset,offset_t nintraeq,dim_t matsol,PetscInt Istart,PetscInt Iend,  offset_t nreg, offset_t ntime, offset_t *ha_eqadd, offset_t ndblock, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laDi,dim_t laD,PetscReal cntl3,PetscReal cntl6,PetscBool presol,dim_t nesteddbbd,int localsize,PetscInt *ndbbddrank1,fortran_int* indata,dim_t mc66,fortran_int *ptx,struct timeval begintime,dim_t subints,MPI_Fint fcomm,solve_real **xcf2,int Isbiupd);
-#endif // HA_CGEGLOBAL_H_INCLUDED
+#endif // TEEMS_SOLVER_H_INCLUDED
 
