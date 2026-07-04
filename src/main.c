@@ -183,7 +183,9 @@ int main(int argc,char **args) {
   PetscOptionsGetReal(NULL,NULL,"-cntl_3",&cntl3,NULL);/*Iterative threshold */
   PetscOptionsGetInt(NULL,NULL,"-ndbbd_bl_rank",&ndbbdrank,NULL);/*Override default rank for last block in NDBBD method. Read text file. >0 text column. Use with care*/
   PetscOptionsGetInt(NULL,NULL,"-stoiter",&StoIter,NULL);
+  inmemory=-1;
   PetscOptionsGetInt(NULL,NULL,"-inmemory",&inmemory,NULL);/* keep value arrays resident instead of spilling to scratch */
+  if(inmemory<0)inmemory=(matsol==MM_LU||matsol==MM_SBBD)?1:0;/* default: resident for methods with no factor-file traffic; DBBD/NDBBD factor I/O wants the page cache that spilling frees */
   {
     /* Scratch directory for solver temp files: -tempdir option, else
        TMPDIR, else the compiled-in default (/tmp/). Capped at 200
