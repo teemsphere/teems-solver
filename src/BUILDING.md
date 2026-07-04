@@ -43,7 +43,10 @@ nothing to scratch in this mode — MP48 holds SBBD factors in memory,
 sized by laA/laDi), **off** for DBBD and NDBBD, whose block-factor file
 traffic wants the page cache that array spilling frees. Measured on a
 4.4M-equation intertemporal run (2 ranks, 30GB node): SBBD ~7% faster
-with no scratch debris; NDBBD ~6-11% slower with residency forced on.
+with no scratch debris; DBBD neutral; NDBBD ~6-11% slower with residency
+forced on. The sign for DBBD/NDBBD depends on factor-file traffic vs
+free RAM, so on large-memory nodes forcing `-inmemory 1` may win there
+too.
 Override with an explicit `-inmemory 0/1`; a memory-availability check
 falls back to spilling when the resident estimate exceeds half of
 MemAvailable.
