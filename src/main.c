@@ -213,6 +213,13 @@ int main(int argc,char **args) {
       }
       strcpy(scratch_dir,tmpopt);
     }
+    /* Under -inmemory, and unless the user pinned a scratch location,
+       place scratch on tmpfs so the block-factor handoff files written
+       by the Fortran kernels never touch disk. */
+    if(inmemory&&!tmpflg&&access("/dev/shm/",W_OK)==0) {
+      strcpy(scratch_dir,"/dev/shm/");
+      if(rank==0)printf("inmemory: scratch on tmpfs (%s)\n",scratch_dir);
+    }
     /* export for the Fortran kernels, which build their factor-file
        paths themselves (hsl_kernels.f90) */
     setenv("TEEMS_SCRATCH",scratch_dir,1);
