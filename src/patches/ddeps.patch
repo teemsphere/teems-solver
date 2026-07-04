@@ -1,0 +1,945 @@
+--- ddeps.f	2026-07-04 00:48:05.699139157 +0000
++++ ddeps.f	2026-07-04 00:48:06.062141586 +0000
+@@ -5582,7 +5582,7 @@
+ C 28 February 2008. Version 1.0.1. Comments flowed to column 72.
+ C 21 September 2009. Version 1.0.2. Minor change to documentation.
+ 
+-      SUBROUTINE MC59AD(ICNTL,NC,NR,NE,IRN,LJCN,JCN,LA,A,LIP,IP,
++      SUBROUTINE ZC59AD(ICNTL,NC,NR,NE,IRN,LJCN,JCN,LA,A,LIP,IP,
+      &                  LIW,IW,INFO)
+ C
+ C To sort the sparsity pattern of a matrix to an ordering by columns.
+@@ -5734,7 +5734,7 @@
+       LOGICAL LCHECK
+ C     ..
+ C     .. External Subroutines ..
+-      EXTERNAL MC59BD,MC59CD,MC59DD,MC59ED,MC59FD
++      EXTERNAL ZC59BD,ZC59CD,ZC59DD,ZC59ED,ZC59FD
+ C     ..
+ C     .. Intrinsic Functions ..
+       INTRINSIC MAX
+@@ -5893,7 +5893,7 @@
+       IDUP = 0
+       IUP = 0
+ 
+-C PART is used by MC59BD to indicate if upper or lower or
++C PART is used by ZC59BD to indicate if upper or lower or
+ C all of matrix is required.
+ C PART =  0 : unsymmetric case, whole matrix wanted
+ C PART =  1 : symmetric case, lower triangular part of matrix wanted
+@@ -5904,15 +5904,15 @@
+       IF (ICNTL2.EQ.0) THEN
+ 
+ C Order directly by columns
+-C On exit from MC59BD, KNE holds number of entries in matrix
++C On exit from ZC59BD, KNE holds number of entries in matrix
+ C after removal of out-of-range entries. If no data checking, KNE = NE.
+-        CALL MC59BD(LCHECK,PART,NC,NR,NE,IRN,JCN,LAA,A,IP,IW,
++        CALL ZC59BD(LCHECK,PART,NC,NR,NE,IRN,JCN,LAA,A,IP,IW,
+      +              IOUT,JOUT,KNE)
+ C Return if ALL entries out-of-range.
+         IF (KNE.EQ.0) GO TO 50
+ 
+ C Check for duplicates
+-        IF (LCHECK) CALL MC59ED(NC,NR,NE,IRN,LIP,IP,LAA,A,IW,IDUP,
++        IF (LCHECK) CALL ZC59ED(NC,NR,NE,IRN,LIP,IP,LAA,A,IW,IDUP,
+      &                          KNE,ICNTL6)
+ 
+       ELSE IF (ICNTL2.EQ.1) THEN
+@@ -5921,24 +5921,24 @@
+ C Interchanged roles of IRN and JCN, so set PART = -1
+ C if matrix is symmetric case
+         IF (ICNTL6.NE.0) PART = -1
+-        CALL MC59BD(LCHECK,PART,NR,NC,NE,JCN,IRN,LAA,A,IW,IP,
++        CALL ZC59BD(LCHECK,PART,NR,NC,NE,JCN,IRN,LAA,A,IW,IP,
+      +              JOUT,IOUT,KNE)
+ C Return if ALL entries out-of-range.
+         IF (KNE.EQ.0) GO TO 50
+ 
+ C At this point, JCN and IW hold column indices and row pointers
+ C Optionally, check for duplicates.
+-        IF (LCHECK) CALL MC59ED(NR,NC,NE,JCN,NR+1,IW,LAA,A,IP,
++        IF (LCHECK) CALL ZC59ED(NR,NC,NE,JCN,NR+1,IW,LAA,A,IP,
+      &                          IDUP,KNE,ICNTL6)
+ 
+ C Now order by columns and by rows within each column
+-        CALL MC59CD(NC,NR,KNE,IRN,JCN,LAA,A,IP,IW)
++        CALL ZC59CD(NC,NR,KNE,IRN,JCN,LAA,A,IP,IW)
+ 
+       ELSE IF (ICNTL2.EQ.2) THEN
+ C Input is using IP, IRN.
+ C Optionally check for duplicates and remove out-of-range entries
+         IF (LCHECK) THEN
+-          CALL MC59FD(NC,NR,NE,IRN,NC+1,IP,LAA,A,LIW,IW,IDUP,
++          CALL ZC59FD(NC,NR,NE,IRN,NC+1,IP,LAA,A,LIW,IW,IDUP,
+      +                IOUT,IUP,KNE,ICNTL6,INFO)
+ C Return if IP not monotonic.
+           IF (INFO(1).EQ.-9) GO TO 40
+@@ -5949,7 +5949,7 @@
+         END IF
+ 
+ C  Order by rows within each column
+-        CALL MC59DD(NC,KNE,IRN,IP,LAA,A)
++        CALL ZC59DD(NC,KNE,IRN,IP,LAA,A)
+ 
+       END IF
+ 
+@@ -5991,7 +5991,7 @@
+       END IF
+    70 RETURN
+ 
+- 9000 FORMAT (/,' *** Error return from MC59AD *** INFO(1) = ',I3)
++ 9000 FORMAT (/,' *** Error return from ZC59AD *** INFO(1) = ',I3)
+  9010 FORMAT (1X,'ICNTL(2) = ',I2,' is out of range')
+  9020 FORMAT (1X,'NC = ',I6,' is out of range')
+  9030 FORMAT (1X,'NR = ',I6,' is out of range')
+@@ -6001,7 +6001,7 @@
+  9060 FORMAT (1X,'Increase LA from ',I10,' to at least ',I10)
+  9065 FORMAT (1X,'Increase LIP from ',I8,' to at least ',I10)
+  9070 FORMAT (1X,'Increase LIW from ',I8,' to at least ',I10)
+- 9080 FORMAT (/,' *** Warning message from MC59AD *** INFO(1) = ',I3)
++ 9080 FORMAT (/,' *** Warning message from ZC59AD *** INFO(1) = ',I3)
+  9090 FORMAT (1X,I8,' entries in IRN supplied by the user were ',
+      +       /,'       out of range and were ignored by the routine')
+  9100 FORMAT (1X,I8,' duplicate entries were supplied by the user')
+@@ -6014,7 +6014,7 @@
+  9150 FORMAT (1X,'ICNTL(6) = ',I2,' is out of range')
+       END
+ C***********************************************************************
+-      SUBROUTINE MC59BD(LCHECK,PART,NC,NR,NE,IRN,JCN,LA,A,IP,IW,IOUT,
++      SUBROUTINE ZC59BD(LCHECK,PART,NC,NR,NE,IRN,JCN,LA,A,IP,IW,IOUT,
+      +                  JOUT,KNE)
+ C
+ C   To sort a sparse matrix from arbitrary order to
+@@ -6350,7 +6350,7 @@
+       END
+ C
+ C**********************************************************
+-      SUBROUTINE MC59CD(NC,NR,NE,IRN,JCN,LA,A,IP,IW)
++      SUBROUTINE ZC59CD(NC,NR,NE,IRN,JCN,LA,A,IP,IW)
+ C
+ C   To sort a sparse matrix stored by rows,
+ C   unordered within each row, to ordering by columns, with
+@@ -6493,7 +6493,7 @@
+ 
+ C**********************************************************
+ 
+-      SUBROUTINE MC59DD(NC,NE,IRN,IP,LA,A)
++      SUBROUTINE ZC59DD(NC,NE,IRN,IP,LA,A)
+ C
+ C To sort from arbitrary order within each column to order
+ C by increasing row index. Note: this is taken from MC20B/BD.
+@@ -6591,7 +6591,7 @@
+       END
+ C***********************************************************************
+ 
+-      SUBROUTINE MC59ED(NC,NR,NE,IRN,LIP,IP,LA,A,IW,IDUP,KNE,ICNTL6)
++      SUBROUTINE ZC59ED(NC,NR,NE,IRN,LIP,IP,LA,A,IW,IDUP,KNE,ICNTL6)
+ 
+ C Checks IRN for duplicate entries.
+ C On exit, IDUP holds number of duplicates found and KNE is number
+@@ -6666,7 +6666,7 @@
+       END
+ C***********************************************************************
+ 
+-      SUBROUTINE MC59FD(NC,NR,NE,IRN,LIP,IP,LA,A,LIW,IW,IDUP,IOUT,
++      SUBROUTINE ZC59FD(NC,NR,NE,IRN,LIP,IP,LA,A,LIW,IW,IDUP,IOUT,
+      +                  IUP,KNE,ICNTL6,INFO)
+ 
+ C Checks IRN for duplicate and out-of-range entries.
+@@ -6679,7 +6679,7 @@
+ C triangular part.
+ C KNE holds number of entries in matrix after removal of
+ C out-of-range and duplicate entries.
+-C Note: this is similar to MC59ED except it also checks IP is
++C Note: this is similar to ZC59ED except it also checks IP is
+ C monotonic and removes out-of-range entries in IRN.
+ C     . .
+ C     .. Scalar Arguments ..
+@@ -6785,13 +6785,13 @@
+ C     some minor bugs fixed, default changed to BLAS 3 with block size
+ C     32.
+ C 6 December 1993. Minor bug fixed re threshold test for pivots.
+-C 4/10/95. IQ in MA50BD made assumed size
+-C 1/11/95. IQ in MA50CD made assumed size
++C 4/10/95. IQ in ZA50BD made assumed size
++C 1/11/95. IQ in ZA50CD made assumed size
+ C 1/11/95. DTRSV not called for zero-sized array.
+ C 14/2/96. NP initialized to 0.
+-C 13/11/97 INFO(4) and INFO(6) in MA50AD made to reflect the situation
++C 13/11/97 INFO(4) and INFO(6) in ZA50AD made to reflect the situation
+ C          at the point of failure in the case of insufficient storage.
+-C 17/3/98  In MA50AD, copy a row forward if there is space at its front,
++C 17/3/98  In ZA50AD, copy a row forward if there is space at its front,
+ C          rather than put new entry at front. Makes the result
+ C          repeatable as LA is altered.
+ 
+@@ -6799,7 +6799,7 @@
+ C 29 November 2006 Version 2.0.0. Sizes of CNTL, ICNTL, INFO, RINFO
+ C          increased and ICNTL(8) added.
+ 
+-      SUBROUTINE MA50AD(M,N,NE,LA,A,IRN,JCN,IQ,CNTL,ICNTL,IP,NP,JFIRST,
++      SUBROUTINE ZA50AD(M,N,NE,LA,A,IRN,JCN,IQ,CNTL,ICNTL,IP,NP,JFIRST,
+      +                  LENR,LASTR,NEXTR,IW,IFIRST,LENC,LASTC,NEXTC,
+      +                  INFO,RINFO)
+ 
+@@ -6947,7 +6947,7 @@
+ 
+       INTEGER IDAMAX
+       EXTERNAL IDAMAX
+-      EXTERNAL MA50DD
++      EXTERNAL ZA50DD
+       INTRINSIC ABS,MAX,MIN
+ 
+       DOUBLE PRECISION ZERO,ONE
+@@ -7066,7 +7066,7 @@
+ C Initial printing
+       IF (MP.GT.0 .AND. ICNTL(3).GT.2) THEN
+          WRITE (MP,'(/2(A,I6),A,I8,A,I8/A,1P,4E10.2/A,7I4)')
+-     +     ' Entering MA50AD with M =',M,' N =',N,' NE =',NE,' LA =',LA,
++     +     ' Entering ZA50AD with M =',M,' N =',N,' NE =',NE,' LA =',LA,
+      +     ' CNTL =',(CNTL(I),I=1,4),' ICNTL =',(ICNTL(I),I=1,7)
+          IF (N.EQ.1 .OR. ICNTL(3).GT.3) THEN
+             DO 10 J = 1,N - 1
+@@ -7410,7 +7410,7 @@
+ C No pivot found. Switch to full matrix processing.
+          INFO(1) = INFO(1) + 2
+          IF (MP.GT.0) WRITE (MP,'(A/A)')
+-     +       ' Warning message from MA50AD: no suitable diagonal pivot',
++     +       ' Warning message from ZA50AD: no suitable diagonal pivot',
+      +       ' found, so switched to full matrix processing.'
+          GO TO 640
+ 
+@@ -7627,7 +7627,7 @@
+ C Column must be moved to the beginning of available storage.
+   510       IF (DISPC+LENC(J)+IFILL.GT.LA+1) THEN
+                INFO(2) = INFO(2) + 1
+-               CALL MA50DD(LA,A,IRN,IQ,N,DISPC,.TRUE.)
++               CALL ZA50DD(LA,A,IRN,IQ,N,DISPC,.TRUE.)
+                JBEG = IQ(J)
+                JEND = JBEG + LENC(J) - 1
+                PIVBEG = IQ(JPIV)
+@@ -7688,7 +7688,7 @@
+                   IF (DISPR+LENR(I).GT.LA) THEN
+ C Compress.
+                      INFO(2) = INFO(2) + 1
+-                     CALL MA50DD(LA,A,JCN,IP,M,DISPR,.FALSE.)
++                     CALL ZA50DD(LA,A,JCN,IP,M,DISPR,.FALSE.)
+                      IF (DISPR+LENR(I).GT.LA) GO TO 705
+                   END IF
+ C Copy row to first free position.
+@@ -7828,7 +7828,7 @@
+       IF (INFO(5).LT.MIN(M,N)) INFO(1) = INFO(1) + 1
+ 
+       IF (MP.GT.0 .AND. ICNTL(3).GT.2) THEN
+-         WRITE (MP,'(A,I6,A,F12.1/A,7I8)') ' Leaving MA50AD with NP =',
++         WRITE (MP,'(A,I6,A,F12.1/A,7I8)') ' Leaving ZA50AD with NP =',
+      +     NP,' RINFO(1) =',RINFO(1),' INFO =',(INFO(I),I=1,7)
+          IF (ICNTL(3).GT.3) THEN
+             WRITE (MP,'(A,(T6,10(I7)))') ' IP = ',IP
+@@ -7841,37 +7841,37 @@
+ C Error conditions.
+   690 INFO(1) = -1
+       IF (LP.GT.0) WRITE (LP,'(/A/(2(A,I8)))')
+-     +    ' **** Error return from MA50AD ****',' M =',M,' N =',N
++     +    ' **** Error return from ZA50AD ****',' M =',M,' N =',N
+       GO TO 750
+   700 INFO(1) = -2
+       IF (LP.GT.0) WRITE (LP,'(/A/(A,I10))')
+-     +    ' **** Error return from MA50AD ****',' NE =',NE
++     +    ' **** Error return from ZA50AD ****',' NE =',NE
+       GO TO 750
+   705 INFO(4) =  NEFACT + NERED
+       INFO(6) = INFO(6) + NDROP
+   710 INFO(1) = -3
+       IF (LP.GT.0) WRITE (LP,'(/A/A,I9,A,I9)')
+-     +    ' **** Error return from MA50AD ****',
++     +    ' **** Error return from ZA50AD ****',
+      +    ' LA  must be increased from',LA,' to at least',INFO(3)
+       GO TO 750
+   720 INFO(1) = -4
+       IF (LP.GT.0) WRITE (LP,'(/A/(3(A,I9)))')
+-     +    ' **** Error return from MA50AD ****',' Entry in row',I,
++     +    ' **** Error return from ZA50AD ****',' Entry in row',I,
+      +    ' and column',J,' duplicated'
+       GO TO 750
+   730 INFO(1) = -5
+       IF (LP.GT.0) WRITE (LP,'(/A/(3(A,I9)))')
+-     +    ' **** Error return from MA50AD ****',' Fault in component ',
++     +    ' **** Error return from ZA50AD ****',' Fault in component ',
+      +    PIVOT,' of column permutation given in IFIRST'
+       GO TO 750
+   740 INFO(1) = -6
+       IF (LP.GT.0) WRITE (LP,'(/A/(3(A,I9)))')
+-     +    ' **** Error return from MA50AD ****',' ICNTL(4) = ',ICNTL(4),
++     +    ' **** Error return from ZA50AD ****',' ICNTL(4) = ',ICNTL(4),
+      +    ' when ICNTL(6) = 2'
+   750 END
+ 
+ 
+-      SUBROUTINE MA50BD(M,N,NE,JOB,AA,IRNA,IPTRA,CNTL,ICNTL,IP,IQ,NP,
++      SUBROUTINE ZA50BD(M,N,NE,JOB,AA,IRNA,IPTRA,CNTL,ICNTL,IP,IQ,NP,
+      +                  LFACT,FACT,IRNF,IPTRL,IPTRU,W,IW,INFO,RINFO)
+ C MA50B/BD factorizes the matrix in AA/IRNA/IPTRA as P L U Q where
+ C     P and Q are permutations, L is lower triangular, and U is unit
+@@ -7978,7 +7978,7 @@
+ C      IRNF(3:IPTRL(N)) holds the row numbers of the packed part
+ C      of L/U, IRNF(IPTRL(N)+1:IPTRL(N)+MF) holds the row indices
+ C      of the full part of L/U, and IRNF(IPTRL(N)+MF+I), I=1,2,..,N-NP
+-C      holds the vector IPIV output by MA50GD.
++C      holds the vector IPIV output by ZA50GD.
+ C      If JOB=2, IRNF will be unaltered.
+ C IPTRL is an integer array that need not be set on a JOB=1 entry and
+ C     must be unchanged since the previous entry if JOB>1.
+@@ -8068,7 +8068,7 @@
+ C U Used to hold local copy of CNTL(2), changed if necessary so that it
+ C    is in range.
+ C
+-      EXTERNAL MA50ED,MA50FD,MA50GD
++      EXTERNAL ZA50ED,ZA50FD,ZA50GD
+       INTRINSIC ABS,MAX,MIN
+ C LAPACK subroutine for triangular factorization.
+ 
+@@ -8087,19 +8087,19 @@
+       IF (M.LT.1 .OR. N.LT.1) THEN
+          INFO(1) = -1
+          IF (LP.GT.0) WRITE (LP,'(/A/A,I8,A,I8)')
+-     +       ' **** Error return from MA50BD ****',' M =',M,' N =',N
++     +       ' **** Error return from ZA50BD ****',' M =',M,' N =',N
+          GO TO 550
+       END IF
+       IF (NE.LE.0) THEN
+          INFO(1) = -2
+          IF (LP.GT.0) WRITE (LP,'(/A/A,I6)')
+-     +       ' **** Error return from MA50BD ****',' NE =',NE
++     +       ' **** Error return from ZA50BD ****',' NE =',NE
+          GO TO 550
+       END IF
+       IF (NP.LT.0 .OR. NP.GT.N) THEN
+          INFO(1) = -7
+          IF (LP.GT.0) WRITE (LP,'(/A/A,I8,A,I8)')
+-     +       ' **** Error return from MA50BD ****',' NP =',NP,' N =',N
++     +       ' **** Error return from ZA50BD ****',' NP =',NP,' N =',N
+          GO TO 550
+       END IF
+       IF (LFACT.LT.MAX(M,NE+2)) THEN
+@@ -8111,14 +8111,14 @@
+          IF (IRNF(1).NE.0) THEN
+             INFO(1) = -6
+             IF (LP.GT.0) WRITE (LP,'(/A/A,I1,A)')
+-     +          ' **** Error return from MA50BD ***',' Call with JOB=',
++     +          ' **** Error return from ZA50BD ***',' Call with JOB=',
+      +          JOB,' follows JOB=1 call in which entries were dropped'
+             GO TO 550
+          END IF
+       ELSE
+          INFO(1) = -5
+          IF (LP.GT.0) WRITE (LP,'(/A/A,I2)')
+-     +       ' **** Error return from MA50BD ****',' JOB =',JOB
++     +       ' **** Error return from ZA50BD ****',' JOB =',JOB
+          GO TO 550
+       END IF
+ 
+@@ -8126,7 +8126,7 @@
+       IF (MP.GT.0) THEN
+          IF (ICNTL(3).GT.2) WRITE (MP,
+      +       '(/2(A,I6),A,I8,A,I3/A,I8,A,I7/A,1P,4E10.2/A,7I8)')
+-     +       ' Entering MA50BD with M =',M,' N =',N,' NE =',NE,' JOB =',
++     +       ' Entering ZA50BD with M =',M,' N =',N,' NE =',NE,' JOB =',
+      +       JOB,' LFACT =',LFACT,' NP =',NP,' CNTL =',(CNTL(I),I=1,4),
+      +       ' ICNTL =',(ICNTL(I),I=1,7)
+          IF (ICNTL(3).GT.3) THEN
+@@ -8608,11 +8608,11 @@
+ 
+   440 IF (MF.GT.0 .AND. NF.GT.0) THEN
+ C Factorize full block
+-         IF (ICNTL(5).GT.1) CALL MA50GD(MF,NF,FACT(IF1),MF,ICNTL(5),
++         IF (ICNTL(5).GT.1) CALL ZA50GD(MF,NF,FACT(IF1),MF,ICNTL(5),
+      +                                  CNTL(4),IRNF(IF1+MF),RANK)
+-         IF (ICNTL(5).EQ.1) CALL MA50FD(MF,NF,FACT(IF1),MF,CNTL(4),
++         IF (ICNTL(5).EQ.1) CALL ZA50FD(MF,NF,FACT(IF1),MF,CNTL(4),
+      +                                  IRNF(IF1+MF),RANK)
+-         IF (ICNTL(5).LE.0) CALL MA50ED(MF,NF,FACT(IF1),MF,CNTL(4),
++         IF (ICNTL(5).LE.0) CALL ZA50ED(MF,NF,FACT(IF1),MF,CNTL(4),
+      +                                  IRNF(IF1+MF),RANK)
+          INFO(5) = INFO(5) + RANK
+          DO 450 I = 1,MIN(MF,NF)
+@@ -8622,7 +8622,7 @@
+       IF (INFO(5).LT.MIN(M,N)) INFO(1) = 1
+       IF (MP.GT.0 .AND. ICNTL(3).GT.2) THEN
+          WRITE (MP,'(A,I6,A,F12.1/A,I3,A,4I8)')
+-     +     ' Leaving MA50BD with IRNF(2) =',IRNF(2),
++     +     ' Leaving ZA50BD with IRNF(2) =',IRNF(2),
+      +     ' RINFO(1) =',RINFO(1),
+      +     ' INFO(1) =',INFO(1),' INFO(4:7) =', (INFO(J),J=4,7)
+          IF (ICNTL(3).GT.3) THEN
+@@ -8668,7 +8668,7 @@
+   510 CONTINUE
+   520 INFO(1) = -3
+       IF (LP.GT.0) THEN
+-         WRITE (LP,'(/A)')' **** Error return from MA50BD **** '
++         WRITE (LP,'(/A)')' **** Error return from ZA50BD **** '
+          IF (ICNTL(8).EQ.0) THEN
+             WRITE (LP,'(A,I7,A,I7)')' LFACT must be increased from',
+      +         LFACT,' to at least',INFO(4)
+@@ -8679,16 +8679,16 @@
+       GO TO 550
+   530 INFO(1) = - (7+K)
+       IF (LP.GT.0) WRITE (LP,'(/A/A,I6,A)')
+-     +    ' **** Error return from MA50BD **** ',
++     +    ' **** Error return from ZA50BD **** ',
+      +    ' Small pivot found in column',K,' of the permuted matrix.'
+       GO TO 550
+   540 INFO(1) = -4
+       IF (LP.GT.0) WRITE (LP,'(/A/(3(A,I9)))')
+-     +    ' **** Error return from MA50BD ****',' Entry in row',I,
++     +    ' **** Error return from ZA50BD ****',' Entry in row',I,
+      +    ' and column',J,' duplicated'
+   550 END
+ 
+-      SUBROUTINE MA50CD(M,N,ICNTL,IQ,NP,TRANS,LFACT,FACT,IRNF,IPTRL,
++      SUBROUTINE ZA50CD(M,N,ICNTL,IQ,NP,TRANS,LFACT,FACT,IRNF,IPTRL,
+      +                  IPTRU,B,X,W,INFO)
+ C MA50C/CD uses the factorization produced by
+ C     MA50B/BD to solve A x = b or (A trans) x = b.
+@@ -8775,7 +8775,7 @@
+ C NF Number of columns held in full format.
+ C PROD Temporary variable used to accumulate inner products.
+ 
+-      EXTERNAL MA50HD
++      EXTERNAL ZA50HD
+ 
+       LP = ICNTL(1)
+       MP = ICNTL(2)
+@@ -8786,7 +8786,7 @@
+       IF (M.LT.1 .OR. N.LT.1) GO TO 250
+ 
+       IF (MP.GT.0 .AND. ICNTL(3).GT.2) WRITE (MP,
+-     +    '(/2(A,I6),A,I4,A,L2)') ' Entering MA50CD with M=',M,' N =',N,
++     +    '(/2(A,I6),A,I4,A,L2)') ' Entering ZA50CD with M=',M,' N =',N,
+      +    ' NP =',NP,' TRANS =',TRANS
+       IF1 = IPTRL(N) + 1
+       MF = IRNF(2)
+@@ -8840,7 +8840,7 @@
+             X(I) = W(NP+I)
+    80    CONTINUE
+          IF (MF.GT.0 .AND. NF.GT.0) THEN
+-            CALL MA50HD(TRANS,MF,NF,FACT(IF1),MF,IRNF(IF1+MF),X,
++            CALL ZA50HD(TRANS,MF,NF,FACT(IF1),MF,IRNF(IF1+MF),X,
+      +                  ICNTL(5))
+          ELSE
+             DO 90 I = 1,MF
+@@ -8862,7 +8862,7 @@
+             X(IRNF(IA1)) = (W(I)-PROD)*FACT(IA1)
+   120    CONTINUE
+          IF (MP.GT.0 .AND. ICNTL(3).GT.3) WRITE (MP,
+-     +       '(A/(4X,5F10.4))') ' Leaving MA50CD with X =', (X(I),I=1,M)
++     +       '(A/(4X,5F10.4))') ' Leaving ZA50CD with X =', (X(I),I=1,M)
+ C
+       ELSE
+          IF (MP.GT.0 .AND. ICNTL(3).GT.3) WRITE (MP,
+@@ -8888,7 +8888,7 @@
+             DO 160 I = 1,MF
+                W(I) = W(IRNF(IF1+I-1))
+   160       CONTINUE
+-            CALL MA50HD(TRANS,MF,NF,FACT(IF1),MF,IRNF(IF1+MF),W,
++            CALL ZA50HD(TRANS,MF,NF,FACT(IF1),MF,IRNF(IF1+MF),W,
+      +                  ICNTL(5))
+             DO 170 I = 1,NF
+                X(NP+I) = W(I)
+@@ -8929,16 +8929,16 @@
+   240       CONTINUE
+          END IF
+          IF (MP.GT.0 .AND. ICNTL(3).GT.3) WRITE (MP,
+-     +       '(A/(4X,5F10.4))') ' Leaving MA50CD with X =', (X(I),I=1,N)
++     +       '(A/(4X,5F10.4))') ' Leaving ZA50CD with X =', (X(I),I=1,N)
+       END IF
+       RETURN
+ C Error condition.
+   250 INFO(1) = -1
+       IF (LP.GT.0) WRITE (LP,'(/A/2(A,I8))')
+-     +    ' **** Error return from MA50CD ****',' M =',M,' N =',N
++     +    ' **** Error return from ZA50CD ****',' M =',M,' N =',N
+       END
+ 
+-      SUBROUTINE MA50DD(LA,A,IND,IPTR,N,DISP,REALS)
++      SUBROUTINE ZA50DD(LA,A,IND,IPTR,N,DISP,REALS)
+ C This subroutine performs garbage collection on the arrays A and IND.
+ C DISP is the position in arrays A/IND immediately after the data
+ C     to be compressed.
+@@ -8983,7 +8983,7 @@
+       END
+ 
+ 
+-      SUBROUTINE MA50ED(M,N,A,LDA,PIVTOL,IPIV,RANK)
++      SUBROUTINE ZA50ED(M,N,A,LDA,PIVTOL,IPIV,RANK)
+ **
+       INTEGER LDA,M,N,RANK
+       DOUBLE PRECISION PIVTOL
+@@ -8995,7 +8995,7 @@
+ *  Purpose
+ *  =======
+ *
+-*  MA50ED computes an LU factorization of a general m-by-n matrix A.
++*  ZA50ED computes an LU factorization of a general m-by-n matrix A.
+ 
+ *  The factorization has the form
+ *     A = P * L * U * Q
+@@ -9103,12 +9103,12 @@
+ 
+       RANK = J - 1
+ *
+-*     End of MA50ED
++*     End of ZA50ED
+ *
+       END
+ 
+ 
+-      SUBROUTINE MA50FD(M,N,A,LDA,PIVTOL,IPIV,RANK)
++      SUBROUTINE ZA50FD(M,N,A,LDA,PIVTOL,IPIV,RANK)
+ *
+ *  -- This is a variant of the LAPACK routine DGETF2 --
+ *
+@@ -9122,7 +9122,7 @@
+ *  Purpose
+ *  =======
+ *
+-*  MA50FD computes an LU factorization of a general m-by-n matrix A.
++*  ZA50FD computes an LU factorization of a general m-by-n matrix A.
+ 
+ *  The factorization has the form
+ *     A = P * L * U * Q
+@@ -9236,12 +9236,12 @@
+ 
+       RANK = J - 1
+ *
+-*     End of MA50FD
++*     End of ZA50FD
+ *
+       END
+ 
+ 
+-      SUBROUTINE MA50GD(M,N,A,LDA,NB,PIVTOL,IPIV,RANK)
++      SUBROUTINE ZA50GD(M,N,A,LDA,NB,PIVTOL,IPIV,RANK)
+ *
+ *  -- This is a variant of the LAPACK routine DGETRF --
+ *
+@@ -9255,7 +9255,7 @@
+ *  Purpose
+ *  =======
+ *
+-*  MA50GD computes an LU factorization of a general m-by-n matrix A.
++*  ZA50GD computes an LU factorization of a general m-by-n matrix A.
+ *
+ *  The factorization has the form
+ *     A = P * L * U * Q
+@@ -9431,11 +9431,11 @@
+    70 CONTINUE
+       RANK = J - 1
+ *
+-*     End of MA50GD
++*     End of ZA50GD
+ *
+       END
+ 
+-      SUBROUTINE MA50HD(TRANS,M,N,A,LDA,IPIV,B,ICNTL5)
++      SUBROUTINE ZA50HD(TRANS,M,N,A,LDA,IPIV,B,ICNTL5)
+ *
+ *  -- This is a variant of the LAPACK routine DGETRS --
+ *     It handles the singular or rectangular case.
+@@ -9452,7 +9452,7 @@
+ *  Solve a system of linear equations
+ *     A * X = B  or  A' * X = B
+ *  with a general m by n matrix A using the LU factorization computed
+-*  by MA50DE, MA50FD, or MA50GD.
++*  by MA50DE, ZA50FD, or ZA50GD.
+ *
+ *  Arguments
+ *  =========
+@@ -9470,7 +9470,7 @@
+ *
+ *  A       (input) DOUBLE PRECISION array, dimension (LDA,N)
+ *          The factors L and U from the factorization A = P*L*U
+-*          as computed by MA50GD.
++*          as computed by ZA50GD.
+ *
+ *  LDA     (input) INTEGER
+ *          The leading dimension of the array A.  LDA >= max(1,N).
+@@ -9609,7 +9609,7 @@
+ 
+       END
+ 
+-      SUBROUTINE MA50ID(CNTL,ICNTL)
++      SUBROUTINE ZA50ID(CNTL,ICNTL)
+ C Set default values for the control arrays.
+ 
+       DOUBLE PRECISION CNTL(10)
+@@ -9640,7 +9640,7 @@
+ C
+ C 12th July 2004 Version 1.0.0. Version numbering added.
+ 
+-      SUBROUTINE MC13DD(N,ICN,LICN,IP,LENR,IOR,IB,NUM,IW)
++      SUBROUTINE ZC13DD(N,ICN,LICN,IP,LENR,IOR,IB,NUM,IW)
+ C     .. Scalar Arguments ..
+       INTEGER LICN,N,NUM
+ C     ..
+@@ -9648,14 +9648,14 @@
+       INTEGER IB(N),ICN(LICN),IOR(N),IP(N),IW(N,3),LENR(N)
+ C     ..
+ C     .. External Subroutines ..
+-      EXTERNAL MC13ED
++      EXTERNAL ZC13ED
+ C     ..
+ C     .. Executable Statements ..
+-      CALL MC13ED(N,ICN,LICN,IP,LENR,IOR,IB,NUM,IW(1,1),IW(1,2),IW(1,3))
++      CALL ZC13ED(N,ICN,LICN,IP,LENR,IOR,IB,NUM,IW(1,1),IW(1,2),IW(1,3))
+       RETURN
+ 
+       END
+-      SUBROUTINE MC13ED(N,ICN,LICN,IP,LENR,ARP,IB,NUM,LOWL,NUMB,PREV)
++      SUBROUTINE ZC13ED(N,ICN,LICN,IP,LENR,ARP,IB,NUM,LOWL,NUMB,PREV)
+ C
+ C ARP(I) IS ONE LESS THAN THE NUMBER OF UNSEARCHED EDGES LEAVING
+ C     NODE I.  AT THE END OF THE ALGORITHM IT IS SET TO A
+@@ -9794,7 +9794,7 @@
+ C
+ C 12th July 2004 Version 1.0.0. Version numbering added.
+ 
+-      SUBROUTINE MC21AD(N,ICN,LICN,IP,LENR,IPERM,NUMNZ,IW)
++      SUBROUTINE ZC21AD(N,ICN,LICN,IP,LENR,IPERM,NUMNZ,IW)
+ C     .. Scalar Arguments ..
+       INTEGER LICN,N,NUMNZ
+ C     ..
+@@ -9802,15 +9802,15 @@
+       INTEGER ICN(LICN),IP(N),IPERM(N),IW(N,4),LENR(N)
+ C     ..
+ C     .. External Subroutines ..
+-      EXTERNAL MC21BD
++      EXTERNAL ZC21BD
+ C     ..
+ C     .. Executable Statements ..
+-      CALL MC21BD(N,ICN,LICN,IP,LENR,IPERM,NUMNZ,IW(1,1),IW(1,2),
++      CALL ZC21BD(N,ICN,LICN,IP,LENR,IPERM,NUMNZ,IW(1,1),IW(1,2),
+      +            IW(1,3),IW(1,4))
+       RETURN
+ C
+       END
+-      SUBROUTINE MC21BD(N,ICN,LICN,IP,LENR,IPERM,NUMNZ,PR,ARP,CV,OUT)
++      SUBROUTINE ZC21BD(N,ICN,LICN,IP,LENR,IPERM,NUMNZ,PR,ARP,CV,OUT)
+ C   PR(I) IS THE PREVIOUS ROW TO I IN THE DEPTH FIRST SEARCH.
+ C IT IS USED AS A WORK ARRAY IN THE SORTING ALGORITHM.
+ C   ELEMENTS (IPERM(I),I) I=1, ... N  ARE NON-ZERO AT THE END OF THE
+@@ -9938,7 +9938,7 @@
+ C Original date March 1993
+ C 12th July 2004 Version 1.0.0. Version numbering added.
+ 
+-      SUBROUTINE MC29AD(M,N,NE,A,IRN,ICN,R,C,W,LP,IFAIL)
++      SUBROUTINE ZC29AD(M,N,NE,A,IRN,ICN,R,C,W,LP,IFAIL)
+       INTEGER M,N,NE
+       DOUBLE PRECISION A(NE)
+       INTEGER IRN(NE),ICN(NE)
+@@ -10150,7 +10150,7 @@
+ 
+ C Error returns
+   220 IF (LP.GT.0) WRITE (LP,'(/A/A,I3)')
+-     +    ' **** Error return from MC29AD ****',' IFAIL =',IFAIL
++     +    ' **** Error return from ZC29AD ****',' IFAIL =',IFAIL
+ 
+       END
+ * COPYRIGHT (c) 1988 AEA Technology and
+@@ -10161,7 +10161,7 @@
+ 
+ C 12th July 2004 Version 1.0.0. Version numbering added.
+ 
+-      SUBROUTINE MC71AD(N,KASE,X,EST,W,IW,KEEP)
++      SUBROUTINE ZC71AD(N,KASE,X,EST,W,IW,KEEP)
+ C
+ C      MC71A/AD ESTIMATES THE 1-NORM OF A SQUARE MATRIX A.
+ C      REVERSE COMMUNICATION IS USED FOR EVALUATING
+@@ -10398,7 +10398,7 @@
+ ! Version 2.2.0
+ ! See ChangeLog for version history.
+ !
+-      SUBROUTINE MA48AD(M,N,NE,JOB,LA,A,IRN,JCN,KEEP,CNTL,ICNTL,IW,INFO,
++      SUBROUTINE ZA48AD(M,N,NE,JOB,LA,A,IRN,JCN,KEEP,CNTL,ICNTL,IW,INFO,
+      +                  RINFO)
+ C Given a sparse matrix, find its block upper triangular form, choose a
+ C     pivot sequence for each diagonal block, and prepare data
+@@ -10602,9 +10602,9 @@
+ C IQ    displacement in IW. IW(IQ+J), J=1,N holds a column permutation.
+ C ISW   used for swopping two integers
+ C IW13  displacement in IW. IW(IW13+1) is the first entry of the
+-C       workarray IW of MC13DD.
++C       workarray IW of ZC13DD.
+ C IW21  displacement in KEEP. KEEP(IW21+1) is the first entry of the
+-C       workarray IW of MC21AD.
++C       workarray IW of ZC21AD.
+ C IW50  displacement in IW. IW(IW50+1) is the first entry of the
+ C       workarray IW of MA50A/AD.
+ C J     column index.
+@@ -10628,12 +10628,12 @@
+ C       entry encountered in row I.  Used for accumulating duplicates.
+ C LASTC displacement in IW. IW(LASTC+I) holds the index of the
+ C       last column encountered that had an entry in row I.
+-C       LASTC is also used to get workspace in KEEP for MA50AD.
++C       LASTC is also used to get workspace in KEEP for ZA50AD.
+ C LDUP  logical flag used to indicate whether duplicates have been
+ C       found and recorded.
+ C LENC  displacement in IW. IW(LENC+J) holds the number of entries
+ C       in column J, excluding duplicates.
+-C       LENC is also used to get workspace in KEEP for MA50AD.
++C       LENC is also used to get workspace in KEEP for ZA50AD.
+ C LENP  displacement in IW. IW(LENP+J) holds the number of entries
+ C       in column J of the permuted matrix.
+ C LENR  displacement in IW. IW(LENR+1) is the first entry of the
+@@ -10645,7 +10645,7 @@
+ C NB Number of blocks.
+ C NBLOCK displacement in KEEP. See comment on KEEP.
+ C NC Number of columns in block.
+-C NDIAG number entries placed on diagonal by MC21AD.
++C NDIAG number entries placed on diagonal by ZC21AD.
+ C NEXTC displacement in IW. IW(NEXTC+1) is the first entry of the
+ C       workarray NEXTC of MA50A/AD.
+ C NEXTR displacement in IW. IW(NEXTR+1) is the first entry of the
+@@ -10665,9 +10665,9 @@
+ C       as zero.
+ C
+ C .. Externals ..
+-      EXTERNAL MC13DD,MC21AD,MA50AD
+-C MC13DD    finds permutation for block triangular form
+-C MC21AD    finds permutation for zero-free diagonal
++      EXTERNAL ZC13DD,ZC21AD,ZA50AD
++C ZC13DD    finds permutation for block triangular form
++C ZC21AD    finds permutation for zero-free diagonal
+ C MA50A/AD factorizes non-triangular diagonal blocks
+       INTRINSIC ABS,MAX
+ C
+@@ -10838,10 +10838,10 @@
+ C
+ C Note that in this part of the code we know that M is equal to N.
+ 
+-C Get workspace from KEEP for MC21AD and MC13DD
++C Get workspace from KEEP for ZC21AD and ZC13DD
+       IW21 = 2*N
+       IW13 = IW21
+-C Partition IW for arrays used by MC21AD and MC13DD
++C Partition IW for arrays used by ZC21AD and ZC13DD
+       IPTRA = LASTC + N
+       LENC = IPTRA + N
+       IB = LENC
+@@ -10887,7 +10887,7 @@
+       NZA = K - 1
+ 
+ C   Compute permutation for zero-free diagonal
+-      CALL MC21AD(N,IRN(NE+1),NZA,IW(IPTRA+1),IW(LENC+1),IW(IP+1),NDIAG,
++      CALL ZC21AD(N,IRN(NE+1),NZA,IW(IPTRA+1),IW(LENC+1),IW(IP+1),NDIAG,
+      +           KEEP(IW21+1))
+ C IW(IP+1) ... col permutation ... new.to.old
+       INFO(10) = NDIAG
+@@ -10912,7 +10912,7 @@
+ 
+ C Use Tarjan's algorithm to obtain permutation to block triangular form.
+ C KEEP(M+1) .. col permutation ...new.to.old
+-      CALL MC13DD(N,IRN(NE+1),NZA,IW(IPTRP+1),IW(LENP+1),KEEP(M+1),
++      CALL ZC13DD(N,IRN(NE+1),NZA,IW(IPTRP+1),IW(LENP+1),KEEP(M+1),
+      +           IW(IB+1),NB,KEEP(IW13+1))
+ C IW(IB+1) ... col number in permuted matrix of start of blocks
+ 
+@@ -11110,7 +11110,7 @@
+       IW50 = 5*M + 2*N
+       NEXTC = 6*M + 2*N
+       PTRO = NEXTC
+-C Use scratch space in KEEP for work arrays in MA50AD.
++C Use scratch space in KEEP for work arrays in ZA50AD.
+       LASTC = M + N
+       LENC = LASTC + N
+ C
+@@ -11165,7 +11165,7 @@
+             INFO(9) = INFO(9) + NZB
+ C Control for forcing columns to end.
+             IF (ICNTL(8).NE.0) ICNTL5(6) = KEEP(LBLOCK+JB)
+-            CALL MA50AD(NR,NC,NZB,LA-NE-K,A(NE+K+1),IRN(NE+K+1),
++            CALL ZA50AD(NR,NC,NZB,LA-NE-K,A(NE+K+1),IRN(NE+K+1),
+      +                  JCN(NE+1),IW(IQ+J1),CNTL5,ICNTL5,IW(IP+J1),
+      +                  NP,IW(JFIRST+1),IW(LENR+1),
+      +                  IW(LASTR+1),IW(NEXTR+1),IW(IW50+1),IW(PTRD+J1),
+@@ -11201,11 +11201,11 @@
+ C Accumulate floating-point count
+             RINFO(1) = RINFO(1) + RINFO5(1)
+ C Calculate data necessary for INFO(4)
+-C KEEP(LENC+KB) holds the actual storage forecast for MA50BD entry.
++C KEEP(LENC+KB) holds the actual storage forecast for ZA50BD entry.
+             KB = KB + 1
+             KEEP(LENC+KB) = INFO5(4) - 2*NR
+ C KEEP(LASTC+KB) holds the storage plus elbow room forecast
+-C         for MA50BD entry.
++C         for ZA50BD entry.
+             KEEP(LASTC+KB) = INFO5(4)
+          END IF
+   390 CONTINUE
+@@ -11383,7 +11383,7 @@
+       END
+ 
+ 
+-      SUBROUTINE MA48BD(M,N,NE,JOB,LA,A,IRN,JCN,KEEP,CNTL,ICNTL,W,IW,
++      SUBROUTINE ZA48BD(M,N,NE,JOB,LA,A,IRN,JCN,KEEP,CNTL,ICNTL,W,IW,
+      +                  INFO,RINFO)
+ C Factorize a sparse matrix, using data provided by MA48A/AD.
+ C
+@@ -11579,7 +11579,7 @@
+ C TRISNG is flag to indicate singularity in triangular block.
+ 
+ C     .. Externals ..
+-      EXTERNAL MA50BD
++      EXTERNAL ZA50BD
+       INTRINSIC MAX
+ 
+       LP = ICNTL(1)
+@@ -11821,7 +11821,7 @@
+             IW(J) = J - J1 + 1
+   120    CONTINUE
+          NP = KEEP(MBLOCK+3*JB)
+-         CALL MA50BD(NR,NC,NZB,JOB5,A(K+1),IRN(K+1),KEEP(IPTRD+J1),
++         CALL ZA50BD(NR,NC,NZB,JOB5,A(K+1),IRN(K+1),KEEP(IPTRD+J1),
+      +               CNTL5,ICNTL5,IW(J1),IQB,NP,LA-NEWNE-KK,
+      +               A(NEWNE+KK+1),IRN(NEWNE+KK+1),KEEP(IPTRL+J1),
+      +               KEEP(IPTRU+J1),W,IW(M+1),INFO5,RINFO5)
+@@ -12019,7 +12019,7 @@
+       END
+ 
+ 
+-      SUBROUTINE MA48CD(M,N,TRANS,JOB,LA,A,IRN,KEEP,CNTL,ICNTL,RHS,X,
++      SUBROUTINE ZA48CD(M,N,TRANS,JOB,LA,A,IRN,KEEP,CNTL,ICNTL,RHS,X,
+      +                  ERROR,W,IW,INFO)
+ 
+ C Solve linear system, using data provided by MA48B/BD.
+@@ -12162,7 +12162,7 @@
+ C TAU   from Arioli, Demmel, and Duff .. used to divide equations
+ C
+ C     .. Externals ..
+-      EXTERNAL MA48DD,MA50CD,MC71AD
++      EXTERNAL ZA48DD,ZA50CD,ZC71AD
+       DOUBLE PRECISION EPS
+ C EPS is the largest real such that 1+EPS is equal to 1.
+ C MA48D/DD solves block triangular system
+@@ -12383,11 +12383,11 @@
+ C
+ C Solve system using MA48D/DD or MA50C/CD.
+          IF (NB.EQ.1 .AND. KEEP(MBLOCK+3).GE.0) THEN
+-            CALL MA50CD(M,N,ICNTL5,IQB,KEEP(MBLOCK+3),TRANS,LA-NE,
++            CALL ZA50CD(M,N,ICNTL5,IQB,KEEP(MBLOCK+3),TRANS,LA-NE,
+      +                  A(NE+1),IRN(NE+1),KEEP(IPTRL+1),KEEP(IPTRU+1),W,
+      +                  X,W(NEQ+1),INFO)
+          ELSE
+-            CALL MA48DD
++            CALL ZA48DD
+      +           (N,NE,LA-NE,A(NE+1),A,IRN(NE+1),IRN,KEEP(IPTRD+1),
+      +            KEEP(IPTRO+1),NB,KEEP(NBLOCK+3),KEEP(IPTRL+1),
+      +            KEEP(IPTRU+1),W,X,TRANS,ICNTL5,W(NEQ+1))
+@@ -12414,11 +12414,11 @@
+ C
+ C Solve system using MA48D/DD or MA50C/CD.
+          IF (NB.EQ.1 .AND. KEEP(MBLOCK+3).GE.0) THEN
+-            CALL MA50CD(M,N,ICNTL5,IQB,KEEP(MBLOCK+3),TRANS,LA-NE,
++            CALL ZA50CD(M,N,ICNTL5,IQB,KEEP(MBLOCK+3),TRANS,LA-NE,
+      +                A(NE+1),IRN(NE+1),KEEP(IPTRL+1),KEEP(IPTRU+1),
+      +                W,W(NEQ+1),W(M+N+1),INFO)
+          ELSE
+-            CALL MA48DD
++            CALL ZA48DD
+      +           (N,NE,LA-NE,A(NE+1),A,IRN(NE+1),IRN,KEEP(IPTRD+1),
+      +            KEEP(IPTRO+1),NB,KEEP(NBLOCK+3),KEEP(IPTRL+1),
+      +            KEEP(IPTRU+1),W,W(NEQ+1),TRANS,ICNTL5,W(M+N+1))
+@@ -12581,7 +12581,7 @@
+             DO 310 KK = 1,40
+ C MC71A/AD calculates norm of matrix
+ C We are calculating the infinity norm of INV(A).W
+-               CALL MC71AD(N,KASE,W(3*NEQ+1),COND(K),RHS,IW,KEEP71)
++               CALL ZC71AD(N,KASE,W(3*NEQ+1),COND(K),RHS,IW,KEEP71)
+ C
+ C  KASE = 0........ Computation completed
+ C  KASE = 1........ W * INV(TRANSPOSE(A)) * Y
+@@ -12592,12 +12592,12 @@
+                IF (KASE.EQ.1) THEN
+ C Solve system using MA48D/DD or MA50C/CD.
+                   IF (NB.EQ.1 .AND. KEEP(MBLOCK+3).GE.0) THEN
+-                     CALL MA50CD(M,N,ICNTL5,IQB,KEEP(MBLOCK+3),
++                     CALL ZA50CD(M,N,ICNTL5,IQB,KEEP(MBLOCK+3),
+      +                           .NOT.TRANS,LA-NE,A(NE+1),IRN(NE+1),
+      +                           KEEP(IPTRL+1),KEEP(IPTRU+1),W(3*NEQ+1),
+      +                           W(2*NEQ+1),RHS,INFO)
+                   ELSE
+-                     CALL MA48DD(N,NE,LA-NE,A(NE+1),A,IRN(NE+1),IRN,
++                     CALL ZA48DD(N,NE,LA-NE,A(NE+1),A,IRN(NE+1),IRN,
+      +                           KEEP(IPTRD+1),KEEP(IPTRO+1),NB,
+      +                           KEEP(NBLOCK+3),KEEP(IPTRL+1),
+      +                           KEEP(IPTRU+1),W(3*NEQ+1),W(2*NEQ+1),
+@@ -12614,12 +12614,12 @@
+   300             CONTINUE
+ C Solve system using MA48D/DD or MA50C/CD.
+                   IF (NB.EQ.1 .AND. KEEP(MBLOCK+3).GE.0) THEN
+-                     CALL MA50CD(M,N,ICNTL5,IQB,KEEP(MBLOCK+3),TRANS,
++                     CALL ZA50CD(M,N,ICNTL5,IQB,KEEP(MBLOCK+3),TRANS,
+      +                           LA-NE,A(NE+1),IRN(NE+1),KEEP(IPTRL+1),
+      +                           KEEP(IPTRU+1),W(2*NEQ+1),W(3*NEQ+1),
+      +                           RHS,INFO)
+                   ELSE
+-                     CALL MA48DD(N,NE,LA-NE,A(NE+1),A,IRN(NE+1),IRN,
++                     CALL ZA48DD(N,NE,LA-NE,A(NE+1),A,IRN(NE+1),IRN,
+      +                           KEEP(IPTRD+1),KEEP(IPTRO+1),NB,
+      +                           KEEP(NBLOCK+3),KEEP(IPTRL+1),
+      +                           KEEP(IPTRU+1),W(2*NEQ+1),W(3*NEQ+1),
+@@ -12681,7 +12681,7 @@
+       END
+ 
+ 
+-      SUBROUTINE MA48DD(N,NE,LA,A,AA,IRN,IRNA,IPTRD,IPTRO,NB,IBLOCK,
++      SUBROUTINE ZA48DD(N,NE,LA,A,AA,IRN,IRNA,IPTRD,IPTRO,NB,IBLOCK,
+      +                  IPTRL,IPTRU,RHS,X,TRANS,ICNTL5,W)
+ C Solve linear system, using data provided by MA48B/BD.
+ C
+@@ -12756,7 +12756,7 @@
+ C     .. Local variables ..
+       INTEGER I,IFLAG(15),IQB(1),J,JB,JJ,J1,K1,K2,NC,NUMB
+ C I     row index
+-C IFLAG error flag from MA50CD .. will never be set
++C IFLAG error flag from ZA50CD .. will never be set
+ C IQB   is passed to MA50C/CD to indicate that no column permutation
+ C       is used.
+ C J     column index
+@@ -12769,7 +12769,7 @@
+ C NUMB  number of diagonal blocks
+ C
+ C     .. Externals ..
+-      EXTERNAL MA50CD
++      EXTERNAL ZA50CD
+ C
+       IQB(1) = 0
+       NUMB = IBLOCK(3,1)
+@@ -12795,7 +12795,7 @@
+             ELSE
+                J1 = 1
+                IF (JB.GT.1) J1 = IBLOCK(3,JB)
+-               CALL MA50CD(NC,NC,ICNTL5,IQB,IBLOCK(2,JB),TRANS,LA+1-J1,
++               CALL ZA50CD(NC,NC,ICNTL5,IQB,IBLOCK(2,JB),TRANS,LA+1-J1,
+      +                     A(J1),IRN(J1),IPTRL(K1),IPTRU(K1),RHS(K1),
+      +                     X(K1),W,IFLAG)
+             END IF
+@@ -12839,7 +12839,7 @@
+             ELSE
+                J1 = 1
+                IF (JB.GT.1) J1 = IBLOCK(3,JB)
+-               CALL MA50CD(NC,NC,ICNTL5,IQB,IBLOCK(2,JB),TRANS,LA+1-J1,
++               CALL ZA50CD(NC,NC,ICNTL5,IQB,IBLOCK(2,JB),TRANS,LA+1-J1,
+      +                     A(J1),IRN(J1),IPTRL(K1),IPTRU(K1),RHS(K1),
+      +                     X(K1),W,IFLAG)
+             END IF
+@@ -12849,7 +12849,7 @@
+       RETURN
+       END
+ 
+-      SUBROUTINE MA48ID(CNTL,ICNTL)
++      SUBROUTINE ZA48ID(CNTL,ICNTL)
+ C Set default values for the control arrays.
+ 
+       DOUBLE PRECISION CNTL(10)
