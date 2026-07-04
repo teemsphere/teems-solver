@@ -33,3 +33,14 @@ time; see `docker/expedited_build/Dockerfile` for the canonical flow:
   `-tempdir <dir>` option or the `TMPDIR` environment variable.
 - The `-smllthreads` option caps OpenMP threads in selected solver
   sections; `-maxthreads` sets the global thread count.
+
+## -inmemory guidance
+
+`-inmemory 1` keeps the value arrays resident (skipping the per-step
+scratch spills) and, unless `-tempdir`/`TMPDIR` is set, places scratch on
+tmpfs. Measured on a 4.4M-equation intertemporal run (2 ranks, 30GB node):
+SBBD ~7% faster with no scratch debris; NDBBD ~6-11% slower because its
+block-factor file traffic competes for the page cache that array spilling
+would otherwise free. Recommendation: use `-inmemory` with LU/SBBD/DBBD;
+for NDBBD keep the default unless the node has RAM well beyond the
+factor-file volume.
