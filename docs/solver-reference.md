@@ -227,6 +227,13 @@ Benchmarks (GTAP12 database; 20-core/30GB node; 2 ranks unless noted):
 Scratch traffic before the in-memory work (202k-eq model, per solve):
 SBBD 274MB, NDBBD 1.36GB — the motivation for §7.
 
+T/R crossover sweep (WB7 and big3 × macro sectors, T ∈ {6,11,21,41},
+min-of-2, production inmemory defaults): **SBBD won every shape** up to
+T/R = 13.7; NDBBD-4 approaches SBBD-2 but never passes it, and LU trails
+SBBD ~2× at larger T. At dev-box scale (≤800k equations, ≤4 ranks) no
+NDBBD-over-SBBD region exists; the question escalates to larger models
+and rank counts (see §12).
+
 Determinism: repeated same-binary runs are bit-identical for every
 method (basis of the golden-run verification, below).
 
