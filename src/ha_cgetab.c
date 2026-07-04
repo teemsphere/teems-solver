@@ -372,14 +372,14 @@ int hcge_rlinzero(char *formulain,int linindx) {
   return 1;
 }
 
-uvadd hcge_readff(char *fname, int niodata, hcge_iodata *iodata, char *commsyntax,ha_cgeset *ha_set,uvdim nset, ha_cgesetele *ha_setele,hcge_cof *ha_cof,uvadd ncof, ha_cgecofele *ha_cofele,uvadd ncofele,hcge_cof *ha_var,uvadd nvar, ha_cgecofele *ha_varele,uvadd nvarele) {
+offset_t hcge_readff(char *fname, int niodata, cmf_file_entry *iodata, char *commsyntax,set_def *ha_set,dim_t nset, set_element *ha_setele,array_def *ha_cof,offset_t ncof, elem_store *ha_cofele,offset_t ncofele,array_def *ha_var,offset_t nvar, elem_store *ha_varele,offset_t nvarele) {
   FILE * filehandle, * filehandle1;
   char line[DATREADLINE]="\0",linecopy[DATREADLINE],line1[TABREADLINE],*p,*p1;//,line1[DATREADLINE]
   char vname[NAMESIZE],setindx[NAMESIZE],header[NAMESIZE],*vname1=NULL,argu[TABREADLINE],varset[MAXVARDIM][NAMESIZE];//,varindx[MAXVARDIM][NAMESIZE],varindx1[MAXVARDIM][NAMESIZE];
-  uvadd j=0,i,l1,count1,recount,recount1,n,n1,n2,dims,antidim[MAXVARDIM],dim[MAXVARDIM],begadd[MAXVARDIM],supsetid[MAXVARDIM],index[MAXVARDIM];
+  offset_t j=0,i,l1,count1,recount,recount1,n,n1,n2,dims,antidim[MAXVARDIM],dim[MAXVARDIM],offset[MAXVARDIM],supsetid[MAXVARDIM],index[MAXVARDIM];
   int count2;//0 no finding;1 find var; 2 find header cof; 4 find header var;
   char *readitem=NULL,*copyvar;
-  ha_cgetype val;
+  solve_real val;
   int k0,k1;
 
   filehandle = fopen(fname,"r");
@@ -476,21 +476,21 @@ uvadd hcge_readff(char *fname, int niodata, hcge_iodata *iodata, char *commsynta
                       l1=recount;
                       if(ha_var[i].size>1) {
                         for (n1=ha_var[i].size-1; n1>1; n1--) {
-                          index[n1]=(uvadd) l1/antidim[n1];
+                          index[n1]=(offset_t) l1/antidim[n1];
                           l1=l1-antidim[n1]*index[n1];
                         }
-                        index[0]=(uvadd) l1/antidim[0];
+                        index[0]=(offset_t) l1/antidim[0];
                         l1=l1-antidim[0]*index[0];
-                        index[1]=(uvadd) l1/antidim[1];
+                        index[1]=(offset_t) l1/antidim[1];
                         l1=l1-antidim[1]*index[1];
                       } else {
                         index[0]=recount;
                       }
                       recount1=0;
                       for (n1=0; n1<ha_var[i].size; n1++) {
-                        recount1=recount1+index[n1]*ha_var[i].antidims[n1];
+                        recount1=recount1+index[n1]*ha_var[i].strides[n1];
                       }
-                      ha_varele[ha_var[i].begadd+recount1].cofval=val;
+                      ha_varele[ha_var[i].offset+recount1].value=val;
                       recount++;
                       if (recount>=dims) {
                         break;
@@ -506,21 +506,21 @@ uvadd hcge_readff(char *fname, int niodata, hcge_iodata *iodata, char *commsynta
                         l1=recount;
                         if(ha_var[i].size>1) {
                           for (n1=ha_var[i].size-1; n1>1; n1--) {
-                            index[n1]=(uvadd) l1/antidim[n1];
+                            index[n1]=(offset_t) l1/antidim[n1];
                             l1=l1-antidim[n1]*index[n1];
                           }
-                          index[0]=(uvadd) l1/antidim[0];
+                          index[0]=(offset_t) l1/antidim[0];
                           l1=l1-antidim[0]*index[0];
-                          index[1]=(uvadd) l1/antidim[1];
+                          index[1]=(offset_t) l1/antidim[1];
                           l1=l1-antidim[1]*index[1];
                         } else {
                           index[0]=recount;
                         }
                         recount1=0;
                         for (n1=0; n1<ha_var[i].size; n1++) {
-                          recount1=recount1+index[n1]*ha_var[i].antidims[n1];
+                          recount1=recount1+index[n1]*ha_var[i].strides[n1];
                         }
-                        ha_varele[ha_var[i].begadd+recount1].cofval=val;
+                        ha_varele[ha_var[i].offset+recount1].value=val;
                         recount++;
                       }
                       readitem = strtok(NULL,"\n");
@@ -528,21 +528,21 @@ uvadd hcge_readff(char *fname, int niodata, hcge_iodata *iodata, char *commsynta
                       l1=recount;
                       if(ha_var[i].size>1) {
                         for (n1=ha_var[i].size-1; n1>1; n1--) {
-                          index[n1]=(uvadd) l1/antidim[n1];
+                          index[n1]=(offset_t) l1/antidim[n1];
                           l1=l1-antidim[n1]*index[n1];
                         }
-                        index[0]=(uvadd) l1/antidim[0];
+                        index[0]=(offset_t) l1/antidim[0];
                         l1=l1-antidim[0]*index[0];
-                        index[1]=(uvadd) l1/antidim[1];
+                        index[1]=(offset_t) l1/antidim[1];
                         l1=l1-antidim[1]*index[1];
                       } else {
                         index[0]=recount;
                       }
                       recount1=0;
                       for (n1=0; n1<ha_var[i].size; n1++) {
-                        recount1=recount1+index[n1]*ha_var[i].antidims[n1];
+                        recount1=recount1+index[n1]*ha_var[i].strides[n1];
                       }
-                      ha_varele[ha_var[i].begadd+recount1].cofval=val;
+                      ha_varele[ha_var[i].offset+recount1].value=val;
                       recount++;
                       if (recount>=dims) {
                         break;
@@ -625,21 +625,21 @@ uvadd hcge_readff(char *fname, int niodata, hcge_iodata *iodata, char *commsynta
                       l1=recount;
                       if(ha_cof[i].size>1) {
                         for (n1=ha_cof[i].size-1; n1>1; n1--) {
-                          index[n1]=(uvadd) l1/antidim[n1];
+                          index[n1]=(offset_t) l1/antidim[n1];
                           l1=l1-antidim[n1]*index[n1];
                         }
-                        index[0]=(uvadd) l1/antidim[0];
+                        index[0]=(offset_t) l1/antidim[0];
                         l1=l1-antidim[0]*index[0];
-                        index[1]=(uvadd) l1/antidim[1];
+                        index[1]=(offset_t) l1/antidim[1];
                         l1=l1-antidim[1]*index[1];
                       } else {
                         index[0]=recount;
                       }
                       recount1=0;
                       for (n1=0; n1<ha_cof[i].size; n1++) {
-                        recount1=recount1+index[n1]*ha_cof[i].antidims[n1];
+                        recount1=recount1+index[n1]*ha_cof[i].strides[n1];
                       }
-                      ha_cofele[ha_cof[i].begadd+recount1].cofval=val;
+                      ha_cofele[ha_cof[i].offset+recount1].value=val;
                       recount++;
                       if (recount>=dims) {
                         break;
@@ -655,21 +655,21 @@ uvadd hcge_readff(char *fname, int niodata, hcge_iodata *iodata, char *commsynta
                         l1=recount;
                         if(ha_cof[i].size>1) {
                           for (n1=ha_cof[i].size-1; n1>1; n1--) {
-                            index[n1]=(uvadd) l1/antidim[n1];
+                            index[n1]=(offset_t) l1/antidim[n1];
                             l1=l1-antidim[n1]*index[n1];
                           }
-                          index[0]=(uvadd) l1/antidim[0];
+                          index[0]=(offset_t) l1/antidim[0];
                           l1=l1-antidim[0]*index[0];
-                          index[1]=(uvadd) l1/antidim[1];
+                          index[1]=(offset_t) l1/antidim[1];
                           l1=l1-antidim[1]*index[1];
                         } else {
                           index[0]=recount;
                         }
                         recount1=0;
                         for (n1=0; n1<ha_cof[i].size; n1++) {
-                          recount1=recount1+index[n1]*ha_cof[i].antidims[n1];
+                          recount1=recount1+index[n1]*ha_cof[i].strides[n1];
                         }
-                        ha_cofele[ha_cof[i].begadd+recount1].cofval=val;
+                        ha_cofele[ha_cof[i].offset+recount1].value=val;
                         recount++;
                       }
                       readitem = strtok(NULL,"\n");
@@ -677,21 +677,21 @@ uvadd hcge_readff(char *fname, int niodata, hcge_iodata *iodata, char *commsynta
                       l1=recount;
                       if(ha_cof[i].size>1) {
                         for (n1=ha_cof[i].size-1; n1>1; n1--) {
-                          index[n1]=(uvadd) l1/antidim[n1];
+                          index[n1]=(offset_t) l1/antidim[n1];
                           l1=l1-antidim[n1]*index[n1];
                         }
-                        index[0]=(uvadd) l1/antidim[0];
+                        index[0]=(offset_t) l1/antidim[0];
                         l1=l1-antidim[0]*index[0];
-                        index[1]=(uvadd) l1/antidim[1];
+                        index[1]=(offset_t) l1/antidim[1];
                         l1=l1-antidim[1]*index[1];
                       } else {
                         index[0]=recount;
                       }
                       recount1=0;
                       for (n1=0; n1<ha_cof[i].size; n1++) {
-                        recount1=recount1+index[n1]*ha_cof[i].antidims[n1];
+                        recount1=recount1+index[n1]*ha_cof[i].strides[n1];
                       }
-                      ha_cofele[ha_cof[i].begadd+recount1].cofval=val;
+                      ha_cofele[ha_cof[i].offset+recount1].value=val;
                       recount++;
                       if (recount>=dims) {
                         break;
@@ -769,14 +769,14 @@ uvadd hcge_readff(char *fname, int niodata, hcge_iodata *iodata, char *commsynta
             if (strcmp(varset[n1],ha_set[ha_cof[i].setid[n1]].setname)==0) {
               dims=dims*ha_set[ha_cof[i].setid[n1]].size;
               dim[n1]=ha_set[ha_cof[i].setid[n1]].size;
-              begadd[n1]=ha_set[ha_cof[i].setid[n1]].begadd;
+              offset[n1]=ha_set[ha_cof[i].setid[n1]].offset;
               supsetid[n1]=0;
             } else {
               for (n=0; n<nset; n++) {
                 if (strcmp(varset[n1],ha_set[n].setname)==0) {
                   dims=dims*ha_set[n].size;
                   dim[n1]=ha_set[n].size;
-                  begadd[n1]=ha_set[n].begadd;
+                  offset[n1]=ha_set[n].offset;
                   for(l1=0; l1<MAXSUPSET; l1++)if(strcmp(ha_set[ha_set[n].subsetid[l1]].setname,ha_set[ha_cof[i].setid[n1]].setname)==0) {
                       supsetid[n1]=l1;
                       break;
@@ -837,21 +837,21 @@ uvadd hcge_readff(char *fname, int niodata, hcge_iodata *iodata, char *commsynta
                       l1=recount;
                       if (ha_cof[i].size>1) {
                         for (n1=ha_cof[i].size-1; n1>1; n1--) {
-                          index[n1]=(uvadd) l1/antidim[n1];
+                          index[n1]=(offset_t) l1/antidim[n1];
                           l1=l1-antidim[n1]*index[n1];
                         }
-                        index[0]=(uvadd) l1/antidim[0];
+                        index[0]=(offset_t) l1/antidim[0];
                         l1=l1-antidim[0]*index[0];
-                        index[1]=(uvadd) l1/antidim[1];
+                        index[1]=(offset_t) l1/antidim[1];
                         l1=l1-antidim[1]*index[1];
                       } else {
                         index[0]=recount;
                       }
                       recount1=0;
                       for (n1=0; n1<ha_cof[i].size; n1++) {
-                        recount1=recount1+ha_setele[begadd[n1]+index[n1]].setsh[supsetid[n1]]*ha_cof[i].antidims[n1];
+                        recount1=recount1+ha_setele[offset[n1]+index[n1]].superset_pos[supsetid[n1]]*ha_cof[i].strides[n1];
                       }
-                      ha_cofele[ha_cof[i].begadd+recount1].cofval=val;
+                      ha_cofele[ha_cof[i].offset+recount1].value=val;
                       recount++;
                       if (recount>=dims) {
                         break;
@@ -867,21 +867,21 @@ uvadd hcge_readff(char *fname, int niodata, hcge_iodata *iodata, char *commsynta
                         l1=recount;
                         if (ha_cof[i].size>1) {
                           for (n1=ha_cof[i].size-1; n1>1; n1--) {
-                            index[n1]=(uvadd) l1/antidim[n1];
+                            index[n1]=(offset_t) l1/antidim[n1];
                             l1=l1-antidim[n1]*index[n1];
                           }
-                          index[0]=(uvadd) l1/antidim[0];
+                          index[0]=(offset_t) l1/antidim[0];
                           l1=l1-antidim[0]*index[0];
-                          index[1]=(uvadd) l1/antidim[1];
+                          index[1]=(offset_t) l1/antidim[1];
                           l1=l1-antidim[1]*index[1];
                         } else {
                           index[0]=recount;
                         }
                         recount1=0;
                         for (n1=0; n1<ha_cof[i].size; n1++) {
-                          recount1=recount1+ha_setele[begadd[n1]+index[n1]].setsh[supsetid[n1]]*ha_cof[i].antidims[n1];
+                          recount1=recount1+ha_setele[offset[n1]+index[n1]].superset_pos[supsetid[n1]]*ha_cof[i].strides[n1];
                         }
-                        ha_cofele[ha_cof[i].begadd+recount1].cofval=val;
+                        ha_cofele[ha_cof[i].offset+recount1].value=val;
                         recount++;
                       }
                       readitem = strtok(NULL,"\n");
@@ -889,21 +889,21 @@ uvadd hcge_readff(char *fname, int niodata, hcge_iodata *iodata, char *commsynta
                       l1=recount;
                       if (ha_cof[i].size>1) {
                         for (n1=ha_cof[i].size-1; n1>1; n1--) {
-                          index[n1]=(uvadd) l1/antidim[n1];
+                          index[n1]=(offset_t) l1/antidim[n1];
                           l1=l1-antidim[n1]*index[n1];
                         }
-                        index[0]=(uvadd) l1/antidim[0];
+                        index[0]=(offset_t) l1/antidim[0];
                         l1=l1-antidim[0]*index[0];
-                        index[1]=(uvadd) l1/antidim[1];
+                        index[1]=(offset_t) l1/antidim[1];
                         l1=l1-antidim[1]*index[1];
                       } else {
                         index[0]=recount;
                       }
                       recount1=0;
                       for (n1=0; n1<ha_cof[i].size; n1++) {
-                        recount1=recount1+ha_setele[begadd[n1]+index[n1]].setsh[supsetid[n1]]*ha_cof[i].antidims[n1];
+                        recount1=recount1+ha_setele[offset[n1]+index[n1]].superset_pos[supsetid[n1]]*ha_cof[i].strides[n1];
                       }
-                      ha_cofele[ha_cof[i].begadd+recount1].cofval=val;
+                      ha_cofele[ha_cof[i].offset+recount1].value=val;
                       recount++;
                       if (recount>=dims) {
                         break;
@@ -936,14 +936,14 @@ uvadd hcge_readff(char *fname, int niodata, hcge_iodata *iodata, char *commsynta
             if (strcmp(varset[n1],ha_set[ha_var[i].setid[n1]].setname)==0) {
               dims=dims*ha_set[ha_var[i].setid[n1]].size;
               dim[n1]=ha_set[ha_var[i].setid[n1]].size;
-              begadd[n1]=ha_set[ha_var[i].setid[n1]].begadd;
+              offset[n1]=ha_set[ha_var[i].setid[n1]].offset;
               supsetid[n1]=0;
             } else {
               for (n=0; n<nset; n++) {
                 if (strcmp(varset[n1],ha_set[n].setname)==0) {
                   dims=dims*ha_set[n].size;
                   dim[n1]=ha_set[n].size;
-                  begadd[n1]=ha_set[n].begadd;
+                  offset[n1]=ha_set[n].offset;
                   for(l1=0; l1<MAXSUPSET; l1++)if(strcmp(ha_set[ha_set[n].subsetid[l1]].setname,ha_set[ha_var[i].setid[n1]].setname)==0) {
                       supsetid[n1]=l1;
                       break;
@@ -1003,21 +1003,21 @@ uvadd hcge_readff(char *fname, int niodata, hcge_iodata *iodata, char *commsynta
                       l1=recount;
                       if (ha_var[i].size>1) {
                         for (n1=ha_var[i].size-1; n1>1; n1--) {
-                          index[n1]=(uvadd) l1/antidim[n1];
+                          index[n1]=(offset_t) l1/antidim[n1];
                           l1=l1-antidim[n1]*index[n1];
                         }
-                        index[0]=(uvadd) l1/antidim[0];
+                        index[0]=(offset_t) l1/antidim[0];
                         l1=l1-antidim[0]*index[0];
-                        index[1]=(uvadd) l1/antidim[1];
+                        index[1]=(offset_t) l1/antidim[1];
                         l1=l1-antidim[1]*index[1];
                       } else {
                         index[0]=recount;
                       }
                       recount1=0;
                       for (n1=0; n1<ha_var[i].size; n1++) {
-                        recount1=recount1+ha_setele[begadd[n1]+index[n1]].setsh[supsetid[n1]]*ha_var[i].antidims[n1];
+                        recount1=recount1+ha_setele[offset[n1]+index[n1]].superset_pos[supsetid[n1]]*ha_var[i].strides[n1];
                       }
-                      ha_varele[ha_var[i].begadd+recount1].cofval=val;
+                      ha_varele[ha_var[i].offset+recount1].value=val;
                       recount++;
                       if (recount>=dims) {
                         break;
@@ -1033,21 +1033,21 @@ uvadd hcge_readff(char *fname, int niodata, hcge_iodata *iodata, char *commsynta
                         l1=recount;
                         if (ha_var[i].size>1) {
                           for (n1=ha_var[i].size-1; n1>1; n1--) {
-                            index[n1]=(uvadd) l1/antidim[n1];
+                            index[n1]=(offset_t) l1/antidim[n1];
                             l1=l1-antidim[n1]*index[n1];
                           }
-                          index[0]=(uvadd) l1/antidim[0];
+                          index[0]=(offset_t) l1/antidim[0];
                           l1=l1-antidim[0]*index[0];
-                          index[1]=(uvadd) l1/antidim[1];
+                          index[1]=(offset_t) l1/antidim[1];
                           l1=l1-antidim[1]*index[1];
                         } else {
                           index[0]=recount;
                         }
                         recount1=0;
                         for (n1=0; n1<ha_var[i].size; n1++) {
-                          recount1=recount1+ha_setele[begadd[n1]+index[n1]].setsh[supsetid[n1]]*ha_var[i].antidims[n1];
+                          recount1=recount1+ha_setele[offset[n1]+index[n1]].superset_pos[supsetid[n1]]*ha_var[i].strides[n1];
                         }
-                        ha_varele[ha_var[i].begadd+recount1].cofval=val;
+                        ha_varele[ha_var[i].offset+recount1].value=val;
                         recount++;
                       }
                       readitem = strtok(NULL,"\n");
@@ -1055,21 +1055,21 @@ uvadd hcge_readff(char *fname, int niodata, hcge_iodata *iodata, char *commsynta
                       l1=recount;
                       if (ha_var[i].size>1) {
                         for (n1=ha_var[i].size-1; n1>1; n1--) {
-                          index[n1]=(uvadd) l1/antidim[n1];
+                          index[n1]=(offset_t) l1/antidim[n1];
                           l1=l1-antidim[n1]*index[n1];
                         }
-                        index[0]=(uvadd) l1/antidim[0];
+                        index[0]=(offset_t) l1/antidim[0];
                         l1=l1-antidim[0]*index[0];
-                        index[1]=(uvadd) l1/antidim[1];
+                        index[1]=(offset_t) l1/antidim[1];
                         l1=l1-antidim[1]*index[1];
                       } else {
                         index[0]=recount;
                       }
                       recount1=0;
                       for (n1=0; n1<ha_var[i].size; n1++) {
-                        recount1=recount1+ha_setele[begadd[n1]+index[n1]].setsh[supsetid[n1]]*ha_var[i].antidims[n1];
+                        recount1=recount1+ha_setele[offset[n1]+index[n1]].superset_pos[supsetid[n1]]*ha_var[i].strides[n1];
                       }
-                      ha_varele[ha_var[i].begadd+recount1].cofval=val;
+                      ha_varele[ha_var[i].offset+recount1].value=val;
                       recount++;
                       if (recount>=dims) {
                         break;
@@ -1104,10 +1104,10 @@ uvadd hcge_readff(char *fname, int niodata, hcge_iodata *iodata, char *commsynta
 }
 
 
-uvadd hcge_dsum(char *formulain, char *commsyntax, hcge_sumcof *sum_cof,ha_cgesetindx *arSet,ha_cgeset *ha_set,uvdim nset,uvdim fdim,int j) {
+offset_t hcge_dsum(char *formulain, char *commsyntax, sum_def *sum_cof,quantifier *arSet,set_def *ha_set,dim_t nset,dim_t fdim,int j) {
   char *readitem,*p,*p1,*p2,interchar2[TABREADLINE],argu[TABREADLINE];//,line5[TABREADLINE]
   char interchar[TABREADLINE],interchar1[TABREADLINE],line[TABREADLINE],line1[TABREADLINE],line2[TABREADLINE],line3[TABREADLINE],line4[TABREADLINE],tempname[NAMESIZE];
-  uvadd i=0,k=0,k1=0,length,ncur=0,ncuri,l,l1,l2,l3,l4,l5,l6,l7,sup;
+  offset_t i=0,k=0,k1=0,length,ncur=0,ncuri,l,l1,l2,l3,l4,l5,l6,l7,sup;
   length=strlen(formulain);
   readitem=formulain;
   while (i<length) {
@@ -1182,7 +1182,7 @@ uvadd hcge_dsum(char *formulain, char *commsyntax, hcge_sumcof *sum_cof,ha_cgese
               if (l4==l3||l3==0) {
                 strcpy(sum_cof[j].dimnames[l3],p);
                 l6=0;
-                for (l5=0; l5<fdim-1; l5++) if(strcmp(p,arSet[l5].arIndx)==0) {
+                for (l5=0; l5<fdim-1; l5++) if(strcmp(p,arSet[l5].index_name)==0) {
                     sum_cof[j].setid[l3]=arSet[l5].setid;
                     l6++;
                   }
@@ -1220,7 +1220,7 @@ uvadd hcge_dsum(char *formulain, char *commsyntax, hcge_sumcof *sum_cof,ha_cgese
                   strcpy(sum_cof[j].dimnames[l3],p);
                   strcat(interchar,sum_cof[j].dimnames[l3]);
                   l6=0;
-                  for (l5=0; l5<fdim-1; l5++) if(strcmp(p,arSet[l5].arIndx)==0) {
+                  for (l5=0; l5<fdim-1; l5++) if(strcmp(p,arSet[l5].index_name)==0) {
                       sum_cof[j].setid[l3]=arSet[l5].setid;
                       l6++;
                       break;
@@ -1327,7 +1327,7 @@ uvadd hcge_dsum(char *formulain, char *commsyntax, hcge_sumcof *sum_cof,ha_cgese
                 strcpy(sum_cof[j].dimnames[l3],p);
                 strcat(interchar,p);
                 l6=0;
-                for (l5=0; l5<fdim-1; l5++) if(strcmp(p,arSet[l5].arIndx)==0) {
+                for (l5=0; l5<fdim-1; l5++) if(strcmp(p,arSet[l5].index_name)==0) {
                     sum_cof[j].setid[l3]=arSet[l5].setid;
                     l6++;
                   }
@@ -1366,7 +1366,7 @@ uvadd hcge_dsum(char *formulain, char *commsyntax, hcge_sumcof *sum_cof,ha_cgese
                   strcat(interchar,sum_cof[j].dimnames[l3]);
                   strcat(interchar,",");
                   l6=0;
-                  for (l5=0; l5<fdim-1; l5++) if(strcmp(p,arSet[l5].arIndx)==0) {
+                  for (l5=0; l5<fdim-1; l5++) if(strcmp(p,arSet[l5].index_name)==0) {
                       sum_cof[j].setid[l3]=arSet[l5].setid;
                       l6++;
                     }
@@ -1439,10 +1439,10 @@ int hcge_nsum(char *formulain, char *commsyntax) {
   return j;
 }
 
-uvadd ha_cgencof(char *fname, char *commsyntax) {
+offset_t ha_cgencof(char *fname, char *commsyntax) {
   FILE * filehandle;
   char line[TABREADLINE]="\0";
-  uvadd j=0;
+  offset_t j=0;
   filehandle = fopen(fname,"r");
   while (ha_cgertabl(commsyntax,filehandle,line,TABREADLINE)) {
     if (strstr(line,"(default")==NULL) {
@@ -1453,10 +1453,10 @@ uvadd ha_cgencof(char *fname, char *commsyntax) {
   return j;
 }
 
-uvadd hcge_rexo(char *fname, char *commsyntax,ha_cgeexovar *ha_cgeshock, hcge_cof *ha_var,uvadd nvar,ha_cgeset *ha_set,uvdim nset, ha_cgesetele *ha_setele) {
+offset_t hcge_rexo(char *fname, char *commsyntax,closure_entry *ha_cgeshock, array_def *ha_var,offset_t nvar,set_def *ha_set,dim_t nset, set_element *ha_setele) {
   FILE * filehandle;
   char line[TABREADLINE]="\0",*readitem=NULL,*p=NULL,*p1=NULL,vname[TABREADLINE],argu[TABREADLINE];//,linecopy[TABREADLINE]
-  uvadd i,j,n=0,l=0,l1,l2,n1,m,dims,dcount,exodims,supsetid[MAXSUPSET],sup,doublepr[MAXSUPSET];
+  offset_t i,j,n=0,l=0,l1,l2,n1,m,dims,dcount,exodims,supsetid[MAXSUPSET],sup,doublepr[MAXSUPSET];
   int k1,k2;
   bool check;
   filehandle = fopen(fname,"r");
@@ -1502,12 +1502,12 @@ uvadd hcge_rexo(char *fname, char *commsyntax,ha_cgeexovar *ha_cgeshock, hcge_co
       check=true;
       if (strchr(vname,'(')==NULL) {
         for (j=0; j<nvar; j++) if (strcmp(vname,ha_var[j].cofname)==0) {
-            dims=ha_var[j].matsize;
+            dims=ha_var[j].nelem;
             if (dims==0) {
-              ha_cgeshock[ha_var[j].begadd].ShockId=true;
+              ha_cgeshock[ha_var[j].offset].is_exogenous=true;
               n=n+1;
             } else for (l=0; l<dims; l++) {
-                ha_cgeshock[ha_var[j].begadd+l].ShockId=true;
+                ha_cgeshock[ha_var[j].offset+l].is_exogenous=true;
                 n=n+1;
               }
             check=false;
@@ -1519,8 +1519,8 @@ uvadd hcge_rexo(char *fname, char *commsyntax,ha_cgeexovar *ha_cgeshock, hcge_co
         p = strtok(vname,"(");
         for(sup=0; sup<MAXSUPSET; sup++)supsetid[sup]=0;
         for (j=0; j<nvar; j++) if (strcmp(p,ha_var[j].cofname)==0) {
-            ha_cgesetindx *arSet= (ha_cgesetindx *) calloc (ha_var[j].size,sizeof(ha_cgesetindx));
-            uvadd *exoantidim= (uvadd *) calloc (ha_var[j].size,sizeof(uvadd));
+            quantifier *arSet= (quantifier *) calloc (ha_var[j].size,sizeof(quantifier));
+            offset_t *exoantidim= (offset_t *) calloc (ha_var[j].size,sizeof(offset_t));
             switch (ha_var[j].size) {
             case 1:
               p = strtok(NULL,")");//p = strtok(vname,")");
@@ -1531,8 +1531,8 @@ uvadd hcge_rexo(char *fname, char *commsyntax,ha_cgeexovar *ha_cgeshock, hcge_co
                 p1=strchr(p,'"');
                 *p1='\0';
                 for (l1=0; l1<ha_set[ha_var[j].setid[0]].size; l1++)
-                  if (strcmp(p,ha_setele[ha_set[ha_var[j].setid[0]].begadd+l1].setele)==0) {
-                    ha_cgeshock[ha_var[j].begadd+l1].ShockId=true;
+                  if (strcmp(p,ha_setele[ha_set[ha_var[j].setid[0]].offset+l1].setele)==0) {
+                    ha_cgeshock[ha_var[j].offset+l1].is_exogenous=true;
                     n=n+1;
                     check=false;
                     break;
@@ -1568,7 +1568,7 @@ uvadd hcge_rexo(char *fname, char *commsyntax,ha_cgeexovar *ha_cgeshock, hcge_co
                 if (*p=='"') {
                   strcpy(argu,p+1);
                   ha_cgefrchr(argu,'"','\0');
-                  for(l1=0; l1<ha_set[ha_var[j].setid[l]].size; l1++) if (strcmp(argu,ha_setele[ha_set[ha_var[j].setid[l]].begadd+l1].setele)==0) {
+                  for(l1=0; l1<ha_set[ha_var[j].setid[l]].size; l1++) if (strcmp(argu,ha_setele[ha_set[ha_var[j].setid[l]].offset+l1].setele)==0) {
                       doublepr[l]=l1;
                       supsetid[l]=-2;
                       break;
@@ -1600,16 +1600,16 @@ uvadd hcge_rexo(char *fname, char *commsyntax,ha_cgeexovar *ha_cgeshock, hcge_co
                 m=l;
                 exodims=0;
                 for (dcount=0; dcount<ha_var[j].size; dcount++) {
-                  l1=(uvadd) m/exoantidim[dcount];
+                  l1=(offset_t) m/exoantidim[dcount];
                   m=m-l1*exoantidim[dcount];
                   if(supsetid[dcount]==-2) {
                     l2=doublepr[dcount];//ha_set[arSet[dcount].setid].begadd;  //Special case
                   } else {
-                    l2=ha_setele[ha_set[arSet[dcount].setid].begadd+l1].setsh[supsetid[dcount]];
+                    l2=ha_setele[ha_set[arSet[dcount].setid].offset+l1].superset_pos[supsetid[dcount]];
                   }
-                  exodims=exodims+l2*ha_var[j].antidims[dcount];
+                  exodims=exodims+l2*ha_var[j].strides[dcount];
                 }
-                ha_cgeshock[ha_var[j].begadd+exodims].ShockId=true;
+                ha_cgeshock[ha_var[j].offset+exodims].is_exogenous=true;
                 n=n+1;
               }
             free(arSet);
@@ -1624,17 +1624,17 @@ uvadd hcge_rexo(char *fname, char *commsyntax,ha_cgeexovar *ha_cgeshock, hcge_co
   return n;
 }
 
-uvadd hcge_rshock(char *fname, char *commsyntax,ha_cgeexovar *ha_cgeshock,uvadd nvarele, hcge_cof *ha_var,uvadd nvar,ha_cgeset *ha_set,uvdim nset, ha_cgesetele *ha_setele,uvdim subints) {
+offset_t hcge_rshock(char *fname, char *commsyntax,closure_entry *ha_cgeshock,offset_t nvarele, array_def *ha_var,offset_t nvar,set_def *ha_set,dim_t nset, set_element *ha_setele,dim_t subints) {
   FILE * filehandle;
   char line[DATREADLINE],linecopy[DATREADLINE],argu[TABREADLINE];
   line[0]='\0';
   linecopy[0]='\0';
   argu[0]='\0';
   char *readitem=NULL,*p=NULL;
-  uvdim varnset;
-  uvdim k1,k2,dimindx[MAXVARDIM],dimbegadd[MAXVARDIM],dimssize[MAXVARDIM],arSet[MAXVARDIM],antidim[MAXVARDIM];
-  uvadd j,l=0,dims,n1,l1,l2,dcount,supsetid[MAXSUPSET],sup;
-  ha_cgetype val;
+  dim_t varnset;
+  dim_t k1,k2,dimindx[MAXVARDIM],dimbegadd[MAXVARDIM],dimssize[MAXVARDIM],arSet[MAXVARDIM],antidim[MAXVARDIM];
+  offset_t j,l=0,dims,n1,l1,l2,dcount,supsetid[MAXSUPSET],sup;
+  solve_real val;
       if ( (filehandle = fopen(fname,"r")) == NULL ) {
         printf("Error opening file %s\n",fname);
       }
@@ -1677,9 +1677,9 @@ uvadd hcge_rshock(char *fname, char *commsyntax,ha_cgeexovar *ha_cgeshock,uvadd 
           readitem = strtok(NULL,";");
           k1=ha_cgerevfind(readitem,"uniform");
           if(k1!=-1){
-            ha_cgeshock[ha_var[j].begadd].ShockVal=atof(readitem+k1+1)/subints;
+            ha_cgeshock[ha_var[j].offset].shock_value=atof(readitem+k1+1)/subints;
           }else{
-            ha_cgeshock[ha_var[j].begadd].ShockVal=atof(readitem)/subints;
+            ha_cgeshock[ha_var[j].offset].shock_value=atof(readitem)/subints;
           }
           l=l+1;
           break;
@@ -1712,13 +1712,13 @@ uvadd hcge_rshock(char *fname, char *commsyntax,ha_cgeexovar *ha_cgeshock,uvadd 
             }
             if(strchr(p,'\"')==NULL) {
               if((strcmp(ha_set[ha_var[j].setid[n1]].setname,p)==0)) {
-                dimbegadd[n1]=ha_set[ha_var[j].setid[n1]].begadd;//ha_set[k1].begadd;
+                dimbegadd[n1]=ha_set[ha_var[j].setid[n1]].offset;//ha_set[k1].begadd;
                 dimssize[n1]=ha_set[ha_var[j].setid[n1]].size;//ha_set[k1].size;
                 dims=dims*dimssize[n1];
                 supsetid[n1]=0;
               } else {
                 for (k1=0; k1<nset; k1++)if (strcmp(ha_set[k1].setname,p)==0) {
-                    dimbegadd[n1]=ha_set[k1].begadd;
+                    dimbegadd[n1]=ha_set[k1].offset;
                     dimssize[n1]=ha_set[k1].size;
                     dims=dims*ha_set[k1].size;
                     for(sup=0; sup<MAXSUPSET; sup++)if(ha_set[k1].subsetid[sup]==ha_var[j].setid[n1]) {
@@ -1741,8 +1741,8 @@ uvadd hcge_rshock(char *fname, char *commsyntax,ha_cgeexovar *ha_cgeshock,uvadd 
               while (p[k2] != '\0') {
                 k2++;
               }
-              for (k1=0; k1<ha_set[ha_var[j].setid[n1]].size; k1++)if (strncmp(ha_setele[ha_set[ha_var[j].setid[n1]].begadd+k1].setele,p+1,k2-2)==0&&ha_setele[ha_set[ha_var[j].setid[n1]].begadd+k1].setele[k2-2]=='\0') {
-                  dimindx[n1]=ha_setele[ha_set[ha_var[j].setid[n1]].begadd+k1].setsh[0];
+              for (k1=0; k1<ha_set[ha_var[j].setid[n1]].size; k1++)if (strncmp(ha_setele[ha_set[ha_var[j].setid[n1]].offset+k1].setele,p+1,k2-2)==0&&ha_setele[ha_set[ha_var[j].setid[n1]].offset+k1].setele[k2-2]=='\0') {
+                  dimindx[n1]=ha_setele[ha_set[ha_var[j].setid[n1]].offset+k1].superset_pos[0];
                   dimssize[n1]=1;
                   supsetid[n1]=-2;
                   break;
@@ -1771,8 +1771,8 @@ uvadd hcge_rshock(char *fname, char *commsyntax,ha_cgeexovar *ha_cgeshock,uvadd 
                   if(dimindx[dcount]>-1) {
                     arSet[dcount]=dimindx[dcount];//ha_setele[dimbegadd[dcount]+l1].setsh;
                   } else {
-                    l1=(uvadd) l2/antidim[dcount];
-                    if(supsetid[dcount]>-2)arSet[dcount]=ha_setele[dimbegadd[dcount]+l1].setsh[supsetid[dcount]];
+                    l1=(offset_t) l2/antidim[dcount];
+                    if(supsetid[dcount]>-2)arSet[dcount]=ha_setele[dimbegadd[dcount]+l1].superset_pos[supsetid[dcount]];
                     else arSet[dcount]=dimindx[dcount];
                     l2=l2-l1*antidim[dcount];
                   }
@@ -1780,26 +1780,26 @@ uvadd hcge_rshock(char *fname, char *commsyntax,ha_cgeexovar *ha_cgeshock,uvadd 
                 if(dimindx[0]>-1) {
                   arSet[0]=dimindx[0];
                 } else {
-                  l1=(uvadd) l2/antidim[0];
-                  if(supsetid[0]>-2)arSet[0]=ha_setele[dimbegadd[0]+l1].setsh[supsetid[0]];
-                  else arSet[0]=ha_setele[dimbegadd[0]+l1].setsh[0];//dimindx[0];
+                  l1=(offset_t) l2/antidim[0];
+                  if(supsetid[0]>-2)arSet[0]=ha_setele[dimbegadd[0]+l1].superset_pos[supsetid[0]];
+                  else arSet[0]=ha_setele[dimbegadd[0]+l1].superset_pos[0];//dimindx[0];
                   l2=l2-l1*antidim[0];
                 }
                 if(dimindx[1]>-1) {
                   arSet[1]=dimindx[1];
                 } else {
-                  l1=(uvadd) l2/antidim[1];
-                  if(supsetid[1]>-2)arSet[1]=ha_setele[dimbegadd[1]+l1].setsh[supsetid[1]];
-                  else arSet[1]=ha_setele[dimbegadd[1]+l1].setsh[0];//l1;//dimindx[1];
+                  l1=(offset_t) l2/antidim[1];
+                  if(supsetid[1]>-2)arSet[1]=ha_setele[dimbegadd[1]+l1].superset_pos[supsetid[1]];
+                  else arSet[1]=ha_setele[dimbegadd[1]+l1].superset_pos[0];//l1;//dimindx[1];
                 }
               } else {
                 arSet[0]=l2;
               }
               l2=0;
               for (dcount=0; dcount<ha_var[j].size; dcount++) {
-                l2=l2+arSet[dcount]*ha_var[j].antidims[dcount];
+                l2=l2+arSet[dcount]*ha_var[j].strides[dcount];
               }
-              ha_cgeshock[ha_var[j].begadd+l2].ShockVal=val/subints;
+              ha_cgeshock[ha_var[j].offset+l2].shock_value=val/subints;
               l=l+1;
             }
           } else {
@@ -1820,8 +1820,8 @@ uvadd hcge_rshock(char *fname, char *commsyntax,ha_cgeexovar *ha_cgeshock,uvadd 
                   if(dimindx[dcount]>-1) {
                     arSet[dcount]=dimindx[dcount];//ha_setele[dimbegadd[dcount]+l1].setsh;
                   } else {
-                    l1=(uvadd) l2/antidim[dcount];
-                    if(supsetid[dcount]>-2)arSet[dcount]=ha_setele[dimbegadd[dcount]+l1].setsh[supsetid[dcount]];
+                    l1=(offset_t) l2/antidim[dcount];
+                    if(supsetid[dcount]>-2)arSet[dcount]=ha_setele[dimbegadd[dcount]+l1].superset_pos[supsetid[dcount]];
                     else arSet[dcount]=dimindx[dcount];
                     l2=l2-l1*antidim[dcount];
                   }
@@ -1830,44 +1830,44 @@ uvadd hcge_rshock(char *fname, char *commsyntax,ha_cgeexovar *ha_cgeshock,uvadd 
                 if(dimindx[1]>-1) {
                   arSet[1]=dimindx[1];
                 } else {
-                  l1=(uvadd) l2/dimssize[0];
-                  if(supsetid[1]>-2)arSet[1]=ha_setele[dimbegadd[1]+l1].setsh[supsetid[1]];
-                  else arSet[1]=ha_setele[dimbegadd[1]+l1].setsh[0];//dimindx[1];
+                  l1=(offset_t) l2/dimssize[0];
+                  if(supsetid[1]>-2)arSet[1]=ha_setele[dimbegadd[1]+l1].superset_pos[supsetid[1]];
+                  else arSet[1]=ha_setele[dimbegadd[1]+l1].superset_pos[0];//dimindx[1];
                   l2=l2-l1*dimssize[0];
                 }
                 if(dimindx[0]>-1) {
                   arSet[0]=dimindx[0];
                 } else {
-                  l1=(uvadd) l2;
-                  if(supsetid[0]>-2)arSet[0]=ha_setele[dimbegadd[0]+l1].setsh[supsetid[0]];
-                  else arSet[0]=ha_setele[dimbegadd[0]+l1].setsh[0];//l1;//dimindx[0];
+                  l1=(offset_t) l2;
+                  if(supsetid[0]>-2)arSet[0]=ha_setele[dimbegadd[0]+l1].superset_pos[supsetid[0]];
+                  else arSet[0]=ha_setele[dimbegadd[0]+l1].superset_pos[0];//l1;//dimindx[0];
                 }
                 }else{
                 if(dimindx[0]>-1) {
                   arSet[0]=dimindx[0];//ha_setele[dimbegadd[dcount]+l1].setsh;
                 } else {
-                  l1=(uvadd) l2/antidim[0];
-                  if(supsetid[0]>-2)arSet[0]=ha_setele[dimbegadd[0]+l1].setsh[supsetid[0]];
-                  else arSet[0]=ha_setele[dimbegadd[0]+l1].setsh[0];//dimindx[0];
+                  l1=(offset_t) l2/antidim[0];
+                  if(supsetid[0]>-2)arSet[0]=ha_setele[dimbegadd[0]+l1].superset_pos[supsetid[0]];
+                  else arSet[0]=ha_setele[dimbegadd[0]+l1].superset_pos[0];//dimindx[0];
                   l2=l2-l1*antidim[0];
                 }
                 if(dimindx[1]>-1) {
                   arSet[1]=dimindx[1];//ha_setele[dimbegadd[dcount]+l1].setsh;
                 } else {
-                  l1=(uvadd) l2/antidim[1];
-                  if(supsetid[1]>-2)arSet[1]=ha_setele[dimbegadd[1]+l1].setsh[supsetid[1]];
-                  else arSet[1]=ha_setele[dimbegadd[1]+l1].setsh[0];//dimindx[0];
+                  l1=(offset_t) l2/antidim[1];
+                  if(supsetid[1]>-2)arSet[1]=ha_setele[dimbegadd[1]+l1].superset_pos[supsetid[1]];
+                  else arSet[1]=ha_setele[dimbegadd[1]+l1].superset_pos[0];//dimindx[0];
                 }
                 }
               } else {
-                if(supsetid[0]>-2)arSet[0]=ha_setele[dimbegadd[0]+l2].setsh[supsetid[0]];
+                if(supsetid[0]>-2)arSet[0]=ha_setele[dimbegadd[0]+l2].superset_pos[supsetid[0]];
                 else arSet[0]=dimindx[0];
               }
               l2=0;
               for (dcount=0; dcount<ha_var[j].size; dcount++) {
-                l2=l2+arSet[dcount]*ha_var[j].antidims[dcount];
+                l2=l2+arSet[dcount]*ha_var[j].strides[dcount];
               }
-              ha_cgeshock[ha_var[j].begadd+l2].ShockVal=val/subints;
+              ha_cgeshock[ha_var[j].offset+l2].shock_value=val/subints;
               l=l+1;
             }
           }
@@ -1884,12 +1884,12 @@ uvadd hcge_rshock(char *fname, char *commsyntax,ha_cgeexovar *ha_cgeshock,uvadd 
   return l;
 }
 
-int hcge_defvar(char *fname, hcge_cof *record, uvadd ncof) {
+int hcge_defvar(char *fname, array_def *record, offset_t ncof) {
   char line[TABREADLINE];
   FILE * filehandle;
   char commsyntax[]="variable";
   filehandle = fopen(fname,"r");
-  uvadd i;
+  offset_t i;
   while (ha_cgertabl(commsyntax,filehandle,line,TABREADLINE)) {
     if(ha_cgefind(line,"default")>0) {
       while (ha_cgefrstr(line," ", ""));
@@ -1905,12 +1905,12 @@ int hcge_defvar(char *fname, hcge_cof *record, uvadd ncof) {
   return 1;
 }
 
-uvadd hcge_rvar(char *fname, char *commsyntax, hcge_cof *record, uvadd ncof, ha_cgeset *ha_set,uvdim nset) {
+offset_t hcge_rvar(char *fname, char *commsyntax, array_def *record, offset_t ncof, set_def *ha_set,dim_t nset) {
   FILE * filehandle;
   char line[TABREADLINE]="\0",linecopy[TABREADLINE],setname1[NAMESIZE],setname[NAMESIZE],setname2[NAMESIZE],setname3[NAMESIZE],finditem[NAMESIZE],finditem1[NAMESIZE],finditem2[NAMESIZE],finditem3[NAMESIZE],vname[NAMESIZE];//,vnamecopy[NAMESIZE];
   char *tpnt=NULL;
-  uvadd n,m,l,ncommsyntax=0,i,j=0,addi=0,add=0,orig;
-  uvdim dcount;
+  offset_t n,m,l,ncommsyntax=0,i,j=0,addi=0,add=0,orig;
+  dim_t dcount;
   char *readitem=NULL;
   bool IsLevel=false,IsChange=false;
   while (commsyntax[ncommsyntax] != '\0') {
@@ -2129,12 +2129,12 @@ uvadd hcge_rvar(char *fname, char *commsyntax, hcge_cof *record, uvadd ncof, ha_
             }
           }
         }
-        record[j].begadd=addi;
+        record[j].offset=addi;
         record[j].size=dcount;
-        record[j].matsize=add;
-        record[j].antidims[dcount-1]=1;
+        record[j].nelem=add;
+        record[j].strides[dcount-1]=1;
         for (l=record[j].size-2; l>-1; l--) {
-          record[j].antidims[l]=record[j].antidims[l+1]*ha_set[record[j].setid[l+1]].size;
+          record[j].strides[l]=record[j].strides[l+1]*ha_set[record[j].setid[l+1]].size;
         }
         addi=addi+add;
       } else {
@@ -2148,18 +2148,18 @@ uvadd hcge_rvar(char *fname, char *commsyntax, hcge_cof *record, uvadd ncof, ha_
             readitem=strchr(setname,')');
             readitem++;
             strcpy(record[j].cofname,readitem);
-            record[j].begadd=addi;
+            record[j].offset=addi;
             record[j].size=0;
-            record[j].matsize=1;
+            record[j].nelem=1;
             addi=addi+1;
           } else {
             strcpy(setname,line+ncommsyntax);
             ha_cgefrstr(setname,";", "");
             ha_cgefrstr(setname,"\n", "");
             strcpy(record[j].cofname,setname);
-            record[j].begadd=addi;
+            record[j].offset=addi;
             record[j].size=0;
-            record[j].matsize=1;
+            record[j].nelem=1;
             addi=addi+1;
           }
         }
@@ -2171,8 +2171,8 @@ uvadd hcge_rvar(char *fname, char *commsyntax, hcge_cof *record, uvadd ncof, ha_
   return addi;
 }
 
-uvadd ha_cgeralltime(ha_cgeset *ha_set,uvdim nset) {
-  uvdim i;
+offset_t ha_cgeralltime(set_def *ha_set,dim_t nset) {
+  dim_t i;
   for(i=0; i<nset; i++) {
     if(ha_set[i].intertemp&&ha_set[i].subsetid[1]==-1) {
       break;
@@ -2186,11 +2186,11 @@ uvadd ha_cgeralltime(ha_cgeset *ha_set,uvdim nset) {
 }
 
 
-uvadd hcge_rcof(char *fname, char *commsyntax, hcge_cof *record, uvadd ncof, ha_cgeset *ha_set,uvadd nset) {
+offset_t hcge_rcof(char *fname, char *commsyntax, array_def *record, offset_t ncof, set_def *ha_set,offset_t nset) {
   FILE * filehandle;
   char line[TABREADLINE]="\0",linecopy[TABREADLINE],setname1[TABREADLINE],setname[TABREADLINE],setname2[TABREADLINE],setname3[TABREADLINE],finditem[TABREADLINE],finditem1[TABREADLINE],finditem2[TABREADLINE],finditem3[TABREADLINE],vname[TABREADLINE];//,vnamecopy[NAMESIZE];
-  uvadd n,m,l,ncommsyntax=0,i=0,j=0,addi=0,add=0;
-  uvdim dcount;
+  offset_t n,m,l,ncommsyntax=0,i=0,j=0,addi=0,add=0;
+  dim_t dcount;
   char *readitem=NULL,*tpnt=NULL;
   while (commsyntax[ncommsyntax] != '\0') {
     ncommsyntax++;
@@ -2376,12 +2376,12 @@ uvadd hcge_rcof(char *fname, char *commsyntax, hcge_cof *record, uvadd ncof, ha_
             }
           }
         }
-        record[j].begadd=addi;
+        record[j].offset=addi;
         record[j].size=dcount;
-        record[j].matsize=add;
-        record[j].antidims[dcount-1]=1;
+        record[j].nelem=add;
+        record[j].strides[dcount-1]=1;
         for (l=record[j].size-2; l>-1; l--) {
-          record[j].antidims[l]=record[j].antidims[l+1]*ha_set[record[j].setid[l+1]].size;
+          record[j].strides[l]=record[j].strides[l+1]*ha_set[record[j].setid[l+1]].size;
         }
         addi=addi+add;
       } else {
@@ -2393,9 +2393,9 @@ uvadd hcge_rcof(char *fname, char *commsyntax, hcge_cof *record, uvadd ncof, ha_
           ha_cgefrstr(setname,";", "");
           ha_cgefrstr(setname,"\n", "");
           strcpy(record[j].cofname,setname);
-          record[j].begadd=addi;
+          record[j].offset=addi;
           record[j].size=0;
-          record[j].matsize=1;
+          record[j].nelem=1;
           addi=addi+1;
         }
       }
@@ -2408,14 +2408,14 @@ uvadd hcge_rcof(char *fname, char *commsyntax, hcge_cof *record, uvadd ncof, ha_
 }
 
 
-int hcge_rcofele(hcge_cof *ha_cof,uvadd ncof, ha_cgeset *ha_set,uvdim nset, ha_cgecofele *ha_cofele) {
-  uvdim l,m,dcount;//,dcount1;//,l3=0,l4=0,ld2=0,ld3=0,ld4=0
-  uvadd l1=0,i;//,sizeele,dcountdim1[MAXVARDIM],l2=0,dcountdim[MAXVARDIM];//,ld1=0
+int hcge_rcofele(array_def *ha_cof,offset_t ncof, set_def *ha_set,dim_t nset, elem_store *ha_cofele) {
+  dim_t l,m,dcount;//,dcount1;//,l3=0,l4=0,ld2=0,ld3=0,ld4=0
+  offset_t l1=0,i;//,sizeele,dcountdim1[MAXVARDIM],l2=0,dcountdim[MAXVARDIM];//,ld1=0
   for (i=0; i<ncof; i++) {
     for (dcount=0; dcount<ha_cof[i].size; dcount++) {
       for (l=0; l<nset; l++) {
         if (strcmp(ha_set[l].setname,ha_set[ha_cof[i].setid[dcount]].setname)==0) {
-          ha_set[ha_cof[i].setid[dcount]].begadd=ha_set[l].begadd;
+          ha_set[ha_cof[i].setid[dcount]].offset=ha_set[l].offset;
           break;
         }
       }
@@ -2424,11 +2424,11 @@ int hcge_rcofele(hcge_cof *ha_cof,uvadd ncof, ha_cgeset *ha_set,uvdim nset, ha_c
   return 1;
 }
 
-uvdim ha_cgenset(char *fname) {
+dim_t ha_cgenset(char *fname) {
   FILE * filehandle;
   char line[TABREADLINE]="\0";
   char *commsyntax="set";
-  uvdim j=0;
+  dim_t j=0;
   filehandle = fopen(fname,"r");
   while (ha_cgertabl(commsyntax,filehandle,line,TABREADLINE)) {
     j++;
@@ -2437,12 +2437,12 @@ uvdim ha_cgenset(char *fname) {
   return j;
 }
 
-int hcge_rinterset(char *fname, int niodata, hcge_iodata *iodata, ha_cgeset *record,uvdim nset) {
+int hcge_rinterset(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,dim_t nset) {
   FILE * filehandle;//, *fileout;
   char line[TABREADLINE]="\0",linecopy[TABREADLINE];//,line1[TABREADLINE];longname[TABREADLINE],
   char header[HEADERSIZE],floginame[NAMESIZE];
   char commsyntax[TABREADLINE],varname[NAMESIZE];
-  uvdim j=0,i,intindx[4],sign[2],intvar[2];//,inttype[4]
+  dim_t j=0,i,intindx[4],sign[2],intvar[2];//,inttype[4]
   int k0,k1=0;
   char *readitem=NULL;//,*p;
   for (j=0; j<nset; j++) {
@@ -2911,12 +2911,12 @@ int hcge_rinterset(char *fname, int niodata, hcge_iodata *iodata, ha_cgeset *rec
   return 0;
 }
 
-int ha_cgerset(char *fname, int niodata, hcge_iodata *iodata, ha_cgeset *record,uvdim nset) {
+int ha_cgerset(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,dim_t nset) {
   FILE * filehandle;//, *fileout;
   char line[TABREADLINE]="\0",linecopy[TABREADLINE],line1[TABREADLINE];
   char longname[TABREADLINE],tempvar[256];
   char *commsyntax="set";
-  uvdim j=0,vsize,dim1,i;
+  dim_t j=0,vsize,dim1,i;
   int k0,k1,k2;
   char *readitem=NULL;//,*p;
 
@@ -3072,8 +3072,8 @@ int ha_cgerset(char *fname, int niodata, hcge_iodata *iodata, ha_cgeset *record,
   return 0;
 }
 
-uvdim ha_setunion(ha_cgesetele *ha_setele, ha_cgeset *ha_set,uvdim nset,uvdim i) {
-  uvdim j,l,n,m,dim1=0,dim2=0,j1,sup1,sup2;
+dim_t ha_setunion(set_element *ha_setele, set_def *ha_set,dim_t nset,dim_t i) {
+  dim_t j,l,n,m,dim1=0,dim2=0,j1,sup1,sup2;
   char line[TABREADLINE],*readitem;
   strcpy(line,ha_set[i].readele);
   readitem = strtok(line,",");
@@ -3090,9 +3090,9 @@ uvdim ha_setunion(ha_cgesetele *ha_setele, ha_cgeset *ha_set,uvdim nset,uvdim i)
   }
   m=0;
   for (n=0; n<dim1; n++) {
-    strcpy(ha_setele[ha_set[i].begadd+m].setele,ha_setele[ha_set[l].begadd+n].setele);
-    ha_setele[ha_set[i].begadd+m].setsh[0]=n;
-    ha_setele[ha_set[l].begadd+m].setsh[sup1]=n;
+    strcpy(ha_setele[ha_set[i].offset+m].setele,ha_setele[ha_set[l].offset+n].setele);
+    ha_setele[ha_set[i].offset+m].superset_pos[0]=n;
+    ha_setele[ha_set[l].offset+m].superset_pos[sup1]=n;
     m++;
   }
   readitem = strtok(NULL,",");
@@ -3107,21 +3107,21 @@ uvdim ha_setunion(ha_cgesetele *ha_setele, ha_cgeset *ha_set,uvdim nset,uvdim i)
     }
   }
   for (n=0; n<dim2; n++) {
-    for (j1=0; j1<dim1; j1++) if(strcmp(ha_setele[ha_set[l].begadd+j1].setele,ha_setele[ha_set[j].begadd+n].setele)==0) break;
+    for (j1=0; j1<dim1; j1++) if(strcmp(ha_setele[ha_set[l].offset+j1].setele,ha_setele[ha_set[j].offset+n].setele)==0) break;
     if(j1==dim1) {
-      strcpy(ha_setele[ha_set[i].begadd+m].setele,ha_setele[ha_set[j].begadd+n].setele);
-      ha_setele[ha_set[i].begadd+m].setsh[0]=m;
-      ha_setele[ha_set[j].begadd+n].setsh[sup2]=m;
+      strcpy(ha_setele[ha_set[i].offset+m].setele,ha_setele[ha_set[j].offset+n].setele);
+      ha_setele[ha_set[i].offset+m].superset_pos[0]=m;
+      ha_setele[ha_set[j].offset+n].superset_pos[sup2]=m;
       m++;
     } else {
-      ha_setele[ha_set[j].begadd+n].setsh[sup2]=j1;
+      ha_setele[ha_set[j].offset+n].superset_pos[sup2]=j1;
     }
   }
   ha_set[i].size=m;
   return m;
 }
-uvdim ha_setplus(ha_cgesetele *ha_setele, ha_cgeset *ha_set,uvdim nset,uvdim i) {
-  uvdim j,l,n,m,dim1=0,dim2=0,j1,sup1,sup2;
+dim_t ha_setplus(set_element *ha_setele, set_def *ha_set,dim_t nset,dim_t i) {
+  dim_t j,l,n,m,dim1=0,dim2=0,j1,sup1,sup2;
   char line[TABREADLINE],*readitem;
   strcpy(line,ha_set[i].readele);
   readitem = strtok(line,",");
@@ -3138,9 +3138,9 @@ uvdim ha_setplus(ha_cgesetele *ha_setele, ha_cgeset *ha_set,uvdim nset,uvdim i) 
   }
   m=0;
   for (n=0; n<dim1; n++) {
-    strcpy(ha_setele[ha_set[i].begadd+m].setele,ha_setele[ha_set[l].begadd+n].setele);
-    ha_setele[ha_set[i].begadd+m].setsh[0]=n;
-    ha_setele[ha_set[l].begadd+m].setsh[sup1]=n;
+    strcpy(ha_setele[ha_set[i].offset+m].setele,ha_setele[ha_set[l].offset+n].setele);
+    ha_setele[ha_set[i].offset+m].superset_pos[0]=n;
+    ha_setele[ha_set[l].offset+m].superset_pos[sup1]=n;
     m++;
   }
   readitem = strtok(NULL,",");
@@ -3155,15 +3155,15 @@ uvdim ha_setplus(ha_cgesetele *ha_setele, ha_cgeset *ha_set,uvdim nset,uvdim i) 
     }
   }
   for (n=0; n<dim2; n++) {
-    strcpy(ha_setele[ha_set[i].begadd+m].setele,ha_setele[ha_set[j].begadd+n].setele);
-    ha_setele[ha_set[i].begadd+m].setsh[0]=m;
-    ha_setele[ha_set[j].begadd+n].setsh[sup2]=m;
+    strcpy(ha_setele[ha_set[i].offset+m].setele,ha_setele[ha_set[j].offset+n].setele);
+    ha_setele[ha_set[i].offset+m].superset_pos[0]=m;
+    ha_setele[ha_set[j].offset+n].superset_pos[sup2]=m;
     m++;
   }
   return m;
 }
-uvdim ha_setminus(ha_cgesetele *ha_setele, ha_cgeset *ha_set,uvdim nset,uvdim i) {
-  uvdim j,l,n,m,v,indi,dim1=0,dim2=0,sup1;
+dim_t ha_setminus(set_element *ha_setele, set_def *ha_set,dim_t nset,dim_t i) {
+  dim_t j,l,n,m,v,indi,dim1=0,dim2=0,sup1;
   char line[TABREADLINE],*readitem;
   strcpy(line,ha_set[i].readele);
   readitem = strtok(line,",");
@@ -3189,27 +3189,27 @@ uvdim ha_setminus(ha_cgesetele *ha_setele, ha_cgeset *ha_set,uvdim nset,uvdim i)
   for (n=0; n<dim1; n++) {
     indi=0;
     for (v=0; v<dim2; v++) {
-      if (strcmp(ha_setele[ha_set[l].begadd+n].setele,ha_setele[ha_set[j].begadd+v].setele)==0) {
+      if (strcmp(ha_setele[ha_set[l].offset+n].setele,ha_setele[ha_set[j].offset+v].setele)==0) {
         indi=1;
         break;
       }
     }
     if(indi==0) {
-      strcpy(ha_setele[ha_set[i].begadd+m].setele,ha_setele[ha_set[l].begadd+n].setele);
-      ha_setele[ha_set[i].begadd+m].setsh[sup1]=n;
-      ha_setele[ha_set[i].begadd+m].setsh[0]=m;
+      strcpy(ha_setele[ha_set[i].offset+m].setele,ha_setele[ha_set[l].offset+n].setele);
+      ha_setele[ha_set[i].offset+m].superset_pos[sup1]=n;
+      ha_setele[ha_set[i].offset+m].superset_pos[0]=m;
       m++;
     }
   }
   return m;
 }
-uvadd ha_cgersubset(char *fname, ha_cgesetele *ha_setele, ha_cgeset *ha_set,uvdim nset) {
+offset_t ha_cgersubset(char *fname, set_element *ha_setele, set_def *ha_set,dim_t nset) {
   FILE * filehandle;//, *fileout;
   char line[TABREADLINE]="\0";
   char set[NAMESIZE],subset[NAMESIZE];
   char *commsyntax="subset";
-  uvdim i,setd,subsetd,sup1;//,nlength;
-  uvadd jj,jjj,j=0,succ=0,ssize=0;
+  dim_t i,setd,subsetd,sup1;//,nlength;
+  offset_t jj,jjj,j=0,succ=0,ssize=0;
   char *readitem=NULL;
 
   filehandle = fopen(fname,"r");
@@ -3235,10 +3235,10 @@ uvadd ha_cgersubset(char *fname, ha_cgesetele *ha_setele, ha_cgeset *ha_set,uvdi
                 break;
               }
             if(sup1==MAXSUPSET)printf("Error!!! Number of superset exceeded! Increase MAXSUPSET!\n");
-            for (jj=ha_set[j].begadd; jj<ha_set[j].begadd+ha_set[j].size; jj++) {
-              for (jjj=ha_set[i].begadd; jjj<ha_set[i].begadd+ha_set[i].size; jjj++) {
+            for (jj=ha_set[j].offset; jj<ha_set[j].offset+ha_set[j].size; jj++) {
+              for (jjj=ha_set[i].offset; jjj<ha_set[i].offset+ha_set[i].size; jjj++) {
                 if (strcmp(ha_setele[jj].setele,ha_setele[jjj].setele)==0) {
-                  ha_setele[jjj].setsh[sup1]=ha_setele[jj].setsh[0];
+                  ha_setele[jjj].superset_pos[sup1]=ha_setele[jj].superset_pos[0];
                   succ++;
                   break;
                 }
@@ -3259,9 +3259,9 @@ uvadd ha_cgersubset(char *fname, ha_cgesetele *ha_setele, ha_cgeset *ha_set,uvdi
   return j;
 }
 
-uvdim ha_cgesubsetchck(ha_cgesetele *ha_setele, ha_cgeset *ha_set,uvdim nset,uvadd* contin) {
-  uvdim i,setd,subsetd,sup1,sup2,sup3,b;//,nlength;
-  uvadd jj,jjj,j=0;
+dim_t ha_cgesubsetchck(set_element *ha_setele, set_def *ha_set,dim_t nset,offset_t* contin) {
+  dim_t i,setd,subsetd,sup1,sup2,sup3,b;//,nlength;
+  offset_t jj,jjj,j=0;
   *contin=0;
   for (i=0; i<nset; i++) {
     b=1;
@@ -3300,10 +3300,10 @@ uvdim ha_cgesubsetchck(ha_cgesetele *ha_setele, ha_cgeset *ha_set,uvdim nset,uva
           return 0;
         }
         ha_set[i].subsetid[sup1]=j;
-        for (jj=ha_set[j].begadd; jj<ha_set[j].begadd+ha_set[j].size; jj++) {
-          for (jjj=ha_set[i].begadd; jjj<ha_set[i].begadd+ha_set[i].size; jjj++) {
+        for (jj=ha_set[j].offset; jj<ha_set[j].offset+ha_set[j].size; jj++) {
+          for (jjj=ha_set[i].offset; jjj<ha_set[i].offset+ha_set[i].size; jjj++) {
             if (strcmp(ha_setele[jj].setele,ha_setele[jjj].setele)==0) {
-              ha_setele[jjj].setsh[sup1]=ha_setele[jj].setsh[0];
+              ha_setele[jjj].superset_pos[sup1]=ha_setele[jj].superset_pos[0];
               break;
             }
           }
@@ -3349,10 +3349,10 @@ uvdim ha_cgesubsetchck(ha_cgesetele *ha_setele, ha_cgeset *ha_set,uvdim nset,uva
           return 0;
         }
         ha_set[i].subsetid[sup1]=j;
-        for (jj=ha_set[j].begadd; jj<ha_set[j].begadd+ha_set[j].size; jj++) {
-          for (jjj=ha_set[i].begadd; jjj<ha_set[i].begadd+ha_set[i].size; jjj++) {
+        for (jj=ha_set[j].offset; jj<ha_set[j].offset+ha_set[j].size; jj++) {
+          for (jjj=ha_set[i].offset; jjj<ha_set[i].offset+ha_set[i].size; jjj++) {
             if (strcmp(ha_setele[jj].setele,ha_setele[jjj].setele)==0) {
-              ha_setele[jjj].setsh[sup1]=ha_setele[jj].setsh[0];
+              ha_setele[jjj].superset_pos[sup1]=ha_setele[jj].superset_pos[0];
               break;
             }
           }
@@ -3419,7 +3419,7 @@ char *ha_cgercls(char *commsyntax, FILE *filehandle, char *readline) {
   return NULL;
 }
 
-char *ha_cgertabl(char *commsyntax, FILE *filehandle, char *readline,uvadd rlinesize) {
+char *ha_cgertabl(char *commsyntax, FILE *filehandle, char *readline,offset_t rlinesize) {
   int check1=0,i,count1=0;
   while (commsyntax[count1] != '\0') {
     count1++;
@@ -3465,7 +3465,7 @@ char *ha_cgertabl(char *commsyntax, FILE *filehandle, char *readline,uvadd rline
   }
   return NULL;
 }
-char *ha_cgertabl1(char *commsyntax, FILE *filehandle, char *readline, ha_cgevar *record, hcge_cof *ha_cof,uvadd ncof,ha_cgetype *zerodivide,uvadd rlinesize) {
+char *ha_cgertabl1(char *commsyntax, FILE *filehandle, char *readline, elem_value *record, array_def *ha_cof,offset_t ncof,solve_real *zerodivide,offset_t rlinesize) {
   int check1=0,count1=0;
   char *zerosyntax="zerodivide default",*p,*zerosyntax1="zerodivide (",*zerosyntax2="zerodivide(";
   while (commsyntax[count1] != '\0') {
@@ -3535,7 +3535,7 @@ char *ha_cgefrstr1(char *line, char *finditem, char *replitem) {
   return line;
 }
 
-char *ha_cgefrstrvbz1(char *line, char *finditem, char *replitem,uvdim nbuffer) {
+char *ha_cgefrstrvbz1(char *line, char *finditem, char *replitem,dim_t nbuffer) {
   char *buffer= (char *) calloc (nbuffer,sizeof(char));
   int count2 = 0,index=0;
   while (finditem[count2] != '\0') {
@@ -3575,7 +3575,7 @@ char *ha_cgefrstr(char *line, char *finditem, char *replitem) {
   return line;
 }
 
-char *ha_cgefrstrvbz(char *line, char *finditem, char *replitem,uvdim nbuffer) {
+char *ha_cgefrstrvbz(char *line, char *finditem, char *replitem,dim_t nbuffer) {
   char *buffer= (char *) calloc (nbuffer,sizeof(char));
   char *p;
   long int count2 = 0,index;

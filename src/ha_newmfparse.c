@@ -1,45 +1,45 @@
 #include <ha_cgeglobal.h>
 
-extern void spec51m_rank_(int *INSIZE,ha_cgetype *cntl6,int *IRN, int *JCN, ha_cgetype *VA,int *IRNA, int *JCNA, int *KEEP,ha_cgetype *w51, int *iw51);
-extern void spec48_ssol2la_(int *INSIZE,int *IRN, int *JCN, ha_cgetype *VA, ha_cgetype *B, ha_cgetype *X);
-extern void spec48m_ssol2la_(int *INSIZE,int *IRN, int *JCN, ha_cgetype *VA, ha_cgetype *B, ha_cgetype *X);
-extern void spec48m_msol_(int *INSIZE,int *IRN, int *JCN, ha_cgetype *VA, ha_cgetype *B, ha_cgetype *X, PetscInt *IRNC, PetscInt *JCNC, PetscScalar *VAC,int *IRNB,int *JCNB,PetscScalar *VALUESB,ha_cgetype *VECBIVI,int *bivinzrow0,int *bivinzcol0);//, forint *IRNV, forint *JCNV, ha_cgetype *VAV
-extern void spec48m_esol_(int *INSIZE,int *IRN, ha_cgetype *VA,int *KEEP, ha_cgetype *B, ha_cgetype *X);
-extern void spec48m_rpesol_(int *INSIZE,int *IRN, ha_cgetype *VA,int *KEEP, ha_cgetype *B, ha_cgetype *X,ha_cgetype *cntl,ha_cgetype *rinfo,ha_cgetype *error1,int *icntl,int *info,ha_cgetype *w,int *iw);
-extern void spec48_single_(forint *indata,int *irn, int *jcn,ha_cgetype *b1, ha_cgetype *values,ha_cgetype *x1, int *neleperrow,int *ai1, MPI_Fint *fcomm);
-extern void spec48_nomc66_(forint *indata, int *jcn,ha_cgetype *b1, ha_cgetype *values,ha_cgetype *x1, int *neleperrow, MPI_Fint *fcomm,forint *rowptrin, forint *colptrin);
-extern void my_spar_add3l_(ha_cgetype *vecbivi, long int *biviindx,long int *nz1,ha_cgetype *vecbivi0,long int *biviindx0,long int *nz0,long int *nz2);
-extern void my_spar_add4l_(ha_cgetype *vecbivi, long int *biviindx,int *irn, int *jcn,long int *nz1,ha_cgetype *vecbivi0,long int *biviindx0,long int *nz0,long int *nz2,int *ncol);
+extern void spec51m_rank_(int *INSIZE,solve_real *cntl6,int *IRN, int *JCN, solve_real *VA,int *IRNA, int *JCNA, int *KEEP,solve_real *w51, int *iw51);
+extern void spec48_ssol2la_(int *INSIZE,int *IRN, int *JCN, solve_real *VA, solve_real *B, solve_real *X);
+extern void spec48m_ssol2la_(int *INSIZE,int *IRN, int *JCN, solve_real *VA, solve_real *B, solve_real *X);
+extern void spec48m_msol_(int *INSIZE,int *IRN, int *JCN, solve_real *VA, solve_real *B, solve_real *X, PetscInt *IRNC, PetscInt *JCNC, PetscScalar *VAC,int *IRNB,int *JCNB,PetscScalar *VALUESB,solve_real *VECBIVI,int *bivinzrow0,int *bivinzcol0);//, forint *IRNV, forint *JCNV, ha_cgetype *VAV
+extern void spec48m_esol_(int *INSIZE,int *IRN, solve_real *VA,int *KEEP, solve_real *B, solve_real *X);
+extern void spec48m_rpesol_(int *INSIZE,int *IRN, solve_real *VA,int *KEEP, solve_real *B, solve_real *X,solve_real *cntl,solve_real *rinfo,solve_real *error1,int *icntl,int *info,solve_real *w,int *iw);
+extern void spec48_single_(fortran_int *indata,int *irn, int *jcn,solve_real *b1, solve_real *values,solve_real *x1, int *neleperrow,int *ai1, MPI_Fint *fcomm);
+extern void spec48_nomc66_(fortran_int *indata, int *jcn,solve_real *b1, solve_real *values,solve_real *x1, int *neleperrow, MPI_Fint *fcomm,fortran_int *rowptrin, fortran_int *colptrin);
+extern void my_spar_add3l_(solve_real *vecbivi, long int *biviindx,long int *nz1,solve_real *vecbivi0,long int *biviindx0,long int *nz0,long int *nz2);
+extern void my_spar_add4l_(solve_real *vecbivi, long int *biviindx,int *irn, int *jcn,long int *nz1,solve_real *vecbivi0,long int *biviindx0,long int *nz0,long int *nz2,int *ncol);
 extern void my_spar_compl_(long int *biviindx,long int *nz1,long int *biviindx0,long int *nz0,long int *nz2);
-extern void prep48_alu1_(int *INSIZE,int *IRN,int* JCN,ha_cgetype *VA,ha_cgetype *W,int *IW,int *KEEP);
-extern void prep48m_msol_(int *INSIZE,int *IRN, int *JCN, ha_cgetype *VA, PetscInt *IRNC, PetscInt *JCNC, PetscScalar *VAC,int *IRNB,int *JCNB,PetscScalar *VALUESB,ha_cgetype *VECBIVI,long int *bivinzrow0,int *bivinzcol0,int* jcnb1,ha_cgetype *sol,ha_cgetype *b,ha_cgetype *w,int* iw,int* keep);
-extern void spar_mulmin_(ha_cgetype* sol,int* nrow,int* nz,int* irn,int* jcn,ha_cgetype* va,ha_cgetype* res);
-extern void spar_mulnoadd_(ha_cgetype* sol,int* nrow,int* nz,int* irn,int* jcn,ha_cgetype* va,ha_cgetype* res);
-extern void spar_vbiviadd_(ha_cgetype* sol,int* bvcol,long int* bvrow,long int* bvsize,int* nrow,int *ncol,int* nz,int* irn,int* jcn,ha_cgetype* va,ha_cgetype* res);
-extern void patio_mat_(int* insizeda,int* IRN,int* JCN,ha_cgetype* VBIVI,int* IRN1A,int* JCN1A);
+extern void prep48_alu1_(int *INSIZE,int *IRN,int* JCN,solve_real *VA,solve_real *W,int *IW,int *KEEP);
+extern void prep48m_msol_(int *INSIZE,int *IRN, int *JCN, solve_real *VA, PetscInt *IRNC, PetscInt *JCNC, PetscScalar *VAC,int *IRNB,int *JCNB,PetscScalar *VALUESB,solve_real *VECBIVI,long int *bivinzrow0,int *bivinzcol0,int* jcnb1,solve_real *sol,solve_real *b,solve_real *w,int* iw,int* keep);
+extern void spar_mulmin_(solve_real* sol,int* nrow,int* nz,int* irn,int* jcn,solve_real* va,solve_real* res);
+extern void spar_mulnoadd_(solve_real* sol,int* nrow,int* nz,int* irn,int* jcn,solve_real* va,solve_real* res);
+extern void spar_vbiviadd_(solve_real* sol,int* bvcol,long int* bvrow,long int* bvsize,int* nrow,int *ncol,int* nz,int* irn,int* jcn,solve_real* va,solve_real* res);
+extern void patio_mat_(int* insizeda,int* IRN,int* JCN,solve_real* VBIVI,int* IRN1A,int* JCN1A);
 
-int HaNewMatVal(char *fname, char *commsyntax,ha_cgeset *ha_set,uvadd nset, ha_cgesetele *ha_setele, hcge_cof *ha_cof,uvadd ncof,hcge_cof *ha_var,uvadd nvar, ha_cgevar *ha_cofvar,uvadd ncofvar,uvadd ncofele,ha_cgeexovar *ha_cgeshock,uvadd ndblock,uvadd alltimeset,uvadd allregset,uvadd *ha_eqadd,uvadd *counteq,uvadd nintraeq,Mat A,Mat B) {
+int HaNewMatVal(char *fname, char *commsyntax,set_def *ha_set,offset_t nset, set_element *ha_setele, array_def *ha_cof,offset_t ncof,array_def *ha_var,offset_t nvar, elem_value *ha_cofvar,offset_t ncofvar,offset_t ncofele,closure_entry *ha_cgeshock,offset_t ndblock,offset_t alltimeset,offset_t allregset,offset_t *ha_eqadd,offset_t *counteq,offset_t nintraeq,Mat A,Mat B) {
   FILE * filehandle;
   char tline[TABREADLINE],line[TABREADLINE],line1[TABREADLINE],leftline[TABREADLINE],linecopy[TABREADLINE];//,set1[NAMESIZE],set2[NAMESIZE];
   char vname[TABREADLINE],sumsyntax[NAMESIZE],lintmp[TABREADLINE];//,*p1=NULL;
   char *readitem=NULL,*p=NULL,*p1=NULL;//,*p2=NULL,*varpnts;
-  ha_cgetype vval;
+  solve_real vval;
   PetscScalar    vvalpetsc;
   PetscInt Iindx,Jindx=0,Istart1,Iend1,matrow,rowindx;//,jfix=0
   PetscErrorCode ierr;
-  ha_cgetype zerodivide=0;
+  solve_real zerodivide=0;
   PetscMPIInt  mpisize1;
   bool isinproc;
   ierr = MatGetOwnershipRange(A,&Istart1,&Iend1);
   MPI_Comm_size(PETSC_COMM_WORLD,&mpisize1);
   CHKERRQ(ierr);
-  uvdim fdim,np,dcount,fdimlin=0,i4,sup,supset[MAXSUPSET];
+  dim_t fdim,np,dcount,fdimlin=0,i4,sup,supset[MAXSUPSET];
   int totalsum,sumcount=1,sumcount1=0,lvar,lvar1,lvar2,lvar3,lvar4;
-  uvadd lj,l1,i1=0,sumbegadd,dcountdim1[4*MAXVARDIM],dcountdim2[4*MAXVARDIM],dcountdim3[4*MAXVARDIM],nloops,nloopslin,nloopsfac,li3,nsumele,nsumele1,l2,eqindx=0,ltime;//,sizelinvars,totlinvars,templinvars
+  offset_t lj,l1,i1=0,sumbegadd,dcountdim1[4*MAXVARDIM],dcountdim2[4*MAXVARDIM],dcountdim3[4*MAXVARDIM],nloops,nloopslin,nloopsfac,li3,nsumele,nsumele1,l2,eqindx=0,ltime;//,sizelinvars,totlinvars,templinvars
   int sumindx,npow,npar,nmul,nplu,ndiv,nmin,ha_calvarsize=0,nlinvars,leadlag,varindx1,varindx2;
-  uvadd j,sj,l,i3,i5,i,arsetdim=0,ha_calvardim=0;
-  ha_cgesetindx *arSet1=NULL;
-  hcge_calvars *ha_calvar1= NULL;
+  offset_t j,sj,l,i3,i5,i,arsetdim=0,ha_calvardim=0;
+  quantifier *arSet1=NULL;
+  formula_op *ha_calvar1= NULL;
 
   filehandle = fopen(fname,"r");
   matrow=0;//nintraeq;
@@ -99,8 +99,8 @@ int HaNewMatVal(char *fname, char *commsyntax,ha_cgeset *ha_set,uvadd nset, ha_c
       readitem=line;
       np=ha_cgenfind(readitem,"p_");
       ha_calvardim=2*(npow+nmul+nplu+npar+1);
-      hcge_calvars *ha_calvar= (hcge_calvars *) calloc (ha_calvardim,sizeof(hcge_calvars));
-      hcge_linvars *LinVars= (hcge_linvars *) calloc (np,sizeof(hcge_linvars));
+      formula_op *ha_calvar= (formula_op *) calloc (ha_calvardim,sizeof(formula_op));
+      eq_var_ref *LinVars= (eq_var_ref *) calloc (np,sizeof(eq_var_ref));
       i3=0;
       lvar=0;
       for (i=0; i<np; i++) {
@@ -259,7 +259,7 @@ int HaNewMatVal(char *fname, char *commsyntax,ha_cgeset *ha_set,uvadd nset, ha_c
       i3=0;
       for (i=0; i<nlinvars; i++) i3+=ha_var[LinVars[i].LinVarIndx].size;
       arsetdim=fdim+i3;
-      ha_cgesetindx *arSet= (ha_cgesetindx *) calloc (arsetdim,sizeof(ha_cgesetindx));
+      quantifier *arSet= (quantifier *) calloc (arsetdim,sizeof(quantifier));
 
       strcpy(line,linecopy);
       nloops=1;
@@ -272,7 +272,7 @@ int HaNewMatVal(char *fname, char *commsyntax,ha_cgeset *ha_set,uvadd nset, ha_c
             readitem = strtok(NULL,",");
           }
           readitem = strtok(NULL,",");
-          strcpy(arSet[i].arIndx,readitem);
+          strcpy(arSet[i].index_name,readitem);
           readitem = strtok(NULL,")");
           for (i4=0; i4<nset; i4++) if(strcmp(readitem,ha_set[i4].setname)==0) {
               arSet[i].setid=i4;
@@ -301,7 +301,7 @@ int HaNewMatVal(char *fname, char *commsyntax,ha_cgeset *ha_set,uvadd nset, ha_c
         readitem=line;
         strcpy(sumsyntax,"sum(");
         totalsum=hcge_nsum(readitem,sumsyntax);
-        hcge_sumcof *sum_cof= (hcge_sumcof *) calloc (totalsum*nlinvars+1,sizeof(hcge_sumcof));
+        sum_def *sum_cof= (sum_def *) calloc (totalsum*nlinvars+1,sizeof(sum_def));
         sumcount=0;
         while (hcge_dsum(readitem,sumsyntax,sum_cof,arSet,ha_set,nset,fdim+1,sumcount)==1) {
           sumcount++;
@@ -313,11 +313,11 @@ int HaNewMatVal(char *fname, char *commsyntax,ha_cgeset *ha_set,uvadd nset, ha_c
           for(sj=0; sj<sum_cof[i4].size; sj++) {
             i1=i1*ha_set[sum_cof[i4].setid[sj]].size;
           }
-          sum_cof[i4].begadd=li3;
+          sum_cof[i4].offset=li3;
           li3=li3+i1;
         }
         nsumele=li3;
-        ha_cgesumele *ha_sumele= (ha_cgesumele *) calloc (nsumele*nlinvars,sizeof(ha_cgesumele));
+        sum_value *ha_sumele= (sum_value *) calloc (nsumele*nlinvars,sizeof(sum_value));
 
         strcpy(line,line1);
         readitem=line;
@@ -332,15 +332,15 @@ int HaNewMatVal(char *fname, char *commsyntax,ha_cgeset *ha_set,uvadd nset, ha_c
           for(sj=0; sj<sum_cof[i4].size; sj++) {
             i1=i1*ha_set[sum_cof[i4].setid[sj]].size;
           }
-          sum_cof[i4].begadd=li3;
+          sum_cof[i4].offset=li3;
           li3=li3+i1;
         }
         nsumele=li3;
         for (i3=0; i3<totalsum; i3++) {
           i1=1;
-          sum_cof[i3].antidims[sum_cof[i3].size-1]=1;
+          sum_cof[i3].strides[sum_cof[i3].size-1]=1;
           for(sj=sum_cof[i3].size-2; sj>-1; sj--) {
-            sum_cof[i3].antidims[sj]=sum_cof[i3].antidims[sj+1]*ha_set[sum_cof[i3].setid[sj+1]].size;
+            sum_cof[i3].strides[sj]=sum_cof[i3].strides[sj+1]*ha_set[sum_cof[i3].setid[sj+1]].size;
           }
         }
         sumcount=0;
@@ -360,7 +360,7 @@ int HaNewMatVal(char *fname, char *commsyntax,ha_cgeset *ha_set,uvadd nset, ha_c
           nloopslin=nloops;
           if (fdim==0) {
             for (l2=0; l2<ha_var[LinVars[i].LinVarIndx].size; l2++) {
-              strcpy(arSet[i3].arIndx,LinVars[i].dimnames[l2]);
+              strcpy(arSet[i3].index_name,LinVars[i].dimnames[l2]);
               for (i4=0; i4<nset; i4++) if(strcmp(ha_set[i4].setname,LinVars[i].dimsetnames[l2])==0) {
                   break;
                 }
@@ -371,11 +371,11 @@ int HaNewMatVal(char *fname, char *commsyntax,ha_cgeset *ha_set,uvadd nset, ha_c
           }
           else for (l2=0; l2<ha_var[LinVars[i].LinVarIndx].size; l2++) {
               for (sj=0; sj<fdim; sj++) {
-                if(strcmp(arSet[sj].arIndx,LinVars[i].dimnames[l2])==0) {
+                if(strcmp(arSet[sj].index_name,LinVars[i].dimnames[l2])==0) {
                   break;
                 }
                 else if (sj==fdim-1) {
-                  strcpy(arSet[fdim+i3].arIndx,LinVars[i].dimnames[l2]);
+                  strcpy(arSet[fdim+i3].index_name,LinVars[i].dimnames[l2]);
                   for (i4=0; i4<nset; i4++) if(strcmp(ha_set[i4].setname,LinVars[i].dimsetnames[l2])==0) {
                       break;
                     }
@@ -385,8 +385,8 @@ int HaNewMatVal(char *fname, char *commsyntax,ha_cgeset *ha_set,uvadd nset, ha_c
                 }
               }
             }
-          nloopsfac=(uvadd)nloopslin/nloops;
-          Jindx=ha_eqadd[matrow+(uvadd)(nloopslin-1)/nloopsfac];
+          nloopsfac=(offset_t)nloopslin/nloops;
+          Jindx=ha_eqadd[matrow+(offset_t)(nloopslin-1)/nloopsfac];
           if(Jindx<Istart1)continue;
           
           fdimlin=fdim+i3;
@@ -418,15 +418,15 @@ int HaNewMatVal(char *fname, char *commsyntax,ha_cgeset *ha_set,uvadd nset, ha_c
             for(sj=0; sj<sum_cof[i4].size; sj++) {
               i1=i1*ha_set[sum_cof[i4].setid[sj]].size;
             }
-            sum_cof[i4].begadd=sumbegadd;
+            sum_cof[i4].offset=sumbegadd;
             sumbegadd=sumbegadd+i1;
           }
           nsumele1=sumbegadd+nsumele;
           for (i3=sumcount; i3<totalsum; i3++) {
             i1=1;
-            sum_cof[i3].antidims[sum_cof[i3].size-1]=1;
+            sum_cof[i3].strides[sum_cof[i3].size-1]=1;
             for(sj=sum_cof[i3].size-2; sj>-1; sj--) {
-              sum_cof[i3].antidims[sj]=sum_cof[i3].antidims[sj+1]*ha_set[sum_cof[i3].setid[sj+1]].size;
+              sum_cof[i3].strides[sj]=sum_cof[i3].strides[sj+1]*ha_set[sum_cof[i3].setid[sj+1]].size;
             }
           }
           strcpy(line,leftline);
@@ -438,7 +438,7 @@ int HaNewMatVal(char *fname, char *commsyntax,ha_cgeset *ha_set,uvadd nset, ha_c
           ha_newfparse(readitem,ha_set,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,&ha_calvarsize,arSet,fdimlin);
           for (dcount=0; dcount<ha_var[LinVars[i].LinVarIndx].size; dcount++) {
             for (i4=0; i4<fdimlin; i4++) {
-              if (strcmp(LinVars[i].dimnames[dcount],arSet[i4].arIndx)==0) {
+              if (strcmp(LinVars[i].dimnames[dcount],arSet[i4].index_name)==0) {
                 dcountdim3[dcount]=i4;
                 break;
               }
@@ -457,17 +457,17 @@ int HaNewMatVal(char *fname, char *commsyntax,ha_cgeset *ha_set,uvadd nset, ha_c
         #pragma omp parallel private(lj,Jindx,i3,sj,i5,l2,dcount,l1,li3,Iindx,ierr,arSet1,ha_calvar1,vval) shared(ha_cofvar,arSet)
         {
         if(omp_get_thread_num()!=0){
-          arSet1=realloc(arSet1,arsetdim*sizeof(ha_cgesetindx));
-          memcpy(arSet1,arSet,arsetdim*sizeof(ha_cgesetindx));
-          ha_calvar1=realloc(ha_calvar1,ha_calvardim*sizeof(hcge_calvars));
-          memcpy(ha_calvar1,ha_calvar,ha_calvardim*sizeof(hcge_calvars));
+          arSet1=realloc(arSet1,arsetdim*sizeof(quantifier));
+          memcpy(arSet1,arSet,arsetdim*sizeof(quantifier));
+          ha_calvar1=realloc(ha_calvar1,ha_calvardim*sizeof(formula_op));
+          memcpy(ha_calvar1,ha_calvar,ha_calvardim*sizeof(formula_op));
         }else{
           ha_calvar1=ha_calvar;
           arSet1=arSet;
         }
-          ha_cgetype *value= (ha_cgetype *) calloc (nloopsfac,sizeof(ha_cgetype));
+          solve_real *value= (solve_real *) calloc (nloopsfac,sizeof(solve_real));
           PetscInt *jcn= (PetscInt *) calloc (nloopsfac,sizeof(PetscInt));
-          ha_cgetype *valueb= (ha_cgetype *) calloc (nloopsfac,sizeof(ha_cgetype));
+          solve_real *valueb= (solve_real *) calloc (nloopsfac,sizeof(solve_real));
           PetscInt *jcnb= (PetscInt *) calloc (nloopsfac,sizeof(PetscInt));
         #pragma omp for
           for (i5=0; i5<nloops; i5++) {
@@ -478,27 +478,27 @@ int HaNewMatVal(char *fname, char *commsyntax,ha_cgeset *ha_set,uvadd nset, ha_c
               for (lj=i5*nloopsfac; lj<(i5+1)*nloopsfac; lj++) {
               l2=lj;
               for (dcount=0; dcount<fdimlin; dcount++) {
-                l1=(uvadd) l2/dcountdim2[dcount];
+                l1=(offset_t) l2/dcountdim2[dcount];
                 arSet1[dcount].indx=l1;
                 l2=l2-l1*dcountdim2[dcount];
               }
               li3=0;
               for (dcount=0; dcount<ha_var[LinVars[i].LinVarIndx].size; dcount++) {
                 if(supset[dcount]==0) {
-                  li3=li3+(arSet1[dcountdim3[dcount]].indx+LinVars[i].dimleadlag[dcount])*ha_var[LinVars[i].LinVarIndx].antidims[dcount];
+                  li3=li3+(arSet1[dcountdim3[dcount]].indx+LinVars[i].dimleadlag[dcount])*ha_var[LinVars[i].LinVarIndx].strides[dcount];
                 }
                 else {
-                  li3=li3+(ha_setele[ha_set[arSet1[dcountdim3[dcount]].setid].begadd+arSet1[dcountdim3[dcount]].indx].setsh[supset[dcount]]+LinVars[i].dimleadlag[dcount])*ha_var[LinVars[i].LinVarIndx].antidims[dcount];
+                  li3=li3+(ha_setele[ha_set[arSet1[dcountdim3[dcount]].setid].offset+arSet1[dcountdim3[dcount]].indx].superset_pos[supset[dcount]]+LinVars[i].dimleadlag[dcount])*ha_var[LinVars[i].LinVarIndx].strides[dcount];
                 }
               }
               vval=ha_newfpcal(ha_cofvar,ha_set,ha_setele,ha_sumele,ha_calvar1,ha_calvarsize,arSet1,fdimlin,zerodivide);
-              Iindx=ha_cgeshock[ha_var[LinVars[i].LinVarIndx].begadd+li3].ExoIndx;
-              if (!ha_cgeshock[ha_var[LinVars[i].LinVarIndx].begadd+li3].ShockId&&vval!=0) {
+              Iindx=ha_cgeshock[ha_var[LinVars[i].LinVarIndx].offset+li3].exo_index;
+              if (!ha_cgeshock[ha_var[LinVars[i].LinVarIndx].offset+li3].is_exogenous&&vval!=0) {
                 value[i3]=vval;
                 jcn[i3]=Iindx;
                 i3++;
               }
-              if (ha_cgeshock[ha_var[LinVars[i].LinVarIndx].begadd+li3].ShockId&&vval!=0) {
+              if (ha_cgeshock[ha_var[LinVars[i].LinVarIndx].offset+li3].is_exogenous&&vval!=0) {
                 valueb[sj]=-vval;
                 jcnb[sj]=Iindx;
                 sj++;
@@ -538,10 +538,10 @@ int HaNewMatVal(char *fname, char *commsyntax,ha_cgeset *ha_set,uvadd nset, ha_c
   return 1;
 }
 
-int hlin_dsum(char *formulain, char *commsyntax, hcge_sumcof *sum_cof,ha_cgesetindx *arSet,ha_cgeset *ha_set,uvdim nset,uvdim fdim,int j) {
+int hlin_dsum(char *formulain, char *commsyntax, sum_def *sum_cof,quantifier *arSet,set_def *ha_set,dim_t nset,dim_t fdim,int j) {
   char *readitem,*p,*p1,*p2,interchar2[NAMESIZE],argu[TABREADLINE],tempname[NAMESIZE];//,line5[TABREADLINE]
   char interchar[NAMESIZE],interchar1[NAMESIZE],line[TABREADLINE],line1[TABREADLINE],line2[TABREADLINE],line3[TABREADLINE],line4[TABREADLINE];
-  uvdim l,l1,l2,l3,l4,l5,l6,l7;
+  dim_t l,l1,l2,l3,l4,l5,l6,l7;
   int ncur=0,ncuri,i=0,k=0,k1=0,length;
   length=strlen(formulain);
   readitem=formulain;
@@ -623,7 +623,7 @@ int hlin_dsum(char *formulain, char *commsyntax, hcge_sumcof *sum_cof,ha_cgeseti
                 if (l4==l3||l3==0) {
                   strcpy(sum_cof[j].dimnames[l3],p);
                   l6=0;
-                  for (l5=0; l5<fdim-1; l5++) if(strcmp(p,arSet[l5].arIndx)==0) {
+                  for (l5=0; l5<fdim-1; l5++) if(strcmp(p,arSet[l5].index_name)==0) {
                       sum_cof[j].setid[l3]=l5;
                       l6++;
                     }
@@ -663,7 +663,7 @@ int hlin_dsum(char *formulain, char *commsyntax, hcge_sumcof *sum_cof,ha_cgeseti
                     strcpy(sum_cof[j].dimnames[l3],p);
                     strcat(interchar,sum_cof[j].dimnames[l3]);
                     l6=0;
-                    for (l5=0; l5<fdim-1; l5++) if(strcmp(p,arSet[l5].arIndx)==0) {
+                    for (l5=0; l5<fdim-1; l5++) if(strcmp(p,arSet[l5].index_name)==0) {
                         sum_cof[j].setid[l3]=l5;
                         l6++;
                         break;
@@ -781,7 +781,7 @@ int hlin_dsum(char *formulain, char *commsyntax, hcge_sumcof *sum_cof,ha_cgeseti
                   strcpy(sum_cof[j].dimnames[l3],p);
                   strcat(interchar,sum_cof[j].dimnames[l3]);
                   l6=0;
-                  for (l5=0; l5<fdim-1; l5++) if(strcmp(p,arSet[l5].arIndx)==0) {
+                  for (l5=0; l5<fdim-1; l5++) if(strcmp(p,arSet[l5].index_name)==0) {
                       sum_cof[j].setid[l3]=l5;
                       l6++;
                     }
@@ -822,7 +822,7 @@ int hlin_dsum(char *formulain, char *commsyntax, hcge_sumcof *sum_cof,ha_cgeseti
                     strcat(interchar,sum_cof[j].dimnames[l3]);
                     strcat(interchar,",");
                     l6=0;
-                    for (l5=0; l5<fdim-1; l5++) if(strcmp(p,arSet[l5].arIndx)==0) {
+                    for (l5=0; l5<fdim-1; l5++) if(strcmp(p,arSet[l5].index_name)==0) {
                         sum_cof[j].setid[l3]=arSet[l5].setid;//l5;
                         l6++;
                       }
@@ -874,17 +874,17 @@ int hlin_dsum(char *formulain, char *commsyntax, hcge_sumcof *sum_cof,ha_cgeseti
   return 0;
 }
 
-int hlin_calsum(char *formulain, char *commsyntax,ha_cgeset *ha_set,uvdim nset, ha_cgesetele *ha_setele,ha_cgevar *ha_cofvar,uvadd ncofvar,uvadd ncofele, hcge_cof *ha_cof,uvadd ncof,hcge_cof *ha_var,uvadd nvar,hcge_sumcof *sum_cof,int totalsum,ha_cgesumele *ha_sumele,uvadd nsumele,hcge_calvars *ha_calvar,ha_cgesetindx *arSet1,uvdim fdim,int *sumindx,int j, ha_cgetype zerodivide) {
+int hlin_calsum(char *formulain, char *commsyntax,set_def *ha_set,dim_t nset, set_element *ha_setele,elem_value *ha_cofvar,offset_t ncofvar,offset_t ncofele, array_def *ha_cof,offset_t ncof,array_def *ha_var,offset_t nvar,sum_def *sum_cof,int totalsum,sum_value *ha_sumele,offset_t nsumele,formula_op *ha_calvar,quantifier *arSet1,dim_t fdim,int *sumindx,int j, solve_real zerodivide) {
   char *readitem,*p;//,*p1,interchar2[NAMESIZE],line5[TABREADLINE];
   char interchar[NAMESIZE],line[TABREADLINE],line1[TABREADLINE],line2[TABREADLINE];//,line3[TABREADLINE],line4[TABREADLINE];//,interchar1[NAMESIZE]
   int i=0,k=0,k1=0,length;//,simpl=0;//,ncur=0,ncuri,l3,l4,l5,l6,l7
-  uvdim dcount,setsh,fdimsumcof,l;
-  uvadd dcountdim1[4*MAXVARDIM],nloops,l1,l2,l3;
+  dim_t dcount,superset_pos,fdimsumcof,l;
+  offset_t dcountdim1[4*MAXVARDIM],nloops,l1,l2,l3;
   int ha_calvarsize;
-  ha_cgetype vval;
-  ha_cgesetindx *arSet2=NULL;
-  hcge_calvars *ha_calvar1= NULL;
-  uvadd arsetsize;
+  solve_real vval;
+  quantifier *arSet2=NULL;
+  formula_op *ha_calvar1= NULL;
+  offset_t arsetsize;
   length=strlen(formulain);
   readitem=formulain;
   while (i<length) {
@@ -914,10 +914,10 @@ int hlin_calsum(char *formulain, char *commsyntax,ha_cgeset *ha_set,uvdim nset, 
           p[strlen(p)-1]='\0';
           strcpy(line2,p);
           arsetsize=sum_cof[j].size+1;
-          ha_cgesetindx *arSet= (ha_cgesetindx *) calloc (arsetsize,sizeof(ha_cgesetindx));
+          quantifier *arSet= (quantifier *) calloc (arsetsize,sizeof(quantifier));
           for (l=0; l<sum_cof[j].size; l++) {
             arSet[l].setid=sum_cof[j].setid[l];
-            strcpy(arSet[l].arIndx,sum_cof[j].dimnames[l]);
+            strcpy(arSet[l].index_name,sum_cof[j].dimnames[l]);
           }
           nloops=1;
           for (l=0; l<sum_cof[j].size; l++) {
@@ -931,17 +931,17 @@ int hlin_calsum(char *formulain, char *commsyntax,ha_cgeset *ha_set,uvdim nset, 
             }
           }
           arSet[sum_cof[j].size].setid=sum_cof[j].sumsetid;
-          strcpy(arSet[sum_cof[j].size].arIndx,sum_cof[j].sumindx);
+          strcpy(arSet[sum_cof[j].size].index_name,sum_cof[j].sumindx);
           fdimsumcof=sum_cof[j].size+1;
           ha_calvarsize=0;
           ha_newfparse(p,ha_set,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,&ha_calvarsize,arSet,fdimsumcof);
-        #pragma omp parallel private(l3,l1,l2,dcount,setsh,vval,arSet2,ha_calvar1) shared(ha_cofvar,arSet,ha_sumele)
+        #pragma omp parallel private(l3,l1,l2,dcount,superset_pos,vval,arSet2,ha_calvar1) shared(ha_cofvar,arSet,ha_sumele)
         {
         if(omp_get_thread_num()!=0){
-          arSet2=realloc(arSet2,arsetsize*sizeof(ha_cgesetindx));
-          memcpy(arSet2,arSet,arsetsize*sizeof(ha_cgesetindx));
-          ha_calvar1=realloc(ha_calvar1,ha_calvarsize*sizeof(hcge_calvars));
-          memcpy(ha_calvar1,ha_calvar,ha_calvarsize*sizeof(hcge_calvars));
+          arSet2=realloc(arSet2,arsetsize*sizeof(quantifier));
+          memcpy(arSet2,arSet,arsetsize*sizeof(quantifier));
+          ha_calvar1=realloc(ha_calvar1,ha_calvarsize*sizeof(formula_op));
+          memcpy(ha_calvar1,ha_calvar,ha_calvarsize*sizeof(formula_op));
         }else{
           ha_calvar1=ha_calvar;
           arSet2=arSet;
@@ -950,16 +950,16 @@ int hlin_calsum(char *formulain, char *commsyntax,ha_cgeset *ha_set,uvdim nset, 
           for (l3=0; l3<nloops; l3++) {
             l2=l3;
             for (dcount=0; dcount<sum_cof[j].size; dcount++) {
-              setsh=(uvadd) l2/dcountdim1[dcount];
-              arSet2[dcount].indx=setsh;
-              l2=l2-setsh*dcountdim1[dcount];
+              superset_pos=(offset_t) l2/dcountdim1[dcount];
+              arSet2[dcount].indx=superset_pos;
+              l2=l2-superset_pos*dcountdim1[dcount];
             }
             vval=0;
             for (l1=0; l1<ha_set[sum_cof[j].sumsetid].size; l1++) {
               arSet2[sum_cof[j].size].indx=l1;
               vval+=ha_newfpcal(ha_cofvar,ha_set,ha_setele,ha_sumele,ha_calvar1,ha_calvarsize,arSet2,fdimsumcof,zerodivide);
             }
-            ha_sumele[*sumindx+l3].varval=vval;
+            ha_sumele[*sumindx+l3].value=vval;
           }
         if(omp_get_thread_num()!=0){
           free(arSet2);
@@ -1017,10 +1017,10 @@ int hlin_calsum(char *formulain, char *commsyntax,ha_cgeset *ha_set,uvdim nset, 
           p=strtok(NULL,"\0");
           p[strlen(p)-1]='\0';
           arsetsize=sum_cof[j].size+1;
-          ha_cgesetindx *arSet= (ha_cgesetindx *) calloc (arsetsize,sizeof(ha_cgesetindx));
+          quantifier *arSet= (quantifier *) calloc (arsetsize,sizeof(quantifier));
           for (l=0; l<sum_cof[j].size; l++) {
             arSet[l].setid=sum_cof[j].setid[l];
-            strcpy(arSet[l].arIndx,sum_cof[j].dimnames[l]);
+            strcpy(arSet[l].index_name,sum_cof[j].dimnames[l]);
           }
           nloops=1;
           for (l=0; l<sum_cof[j].size; l++) {
@@ -1034,17 +1034,17 @@ int hlin_calsum(char *formulain, char *commsyntax,ha_cgeset *ha_set,uvdim nset, 
             }
           }
           arSet[sum_cof[j].size].setid=sum_cof[j].sumsetid;
-          strcpy(arSet[sum_cof[j].size].arIndx,sum_cof[j].sumindx);
+          strcpy(arSet[sum_cof[j].size].index_name,sum_cof[j].sumindx);
           fdimsumcof=sum_cof[j].size+1;
           ha_calvarsize=0;
           ha_newfparse(p,ha_set,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,&ha_calvarsize,arSet,fdimsumcof);
-        #pragma omp parallel private(l3,l1,l2,dcount,setsh,vval,arSet2,ha_calvar1) shared(ha_cofvar,arSet,ha_sumele)
+        #pragma omp parallel private(l3,l1,l2,dcount,superset_pos,vval,arSet2,ha_calvar1) shared(ha_cofvar,arSet,ha_sumele)
         {
         if(omp_get_thread_num()!=0){
-          arSet2=realloc(arSet2,arsetsize*sizeof(ha_cgesetindx));
-          memcpy(arSet2,arSet,arsetsize*sizeof(ha_cgesetindx));
-          ha_calvar1=realloc(ha_calvar1,ha_calvarsize*sizeof(hcge_calvars));
-          memcpy(ha_calvar1,ha_calvar,ha_calvarsize*sizeof(hcge_calvars));
+          arSet2=realloc(arSet2,arsetsize*sizeof(quantifier));
+          memcpy(arSet2,arSet,arsetsize*sizeof(quantifier));
+          ha_calvar1=realloc(ha_calvar1,ha_calvarsize*sizeof(formula_op));
+          memcpy(ha_calvar1,ha_calvar,ha_calvarsize*sizeof(formula_op));
         }else{
           ha_calvar1=ha_calvar;
           arSet2=arSet;
@@ -1053,16 +1053,16 @@ int hlin_calsum(char *formulain, char *commsyntax,ha_cgeset *ha_set,uvdim nset, 
           for (l3=0; l3<nloops; l3++) {
             l2=l3;
             for (dcount=0; dcount<sum_cof[j].size; dcount++) {
-              setsh=(uvadd) l2/dcountdim1[dcount];
-              arSet2[dcount].indx=setsh;
-              l2=l2-setsh*dcountdim1[dcount];
+              superset_pos=(offset_t) l2/dcountdim1[dcount];
+              arSet2[dcount].indx=superset_pos;
+              l2=l2-superset_pos*dcountdim1[dcount];
             }
             vval=0;
             for (l1=0; l1<ha_set[sum_cof[j].sumsetid].size; l1++) {
               arSet2[sum_cof[j].size].indx=l1;
               vval+=ha_newfpcal(ha_cofvar,ha_set,ha_setele,ha_sumele,ha_calvar1,ha_calvarsize,arSet2,fdimsumcof,zerodivide);
             }
-            ha_sumele[(uvadd)*sumindx+l3].varval=vval;//ha_sumele[*sumindx+l2].varval=vval;
+            ha_sumele[(offset_t)*sumindx+l3].value=vval;//ha_sumele[*sumindx+l2].varval=vval;
           }
         if(omp_get_thread_num()!=0){
           free(arSet2);
@@ -1106,7 +1106,7 @@ int hlin_calsum(char *formulain, char *commsyntax,ha_cgeset *ha_set,uvdim nset, 
   return 0;
 }
 
-int hlin_replsum(char *formulain, char *commsyntax,int LinIndx, hcge_linvars *LinVars,hcge_cof *ha_var) {
+int hlin_replsum(char *formulain, char *commsyntax,int LinIndx, eq_var_ref *LinVars,array_def *ha_var) {
   char *readitem,line[TABREADLINE],line1[TABREADLINE],line2[TABREADLINE],line3[TABREADLINE],argu[TABREADLINE],*p0,*p1;
   int i=0,k=0,k1=0,k2,k3,length,tsum,j,l;
   bool IsRemSum;
@@ -1259,7 +1259,7 @@ int hlin_replsum(char *formulain, char *commsyntax,int LinIndx, hcge_linvars *Li
   return 0;
 }
 
-int hlin_rlinone(char *formulain,hcge_linvars *LinVars,int linindx,hcge_cof *ha_var) {
+int hlin_rlinone(char *formulain,eq_var_ref *LinVars,int linindx,array_def *ha_var) {
   char line[TABREADLINE];
   int i1,i2,i3,l;//,l,d;
   line[0]='p';
@@ -1298,16 +1298,16 @@ int hlin_rlinone(char *formulain,hcge_linvars *LinVars,int linindx,hcge_cof *ha_
   return 1;
 }
 
-int NewMatvarRead(char *fname, char *commsyntax,ha_cgeset *ha_set,uvdim nset,ha_cgesetele *ha_setele,hcge_cof *ha_cof,uvadd ncof,hcge_cof *ha_var,uvadd nvar,ha_cgevar *ha_cofvar,uvadd ncofvar,uvadd ncofele,ha_cgeexovar *ha_cgeshock,bool *var_inter,hcge_cof *ha_eq,bool *ha_eqint,uvdim *eq_orderintra,uvdim *eq_orderreg,uvadd allregset,uvadd alltimeset,uvdim *orderintra,uvdim *orderreg) {
+int NewMatvarRead(char *fname, char *commsyntax,set_def *ha_set,dim_t nset,set_element *ha_setele,array_def *ha_cof,offset_t ncof,array_def *ha_var,offset_t nvar,elem_value *ha_cofvar,offset_t ncofvar,offset_t ncofele,closure_entry *ha_cgeshock,bool *var_inter,array_def *ha_eq,bool *ha_eqint,dim_t *eq_orderintra,dim_t *eq_orderreg,offset_t allregset,offset_t alltimeset,dim_t *orderintra,dim_t *orderreg) {
   FILE * filehandle;
   char tline[TABREADLINE],line[TABREADLINE],line1[TABREADLINE],linecopy[TABREADLINE];//,set1[NAMESIZE],set2[NAMESIZE];
   char vname[TABREADLINE],lintmp[TABREADLINE];//,*p1=NULL;
   char *readitem=NULL,*p=NULL,*p1=NULL;//,*p2=NULL,*varpnts;
-  ha_cgetype zerodivide=0;
-  uvdim fdim,np,i4;
-  uvadd rowindx,j,l,l1,lj,dcountdim1[4*MAXVARDIM],dcountdim2[4*MAXVARDIM],nloops,nloopslin,li3,l2,matrow,eqindx=0,matsize,l01,j01;//,sizelinvars,totlinvars,templinvars
+  solve_real zerodivide=0;
+  dim_t fdim,np,i4;
+  offset_t rowindx,j,l,l1,lj,dcountdim1[4*MAXVARDIM],dcountdim2[4*MAXVARDIM],nloops,nloopslin,li3,l2,matrow,eqindx=0,nelem,l01,j01;//,sizelinvars,totlinvars,templinvars
   int sj,i,i3,nlinvars,lvar,lvar1,lvar2,lvar3,lvar4,dcount,fdimlin=0,leadlag,varindx1,varindx2,tempint;
-  ha_cgetype dimmat[4*MAXVARDIM];
+  solve_real dimmat[4*MAXVARDIM];
 
   filehandle = fopen(fname,"r");
   matrow=0;
@@ -1359,7 +1359,7 @@ int NewMatvarRead(char *fname, char *commsyntax,ha_cgeset *ha_set,uvdim nset,ha_
       strcpy(tline,readitem);
       strcpy(line1,readitem);
       np=ha_cgenfind(readitem,"p_");
-      hcge_linvars *LinVars= (hcge_linvars *) calloc (np+1,sizeof(hcge_linvars));
+      eq_var_ref *LinVars= (eq_var_ref *) calloc (np+1,sizeof(eq_var_ref));
       i3=0;
       lvar=0;
       for (i=0; i<np; i++) {
@@ -1515,7 +1515,7 @@ int NewMatvarRead(char *fname, char *commsyntax,ha_cgeset *ha_set,uvdim nset,ha_
       }
       nlinvars=i3;
       for (i=0; i<nlinvars; i++) i3+=ha_var[LinVars[i].LinVarIndx].size;
-      ha_cgesetindx *arSet= (ha_cgesetindx *) calloc (fdim+i3+1,sizeof(ha_cgesetindx));
+      quantifier *arSet= (quantifier *) calloc (fdim+i3+1,sizeof(quantifier));
       bool *linvarrcount= (bool *) calloc (nlinvars,sizeof(bool));
 
       strcpy(line,linecopy);
@@ -1529,7 +1529,7 @@ int NewMatvarRead(char *fname, char *commsyntax,ha_cgeset *ha_set,uvdim nset,ha_
             readitem = strtok(NULL,",");
           }
           readitem = strtok(NULL,",");
-          strcpy(arSet[i].arIndx,readitem);
+          strcpy(arSet[i].index_name,readitem);
           readitem = strtok(NULL,")");
           for (i4=0; i4<nset; i4++) if(strcmp(readitem,ha_set[i4].setname)==0) {
               arSet[i].setid=i4;
@@ -1540,7 +1540,7 @@ int NewMatvarRead(char *fname, char *commsyntax,ha_cgeset *ha_set,uvdim nset,ha_
         }
       }
       ha_eq[eqindx].size=fdim;
-      ha_eq[eqindx].matsize=nloops;
+      ha_eq[eqindx].nelem=nloops;
       if(alltimeset>=0) {
         if(eqindx==0) {
           for(i=0; i<nvar; i++) {
@@ -1600,10 +1600,10 @@ int NewMatvarRead(char *fname, char *commsyntax,ha_cgeset *ha_set,uvdim nset,ha_
                 continue;
               }
               for(i3=0; i3<ha_var[LinVars[i4].LinVarIndx].size; i3++) {
-                if(strcmp(LinVars[i4].dimnames[i3],arSet[i].arIndx)==0&&ha_set[ha_eq[eqindx].setid[i]].regional&&orderreg[LinVars[i4].LinVarIndx]==i3) { //ha_set[ha_var[LinVars[i4].LinVarIndx].setid[i3]].regional) {
-                  dimmat[i]+=ha_var[LinVars[i4].LinVarIndx].matsize;
+                if(strcmp(LinVars[i4].dimnames[i3],arSet[i].index_name)==0&&ha_set[ha_eq[eqindx].setid[i]].regional&&orderreg[LinVars[i4].LinVarIndx]==i3) { //ha_set[ha_var[LinVars[i4].LinVarIndx].setid[i3]].regional) {
+                  dimmat[i]+=ha_var[LinVars[i4].LinVarIndx].nelem;
                   l01=0;
-                  for(j01=0; j01<ha_var[LinVars[i4].LinVarIndx].matsize; j01++)if(ha_cgeshock[ha_var[LinVars[i4].LinVarIndx].begadd+j01].ShockId)l01++;
+                  for(j01=0; j01<ha_var[LinVars[i4].LinVarIndx].nelem; j01++)if(ha_cgeshock[ha_var[LinVars[i4].LinVarIndx].offset+j01].is_exogenous)l01++;
                   dimmat[i]-=l01;
                   linvarrcount[i4]=true;
                   if(lvar4<i4)linvarrcount[lvar4]=true;
@@ -1611,10 +1611,10 @@ int NewMatvarRead(char *fname, char *commsyntax,ha_cgeset *ha_set,uvdim nset,ha_
               }
             }
           }
-          matsize=0;
-          for (i=0; i<fdim; i++)if(dimmat[i]>matsize)matsize=dimmat[i];
-          for (i=0; i<fdim; i++)if(dimmat[i]==matsize)break;
-          if(matsize==0) {
+          nelem=0;
+          for (i=0; i<fdim; i++)if(dimmat[i]>nelem)nelem=dimmat[i];
+          for (i=0; i<fdim; i++)if(dimmat[i]==nelem)break;
+          if(nelem==0) {
             eq_orderreg[eqindx]=tempint;
             ha_eqint[eqindx]=true;
           }
@@ -1626,7 +1626,7 @@ int NewMatvarRead(char *fname, char *commsyntax,ha_cgeset *ha_set,uvdim nset,ha_
 
 
         if(eq_orderreg[eqindx]>-1) {
-          matsize=0;
+          nelem=0;
           memset(linvarrcount,0,nlinvars*sizeof(bool));
           for(i4=0; i4<nlinvars; i4++) {
             for(lvar4=0; lvar4<i4; lvar4++)if(strcmp(LinVars[i4].LinVarName,LinVars[lvar4].LinVarName)==0)break;
@@ -1634,19 +1634,19 @@ int NewMatvarRead(char *fname, char *commsyntax,ha_cgeset *ha_set,uvdim nset,ha_
               linvarrcount[i4]=true;
               continue;
             }
-            if(strcmp(LinVars[i4].dimnames[orderreg[LinVars[i4].LinVarIndx]],arSet[eq_orderreg[eqindx]].arIndx)!=0&&!var_inter[LinVars[i4].LinVarIndx]) {
-              matsize+=ha_var[LinVars[i4].LinVarIndx].matsize;
+            if(strcmp(LinVars[i4].dimnames[orderreg[LinVars[i4].LinVarIndx]],arSet[eq_orderreg[eqindx]].index_name)!=0&&!var_inter[LinVars[i4].LinVarIndx]) {
+              nelem+=ha_var[LinVars[i4].LinVarIndx].nelem;
               l01=0;
-              for(j01=0; j01<ha_var[LinVars[i4].LinVarIndx].matsize; j01++)if(ha_cgeshock[ha_var[LinVars[i4].LinVarIndx].begadd+j01].ShockId)l01++;
-              matsize+=ha_var[LinVars[i4].LinVarIndx].matsize-l01;
+              for(j01=0; j01<ha_var[LinVars[i4].LinVarIndx].nelem; j01++)if(ha_cgeshock[ha_var[LinVars[i4].LinVarIndx].offset+j01].is_exogenous)l01++;
+              nelem+=ha_var[LinVars[i4].LinVarIndx].nelem-l01;
               linvarrcount[i4]=true;
               if(lvar4<i4)linvarrcount[lvar4]=true;
             }
           }
-          if(matsize>=ha_eq[eqindx].matsize)ha_eqint[eqindx]=true;
+          if(nelem>=ha_eq[eqindx].nelem)ha_eqint[eqindx]=true;
           else {
             for(i4=0; i4<nlinvars; i4++)
-              if(strcmp(LinVars[i4].dimnames[orderreg[LinVars[i4].LinVarIndx]],arSet[eq_orderreg[eqindx]].arIndx)!=0&&!var_inter[LinVars[i4].LinVarIndx]) {
+              if(strcmp(LinVars[i4].dimnames[orderreg[LinVars[i4].LinVarIndx]],arSet[eq_orderreg[eqindx]].index_name)!=0&&!var_inter[LinVars[i4].LinVarIndx]) {
                 var_inter[LinVars[i4].LinVarIndx]=true;
               }
           }
@@ -1662,17 +1662,17 @@ int NewMatvarRead(char *fname, char *commsyntax,ha_cgeset *ha_set,uvdim nset,ha_
   return 1;
 }
 
-int NestedMatvarRead(char *fname, char *commsyntax,ha_cgeset *ha_set,uvdim nset,ha_cgesetele *ha_setele,hcge_cof *ha_cof,uvadd ncof,hcge_cof *ha_var,uvadd nvar,ha_cgevar *ha_cofvar,uvadd ncofvar,uvadd ncofele,ha_cgeexovar *ha_cgeshock,bool *var_inter,hcge_cof *ha_eq,bool *ha_eqint,uvdim *eq_orderintra,uvdim *eq_orderreg,uvadd allregset,uvadd alltimeset,uvdim *orderintra,uvdim *orderreg) {
+int NestedMatvarRead(char *fname, char *commsyntax,set_def *ha_set,dim_t nset,set_element *ha_setele,array_def *ha_cof,offset_t ncof,array_def *ha_var,offset_t nvar,elem_value *ha_cofvar,offset_t ncofvar,offset_t ncofele,closure_entry *ha_cgeshock,bool *var_inter,array_def *ha_eq,bool *ha_eqint,dim_t *eq_orderintra,dim_t *eq_orderreg,offset_t allregset,offset_t alltimeset,dim_t *orderintra,dim_t *orderreg) {
   FILE * filehandle;
   char tline[TABREADLINE],line[TABREADLINE],line1[TABREADLINE],linecopy[TABREADLINE];//,set1[NAMESIZE],set2[NAMESIZE];
   char vname[TABREADLINE],lintmp[TABREADLINE];//,*p1=NULL;
   char *readitem=NULL,*p=NULL,*p1=NULL;//,*p2=NULL,*varpnts;
-  ha_cgetype zerodivide=0;
-  uvdim fdim,np;
-  uvadd rowindx,j,j01,l,l01,lj,dcountdim1[4*MAXVARDIM],dcountdim2[4*MAXVARDIM],nloops,nloopslin,li3,l2,matrow,eqindx=0,matsize;//,sizelinvars,totlinvars,templinvars
-  uvadd sj,i,i3,i4,nlinvars,lvar,lvar1,lvar2,lvar3,lvar4,dcount,fdimlin=0,varindx1,varindx2,tempint;
+  solve_real zerodivide=0;
+  dim_t fdim,np;
+  offset_t rowindx,j,j01,l,l01,lj,dcountdim1[4*MAXVARDIM],dcountdim2[4*MAXVARDIM],nloops,nloopslin,li3,l2,matrow,eqindx=0,nelem;//,sizelinvars,totlinvars,templinvars
+  offset_t sj,i,i3,i4,nlinvars,lvar,lvar1,lvar2,lvar3,lvar4,dcount,fdimlin=0,varindx1,varindx2,tempint;
   int leadlag;
-  ha_cgetype dimmat[4*MAXVARDIM];
+  solve_real dimmat[4*MAXVARDIM];
 
   filehandle = fopen(fname,"r");
   matrow=0;
@@ -1724,7 +1724,7 @@ int NestedMatvarRead(char *fname, char *commsyntax,ha_cgeset *ha_set,uvdim nset,
       strcpy(tline,readitem);
       strcpy(line1,readitem);
       np=ha_cgenfind(readitem,"p_");
-      hcge_linvars *LinVars= (hcge_linvars *) calloc (np+1,sizeof(hcge_linvars));
+      eq_var_ref *LinVars= (eq_var_ref *) calloc (np+1,sizeof(eq_var_ref));
       i3=0;
       lvar=0;
       for (i=0; i<np; i++) {
@@ -1892,7 +1892,7 @@ int NestedMatvarRead(char *fname, char *commsyntax,ha_cgeset *ha_set,uvdim nset,
       }
       nlinvars=i3;
       for (i=0; i<nlinvars; i++) i3+=ha_var[LinVars[i].LinVarIndx].size;
-      ha_cgesetindx *arSet= (ha_cgesetindx *) calloc (fdim+i3+1,sizeof(ha_cgesetindx));
+      quantifier *arSet= (quantifier *) calloc (fdim+i3+1,sizeof(quantifier));
       bool *linvarrcount= (bool *) calloc (nlinvars,sizeof(bool));
 
       strcpy(line,linecopy);
@@ -1906,7 +1906,7 @@ int NestedMatvarRead(char *fname, char *commsyntax,ha_cgeset *ha_set,uvdim nset,
             readitem = strtok(NULL,",");
           }
           readitem = strtok(NULL,",");
-          strcpy(arSet[i].arIndx,readitem);
+          strcpy(arSet[i].index_name,readitem);
           readitem = strtok(NULL,")");
           for (i4=0; i4<nset; i4++) if(strcmp(readitem,ha_set[i4].setname)==0) {
               arSet[i].setid=i4;
@@ -1917,7 +1917,7 @@ int NestedMatvarRead(char *fname, char *commsyntax,ha_cgeset *ha_set,uvdim nset,
         }
       }
       ha_eq[eqindx].size=fdim;
-      ha_eq[eqindx].matsize=nloops;
+      ha_eq[eqindx].nelem=nloops;
 
 
       if(eqindx==0) {
@@ -1966,21 +1966,21 @@ int NestedMatvarRead(char *fname, char *commsyntax,ha_cgeset *ha_set,uvdim nset,
               continue;
             }
             for(i3=0; i3<ha_var[LinVars[i4].LinVarIndx].size; i3++) {
-              if(strcmp(LinVars[i4].dimnames[i3],arSet[i].arIndx)==0&&ha_set[ha_eq[eqindx].setid[i]].regional&&orderreg[LinVars[i4].LinVarIndx]==i3) {
-                dimmat[i]+=ha_var[LinVars[i4].LinVarIndx].matsize;
+              if(strcmp(LinVars[i4].dimnames[i3],arSet[i].index_name)==0&&ha_set[ha_eq[eqindx].setid[i]].regional&&orderreg[LinVars[i4].LinVarIndx]==i3) {
+                dimmat[i]+=ha_var[LinVars[i4].LinVarIndx].nelem;
                 linvarrcount[i4]=true;
                 if(lvar4<i4)linvarrcount[lvar4]=true;
                 l01=0;
-                for(j01=0; j01<ha_var[LinVars[i4].LinVarIndx].matsize; j01++)if(ha_cgeshock[ha_var[LinVars[i4].LinVarIndx].begadd+j01].ShockId)l01++;
+                for(j01=0; j01<ha_var[LinVars[i4].LinVarIndx].nelem; j01++)if(ha_cgeshock[ha_var[LinVars[i4].LinVarIndx].offset+j01].is_exogenous)l01++;
                 dimmat[i]-=l01;
               }
             }
           }
         }
-        matsize=0;
-        for (i=0; i<fdim; i++)if(dimmat[i]>matsize)matsize=dimmat[i];
-        for (i=0; i<fdim; i++)if(dimmat[i]==matsize)break;
-        if(matsize==0) {
+        nelem=0;
+        for (i=0; i<fdim; i++)if(dimmat[i]>nelem)nelem=dimmat[i];
+        for (i=0; i<fdim; i++)if(dimmat[i]==nelem)break;
+        if(nelem==0) {
           eq_orderreg[eqindx]=-1;
         }
         else {
@@ -1988,7 +1988,7 @@ int NestedMatvarRead(char *fname, char *commsyntax,ha_cgeset *ha_set,uvdim nset,
         }
       }
       if(eq_orderreg[eqindx]>-1) {
-        matsize=0;
+        nelem=0;
         memset(linvarrcount,0,nlinvars*sizeof(bool));
         for(i4=0; i4<nlinvars; i4++) {
           for(lvar4=0; lvar4<i4; lvar4++)if(strcmp(LinVars[i4].LinVarName,LinVars[lvar4].LinVarName)==0)break;
@@ -1996,18 +1996,18 @@ int NestedMatvarRead(char *fname, char *commsyntax,ha_cgeset *ha_set,uvdim nset,
             linvarrcount[i4]=true;
             continue;
           }
-          if(strcmp(LinVars[i4].dimnames[orderreg[LinVars[i4].LinVarIndx]],arSet[eq_orderreg[eqindx]].arIndx)!=0&&orderreg[LinVars[i4].LinVarIndx]!=-1) {
+          if(strcmp(LinVars[i4].dimnames[orderreg[LinVars[i4].LinVarIndx]],arSet[eq_orderreg[eqindx]].index_name)!=0&&orderreg[LinVars[i4].LinVarIndx]!=-1) {
             l01=0;
-            for(j01=0; j01<ha_var[LinVars[i4].LinVarIndx].matsize; j01++)if(ha_cgeshock[ha_var[LinVars[i4].LinVarIndx].begadd+j01].ShockId)l01++;
-            matsize+=ha_var[LinVars[i4].LinVarIndx].matsize-l01;
+            for(j01=0; j01<ha_var[LinVars[i4].LinVarIndx].nelem; j01++)if(ha_cgeshock[ha_var[LinVars[i4].LinVarIndx].offset+j01].is_exogenous)l01++;
+            nelem+=ha_var[LinVars[i4].LinVarIndx].nelem-l01;
             linvarrcount[i4]=true;
             if(lvar4<i4)linvarrcount[lvar4]=true;
           }
         }
-        if(matsize>=ha_eq[eqindx].matsize)eq_orderreg[eqindx]=-1;//printf("OOOOOOOOOOOOOOOOO\n");}
+        if(nelem>=ha_eq[eqindx].nelem)eq_orderreg[eqindx]=-1;//printf("OOOOOOOOOOOOOOOOO\n");}
         else {
           for(i4=0; i4<nlinvars; i4++)
-            if(strcmp(LinVars[i4].dimnames[orderreg[LinVars[i4].LinVarIndx]],arSet[eq_orderreg[eqindx]].arIndx)!=0&&orderreg[LinVars[i4].LinVarIndx]!=-1) {
+            if(strcmp(LinVars[i4].dimnames[orderreg[LinVars[i4].LinVarIndx]],arSet[eq_orderreg[eqindx]].index_name)!=0&&orderreg[LinVars[i4].LinVarIndx]!=-1) {
               orderreg[LinVars[i4].LinVarIndx]=-1;//orderintra[LinVars[i4].LinVarIndx]=-1;
             }
         }
@@ -2038,20 +2038,20 @@ int NestedMatvarRead(char *fname, char *commsyntax,ha_cgeset *ha_set,uvdim nset,
   return 1;
 }
 
-int NewMatreadele(char *fname, char *commsyntax,ha_cgeset *ha_set,uvdim nset,ha_cgesetele *ha_setele,hcge_cof *ha_cof,uvadd ncof,hcge_cof *ha_var,uvadd nvar,ha_cgevar *ha_cofvar,uvadd ncofvar,uvadd ncofele, uvadd nexo,ha_cgeexovar *ha_cgeshock,uvadd ndblock,uvadd alltimeset,uvadd allregset,bool *ha_eqint,uvadd *ha_eqadd,uvdim *ha_eqtime,uvdim *ha_eqreg,uvadd *counteq,uvadd nintraeq,bool *sbbd_overrid,PetscInt Istart,PetscInt Iend,PetscInt *dnz,PetscInt *dnnz,PetscInt *onz,PetscInt *onnz,PetscInt *dnzB,PetscInt *dnnzB,PetscInt *onzB,PetscInt *onnzB,int nesteddbbd) {
+int NewMatreadele(char *fname, char *commsyntax,set_def *ha_set,dim_t nset,set_element *ha_setele,array_def *ha_cof,offset_t ncof,array_def *ha_var,offset_t nvar,elem_value *ha_cofvar,offset_t ncofvar,offset_t ncofele, offset_t nexo,closure_entry *ha_cgeshock,offset_t ndblock,offset_t alltimeset,offset_t allregset,bool *ha_eqint,offset_t *ha_eqadd,dim_t *ha_eqtime,dim_t *ha_eqreg,offset_t *counteq,offset_t nintraeq,bool *sbbd_overrid,PetscInt Istart,PetscInt Iend,PetscInt *dnz,PetscInt *dnnz,PetscInt *onz,PetscInt *onnz,PetscInt *dnzB,PetscInt *dnnzB,PetscInt *onzB,PetscInt *onnzB,int nesteddbbd) {
   FILE * filehandle;
   char tline[TABREADLINE],line[TABREADLINE],line1[TABREADLINE],linecopy[TABREADLINE];//,set1[NAMESIZE],set2[NAMESIZE];
   char vname[TABREADLINE],lintmp[TABREADLINE];//,*p1=NULL;
   char *readitem=NULL,*p=NULL,*p1=NULL;//,*p2=NULL,*varpnts;
   PetscInt Iindx=0,Jindx;
-  ha_cgetype zerodivide=0;
-  uvdim fdim=0,np,i4,sup,supset[MAXSUPSET];
-  uvadd rowindx,rowindxorg,l,l1,lj,dcountdim1[4*MAXVARDIM],dcountdim2[4*MAXVARDIM],dcountdim3[4*MAXVARDIM],dcountdim4[4*MAXVARDIM],dcountdim5[4*MAXVARDIM],nloops,nloopslin,nloopsfac,li3,l2,matrow,matroworg,ltime,lreg,leq=0,eqindx=0;//,sizelinvars,totlinvars,templinvars
-  uvadd nreg=0,nint=0,sj,i,i3;
+  solve_real zerodivide=0;
+  dim_t fdim=0,np,i4,sup,supset[MAXSUPSET];
+  offset_t rowindx,rowindxorg,l,l1,lj,dcountdim1[4*MAXVARDIM],dcountdim2[4*MAXVARDIM],dcountdim3[4*MAXVARDIM],dcountdim4[4*MAXVARDIM],dcountdim5[4*MAXVARDIM],nloops,nloopslin,nloopsfac,li3,l2,matrow,matroworg,ltime,lreg,leq=0,eqindx=0;//,sizelinvars,totlinvars,templinvars
+  offset_t nreg=0,nint=0,sj,i,i3;
   if(allregset>-1)nreg=ha_set[allregset].size;
   if(alltimeset>-1)nint=ha_set[alltimeset].size;
   int nlinvars,lvar,lvar1,lvar2,lvar3,lvar4,dcount,fdimlin=0,leadlag,varindx1,varindx2;
-  uvadd *counteq1= (uvadd *) calloc (ndblock,sizeof(uvadd));
+  offset_t *counteq1= (offset_t *) calloc (ndblock,sizeof(offset_t));
   for(i=0; i<ndblock; i++)counteq1[i]=counteq[i];
   filehandle = fopen(fname,"r");
   matrow=nintraeq;
@@ -2101,7 +2101,7 @@ int NewMatreadele(char *fname, char *commsyntax,ha_cgeset *ha_set,uvdim nset,ha_
       strcpy(tline,readitem);
       strcpy(line1,readitem);
       np=ha_cgenfind(readitem,"p_");
-      hcge_linvars *LinVars= (hcge_linvars *) calloc (np+1,sizeof(hcge_linvars));
+      eq_var_ref *LinVars= (eq_var_ref *) calloc (np+1,sizeof(eq_var_ref));
       i3=0;
       lvar=0;
       for (i=0; i<np; i++) {
@@ -2257,7 +2257,7 @@ int NewMatreadele(char *fname, char *commsyntax,ha_cgeset *ha_set,uvdim nset,ha_
       }
       nlinvars=i3;
       for (i=0; i<nlinvars; i++) i3+=ha_var[LinVars[i].LinVarIndx].size;
-      ha_cgesetindx *arSet= (ha_cgesetindx *) calloc (fdim+i3+1,sizeof(ha_cgesetindx));
+      quantifier *arSet= (quantifier *) calloc (fdim+i3+1,sizeof(quantifier));
 
       strcpy(line,linecopy);
       nloops=1;
@@ -2270,7 +2270,7 @@ int NewMatreadele(char *fname, char *commsyntax,ha_cgeset *ha_set,uvdim nset,ha_
             readitem = strtok(NULL,",");
           }
           readitem = strtok(NULL,",");
-          strcpy(arSet[i].arIndx,readitem);
+          strcpy(arSet[i].index_name,readitem);
           readitem = strtok(NULL,")");
           for (i4=0; i4<nset; i4++) if(strcmp(readitem,ha_set[i4].setname)==0) {
               arSet[i].setid=i4;
@@ -2316,7 +2316,7 @@ int NewMatreadele(char *fname, char *commsyntax,ha_cgeset *ha_set,uvdim nset,ha_
         nloopslin=nloops;
         if (fdim==0) {
           for (l2=0; l2<ha_var[LinVars[i].LinVarIndx].size; l2++) {
-            strcpy(arSet[i3].arIndx,LinVars[i].dimnames[l2]);
+            strcpy(arSet[i3].index_name,LinVars[i].dimnames[l2]);
             for (i4=0; i4<nset; i4++) if(strcmp(ha_set[i4].setname,LinVars[i].dimsetnames[l2])==0) {
                 break;
               }
@@ -2328,11 +2328,11 @@ int NewMatreadele(char *fname, char *commsyntax,ha_cgeset *ha_set,uvdim nset,ha_
         }
         else for (l2=0; l2<ha_var[LinVars[i].LinVarIndx].size; l2++) {
             for (sj=0; sj<fdim; sj++) {
-              if(strcmp(arSet[sj].arIndx,LinVars[i].dimnames[l2])==0) {
+              if(strcmp(arSet[sj].index_name,LinVars[i].dimnames[l2])==0) {
                 break;
               }
               else if (sj==fdim-1) {
-                strcpy(arSet[fdim+i3].arIndx,LinVars[i].dimnames[l2]);
+                strcpy(arSet[fdim+i3].index_name,LinVars[i].dimnames[l2]);
                 for (i4=0; i4<nset; i4++) if(strcmp(ha_set[i4].setname,LinVars[i].dimsetnames[l2])==0) {
                     break;
                   }
@@ -2353,10 +2353,10 @@ int NewMatreadele(char *fname, char *commsyntax,ha_cgeset *ha_set,uvdim nset,ha_
         else for (dcount=0; dcount<fdim; dcount++) {
             dcountdim2[dcount]=dcountdim1[dcount];
           }
-        nloopsfac=(uvadd)nloopslin/nloops;
+        nloopsfac=(offset_t)nloopslin/nloops;
         for (dcount=0; dcount<ha_var[LinVars[i].LinVarIndx].size; dcount++) {
           for (i4=0; i4<fdimlin; i4++) {
-            if (strcmp(LinVars[i].dimnames[dcount],arSet[i4].arIndx)==0) {
+            if (strcmp(LinVars[i].dimnames[dcount],arSet[i4].index_name)==0) {
               dcountdim5[dcount]=i4;
               break;
             }
@@ -2377,7 +2377,7 @@ int NewMatreadele(char *fname, char *commsyntax,ha_cgeset *ha_set,uvdim nset,ha_
           rowindx=0;
           rowindxorg=0;
           for (dcount=0; dcount<fdimlin; dcount++) {
-            l1=(uvadd) l2/dcountdim2[dcount];
+            l1=(offset_t) l2/dcountdim2[dcount];
             arSet[dcount].indx=l1;
             if(ha_eqint[eqindx]) {
               if(alltimeset>=0&&allregset<0) {
@@ -2422,44 +2422,44 @@ int NewMatreadele(char *fname, char *commsyntax,ha_cgeset *ha_set,uvdim nset,ha_
           li3=0;
           for (dcount=0; dcount<ha_var[LinVars[i].LinVarIndx].size; dcount++) {
             if(supset[dcount]==0) {
-              li3=li3+(arSet[dcountdim5[dcount]].indx+LinVars[i].dimleadlag[dcount])*ha_var[LinVars[i].LinVarIndx].antidims[dcount];
+              li3=li3+(arSet[dcountdim5[dcount]].indx+LinVars[i].dimleadlag[dcount])*ha_var[LinVars[i].LinVarIndx].strides[dcount];
             }
             else {
-              li3=li3+(ha_setele[ha_set[arSet[dcountdim5[dcount]].setid].begadd+arSet[dcountdim5[dcount]].indx].setsh[supset[dcount]]+LinVars[i].dimleadlag[dcount])*ha_var[LinVars[i].LinVarIndx].antidims[dcount];
+              li3=li3+(ha_setele[ha_set[arSet[dcountdim5[dcount]].setid].offset+arSet[dcountdim5[dcount]].indx].superset_pos[supset[dcount]]+LinVars[i].dimleadlag[dcount])*ha_var[LinVars[i].LinVarIndx].strides[dcount];
             }
           }
 
           if(ha_eqint[eqindx]) {
             if(alltimeset>=0&&allregset>=0) {
               if(nesteddbbd==1) {
-                if(ha_eqreg[eqindx]>-1)Jindx=counteq1[(ha_setele[ha_set[arSet[ha_eqtime[eqindx]].setid].begadd+ltime].setsh[ha_set[arSet[ha_eqtime[eqindx]].setid].intsup])*(nreg+1)+ha_setele[ha_set[arSet[ha_eqreg[eqindx]].setid].begadd+lreg].setsh[ha_set[arSet[ha_eqreg[eqindx]].setid].regsup]]+rowindx;
-                else Jindx=counteq1[(ha_setele[ha_set[arSet[ha_eqtime[eqindx]].setid].begadd+ltime].setsh[ha_set[arSet[ha_eqtime[eqindx]].setid].intsup])*(nreg+1)+nreg]+rowindx;
+                if(ha_eqreg[eqindx]>-1)Jindx=counteq1[(ha_setele[ha_set[arSet[ha_eqtime[eqindx]].setid].offset+ltime].superset_pos[ha_set[arSet[ha_eqtime[eqindx]].setid].intsup])*(nreg+1)+ha_setele[ha_set[arSet[ha_eqreg[eqindx]].setid].offset+lreg].superset_pos[ha_set[arSet[ha_eqreg[eqindx]].setid].regsup]]+rowindx;
+                else Jindx=counteq1[(ha_setele[ha_set[arSet[ha_eqtime[eqindx]].setid].offset+ltime].superset_pos[ha_set[arSet[ha_eqtime[eqindx]].setid].intsup])*(nreg+1)+nreg]+rowindx;
               }
               else {
                 if(arSet[ha_eqtime[eqindx]].setid==alltimeset)
-                  Jindx=counteq1[(ha_setele[ha_set[arSet[ha_eqtime[eqindx]].setid].begadd+ltime].setsh[0])*ha_set[arSet[ha_eqreg[eqindx]].setid].size+ha_setele[ha_set[arSet[ha_eqreg[eqindx]].setid].begadd+lreg].setsh[0]]+rowindx;
+                  Jindx=counteq1[(ha_setele[ha_set[arSet[ha_eqtime[eqindx]].setid].offset+ltime].superset_pos[0])*ha_set[arSet[ha_eqreg[eqindx]].setid].size+ha_setele[ha_set[arSet[ha_eqreg[eqindx]].setid].offset+lreg].superset_pos[0]]+rowindx;
                 else {
                   for(i4=1; i4<MAXSUPSET; i4++)if(ha_set[arSet[ha_eqtime[eqindx]].setid].subsetid[i4]=alltimeset)break;
-                  Jindx=counteq1[(ha_setele[ha_set[arSet[ha_eqtime[eqindx]].setid].begadd+ltime].setsh[i4])*ha_set[arSet[ha_eqreg[eqindx]].setid].size+ha_setele[ha_set[arSet[ha_eqreg[eqindx]].setid].begadd+lreg].setsh[0]]+rowindx;
+                  Jindx=counteq1[(ha_setele[ha_set[arSet[ha_eqtime[eqindx]].setid].offset+ltime].superset_pos[i4])*ha_set[arSet[ha_eqreg[eqindx]].setid].size+ha_setele[ha_set[arSet[ha_eqreg[eqindx]].setid].offset+lreg].superset_pos[0]]+rowindx;
                 }
               }
             }
             if(alltimeset>=0&&allregset<0) {
               if(arSet[ha_eqtime[eqindx]].setid==alltimeset)
-                Jindx=counteq1[ha_setele[ha_set[arSet[ha_eqtime[eqindx]].setid].begadd+ltime].setsh[0]]+rowindx;
+                Jindx=counteq1[ha_setele[ha_set[arSet[ha_eqtime[eqindx]].setid].offset+ltime].superset_pos[0]]+rowindx;
               else {
                 for(i4=1; i4<MAXSUPSET; i4++)if(ha_set[arSet[ha_eqtime[eqindx]].setid].subsetid[i4]=alltimeset)break;
-                Jindx=counteq1[ha_setele[ha_set[arSet[ha_eqtime[eqindx]].setid].begadd+ltime].setsh[i4]]+rowindx;
+                Jindx=counteq1[ha_setele[ha_set[arSet[ha_eqtime[eqindx]].setid].offset+ltime].superset_pos[i4]]+rowindx;
               }
             }
-            if(alltimeset<0&&allregset>=0) Jindx=counteq1[ha_setele[ha_set[arSet[ha_eqreg[eqindx]].setid].begadd+ltime].setsh[0]]+rowindx;
+            if(alltimeset<0&&allregset>=0) Jindx=counteq1[ha_setele[ha_set[arSet[ha_eqreg[eqindx]].setid].offset+ltime].superset_pos[0]]+rowindx;
           }
           else Jindx=matrow+rowindx;
-          leq=matroworg+(uvadd)lj/nloopsfac;//matroworg+rowindxorg;
+          leq=matroworg+(offset_t)lj/nloopsfac;//matroworg+rowindxorg;
           ha_eqadd[leq]=Jindx;
-          Iindx=ha_cgeshock[ha_var[LinVars[i].LinVarIndx].begadd+li3].ExoIndx;
+          Iindx=ha_cgeshock[ha_var[LinVars[i].LinVarIndx].offset+li3].exo_index;
           if(Istart<=Jindx&&Jindx<Iend) {
-            if (!ha_cgeshock[ha_var[LinVars[i].LinVarIndx].begadd+li3].ShockId) {
+            if (!ha_cgeshock[ha_var[LinVars[i].LinVarIndx].offset+li3].is_exogenous) {
               if (Istart<=Iindx&&Iindx<Iend) {
                 dnnz[Jindx-Istart]=dnnz[Jindx-Istart]+1;
               }
@@ -2467,7 +2467,7 @@ int NewMatreadele(char *fname, char *commsyntax,ha_cgeset *ha_set,uvdim nset,ha_
                 onnz[Jindx-Istart]=onnz[Jindx-Istart]+1;
               }
             }
-            if (ha_cgeshock[ha_var[LinVars[i].LinVarIndx].begadd+li3].ShockId) {
+            if (ha_cgeshock[ha_var[LinVars[i].LinVarIndx].offset+li3].is_exogenous) {
               if (Istart<=Iindx&&Iindx<Iend) { //&&Iindx<nexo
                 dnnzB[Jindx-Istart]=dnnzB[Jindx-Istart]+1;
               }
@@ -2482,33 +2482,33 @@ int NewMatreadele(char *fname, char *commsyntax,ha_cgeset *ha_set,uvdim nset,ha_
         if(alltimeset>=0&&allregset>=0) {
           if(nesteddbbd==1) {
             if(ha_eqreg[eqindx]>-1)for(lj=0; lj<ha_set[arSet[ha_eqtime[eqindx]].setid].size; lj++)for(l2=0; l2<ha_set[arSet[ha_eqreg[eqindx]].setid].size; l2++) {
-                  counteq1[ha_setele[ha_set[arSet[ha_eqtime[eqindx]].setid].begadd+lj].setsh[ha_set[arSet[ha_eqtime[eqindx]].setid].intsup]*(nreg+1)+ha_setele[ha_set[arSet[ha_eqreg[eqindx]].setid].begadd+l2].setsh[ha_set[arSet[ha_eqreg[eqindx]].setid].regsup]]+=nloops/ha_set[arSet[ha_eqtime[eqindx]].setid].size/ha_set[arSet[ha_eqreg[eqindx]].setid].size;
+                  counteq1[ha_setele[ha_set[arSet[ha_eqtime[eqindx]].setid].offset+lj].superset_pos[ha_set[arSet[ha_eqtime[eqindx]].setid].intsup]*(nreg+1)+ha_setele[ha_set[arSet[ha_eqreg[eqindx]].setid].offset+l2].superset_pos[ha_set[arSet[ha_eqreg[eqindx]].setid].regsup]]+=nloops/ha_set[arSet[ha_eqtime[eqindx]].setid].size/ha_set[arSet[ha_eqreg[eqindx]].setid].size;
                   if(ha_set[arSet[ha_eqreg[eqindx]].setid].regsup!=0)printf("Sub reg not supported in NDBBD!!!\n");
                 }
             else for(lj=0; lj<ha_set[arSet[ha_eqtime[eqindx]].setid].size; lj++)
-                counteq1[ha_setele[ha_set[arSet[ha_eqtime[eqindx]].setid].begadd+lj].setsh[ha_set[arSet[ha_eqtime[eqindx]].setid].intsup]*(nreg+1)+nreg]+=nloops/ha_set[arSet[ha_eqtime[eqindx]].setid].size;
+                counteq1[ha_setele[ha_set[arSet[ha_eqtime[eqindx]].setid].offset+lj].superset_pos[ha_set[arSet[ha_eqtime[eqindx]].setid].intsup]*(nreg+1)+nreg]+=nloops/ha_set[arSet[ha_eqtime[eqindx]].setid].size;
           }
           else {
             if(arSet[ha_eqtime[eqindx]].setid==alltimeset)
               for(lj=0; lj<ha_set[arSet[ha_eqtime[eqindx]].setid].size; lj++)for(l2=0; l2<ha_set[arSet[ha_eqreg[eqindx]].setid].size; l2++)
-                  counteq1[ha_setele[ha_set[arSet[ha_eqtime[eqindx]].setid].begadd+lj].setsh[0]*ha_set[arSet[ha_eqreg[eqindx]].setid].size+ha_setele[ha_set[arSet[ha_eqreg[eqindx]].setid].begadd+l2].setsh[0]]+=nloops/ha_set[arSet[ha_eqtime[eqindx]].setid].size/ha_set[arSet[ha_eqreg[eqindx]].setid].size;
+                  counteq1[ha_setele[ha_set[arSet[ha_eqtime[eqindx]].setid].offset+lj].superset_pos[0]*ha_set[arSet[ha_eqreg[eqindx]].setid].size+ha_setele[ha_set[arSet[ha_eqreg[eqindx]].setid].offset+l2].superset_pos[0]]+=nloops/ha_set[arSet[ha_eqtime[eqindx]].setid].size/ha_set[arSet[ha_eqreg[eqindx]].setid].size;
             else {
               for(lj=0; lj<ha_set[arSet[ha_eqtime[eqindx]].setid].size; lj++)for(l2=0; l2<ha_set[arSet[ha_eqreg[eqindx]].setid].size; l2++) {
                   for(i4=1; i4<MAXSUPSET; i4++)if(ha_set[arSet[ha_eqtime[eqindx]].setid].subsetid[i4]=alltimeset)break;
-                  counteq1[ha_setele[ha_set[arSet[ha_eqtime[eqindx]].setid].begadd+lj].setsh[i4]*ha_set[arSet[ha_eqreg[eqindx]].setid].size+ha_setele[ha_set[arSet[ha_eqreg[eqindx]].setid].begadd+l2].setsh[0]]+=nloops/ha_set[arSet[ha_eqtime[eqindx]].setid].size/ha_set[arSet[ha_eqreg[eqindx]].setid].size;
+                  counteq1[ha_setele[ha_set[arSet[ha_eqtime[eqindx]].setid].offset+lj].superset_pos[i4]*ha_set[arSet[ha_eqreg[eqindx]].setid].size+ha_setele[ha_set[arSet[ha_eqreg[eqindx]].setid].offset+l2].superset_pos[0]]+=nloops/ha_set[arSet[ha_eqtime[eqindx]].setid].size/ha_set[arSet[ha_eqreg[eqindx]].setid].size;
                 }
             }
           }
         }
         if(alltimeset>=0&&allregset<0) {
           if(arSet[ha_eqtime[eqindx]].setid==alltimeset)
-            for(lj=0; lj<ha_set[arSet[ha_eqtime[eqindx]].setid].size; lj++)counteq1[ha_setele[ha_set[arSet[ha_eqtime[eqindx]].setid].begadd+lj].setsh[0]]+=nloops/ha_set[arSet[ha_eqtime[eqindx]].setid].size;
+            for(lj=0; lj<ha_set[arSet[ha_eqtime[eqindx]].setid].size; lj++)counteq1[ha_setele[ha_set[arSet[ha_eqtime[eqindx]].setid].offset+lj].superset_pos[0]]+=nloops/ha_set[arSet[ha_eqtime[eqindx]].setid].size;
           else {
             for(i4=1; i4<MAXSUPSET; i4++)if(ha_set[arSet[ha_eqtime[eqindx]].setid].subsetid[i4]=alltimeset)break;
-            for(lj=0; lj<ha_set[arSet[ha_eqtime[eqindx]].setid].size; lj++)counteq1[ha_setele[ha_set[arSet[ha_eqtime[eqindx]].setid].begadd+lj].setsh[i4]]+=nloops/ha_set[arSet[ha_eqtime[eqindx]].setid].size;
+            for(lj=0; lj<ha_set[arSet[ha_eqtime[eqindx]].setid].size; lj++)counteq1[ha_setele[ha_set[arSet[ha_eqtime[eqindx]].setid].offset+lj].superset_pos[i4]]+=nloops/ha_set[arSet[ha_eqtime[eqindx]].setid].size;
           }
         }
-        if(alltimeset<0&&allregset>=0)for(lj=0; lj<ha_set[arSet[ha_eqreg[eqindx]].setid].size; lj++)counteq1[ha_setele[ha_set[arSet[ha_eqreg[eqindx]].setid].begadd+lj].setsh[0]]+=nloops/ha_set[arSet[ha_eqreg[eqindx]].setid].size;
+        if(alltimeset<0&&allregset>=0)for(lj=0; lj<ha_set[arSet[ha_eqreg[eqindx]].setid].size; lj++)counteq1[ha_setele[ha_set[arSet[ha_eqreg[eqindx]].setid].offset+lj].superset_pos[0]]+=nloops/ha_set[arSet[ha_eqreg[eqindx]].setid].size;
       }
       else matrow+=nloops;
       matroworg+=nloops;
@@ -2522,7 +2522,7 @@ int NewMatreadele(char *fname, char *commsyntax,ha_cgeset *ha_set,uvdim nset,ha_
   return 1;
 }
 
-int HaDBBDMatOder(Mat A, uvadd VecSize, PetscInt mpisize, PetscInt rank, PetscInt Istart, PetscInt Iend, uvadd nvarele, uvadd *ha_eqadd,int *ha_rows,int *ha_cols, uvadd ndblock,int *ha_ndblocks, uvadd *countvarintra1, uvadd *counteq, uvadd *counteqnoadd,uvdim laA,ha_cgetype cntl6) {
+int HaDBBDMatOder(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscInt Istart, PetscInt Iend, offset_t nvarele, offset_t *ha_eqadd,int *ha_rows,int *ha_cols, offset_t ndblock,int *ha_ndblocks, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,solve_real cntl6) {
   IS *rowindices,*colindices;//,isrow,iscol;
   PetscInt bfirst,bend,sblockin,nmatin,nmatinplus,nrowcolin,sumrowcolin;
   Mat *submatA;
@@ -2530,13 +2530,13 @@ int HaDBBDMatOder(Mat A, uvadd VecSize, PetscInt mpisize, PetscInt rank, PetscIn
   PetscScalar *vals;
   PetscErrorCode ierr;
   PetscViewer viewer;
-  uvadd lasize;
+  offset_t lasize;
   int *ha_rows1= (int *) calloc (VecSize,sizeof(int));
   int *ha_cols1= (int *) calloc (VecSize,sizeof(int));
   int *ha_ndblocks1= (int *) calloc (ndblock,sizeof(int));
 
   //*****New order test**********//
-  nmatin=(uvadd)ndblock/mpisize;
+  nmatin=(offset_t)ndblock/mpisize;
   if(nmatin*mpisize<ndblock)nmatinplus=nmatin+1;
   else nmatinplus=nmatin;
   for(i=0; i<mpisize; i++)if(rank+1<=ndblock-mpisize*nmatin)nmatin++;
@@ -2599,11 +2599,11 @@ int HaDBBDMatOder(Mat A, uvadd VecSize, PetscInt mpisize, PetscInt rank, PetscIn
     int *jcn=(int *) calloc (lasize,sizeof(int));
     int *irn1=(int *)malloc(nrow*sizeof(int));
     int *jcn1=(int *)malloc(ncol*sizeof(int));
-    ha_cgetype *values= (ha_cgetype *) calloc (lasize,sizeof(ha_cgetype));
+    solve_real *values= (solve_real *) calloc (lasize,sizeof(solve_real));
     int *keep=(int *) malloc ((nrow+5*ncol+4*ncol+7)*sizeof(int));//ICNTL(6)=1
-  ha_cgetype *w51;
-  if(nrow>ncol) w51=(ha_cgetype *) malloc ((5*nrow)*sizeof(ha_cgetype));
-  else w51=(ha_cgetype *) malloc ((5*ncol)*sizeof(ha_cgetype));
+  solve_real *w51;
+  if(nrow>ncol) w51=(solve_real *) malloc ((5*nrow)*sizeof(solve_real));
+  else w51=(solve_real *) malloc ((5*ncol)*sizeof(solve_real));
   int *iw51=(int *) malloc ((6*nrow+3*ncol)*sizeof(int));
     int *insize=(int *) calloc (6,sizeof(int));
     insize[0]=nrow;
@@ -2657,7 +2657,7 @@ int HaDBBDMatOder(Mat A, uvadd VecSize, PetscInt mpisize, PetscInt rank, PetscIn
 }
 
 
-int HaNDBBDMatOderPre(Mat A, uvadd VecSize, PetscInt mpisize, PetscInt rank, PetscInt Istart, PetscInt Iend,int nreg, int ntime, uvadd nvarele, uvadd *ha_eqadd,int *ha_rows,int *ha_cols, uvadd ndblock,int *ha_ndblocks, uvadd *countvarintra1, uvadd *counteq, uvadd *counteqnoadd,uvdim laA,uvdim laDi,ha_cgetype cntl6,PetscInt* ndbbdrank,PetscBool presol) {
+int HaNDBBDMatOderPre(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscInt Istart, PetscInt Iend,int nreg, int ntime, offset_t nvarele, offset_t *ha_eqadd,int *ha_rows,int *ha_cols, offset_t ndblock,int *ha_ndblocks, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laDi,solve_real cntl6,PetscInt* ndbbdrank,PetscBool presol) {
   FILE *presolfile;
   char j1name[1024],filename[1024],rankname[1024];
   size_t frd;
@@ -2665,8 +2665,8 @@ int HaNDBBDMatOderPre(Mat A, uvadd VecSize, PetscInt mpisize, PetscInt rank, Pet
   PetscInt bfirst,bend,sblockin,nmatin,nmatint,nmatinplus,nrowcolin,sumrowcolin,rfirst,cfirst;
   Mat *submatA=NULL;//,*submatD=NULL;
   PetscInt i,j,j0,j1,j2,j3,j4,j5,j6,j7,j8,nrow,ncol,nz,nz1,*ai,*aj,la;
-  uvadd lasize;
-  ha_cgetype cntl6in;
+  offset_t lasize;
+  solve_real cntl6in;
   PetscScalar *vals;
   PetscErrorCode ierr;
   PetscViewer viewer;
@@ -2674,12 +2674,12 @@ int HaNDBBDMatOderPre(Mat A, uvadd VecSize, PetscInt mpisize, PetscInt rank, Pet
   MatGetInfo(A,MAT_LOCAL,&matinfo);
   printf("rank %d matinfo.nz_used %g\n",rank,matinfo.nz_used);
   int *ha_ndblocks1= (int *) calloc (ndblock,sizeof(int));
-  uvadd *counteq2= (uvadd *) calloc (ndblock+1,sizeof(uvadd));
-  uvadd *counteqnoadd1= (uvadd *) calloc (ndblock,sizeof(uvadd));
-  uvadd *counteqnoadd2= (uvadd *) calloc (ndblock,sizeof(uvadd));
-  uvadd *countvarintra2= (uvadd *) calloc (ndblock+1,sizeof(uvadd));
-  uvadd *countvarintra4= (uvadd *) calloc (ndblock+1,sizeof(uvadd));
-  uvadd *countvarintra6= (uvadd *) calloc (ndblock+1,sizeof(uvadd));
+  offset_t *counteq2= (offset_t *) calloc (ndblock+1,sizeof(offset_t));
+  offset_t *counteqnoadd1= (offset_t *) calloc (ndblock,sizeof(offset_t));
+  offset_t *counteqnoadd2= (offset_t *) calloc (ndblock,sizeof(offset_t));
+  offset_t *countvarintra2= (offset_t *) calloc (ndblock+1,sizeof(offset_t));
+  offset_t *countvarintra4= (offset_t *) calloc (ndblock+1,sizeof(offset_t));
+  offset_t *countvarintra6= (offset_t *) calloc (ndblock+1,sizeof(offset_t));
   if(rank<10)strcpy(rankname,"000");
   if(rank<100&&rank>9)strcpy(rankname,"00");
   if(rank<1000&&rank>99)strcpy(rankname,"0");
@@ -2687,7 +2687,7 @@ int HaNDBBDMatOderPre(Mat A, uvadd VecSize, PetscInt mpisize, PetscInt rank, Pet
   sprintf(filename, "%d",rank);
   strcat(rankname,filename);
   //*****New order test**********//
-  nmatint=(uvadd)ntime/mpisize;
+  nmatint=(offset_t)ntime/mpisize;
   for(i=0; i<mpisize; i++)if(rank+1<=ntime-mpisize*nmatint)nmatint++;
   nmatin=(nreg+1)*nmatint;
   int *begblock= (int *) calloc (mpisize,sizeof(int));
@@ -2770,11 +2770,11 @@ int HaNDBBDMatOderPre(Mat A, uvadd VecSize, PetscInt mpisize, PetscInt rank, Pet
     int*irn1=NULL,*jcn1=NULL;
   irn1=realloc(irn1,nrowmax*sizeof(int));
   jcn1=realloc(jcn1,ncolmax*sizeof(int));
-    ha_cgetype *values= (ha_cgetype *) calloc (lasizemax,sizeof(ha_cgetype));
+    solve_real *values= (solve_real *) calloc (lasizemax,sizeof(solve_real));
   int *keep=(int *) malloc ((nrowmax+5*ncolmax+4*ncolmax+7)*sizeof(int));//ICNTL(6)=1
-  ha_cgetype *w51;
-  if(nrowmax>ncolmax) w51=(ha_cgetype *) malloc ((5*nrowmax)*sizeof(ha_cgetype));
-  else w51=(ha_cgetype *) malloc ((5*ncolmax)*sizeof(ha_cgetype));
+  solve_real *w51;
+  if(nrowmax>ncolmax) w51=(solve_real *) malloc ((5*nrowmax)*sizeof(solve_real));
+  else w51=(solve_real *) malloc ((5*ncolmax)*sizeof(solve_real));
   int *iw51=(int *) malloc ((6*nrowmax+3*ncolmax)*sizeof(int));
     int *insize=(int *) calloc (6,sizeof(int));
   #pragma omp for schedule (static)
@@ -2910,9 +2910,9 @@ int HaNDBBDMatOderPre(Mat A, uvadd VecSize, PetscInt mpisize, PetscInt rank, Pet
     }
 
   }
-  memcpy(counteq,counteq2,(ndblock+1)*sizeof(uvadd));
-  memcpy(counteqnoadd,counteqnoadd2,(ndblock)*sizeof(uvadd));
-  memcpy(countvarintra1,countvarintra4,(ndblock+1)*sizeof(uvadd));
+  memcpy(counteq,counteq2,(ndblock+1)*sizeof(offset_t));
+  memcpy(counteqnoadd,counteqnoadd2,(ndblock)*sizeof(offset_t));
+  memcpy(countvarintra1,countvarintra4,(ndblock+1)*sizeof(offset_t));
   MPI_Barrier(PETSC_COMM_WORLD);
   MPI_Allreduce(ha_cols1,ha_cols,VecSize, MPI_INT, MPI_SUM,PETSC_COMM_WORLD);
   MPI_Allreduce(ha_rows1,ha_rows,VecSize, MPI_INT, MPI_SUM,PETSC_COMM_WORLD);
@@ -2930,7 +2930,7 @@ int HaNDBBDMatOderPre(Mat A, uvadd VecSize, PetscInt mpisize, PetscInt rank, Pet
   return 1;
 }
 
-int HaNDBBDMatOder(Mat A, uvadd VecSize, PetscInt mpisize, PetscInt rank, PetscInt Istart, PetscInt Iend,int nreg, int ntime, uvadd nvarele, uvadd *ha_eqadd,int *ha_rows,int *ha_cols, uvadd ndblock,int *ha_ndblocks, uvadd *countvarintra1, uvadd *counteq, uvadd *counteqnoadd,uvdim laA,uvdim laDi,ha_cgetype cntl6,PetscInt* ndbbdrank,PetscBool presol) {
+int HaNDBBDMatOder(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscInt Istart, PetscInt Iend,int nreg, int ntime, offset_t nvarele, offset_t *ha_eqadd,int *ha_rows,int *ha_cols, offset_t ndblock,int *ha_ndblocks, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laDi,solve_real cntl6,PetscInt* ndbbdrank,PetscBool presol) {
   FILE *presolfile;
   char j1name[1024],filename[1024],rankname[1024];
   size_t frd;
@@ -2943,7 +2943,7 @@ int HaNDBBDMatOder(Mat A, uvadd VecSize, PetscInt mpisize, PetscInt rank, PetscI
   sprintf(filename, "%d",rank);
   strcat(rankname,filename);
   //*****New order test**********//
-  nmatint=(uvadd)ntime/mpisize;
+  nmatint=(offset_t)ntime/mpisize;
   for(i=0; i<mpisize; i++)if(rank+1<=ntime-mpisize*nmatint)nmatint++;
   nmatin=(nreg+1)*nmatint;
   int *begblock= (int *) calloc (mpisize,sizeof(int));
@@ -3059,7 +3059,7 @@ int HaNDBBDMatOder(Mat A, uvadd VecSize, PetscInt mpisize, PetscInt rank, PetscI
 }
 
 
-int HaDBBDParSol(Mat A, Vec b, ha_cgetype *x1, uvadd VecSize, PetscInt mpisize, PetscInt rank, PetscInt Istart, PetscInt Iend,int *ha_rows,int *ha_cols, uvadd ndblock,int *ha_ndblocks, uvadd *countvarintra1, uvadd *counteq, uvadd *counteqnoadd,uvdim laA,uvdim laD,PetscReal cntl3) {//,bool iter
+int HaDBBDParSol(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscInt Istart, PetscInt Iend,int *ha_rows,int *ha_cols, offset_t ndblock,int *ha_ndblocks, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laD,PetscReal cntl3) {//,bool iter
   IS *rowindices,*colindices,*Cindices,*Bindices,*BBindices,*BBiindices;
   const PetscInt *nindices;
   PetscInt bfirst,bend,sblockin,nmatin,nmatinplus,nrowcolin,sumrowcolin,i,i1,j,j0,j1,j2,j3,j4,j5,j6,l0,l1,l2,l3,l4,l5,rank1,proc1=0,nnzmax,j1nz,j1irnbs;
@@ -3067,13 +3067,13 @@ int HaDBBDParSol(Mat A, Vec b, ha_cgetype *x1, uvadd VecSize, PetscInt mpisize, 
   Vec vecxd;
   PetscInt *ai,*aj,*aic,*ajc;
   PetscInt nrow,ncol,nz,nrowc,ncolc,nrowb,ncolb,nzc,nzv;
-  uvadd lasize,ldsize;
+  offset_t lasize,ldsize;
   MPI_Status   status;
   clock_t timestr,timeend;
   int j2int,la1;
   size_t freadresult;
   PetscScalar *vals,*valsc,vecval;
-  ha_cgetype vval;
+  solve_real vval;
   PetscErrorCode ierr;
   PetscViewer viewer;
   FILE* fp1,*fp2,*fp3;
@@ -3085,7 +3085,7 @@ int HaDBBDParSol(Mat A, Vec b, ha_cgetype *x1, uvadd VecSize, PetscInt mpisize, 
   if(rank>=1000)rankname[0]='\0';
   sprintf(filename, "%d",rank);
   strcat(rankname,filename);
-  nmatin=(uvadd)ndblock/mpisize;
+  nmatin=(offset_t)ndblock/mpisize;
   int nmatinBB=1;
   if(nmatin*mpisize<ndblock)nmatinplus=nmatin+1;
   else nmatinplus=nmatin;
@@ -3131,7 +3131,7 @@ int HaDBBDParSol(Mat A, Vec b, ha_cgetype *x1, uvadd VecSize, PetscInt mpisize, 
   PetscInt *indicesB= (PetscInt *) calloc (VecSize-sumrowcolin,sizeof(PetscInt));
   PetscInt *offblock= (PetscInt *) calloc (ndblock+1,sizeof(PetscInt));
   PetscInt *offblockrow= (PetscInt *) calloc (ndblock+1,sizeof(PetscInt));
-  ha_cgetype *vecbiui= (ha_cgetype *) calloc (VecSize-sumrowcolin,sizeof(ha_cgetype));
+  solve_real *vecbiui= (solve_real *) calloc (VecSize-sumrowcolin,sizeof(solve_real));
   offblock[0]=0;
   for(j=0; j<ndblock; j++)offblock[j+1]=offblock[j]+countvarintra1[j+1]-countvarintra1[j]-ha_ndblocks[j];
   offblockrow[0]=0;
@@ -3181,7 +3181,7 @@ int HaDBBDParSol(Mat A, Vec b, ha_cgetype *x1, uvadd VecSize, PetscInt mpisize, 
       MPI_Bcast(&bfirst,1, MPI_INT,j, PETSC_COMM_WORLD);
       MPI_Bcast(&bend,1, MPI_INT,j, PETSC_COMM_WORLD);
       PetscInt *indices= (PetscInt *) calloc (bend,sizeof(PetscInt));
-      ha_cgetype *yi0 = (ha_cgetype*)calloc(bend,sizeof(ha_cgetype));
+      solve_real *yi0 = (solve_real*)calloc(bend,sizeof(solve_real));
       for(j1=0; j1<bend; j1++) { //ha_ndblocks[i+begblock[j]]
         j2=ha_rows[bfirst+j1]+bfirst;
         if(j2>=Istart&&j2<Iend)indices[j1]=j2;
@@ -3189,9 +3189,9 @@ int HaDBBDParSol(Mat A, Vec b, ha_cgetype *x1, uvadd VecSize, PetscInt mpisize, 
       }
       VecGetValues(b,bend,indices,yi0);
 
-      HaReduce(yi0,(forint)bend,mpisize,rank,j);
+      HaReduce(yi0,(fortran_int)bend,mpisize,rank,j);
       if(rank==j&&i<nmatin) {
-        memcpy (yi1[i],yi0,bend*sizeof(ha_cgetype));
+        memcpy (yi1[i],yi0,bend*sizeof(solve_real));
       }
       free(indices);
       free(yi0);
@@ -3323,7 +3323,7 @@ int HaDBBDParSol(Mat A, Vec b, ha_cgetype *x1, uvadd VecSize, PetscInt mpisize, 
   PetscFree(submatBB);
   CHKERRQ(ierr);
   printf("OK1 rank %d sumrowcolin %d\n",rank,sumrowcolin);
-  ha_cgetype *xi1 = (ha_cgetype*)calloc(sumrowcolin,sizeof(ha_cgetype));
+  solve_real *xi1 = (solve_real*)calloc(sumrowcolin,sizeof(solve_real));
   int insizes=17;
   int *insize=(int *) calloc (insizes*nmatin,sizeof(int));
   int *bivinzrow=(int *) calloc (VecSize-sumrowcolin,sizeof(int));
@@ -3373,15 +3373,15 @@ int HaDBBDParSol(Mat A, Vec b, ha_cgetype *x1, uvadd VecSize, PetscInt mpisize, 
   }
   vecbivisize=((long int)bivirowsize)*((long int)bivicolsize);
   if(vecbivisize<0)printf("Overflow detected, the interface problem is too big!!!!!!\n");
-  ha_cgetype *vecbivi= (ha_cgetype *) calloc (vecbivisize,sizeof(ha_cgetype));
+  solve_real *vecbivi= (solve_real *) calloc (vecbivisize,sizeof(solve_real));
   printf("vecbivisize %ld rank %d\n",vecbivisize,rank);
 
-  ha_cgetype *xi1point;
-  uvadd xi1indx=0;
+  solve_real *xi1point;
+  offset_t xi1indx=0;
   int jthrd,nthrd=1;
   nthrd=omp_get_max_threads();
-  uvadd *nthrds= (uvadd *) calloc (nthrd+1,sizeof(uvadd));
-  uvadd *nthrds1= (uvadd *) calloc (nthrd+1,sizeof(uvadd));
+  offset_t *nthrds= (offset_t *) calloc (nthrd+1,sizeof(offset_t));
+  offset_t *nthrds1= (offset_t *) calloc (nthrd+1,sizeof(offset_t));
   #pragma omp parallel private(jthrd,j1,j,timestr,submatCT,ai,aj,vals,nz,nrow,ncol,lasize,aic,ajc,valsc,nzc,nrowc,ncolc,nrowb,ncolb,xi1point,xi1indx,i,timeend) shared(submatA,insize,nthrds,nthrds1)
   {
   jthrd=omp_get_thread_num();
@@ -3420,7 +3420,7 @@ int HaDBBDParSol(Mat A, Vec b, ha_cgetype *x1, uvadd VecSize, PetscInt mpisize, 
       lasize=ceil((laA/100.0)*nz);
       int *irn=(int *) calloc (lasize,sizeof(int));
       int *jcn=(int *) calloc (lasize,sizeof(int));
-      ha_cgetype *values= (ha_cgetype *) calloc (lasize,sizeof(ha_cgetype));
+      solve_real *values= (solve_real *) calloc (lasize,sizeof(solve_real));
       insize[j1*insizes+13]=bivirowsize;
       insize[j1*insizes+14]=bivicolsize;
       insize[j1*insizes]=nrow;
@@ -3436,7 +3436,7 @@ int HaDBBDParSol(Mat A, Vec b, ha_cgetype *x1, uvadd VecSize, PetscInt mpisize, 
       insize[j1*insizes+4]=ncolc;
       memcpy (irn+nz,ai,(nrow+1)*sizeof(PetscInt));
       memcpy (jcn,aj,nz*sizeof(PetscInt));
-      memcpy (values,vals,nz*sizeof(ha_cgetype));
+      memcpy (values,vals,nz*sizeof(solve_real));
       insize[j1*insizes+2]=nz;
       insize[j1*insizes+5]=nzc;
       MatDestroy(&submatA[j1]);
@@ -3517,70 +3517,70 @@ int HaDBBDParSol(Mat A, Vec b, ha_cgetype *x1, uvadd VecSize, PetscInt mpisize, 
   }
   free(bivinzrow1);
   free(bivinzcol1);
-  vecbivi=realloc(vecbivi,lj2*sizeof(ha_cgetype));
+  vecbivi=realloc(vecbivi,lj2*sizeof(solve_real));
   nz0=lj2;
   printf("jjjj1 %ld j2 %ld rank %d nz0 %ld nz3 %ld\n",lj,lj2,rank,nz0,nz3);
   char processor_name[MPI_MAX_PROCESSOR_NAME];
   int name_len,name_len_max,name_beg,class_size,color,group_size,ha_id,group_size1,group_size11,ha_id1;
-  MPI_Comm_rank( HA_COMM, &ha_id);
-  MPI_Comm_size(HA_COMM,&group_size);
+  MPI_Comm_rank( node_comm, &ha_id);
+  MPI_Comm_size(node_comm,&group_size);
   if(ha_id==group_size-1)color=1;
   else color=0;
-  MPI_Comm_rank( HA1_COMM, &ha_id1);
-  MPI_Comm_size(HA1_COMM,&group_size1);
+  MPI_Comm_rank( node_tail_comm, &ha_id1);
+  MPI_Comm_size(node_tail_comm,&group_size1);
   group_size11=group_size1;
   MPI_Bcast(&group_size11,1, MPI_INT,mpisize-1, PETSC_COMM_WORLD);
   int sindx01,sindx02,sindx03;
 
   if(ha_id!=group_size-1) {
     lj2=nz3;
-    MPI_Send(&lj2,1, MPI_LONG,group_size-1, 10, HA_COMM);
+    MPI_Send(&lj2,1, MPI_LONG,group_size-1, 10, node_comm);
     sindx01=lj2/MAXSSIZE;
     sindx03=0;
     for(sindx02=0; sindx02<sindx01; sindx02++) {
-      if(SORD==1)MPI_Send(vecbivi+sindx03,MAXSSIZE, MPI_DOUBLE,group_size-1, 11*sindx01+sindx02, HA_COMM);
-      else MPI_Send(vecbivi+sindx03,MAXSSIZE, MPI_FLOAT,group_size-1, 11*sindx01+sindx02, HA_COMM);
+      if(SORD==1)MPI_Send(vecbivi+sindx03,MAXSSIZE, MPI_DOUBLE,group_size-1, 11*sindx01+sindx02, node_comm);
+      else MPI_Send(vecbivi+sindx03,MAXSSIZE, MPI_FLOAT,group_size-1, 11*sindx01+sindx02, node_comm);
       sindx03+=MAXSSIZE;
     }
-    if(SORD==1)MPI_Send(vecbivi+sindx03,lj2-sindx01*MAXSSIZE, MPI_DOUBLE,group_size-1, 11, HA_COMM);
-    else MPI_Send(vecbivi+sindx03,lj2-sindx01*MAXSSIZE, MPI_FLOAT,group_size-1, 11, HA_COMM);
+    if(SORD==1)MPI_Send(vecbivi+sindx03,lj2-sindx01*MAXSSIZE, MPI_DOUBLE,group_size-1, 11, node_comm);
+    else MPI_Send(vecbivi+sindx03,lj2-sindx01*MAXSSIZE, MPI_FLOAT,group_size-1, 11, node_comm);
     free(vecbivi);
     vecbivi=NULL;
     sindx03=0;
     for(sindx02=0; sindx02<sindx01; sindx02++) {
-      MPI_Send(biviindx1+sindx03,MAXSSIZE, MPI_LONG,group_size-1, 12*sindx01+sindx02, HA_COMM);
+      MPI_Send(biviindx1+sindx03,MAXSSIZE, MPI_LONG,group_size-1, 12*sindx01+sindx02, node_comm);
       sindx03+=MAXSSIZE;
     }
-    MPI_Send(biviindx1+sindx03,lj2-sindx01*MAXSSIZE, MPI_LONG,group_size-1, 12, HA_COMM);
+    MPI_Send(biviindx1+sindx03,lj2-sindx01*MAXSSIZE, MPI_LONG,group_size-1, 12, node_comm);
     free(obiviindx1);
     obiviindx1=NULL;
   }
   if(ha_id==group_size-1) {
     for(j6=0; j6<group_size-1; j6++) {
-      MPI_Recv(&lj2,1, MPI_LONG,  MPI_ANY_SOURCE,10, HA_COMM,&status);
+      MPI_Recv(&lj2,1, MPI_LONG,  MPI_ANY_SOURCE,10, node_comm,&status);
       i=status.MPI_SOURCE;
       obiviindx0=realloc(obiviindx0,(lj2+1)*sizeof(long int));
       obiviindx0[0]=-1;
       biviindx0=obiviindx0;
       biviindx0++;
-      ha_cgetype *vecbivi0= (ha_cgetype *) calloc (lj2,sizeof(ha_cgetype));
+      solve_real *vecbivi0= (solve_real *) calloc (lj2,sizeof(solve_real));
       sindx01=lj2/MAXSSIZE;
       sindx03=0;
       for(sindx02=0; sindx02<sindx01; sindx02++) {
-        if(SORD==1)MPI_Recv(vecbivi0+sindx03,MAXSSIZE, MPI_DOUBLE,i,11*sindx01+sindx02, HA_COMM,&status);
-        else MPI_Recv(vecbivi0+sindx03,MAXSSIZE, MPI_FLOAT,i,11*sindx01+sindx02, HA_COMM,&status);
+        if(SORD==1)MPI_Recv(vecbivi0+sindx03,MAXSSIZE, MPI_DOUBLE,i,11*sindx01+sindx02, node_comm,&status);
+        else MPI_Recv(vecbivi0+sindx03,MAXSSIZE, MPI_FLOAT,i,11*sindx01+sindx02, node_comm,&status);
         sindx03+=MAXSSIZE;
       }
-      if(SORD==1)MPI_Recv(vecbivi0+sindx03,lj2-sindx01*MAXSSIZE, MPI_DOUBLE,i,11, HA_COMM,&status);
-      else MPI_Recv(vecbivi0+sindx03,lj2-sindx01*MAXSSIZE, MPI_FLOAT,i,11, HA_COMM,&status);
+      if(SORD==1)MPI_Recv(vecbivi0+sindx03,lj2-sindx01*MAXSSIZE, MPI_DOUBLE,i,11, node_comm,&status);
+      else MPI_Recv(vecbivi0+sindx03,lj2-sindx01*MAXSSIZE, MPI_FLOAT,i,11, node_comm,&status);
       sindx03=0;
       for(sindx02=0; sindx02<sindx01; sindx02++) {
-        MPI_Recv(biviindx0+sindx03,MAXSSIZE, MPI_LONG,i,12*sindx01+sindx02, HA_COMM,&status);
+        MPI_Recv(biviindx0+sindx03,MAXSSIZE, MPI_LONG,i,12*sindx01+sindx02, node_comm,&status);
         sindx03+=MAXSSIZE;
       }
-      MPI_Recv(biviindx0+sindx03,lj2-sindx01*MAXSSIZE, MPI_LONG,i,12, HA_COMM,&status);
+      MPI_Recv(biviindx0+sindx03,lj2-sindx01*MAXSSIZE, MPI_LONG,i,12, node_comm,&status);
       my_spar_compl_(biviindx1,&nz0,biviindx0,&lj2,&nz1);
-      vecbivi=realloc(vecbivi,nz1*sizeof(ha_cgetype));
+      vecbivi=realloc(vecbivi,nz1*sizeof(solve_real));
       obiviindx1=realloc(obiviindx1,(nz1+1)*sizeof(long int));
       obiviindx1[0]=-1;
       biviindx1=obiviindx1;
@@ -3599,22 +3599,22 @@ int HaDBBDParSol(Mat A, Vec b, ha_cgetype *x1, uvadd VecSize, PetscInt mpisize, 
     nz3=nz0;
     if(ha_id1!=group_size1-1) {
       lj2=nz3;
-      MPI_Send(&lj2,1, MPI_LONG,group_size1-1, 10, HA1_COMM);
+      MPI_Send(&lj2,1, MPI_LONG,group_size1-1, 10, node_tail_comm);
       sindx01=lj2/MAXSSIZE;
       sindx03=0;
       for(sindx02=0; sindx02<sindx01; sindx02++) {
-        if(SORD==1) MPI_Send(vecbivi+sindx03,MAXSSIZE, MPI_DOUBLE,group_size1-1, 11*sindx01+sindx02, HA1_COMM);
-        else MPI_Send(vecbivi+sindx03,MAXSSIZE, MPI_FLOAT,group_size1-1, 11*sindx01+sindx02, HA1_COMM);
+        if(SORD==1) MPI_Send(vecbivi+sindx03,MAXSSIZE, MPI_DOUBLE,group_size1-1, 11*sindx01+sindx02, node_tail_comm);
+        else MPI_Send(vecbivi+sindx03,MAXSSIZE, MPI_FLOAT,group_size1-1, 11*sindx01+sindx02, node_tail_comm);
         sindx03+=MAXSSIZE;
       }
-      if(SORD==1) MPI_Send(vecbivi+sindx03,lj2-sindx01*MAXSSIZE, MPI_DOUBLE,group_size1-1, 11, HA1_COMM);
-      else MPI_Send(vecbivi+sindx03,lj2-sindx01*MAXSSIZE, MPI_FLOAT,group_size1-1, 11, HA1_COMM);
+      if(SORD==1) MPI_Send(vecbivi+sindx03,lj2-sindx01*MAXSSIZE, MPI_DOUBLE,group_size1-1, 11, node_tail_comm);
+      else MPI_Send(vecbivi+sindx03,lj2-sindx01*MAXSSIZE, MPI_FLOAT,group_size1-1, 11, node_tail_comm);
       sindx03=0;
       for(sindx02=0; sindx02<sindx01; sindx02++) {
-        MPI_Send(biviindx1+sindx03,MAXSSIZE, MPI_LONG,group_size1-1, 12*sindx01+sindx02, HA1_COMM);
+        MPI_Send(biviindx1+sindx03,MAXSSIZE, MPI_LONG,group_size1-1, 12*sindx01+sindx02, node_tail_comm);
         sindx03+=MAXSSIZE;
       }
-      MPI_Send(biviindx1+sindx03,lj2-sindx01*MAXSSIZE, MPI_LONG,group_size1-1, 12, HA1_COMM);
+      MPI_Send(biviindx1+sindx03,lj2-sindx01*MAXSSIZE, MPI_LONG,group_size1-1, 12, node_tail_comm);
       free(obiviindx1);
       obiviindx1=NULL;
       free(vecbivi);
@@ -3622,30 +3622,30 @@ int HaDBBDParSol(Mat A, Vec b, ha_cgetype *x1, uvadd VecSize, PetscInt mpisize, 
     }
     if(ha_id1==group_size1-1) {
       for(j6=0; j6<group_size1-1; j6++) {
-        MPI_Recv(&lj2,1, MPI_LONG,  MPI_ANY_SOURCE,10, HA1_COMM,&status);
+        MPI_Recv(&lj2,1, MPI_LONG,  MPI_ANY_SOURCE,10, node_tail_comm,&status);
         i=status.MPI_SOURCE;
         obiviindx0=realloc(obiviindx0,(lj2+1)*sizeof(long int));
         obiviindx0[0]=-1;
         biviindx0=obiviindx0;
         biviindx0++;
-        ha_cgetype *vecbivi0= (ha_cgetype *) calloc (lj2,sizeof(ha_cgetype));
+        solve_real *vecbivi0= (solve_real *) calloc (lj2,sizeof(solve_real));
         sindx01=lj2/MAXSSIZE;
         sindx03=0;
         for(sindx02=0; sindx02<sindx01; sindx02++) {
-          if(SORD==1) MPI_Recv(vecbivi0+sindx03,MAXSSIZE, MPI_DOUBLE,i,11*sindx01+sindx02, HA1_COMM,&status);
-          else MPI_Recv(vecbivi0+sindx03,MAXSSIZE, MPI_FLOAT,i,11*sindx01+sindx02, HA1_COMM,&status);
+          if(SORD==1) MPI_Recv(vecbivi0+sindx03,MAXSSIZE, MPI_DOUBLE,i,11*sindx01+sindx02, node_tail_comm,&status);
+          else MPI_Recv(vecbivi0+sindx03,MAXSSIZE, MPI_FLOAT,i,11*sindx01+sindx02, node_tail_comm,&status);
           sindx03+=MAXSSIZE;
         }
-        if(SORD==1) MPI_Recv(vecbivi0+sindx03,lj2-sindx01*MAXSSIZE, MPI_DOUBLE,i,11, HA1_COMM,&status);
-        else MPI_Recv(vecbivi0+sindx03,lj2-sindx01*MAXSSIZE, MPI_FLOAT,i,11, HA1_COMM,&status);
+        if(SORD==1) MPI_Recv(vecbivi0+sindx03,lj2-sindx01*MAXSSIZE, MPI_DOUBLE,i,11, node_tail_comm,&status);
+        else MPI_Recv(vecbivi0+sindx03,lj2-sindx01*MAXSSIZE, MPI_FLOAT,i,11, node_tail_comm,&status);
         sindx03=0;
         for(sindx02=0; sindx02<sindx01; sindx02++) {
-          MPI_Recv(biviindx0+sindx03,MAXSSIZE, MPI_LONG,i,12*sindx01+sindx02, HA1_COMM,&status);
+          MPI_Recv(biviindx0+sindx03,MAXSSIZE, MPI_LONG,i,12*sindx01+sindx02, node_tail_comm,&status);
           sindx03+=MAXSSIZE;
         }
-        MPI_Recv(biviindx0+sindx03,lj2-sindx01*MAXSSIZE, MPI_LONG,i,12, HA1_COMM,&status);
+        MPI_Recv(biviindx0+sindx03,lj2-sindx01*MAXSSIZE, MPI_LONG,i,12, node_tail_comm,&status);
         my_spar_compl_(biviindx1,&nz0,biviindx0,&lj2,&nz1);
-        vecbivi=realloc(vecbivi,nz1*sizeof(ha_cgetype));
+        vecbivi=realloc(vecbivi,nz1*sizeof(solve_real));
         obiviindx1=realloc(obiviindx1,(nz1+1)*sizeof(long int));
         obiviindx1[0]=-1;
         biviindx1=obiviindx1;
@@ -3660,7 +3660,7 @@ int HaDBBDParSol(Mat A, Vec b, ha_cgetype *x1, uvadd VecSize, PetscInt mpisize, 
     }
   }
 
-  forint vecbiuisize=0;
+  fortran_int vecbiuisize=0;
   vecbiuisize=VecSize-sumrowcolin;
   printf("after bivi rank %d\n",rank);
   HaReduceNoComp(vecbiui,vecbiuisize,mpisize,rank,mpisize-1);
@@ -3670,8 +3670,8 @@ int HaDBBDParSol(Mat A, Vec b, ha_cgetype *x1, uvadd VecSize, PetscInt mpisize, 
     vecbiui=NULL;
   }
   timestr=clock();
-  ha_cgetype *xd;//= (ha_cgetype*)calloc(vecbiuisize,sizeof(ha_cgetype));
-  ha_cgetype *x0;//,*vecbivi0;//= (ha_cgetype*)calloc(VecSize,sizeof(ha_cgetype));
+  solve_real *xd;//= (ha_cgetype*)calloc(vecbiuisize,sizeof(ha_cgetype));
+  solve_real *x0;//,*vecbivi0;//= (ha_cgetype*)calloc(VecSize,sizeof(ha_cgetype));
   long int j7,lnz;
   if(rank==mpisize-1) {
     Mat_SeqAIJ         *aa=(Mat_SeqAIJ*)submatD[0]->data;//*aa=subA->data;
@@ -3706,7 +3706,7 @@ int HaDBBDParSol(Mat A, Vec b, ha_cgetype *x1, uvadd VecSize, PetscInt mpisize, 
 
     printf("nz1 %ld\n",nz1);
     ldsize=ceil((laD/100.0)*nz1);
-    vecbivi=realloc(vecbivi,ldsize*sizeof(ha_cgetype));
+    vecbivi=realloc(vecbivi,ldsize*sizeof(solve_real));
     int *irn1=(int *) calloc (nz1,sizeof(int));
     int *jcn=(int *) calloc (ldsize,sizeof(int));
     printf("indx0 %ld indx1 %ld\n",obiviindx1[0],obiviindx0[0]);
@@ -3728,7 +3728,7 @@ int HaDBBDParSol(Mat A, Vec b, ha_cgetype *x1, uvadd VecSize, PetscInt mpisize, 
     insizeD[3]=laD;
     insizeD[5]=ldsize;
     printf("ok\n");
-    xd=(ha_cgetype *) calloc (vecbiuisize,sizeof(ha_cgetype));//realloc (xd,vecbiuisize*sizeof(ha_cgetype));
+    xd=(solve_real *) calloc (vecbiuisize,sizeof(solve_real));//realloc (xd,vecbiuisize*sizeof(ha_cgetype));
     printf("ok!!!!!!!! vecbiuisize %ld nrow %d\n",vecbiuisize,nrow);
     spec48_ssol2la_(insizeD,irn1,jcn,vecbivi,vecbiui,xd);
     printf("ok!!!!!!!!\n");
@@ -3742,7 +3742,7 @@ int HaDBBDParSol(Mat A, Vec b, ha_cgetype *x1, uvadd VecSize, PetscInt mpisize, 
     free(irn1);
     free(jcn);
     free(insizeD);
-    x0=(ha_cgetype *) calloc (VecSize,sizeof(ha_cgetype));//realloc (x0,*sizeof(ha_cgetype));
+    x0=(solve_real *) calloc (VecSize,sizeof(solve_real));//realloc (x0,*sizeof(ha_cgetype));
     for(i=0; i<vecbiuisize; i++) {
       x0[indicesC[i]]=xd[i];
     }
@@ -3757,8 +3757,8 @@ int HaDBBDParSol(Mat A, Vec b, ha_cgetype *x1, uvadd VecSize, PetscInt mpisize, 
   free(vecbivi);
   free(indicesC);
   if(rank!=mpisize-1) {
-    xd=(ha_cgetype *) calloc (vecbiuisize,sizeof(ha_cgetype));//realloc (xd,vecbiuisize*sizeof(ha_cgetype));
-    x0=(ha_cgetype *) calloc (VecSize,sizeof(ha_cgetype));//realloc (x0,*sizeof(ha_cgetype));
+    xd=(solve_real *) calloc (vecbiuisize,sizeof(solve_real));//realloc (xd,vecbiuisize*sizeof(ha_cgetype));
+    x0=(solve_real *) calloc (VecSize,sizeof(solve_real));//realloc (x0,*sizeof(ha_cgetype));
   }
   PetscFree(submatD);
   MPI_Barrier(PETSC_COMM_WORLD);
@@ -3769,7 +3769,7 @@ int HaDBBDParSol(Mat A, Vec b, ha_cgetype *x1, uvadd VecSize, PetscInt mpisize, 
   xi1indx=0;
   for(j1=0; j1<nmatinplus; j1++) {
     if(j1<nmatin) {
-      ha_cgetype *biui0= (ha_cgetype *) calloc (ha_ndblocks[j1+begblock[rank]],sizeof(ha_cgetype));
+      solve_real *biui0= (solve_real *) calloc (ha_ndblocks[j1+begblock[rank]],sizeof(solve_real));
 
       fp1 = fopen(fn01[j1], "rb");
       if (fp1==NULL)printf("File opening error\n");
@@ -3780,10 +3780,10 @@ int HaDBBDParSol(Mat A, Vec b, ha_cgetype *x1, uvadd VecSize, PetscInt mpisize, 
       la1=ceil((insize[j1*insizes+9]/100.0)*insize[j1*insizes+2]);
       int *irne = (int*)calloc(la1,sizeof(int));
       int *keep = (int*)calloc(insize[j1*insizes+12],sizeof(int));
-      ha_cgetype *vale = (ha_cgetype*)calloc(la1,sizeof(ha_cgetype));
+      solve_real *vale = (solve_real*)calloc(la1,sizeof(solve_real));
       freadresult=fread(irne,sizeof(int),la1,fp1);
       freadresult=fread(keep,sizeof(int),insize[j1*insizes+12],fp2);
-      freadresult=fread(vale,sizeof(ha_cgetype),la1,fp3);
+      freadresult=fread(vale,sizeof(solve_real),la1,fp3);
       fclose(fp1);
       fclose(fp2);
       fclose(fp3);
@@ -3797,7 +3797,7 @@ int HaDBBDParSol(Mat A, Vec b, ha_cgetype *x1, uvadd VecSize, PetscInt mpisize, 
       nz=ac->nz;
       nrow=submatC[j1]->rmap->n;
       ncol=submatC[j1]->cmap->n;
-      ha_cgetype *be0 = (ha_cgetype*)calloc(nrow,sizeof(ha_cgetype));
+      solve_real *be0 = (solve_real*)calloc(nrow,sizeof(solve_real));
       for(i=0; i<nrow-1; i++) {
         for(j=ai[i]; j<ai[i+1]; j++) {
           be0[i]+=vals[j]*xd[aj[j]];
@@ -3852,21 +3852,21 @@ int HaDBBDParSol(Mat A, Vec b, ha_cgetype *x1, uvadd VecSize, PetscInt mpisize, 
   return 0;
 }
 
-int HaNDBBDParPre(Mat A, Vec b, ha_cgetype *x1, uvadd VecSize, PetscInt mpisize, PetscInt rank, PetscInt Istart, PetscInt Iend,int *ha_rows,int *ha_cols, uvadd ndblock,uvadd nreg,uvadd ntime,int *ha_ndblocks, uvadd *countvarintra1, uvadd *counteq, uvadd *counteqnoadd,uvdim laA,uvdim laDi,uvdim laD,PetscReal cntl3,PetscReal cntl6,PetscBool presol) {//,bool iter
+int HaNDBBDParPre(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscInt Istart, PetscInt Iend,int *ha_rows,int *ha_cols, offset_t ndblock,offset_t nreg,offset_t ntime,int *ha_ndblocks, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laDi,dim_t laD,PetscReal cntl3,PetscReal cntl6,PetscBool presol) {//,bool iter
   IS *rowindices=NULL,*colindices=NULL,*colindicesbc1=NULL,*rowBBij=NULL,*colBBij=NULL;//,*colindicesbcpm,*colindicesbcpm1
   PetscInt bfirst,bend,sblockin,nmatin,nmatinplus,nmatint,nmatinplust,nmatminust,nrowcolin,i,i1,j,j0,j1,j2,j3,j4,j5,j6,j7,l0,l1,l2,l3,l4,l5,rank1,proc1=0,nnzmax,j1nz,j1irnbs;//,sumrowcolin
   Mat *submatAij=NULL,*submatBBij=NULL;//,*submatCij,*submatBij;,*submatB
   Vec vecxd;
   PetscInt *ai,*aj,*a1i,*a1j,*a2i,*a2j,*aic,*ajc;
   PetscReal cntl6in;
-  uvadd lasize,ldsize;
+  offset_t lasize,ldsize;
   size_t freadresult,fwrt;
   PetscInt nrow,ncol,nz,nrowc,ncolc,nrowb,ncolb,nzc,nzv;
   MPI_Status   status;
   int j2int,la1,fd1,fd2,fd3,unequal=0;
   bool ifremove=false;
   PetscScalar *vals,*val1s,*val2s,*valsc,vecval;
-  ha_cgetype vval;
+  solve_real vval;
   PetscErrorCode ierr;
   PetscViewer viewer;
   FILE* presolfile;
@@ -3880,7 +3880,7 @@ int HaNDBBDParPre(Mat A, Vec b, ha_cgetype *x1, uvadd VecSize, PetscInt mpisize,
   sprintf(filename, "%d",rank);
   strcat(rankname,filename);
   int nmatinBB=1;
-  nmatint=(uvadd)ntime/mpisize;
+  nmatint=(offset_t)ntime/mpisize;
   if(nmatint*mpisize<ntime)unequal=1;
   nmatminust=nmatint;
   if(nmatint*mpisize<ntime)nmatinplust=nmatint+1;
@@ -4121,7 +4121,7 @@ int HaNDBBDParPre(Mat A, Vec b, ha_cgetype *x1, uvadd VecSize, PetscInt mpisize,
   windx=bindx;
   Mat_SeqAIJ         *aa,*ac,*ab;
   Mat submatCT;
-  ha_cgetype *vecbivi=NULL;
+  solve_real *vecbivi=NULL;
   long int bbrowijmax=0,bivirowsizemax=0,bivicolsizemax=0,vecbivisizemax=0,lasizemax=0,nz1max=0,nrowmax=0,ncolmax=0,nrowamax=0,ncolamax=0,nebmax=0;
   #pragma omp for schedule (static)
   for(j3=0; j3<nmatint; j3++) {
@@ -4185,26 +4185,26 @@ int HaNDBBDParPre(Mat A, Vec b, ha_cgetype *x1, uvadd VecSize, PetscInt mpisize,
     if(bivinzrow1==NULL)printf("Error!!!! No memory left for bivinzrow1!\n");
     bivinzcol1=realloc (bivinzcol1,bivicolsizemax*sizeof(long int));
     if(bivinzcol1==NULL)printf("Error!!!! No memory left for bivinzcol1!\n");
-      vecbivi= (ha_cgetype *) malloc (vecbivisizemax*sizeof(ha_cgetype));
+      vecbivi= (solve_real *) malloc (vecbivisizemax*sizeof(solve_real));
     if(vecbivi==NULL)printf("Error!!!! No memory left for vecbivi!\n");
       irn=(int *) malloc (lasizemax*sizeof(int));
     if(irn==NULL)printf("Error!!!! No memory left for irn!\n");
       jcn=(int *) malloc (lasizemax*sizeof(int));
     if(jcn==NULL)printf("Error!!!! No memory left for jcn!\n");
-      ha_cgetype *values= (ha_cgetype *) calloc (lasizemax,sizeof(ha_cgetype));
+      solve_real *values= (solve_real *) calloc (lasizemax,sizeof(solve_real));
     if(values==NULL)printf("Error!!!! No memory left for values!\n");
       int* jcnb1=(int *) malloc (nebmax*sizeof(int));
     if(jcnb1==NULL)printf("Error!!!! No memory left for jcnb1!\n");
-      ha_cgetype *sol48= (ha_cgetype *) malloc (nrowamax*sizeof(ha_cgetype));
+      solve_real *sol48= (solve_real *) malloc (nrowamax*sizeof(solve_real));
     if(sol48==NULL)printf("Error!!!! No memory left for sol48!\n");
-      ha_cgetype *b48= (ha_cgetype *) malloc (nrowamax*sizeof(ha_cgetype));
+      solve_real *b48= (solve_real *) malloc (nrowamax*sizeof(solve_real));
     if(b48==NULL)printf("Error!!!! No memory left for b48!\n");
       int* keep=NULL,*iw51=NULL;
   keep=(int *) malloc ((nrowamax+5*ncolamax+4*ncolamax+7)*sizeof(int));//ICNTL(6)=1
     if(keep==NULL)printf("Error!!!! No memory left for keep!\n");
-  ha_cgetype *w51=NULL;
-  if(nrowamax>ncolamax) w51=(ha_cgetype *) malloc ((5*nrowamax)*sizeof(ha_cgetype));
-  else w51=(ha_cgetype *) malloc ((5*ncolamax)*sizeof(ha_cgetype));
+  solve_real *w51=NULL;
+  if(nrowamax>ncolamax) w51=(solve_real *) malloc ((5*nrowamax)*sizeof(solve_real));
+  else w51=(solve_real *) malloc ((5*ncolamax)*sizeof(solve_real));
     if(w51==NULL)printf("Error!!!! No memory left for w51!\n");
   iw51=(int *) malloc ((6*nrowamax+3*ncolamax)*sizeof(int));
     if(iw51==NULL)printf("Error!!!! No memory left for iw51!\n");
@@ -4255,7 +4255,7 @@ int HaNDBBDParPre(Mat A, Vec b, ha_cgetype *x1, uvadd VecSize, PetscInt mpisize,
     vecbivisize=((long int)bivirowsize)*((long int)bivicolsize);
     printf("rank %d vecbivisize %ld bivirowsize %d bivicolsize %d\n",rank,vecbivisize,bivirowsize,bivicolsize);
     if(vecbivisize<0)printf("Overflow detected, the interface problem is too big!!!!!!\n");
-    memset(vecbivi,0,vecbivisize*sizeof(ha_cgetype));
+    memset(vecbivi,0,vecbivisize*sizeof(solve_real));
     for(j1=0; j1<nreg; j1++) {
       j4=j1+j3*(nreg+1);
       aa=(Mat_SeqAIJ*)submatAij[j4]->data;//*aa=subA->data;
@@ -4287,7 +4287,7 @@ int HaNDBBDParPre(Mat A, Vec b, ha_cgetype *x1, uvadd VecSize, PetscInt mpisize,
       insize[j4*insizes+4]=ncolc;
       memcpy (irn+nz,ai,(nrow+1)*sizeof(PetscInt));
       memcpy (jcn,aj,nz*sizeof(PetscInt));
-      memcpy (values,vals,nz*sizeof(ha_cgetype));
+      memcpy (values,vals,nz*sizeof(solve_real));
       insize[j4*insizes+2]=nz;
       insize[j4*insizes+5]=nzc;
       MatDestroy(&submatAij[j4]);//1
@@ -4381,7 +4381,7 @@ int HaNDBBDParPre(Mat A, Vec b, ha_cgetype *x1, uvadd VecSize, PetscInt mpisize,
       if((presolfile=fopen(filename, "wb"))==NULL) {
         printf("Cannot open file.\n");
       }
-      fwrt=fwrite(vecbivi, sizeof(ha_cgetype),nz1, presolfile);
+      fwrt=fwrite(vecbivi, sizeof(solve_real),nz1, presolfile);
       if(fwrt==0)printf("File write error.");
       fclose(presolfile);
       strcpy(filename,"_rbvi");
@@ -4411,7 +4411,7 @@ int HaNDBBDParPre(Mat A, Vec b, ha_cgetype *x1, uvadd VecSize, PetscInt mpisize,
       strcat(filename,j1name);
       strcat(filename,".bin");
       fd1 = open(filename,O_WRONLY|O_CREAT|O_TRUNC, 0644);
-      fwrt = write(fd1,vecbivi, sizeof(ha_cgetype)*nz1);
+      fwrt = write(fd1,vecbivi, sizeof(solve_real)*nz1);
       close(fd1);
       strcpy(filename,"_rbvi");
       strcat(filename,rankname);
@@ -4513,12 +4513,12 @@ int HaNDBBDParPre(Mat A, Vec b, ha_cgetype *x1, uvadd VecSize, PetscInt mpisize,
   if(jcn==NULL)printf("Error!!!! No memory left for jcn!\n");
   keep=(int *) malloc ((nrowmax+5*ncolmax+4*ncolmax+7)*sizeof(int));//ICNTL(6)=1
   if(keep==NULL)printf("Error!!!! No memory left for keep!\n");
-  if(nrowmax>ncolmax) w51=(ha_cgetype *) malloc ((5*nrowmax)*sizeof(ha_cgetype));
-  else w51=(ha_cgetype *) malloc ((5*ncolmax)*sizeof(ha_cgetype));
+  if(nrowmax>ncolmax) w51=(solve_real *) malloc ((5*nrowmax)*sizeof(solve_real));
+  else w51=(solve_real *) malloc ((5*ncolmax)*sizeof(solve_real));
   if(w51==NULL)printf("Error!!!! No memory left for w51!\n");
   iw51=(int *) malloc ((6*nrowmax+3*ncolmax)*sizeof(int));
   if(iw51==NULL)printf("Error!!!! No memory left for iw51!\n");
-  vecbivi=realloc(vecbivi,ldsize*sizeof(ha_cgetype));
+  vecbivi=realloc(vecbivi,ldsize*sizeof(solve_real));
   if(vecbivi==NULL)printf("Error!!!! No memory left for vecbivi!\n");
   int *insizeda=(int *) calloc (5+nreg*insizes,sizeof(int));
   #pragma omp for schedule (static)
@@ -4552,7 +4552,7 @@ int HaNDBBDParPre(Mat A, Vec b, ha_cgetype *x1, uvadd VecSize, PetscInt mpisize,
       if((presolfile=fopen(filename, "r"))==NULL) {
         printf("Cannot open file.\n");
       }
-      fwrt=fread(vecbivi, sizeof(ha_cgetype), insizeda[2], presolfile);
+      fwrt=fread(vecbivi, sizeof(solve_real), insizeda[2], presolfile);
       if(fwrt== 0) printf("File read error %ld %d.\n",fwrt,insizeda[2]);
       fclose(presolfile);
       strcpy(filename,"_rbvi");
@@ -4667,7 +4667,7 @@ int HaNDBBDParPre(Mat A, Vec b, ha_cgetype *x1, uvadd VecSize, PetscInt mpisize,
 }
 
 
-int HaNDBBDParSol(Mat A, Vec b, ha_cgetype *x1, uvadd VecSize, PetscInt mpisize, PetscInt rank, PetscInt Istart, PetscInt Iend,int *ha_rows,int *ha_cols, uvadd ndblock,uvadd nreg,uvadd ntime,int *ha_ndblocks, uvadd *countvarintra1, uvadd *counteq, uvadd *counteqnoadd,uvdim laA,uvdim laDi,uvdim laD,PetscReal cntl3,PetscReal cntl6,PetscBool presol) {//,bool iter
+int HaNDBBDParSol(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscInt Istart, PetscInt Iend,int *ha_rows,int *ha_cols, offset_t ndblock,offset_t nreg,offset_t ntime,int *ha_ndblocks, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laDi,dim_t laD,PetscReal cntl3,PetscReal cntl6,PetscBool presol) {//,bool iter
   IS *rowindices=NULL,*colindices=NULL,*rowindicesbc=NULL,*colindicesbc1=NULL,*colindicesbc2=NULL,*Cindices=NULL,*Bindices=NULL,Cindicesc,Bindicesc,*BBindices=NULL,*BBiindices=NULL,*rowBBij=NULL,*colBBij=NULL;//,*colindicesbcpm,*colindicesbcpm1
   const PetscInt *nindices;
   PetscInt bfirst,bend,sblockin,nmatin,nmatinplus,nmatint,nmatinplust,nmatminust,nrowcolin,sumrowcolin,i,i1,j,j0,j1,j2,j3,j4,j5,j6,j7,l0,l1,l2,l3,l4,l5,rank1,proc1=0,nnzmax,j1nz,j1irnbs;
@@ -4675,7 +4675,7 @@ int HaNDBBDParSol(Mat A, Vec b, ha_cgetype *x1, uvadd VecSize, PetscInt mpisize,
   Vec vecxd;
   PetscInt *ai,*aj,*a1i,*a1j,*a2i,*a2j,*aic,*ajc;
   PetscReal cntl6in;
-  uvadd ldsize;
+  offset_t ldsize;
   long int *biviindx1,*biviindx0,j7l;
   long int *obiviindx1= NULL;//(long int*)calloc(1,sizeof(long int));
   long int *obiviindx0= NULL;//(long int*)calloc(1,sizeof(long int));
@@ -4687,7 +4687,7 @@ int HaNDBBDParSol(Mat A, Vec b, ha_cgetype *x1, uvadd VecSize, PetscInt mpisize,
   nthrd=omp_get_max_threads( );
   bool ifremove=false,iterstop;
   PetscScalar *vals,*val1s,*val2s,*valsc,vecval;
-  ha_cgetype vval;
+  solve_real vval;
   PetscErrorCode ierr;
   PetscViewer viewer;
   FILE* fp1,*fp2,*fp3,*presolfile;
@@ -4702,7 +4702,7 @@ int HaNDBBDParSol(Mat A, Vec b, ha_cgetype *x1, uvadd VecSize, PetscInt mpisize,
   strcat(rankname,filename);
   int nmatinBB=1;
   //reg matrix in one process only
-  nmatint=(uvadd)ntime/mpisize;
+  nmatint=(offset_t)ntime/mpisize;
   if(nmatint*mpisize<ntime)unequal=1;
   nmatminust=nmatint;
   if(nmatint*mpisize<ntime)nmatinplust=nmatint+1;
@@ -4774,9 +4774,9 @@ int HaNDBBDParSol(Mat A, Vec b, ha_cgetype *x1, uvadd VecSize, PetscInt mpisize,
     submatB2[i] = (Mat*)calloc(1,sizeof(Mat));
   }
 
-  ha_cgetype **yi2= (ha_cgetype**)calloc(nmatin,sizeof(ha_cgetype*));
+  solve_real **yi2= (solve_real**)calloc(nmatin,sizeof(solve_real*));
   for (i=0; i<nmatin; i++) {
-    yi2[i] = (ha_cgetype*)calloc(ha_ndblocks[i+begblock[rank]],sizeof(ha_cgetype));
+    yi2[i] = (solve_real*)calloc(ha_ndblocks[i+begblock[rank]],sizeof(solve_real));
   }
   sumrowcolin=0;
   for(j=0; j<ndblock; j++) {
@@ -4833,34 +4833,34 @@ int HaNDBBDParSol(Mat A, Vec b, ha_cgetype *x1, uvadd VecSize, PetscInt mpisize,
       MPI_Bcast(&bfirst,1, MPI_INT,j, PETSC_COMM_WORLD);
       MPI_Bcast(&bend,1, MPI_INT,j, PETSC_COMM_WORLD);
       PetscInt *indices= (PetscInt *) calloc (bend,sizeof(PetscInt));
-      ha_cgetype *yi0 = (ha_cgetype*)calloc(bend,sizeof(ha_cgetype));
+      solve_real *yi0 = (solve_real*)calloc(bend,sizeof(solve_real));
       for(j1=0; j1<bend; j1++) { //ha_ndblocks[i+begblock[j]]
         j2=ha_rows[bfirst+j1];//+bfirst;
         if(j2>=Istart&&j2<Iend)indices[j1]=j2;
         else indices[j1]=-1;
       }
       VecGetValues(b,bend,indices,yi0);
-      HaReduce(yi0,(forint)bend,mpisize,rank,j);
+      HaReduce(yi0,(fortran_int)bend,mpisize,rank,j);
       if(rank==j&&i<nmatin) {
-        memcpy (yi2[i],yi0,bend*sizeof(ha_cgetype));
+        memcpy (yi2[i],yi0,bend*sizeof(solve_real));
       }
       free(indices);
       free(yi0);
     }
   }
   printf("rank1w2 %d\n",rank);
-  ha_cgetype **yi1= (ha_cgetype**)calloc(nmatint,sizeof(ha_cgetype*));
+  solve_real **yi1= (solve_real**)calloc(nmatint,sizeof(solve_real*));
   for (i=0; i<nmatint; i++) {
     j1=0;
     for (j=0; j<nreg+1; j++) {
       j1+=ha_ndblocks[i*(nreg+1)+j+begblock[rank]];
     }
-    yi1[i] = (ha_cgetype*)calloc(j1,sizeof(ha_cgetype));
+    yi1[i] = (solve_real*)calloc(j1,sizeof(solve_real));
   }
   for (i=0; i<nmatint; i++) {
     j1=0;
     for (j=0; j<nreg+1; j++) {
-      memcpy (&yi1[i][j1],yi2[i*(nreg+1)+j],ha_ndblocks[i*(nreg+1)+j+begblock[rank]]*sizeof(ha_cgetype));
+      memcpy (&yi1[i][j1],yi2[i*(nreg+1)+j],ha_ndblocks[i*(nreg+1)+j+begblock[rank]]*sizeof(solve_real));
       free(yi2[i*(nreg+1)+j]);
       j1+=ha_ndblocks[i*(nreg+1)+j+begblock[rank]];
     }
@@ -4951,7 +4951,7 @@ int HaNDBBDParSol(Mat A, Vec b, ha_cgetype *x1, uvadd VecSize, PetscInt mpisize,
     }
   if(j2==VecSize-sumrowcolin)j1=VecSize-sumrowcolin;
   printf("rank %d j %d j1 %d istart %d iend %d\n",rank,j,j1,Istart,Iend);
-  ha_cgetype *vecbiui= (ha_cgetype *) calloc (VecSize-sumrowcolin,sizeof(ha_cgetype));
+  solve_real *vecbiui= (solve_real *) calloc (VecSize-sumrowcolin,sizeof(solve_real));
   VecGetValues(b,j1-j,&indicesB[j],&vecbiui[j]);//implicite yd save mem
   ierr = VecDestroy(&b);
   CHKERRQ(ierr);
@@ -5103,13 +5103,13 @@ int HaNDBBDParSol(Mat A, Vec b, ha_cgetype *x1, uvadd VecSize, PetscInt mpisize,
   PetscReal *ccolnorms=NULL;//(PetscReal *) calloc (1,sizeof(PetscReal));
   int bivirowsize=1,bivicolsize=1,bbrowij,ddrowi;
   long int vecbivisize=0,li,lj;//,halfvec;
-  ha_cgetype *xi1point;
+  solve_real *xi1point;
   long int *bivinzrow1=NULL;//(long int *) calloc (1,sizeof(long int));
   long int *bivinzcol1=NULL;//(long int *) calloc (1,sizeof(long int));
-  uvadd xi1indx=0;
+  offset_t xi1indx=0;
   long int nz0=0,nz1,nz3;//,nz2,halfj2;
   int fd1,fd2,fd3,frrsl1,frrsl2,frrsl3;
-  omp_set_num_threads(smallthreads);
+  omp_set_num_threads(section_threads);
   #pragma omp parallel private(jthrd,nthrd,j4,j1name,filename,frd,fd1,nrow,ncol,i,j,presolfile,nz,nz1,cntl6in,fwrt,ldsize,j3) shared(insize)
   {
   int windx=0,bindx,eindx;
@@ -5153,13 +5153,13 @@ int HaNDBBDParSol(Mat A, Vec b, ha_cgetype *x1, uvadd VecSize, PetscInt mpisize,
   if(irn1==NULL)printf("Error!!!! No memory left for irn1!\n");
   int *jcn1=(int *) malloc(ldsize*sizeof(int));
   if(jcn1==NULL)printf("Error!!!! No memory left for jcn1!\n");
-  ha_cgetype *vecbivi0= (ha_cgetype *) malloc (ldsize*sizeof(ha_cgetype));
+  solve_real *vecbivi0= (solve_real *) malloc (ldsize*sizeof(solve_real));
   if(vecbivi0==NULL)printf("Error!!!! No memory left for vecbivi0!\n");
   int *irn1a=(int *) malloc (insizeda0*sizeof(int));
   if(irn1a==NULL)printf("Error!!!! No memory left for irn1a!\n");
   int *jcn1a=(int *) malloc (insizeda1*sizeof(int));
   if(jcn1a==NULL)printf("Error!!!! No memory left for jcn1a!\n");
-  ha_cgetype *fw=(ha_cgetype *) malloc (insizeda0*sizeof(ha_cgetype));
+  solve_real *fw=(solve_real *) malloc (insizeda0*sizeof(solve_real));
   if(fw==NULL)printf("Error!!!! No memory left for fw!\n");
   int *fiw=(int *) malloc ((6*insizeda0+3*insizeda1)*sizeof(int));
   if(fiw==NULL)printf("Error!!!! No memory left for fiw!\n");
@@ -5228,7 +5228,7 @@ int HaNDBBDParSol(Mat A, Vec b, ha_cgetype *x1, uvadd VecSize, PetscInt mpisize,
       if((presolfile=fopen(filename, "r"))==NULL) {
         printf("Cannot open file.\n");
       }
-      frd=fread(vecbivi0, sizeof(ha_cgetype), insizeda[2], presolfile);
+      frd=fread(vecbivi0, sizeof(solve_real), insizeda[2], presolfile);
       if(frd== 0) printf("File read error %ld %d.\n",frd,insizeda[2]);
       fclose(presolfile);
       remove(filename);
@@ -5261,7 +5261,7 @@ int HaNDBBDParSol(Mat A, Vec b, ha_cgetype *x1, uvadd VecSize, PetscInt mpisize,
       strcat(filename,j1name);
       strcat(filename,".bin");
       fd1 = open(filename, O_RDONLY);
-      frd = read(fd1,vecbivi0, sizeof(ha_cgetype)*insizeda[2]);
+      frd = read(fd1,vecbivi0, sizeof(solve_real)*insizeda[2]);
       close(fd1);
       remove(filename);
       strcpy(filename,"_rbvi");
@@ -5326,7 +5326,7 @@ int HaNDBBDParSol(Mat A, Vec b, ha_cgetype *x1, uvadd VecSize, PetscInt mpisize,
   free(insizeda);
   printf("rank %d ok10!!!!!!!!\n",rank);
   }
-  omp_set_num_threads(mymaxnumthrd);
+  omp_set_num_threads(max_threads);
   if(presol)
     return 0;
   printf("Rank %d End of preparation!\n",rank);
@@ -5391,7 +5391,7 @@ int HaNDBBDParSol(Mat A, Vec b, ha_cgetype *x1, uvadd VecSize, PetscInt mpisize,
   }
   vecbivisize=((long int)bivirowsize)*((long int)bivicolsize);
   if(vecbivisize<0)printf("Overflow detected, the interface problem is too big!!!!!!\n");
-  ha_cgetype *vecbivi= (ha_cgetype *) calloc (vecbivisize,sizeof(ha_cgetype));
+  solve_real *vecbivi= (solve_real *) calloc (vecbivisize,sizeof(solve_real));
   printf("vecbivisize %ld rank %d\n",vecbivisize,rank);
   xi1indx=0;
   int maxcolc1=0,maxcolc=0,maxrowc=0,maxrowc1=0;
@@ -5405,16 +5405,16 @@ int HaNDBBDParSol(Mat A, Vec b, ha_cgetype *x1, uvadd VecSize, PetscInt mpisize,
     if(maxrowc<maxrowc1)maxrowc=maxrowc1;
   }
   int maxrowcij;
-  ha_cgetype *xi1 = (ha_cgetype*)calloc(sumrowcolin,sizeof(ha_cgetype));
+  solve_real *xi1 = (solve_real*)calloc(sumrowcolin,sizeof(solve_real));
   #pragma omp parallel private(jthrd,timestr,aic,ajc,valsc,nrowc,ncolc,a1i,a1j,val1s,nz,a2i,a2j,val2s,nrowb,ncolb,i,j,j2,xi1point,xi1indx,maxrowcij,la1,fp1,fp2,fp3,freadresult,frrsl1,frrsl2,frrsl3,longsize,nzc) shared(submatC,submatB1,submatB2,xi1,submatCij,submatBij,insize,yi1,vecbivi,vecbiui)
   {
   int icntl[20],info[20];
-  ha_cgetype cntl[10],rinfo[10],error1[3];
-  ha_cgetype *w= (ha_cgetype*)calloc(4*maxcolc,sizeof(ha_cgetype));
+  solve_real cntl[10],rinfo[10],error1[3];
+  solve_real *w= (solve_real*)calloc(4*maxcolc,sizeof(solve_real));
   int *iw= (int*)calloc(maxcolc,sizeof(int));
   int **irnereg= (int**)calloc(nreg+1,sizeof(int*));
   int **keepreg= (int**)calloc(nreg+1,sizeof(int*));
-  ha_cgetype **valereg = (ha_cgetype**)calloc(nreg+1,sizeof(ha_cgetype*));
+  solve_real **valereg = (solve_real**)calloc(nreg+1,sizeof(solve_real*));
   FILE** nfp1= (FILE**)calloc(nreg+1,sizeof(FILE*));
   FILE** nfp2= (FILE**)calloc(nreg+1,sizeof(FILE*));
   FILE** nfp3= (FILE**)calloc(nreg+1,sizeof(FILE*));
@@ -5496,8 +5496,8 @@ int HaNDBBDParSol(Mat A, Vec b, ha_cgetype *x1, uvadd VecSize, PetscInt mpisize,
         fclose(nfp2[i]);
         nfp3[i] = fopen(fn03[j2], "rb");
         if (nfp3[i]==NULL)printf("File opening error\n");
-        valereg[i] = realloc(valereg[i],la1*sizeof(ha_cgetype));//(ha_cgetype*)calloc(la1,sizeof(ha_cgetype));
-        freadresult=fread(valereg[i],sizeof(ha_cgetype),la1,nfp3[i]);
+        valereg[i] = realloc(valereg[i],la1*sizeof(solve_real));//(ha_cgetype*)calloc(la1,sizeof(ha_cgetype));
+        freadresult=fread(valereg[i],sizeof(solve_real),la1,nfp3[i]);
         fclose(nfp3[i]);
       }
       else {
@@ -5507,10 +5507,10 @@ int HaNDBBDParSol(Mat A, Vec b, ha_cgetype *x1, uvadd VecSize, PetscInt mpisize,
         la1=ceil((insize[j2*insizes+9]/100.0)*insize[j2*insizes+2]);
         irnereg[i] = realloc(irnereg[i],la1*sizeof(int));//(int*)calloc(la1,sizeof(int));
         keepreg[i] = realloc(keepreg[i],insize[j2*insizes+12]*sizeof(int));//(int*)calloc(insize[j1*insizes+12],sizeof(int));
-        valereg[i] = realloc(valereg[i],la1*sizeof(ha_cgetype));//(ha_cgetype*)calloc(la1,sizeof(ha_cgetype));
+        valereg[i] = realloc(valereg[i],la1*sizeof(solve_real));//(ha_cgetype*)calloc(la1,sizeof(ha_cgetype));
         frrsl1=read(nfd1[i],irnereg[i],sizeof(int)*la1);
         frrsl2=read(nfd2[i],keepreg[i],insize[j2*insizes+12]*sizeof(int));
-        frrsl3=read(nfd3[i],valereg[i],la1*sizeof(ha_cgetype));
+        frrsl3=read(nfd3[i],valereg[i],la1*sizeof(solve_real));
         close(nfd1[i]);
         close(nfd2[i]);
         close(nfd3[i]);
@@ -5518,11 +5518,11 @@ int HaNDBBDParSol(Mat A, Vec b, ha_cgetype *x1, uvadd VecSize, PetscInt mpisize,
     }
     }
     printf("OK here11a nrowc %d ncolc %d maxrow %d!\n",nrowc,ncolc,maxrowcij);
-    ha_cgetype *b02 = (ha_cgetype*)calloc(maxrowcij,sizeof(ha_cgetype));
+    solve_real *b02 = (solve_real*)calloc(maxrowcij,sizeof(solve_real));
 
     NDBBD_sol_nread1(rank,j1*(nreg+1),nreg,insize,insizes,submatCij,submatBij,yi1[j1],xi1point,irnereg,keepreg,valereg,cntl,rinfo,error1,icntl,info,w,iw,b02);
-    ha_cgetype *bccol= (ha_cgetype*)calloc(ncolc,sizeof(ha_cgetype));
-    longsize=ncolc*sizeof(ha_cgetype);
+    solve_real *bccol= (solve_real*)calloc(ncolc,sizeof(solve_real));
+    longsize=ncolc*sizeof(solve_real);
     for(i=0; i<nrowc-1; i++) {
       if(aic[i]<aic[i+1]) {
         memset(yi1[j1],0,longsize);
@@ -5604,37 +5604,37 @@ int HaNDBBDParSol(Mat A, Vec b, ha_cgetype *x1, uvadd VecSize, PetscInt mpisize,
   free(bivinzrow1);
   free(bivinzcol1);
   printf("OK here11! j %ld j2 %ld bivi %ld\n",lj,lj2,biviindx1[lj2-1]);
-  vecbivi=realloc(vecbivi,lj2*sizeof(ha_cgetype));
+  vecbivi=realloc(vecbivi,lj2*sizeof(solve_real));
   printf("OK here11!\n");
   nz0=lj2;
   int group_size,ha_id,group_size1,group_size11,ha_id1,color;
-  MPI_Comm_rank( HA_COMM, &ha_id);
-  MPI_Comm_size(HA_COMM,&group_size);
+  MPI_Comm_rank( node_comm, &ha_id);
+  MPI_Comm_size(node_comm,&group_size);
   if(ha_id==group_size-1)color=1;
   else color=0;
-  MPI_Comm_rank( HA1_COMM, &ha_id1);
-  MPI_Comm_size(HA1_COMM,&group_size1);
+  MPI_Comm_rank( node_tail_comm, &ha_id1);
+  MPI_Comm_size(node_tail_comm,&group_size1);
   group_size11=group_size1;
   MPI_Bcast(&group_size11,1, MPI_INT,mpisize-1, PETSC_COMM_WORLD);
   long int sindx01,sindx02,sindx03;
   
   if(ha_id!=group_size-1) {
-    MPI_Send(&lj2,1, MPI_LONG,group_size-1, 10, HA_COMM);
+    MPI_Send(&lj2,1, MPI_LONG,group_size-1, 10, node_comm);
     sindx01=lj2/MAXSSIZE;
     sindx03=0;
     for(sindx02=0; sindx02<sindx01; sindx02++) {
-    if(SORD==1)MPI_Send(vecbivi+sindx03,MAXSSIZE, MPI_DOUBLE,group_size-1, 11*sindx01+sindx02, HA_COMM);
-    else MPI_Send(vecbivi+sindx03,MAXSSIZE, MPI_FLOAT,group_size-1, 11*sindx01+sindx02, HA_COMM);
+    if(SORD==1)MPI_Send(vecbivi+sindx03,MAXSSIZE, MPI_DOUBLE,group_size-1, 11*sindx01+sindx02, node_comm);
+    else MPI_Send(vecbivi+sindx03,MAXSSIZE, MPI_FLOAT,group_size-1, 11*sindx01+sindx02, node_comm);
     sindx03+=MAXSSIZE;
     }
-    if(SORD==1)MPI_Send(vecbivi+sindx03,lj2-sindx01*MAXSSIZE, MPI_DOUBLE,group_size-1, 11, HA_COMM);
-    else MPI_Send(vecbivi+sindx03,lj2-sindx01*MAXSSIZE, MPI_FLOAT,group_size-1, 11, HA_COMM);
+    if(SORD==1)MPI_Send(vecbivi+sindx03,lj2-sindx01*MAXSSIZE, MPI_DOUBLE,group_size-1, 11, node_comm);
+    else MPI_Send(vecbivi+sindx03,lj2-sindx01*MAXSSIZE, MPI_FLOAT,group_size-1, 11, node_comm);
     sindx03=0;
     for(sindx02=0; sindx02<sindx01; sindx02++) {
-    MPI_Send(biviindx1+sindx03,MAXSSIZE, MPI_LONG,group_size-1, 12*sindx01+sindx02, HA_COMM);
+    MPI_Send(biviindx1+sindx03,MAXSSIZE, MPI_LONG,group_size-1, 12*sindx01+sindx02, node_comm);
     sindx03+=MAXSSIZE;
     }
-    MPI_Send(biviindx1+sindx03,lj2-sindx01*MAXSSIZE, MPI_LONG,group_size-1, 12, HA_COMM);
+    MPI_Send(biviindx1+sindx03,lj2-sindx01*MAXSSIZE, MPI_LONG,group_size-1, 12, node_comm);
     free(obiviindx1);
     obiviindx1=NULL;
     free(vecbivi);
@@ -5642,30 +5642,30 @@ int HaNDBBDParSol(Mat A, Vec b, ha_cgetype *x1, uvadd VecSize, PetscInt mpisize,
   }
   if(ha_id==group_size-1) {
     for(j6=0; j6<group_size-1; j6++) {
-      MPI_Recv(&lj2,1, MPI_LONG,  MPI_ANY_SOURCE,10, HA_COMM,&status);
+      MPI_Recv(&lj2,1, MPI_LONG,  MPI_ANY_SOURCE,10, node_comm,&status);
       i=status.MPI_SOURCE;
       obiviindx0=realloc(obiviindx0,(lj2+1)*sizeof(long int));
       obiviindx0[0]=-1;
       biviindx0=obiviindx0;
       biviindx0++;
-      ha_cgetype *vecbivi0= (ha_cgetype *) calloc (lj2,sizeof(ha_cgetype));
+      solve_real *vecbivi0= (solve_real *) calloc (lj2,sizeof(solve_real));
     sindx01=lj2/MAXSSIZE;
     sindx03=0;
     for(sindx02=0; sindx02<sindx01; sindx02++) {
-      if(SORD==1)MPI_Recv(vecbivi0+sindx03,MAXSSIZE, MPI_DOUBLE,i,11*sindx01+sindx02, HA_COMM,&status);
-      else MPI_Recv(vecbivi0+sindx03,MAXSSIZE, MPI_FLOAT,i,11*sindx01+sindx02, HA_COMM,&status);
+      if(SORD==1)MPI_Recv(vecbivi0+sindx03,MAXSSIZE, MPI_DOUBLE,i,11*sindx01+sindx02, node_comm,&status);
+      else MPI_Recv(vecbivi0+sindx03,MAXSSIZE, MPI_FLOAT,i,11*sindx01+sindx02, node_comm,&status);
       sindx03+=MAXSSIZE;
     }
-      if(SORD==1)MPI_Recv(vecbivi0+sindx03,lj2-sindx01*MAXSSIZE, MPI_DOUBLE,i,11, HA_COMM,&status);
-      else MPI_Recv(vecbivi0+sindx03,lj2-sindx01*MAXSSIZE, MPI_FLOAT,i,11, HA_COMM,&status);
+      if(SORD==1)MPI_Recv(vecbivi0+sindx03,lj2-sindx01*MAXSSIZE, MPI_DOUBLE,i,11, node_comm,&status);
+      else MPI_Recv(vecbivi0+sindx03,lj2-sindx01*MAXSSIZE, MPI_FLOAT,i,11, node_comm,&status);
     sindx03=0;
     for(sindx02=0; sindx02<sindx01; sindx02++) {
-      MPI_Recv(biviindx0+sindx03,MAXSSIZE, MPI_LONG,i,12*sindx01+sindx02, HA_COMM,&status);
+      MPI_Recv(biviindx0+sindx03,MAXSSIZE, MPI_LONG,i,12*sindx01+sindx02, node_comm,&status);
       sindx03+=MAXSSIZE;
     }
-      MPI_Recv(biviindx0+sindx03,lj2-sindx01*MAXSSIZE, MPI_LONG,i,12, HA_COMM,&status);
+      MPI_Recv(biviindx0+sindx03,lj2-sindx01*MAXSSIZE, MPI_LONG,i,12, node_comm,&status);
       my_spar_compl_(biviindx1,&nz0,biviindx0,&lj2,&nz1);
-      vecbivi=realloc(vecbivi,nz1*sizeof(ha_cgetype));
+      vecbivi=realloc(vecbivi,nz1*sizeof(solve_real));
       obiviindx1=realloc(obiviindx1,(nz1+1)*sizeof(long int));
       obiviindx1[0]=-1;
       biviindx1=obiviindx1;
@@ -5684,22 +5684,22 @@ int HaNDBBDParSol(Mat A, Vec b, ha_cgetype *x1, uvadd VecSize, PetscInt mpisize,
     nz3=nz0;
     if(ha_id1!=group_size1-1) {
       lj2=nz3;
-      MPI_Send(&lj2,1, MPI_LONG,group_size1-1, 10, HA1_COMM);
+      MPI_Send(&lj2,1, MPI_LONG,group_size1-1, 10, node_tail_comm);
     sindx01=lj2/MAXSSIZE;
     sindx03=0;
     for(sindx02=0; sindx02<sindx01; sindx02++) {
-      if(SORD==1)MPI_Send(vecbivi+sindx03,MAXSSIZE, MPI_DOUBLE,group_size1-1, 11*sindx01+sindx02, HA1_COMM);
-      else MPI_Send(vecbivi+sindx03,MAXSSIZE, MPI_FLOAT,group_size1-1, 11*sindx01+sindx02, HA1_COMM);
+      if(SORD==1)MPI_Send(vecbivi+sindx03,MAXSSIZE, MPI_DOUBLE,group_size1-1, 11*sindx01+sindx02, node_tail_comm);
+      else MPI_Send(vecbivi+sindx03,MAXSSIZE, MPI_FLOAT,group_size1-1, 11*sindx01+sindx02, node_tail_comm);
       sindx03+=MAXSSIZE;
     }
-      if(SORD==1)MPI_Send(vecbivi+sindx03,lj2-sindx01*MAXSSIZE, MPI_DOUBLE,group_size1-1, 11, HA1_COMM);
-      else MPI_Send(vecbivi+sindx03,lj2-sindx01*MAXSSIZE, MPI_FLOAT,group_size1-1, 11, HA1_COMM);
+      if(SORD==1)MPI_Send(vecbivi+sindx03,lj2-sindx01*MAXSSIZE, MPI_DOUBLE,group_size1-1, 11, node_tail_comm);
+      else MPI_Send(vecbivi+sindx03,lj2-sindx01*MAXSSIZE, MPI_FLOAT,group_size1-1, 11, node_tail_comm);
     sindx03=0;
     for(sindx02=0; sindx02<sindx01; sindx02++) {
-      MPI_Send(biviindx1+sindx03,MAXSSIZE, MPI_LONG,group_size1-1, 12*sindx01+sindx02, HA1_COMM);
+      MPI_Send(biviindx1+sindx03,MAXSSIZE, MPI_LONG,group_size1-1, 12*sindx01+sindx02, node_tail_comm);
       sindx03+=MAXSSIZE;
     }
-      MPI_Send(biviindx1+sindx03,lj2-sindx01*MAXSSIZE, MPI_LONG,group_size1-1, 12, HA1_COMM);
+      MPI_Send(biviindx1+sindx03,lj2-sindx01*MAXSSIZE, MPI_LONG,group_size1-1, 12, node_tail_comm);
       free(obiviindx1);
       obiviindx1=NULL;
       free(vecbivi);
@@ -5707,30 +5707,30 @@ int HaNDBBDParSol(Mat A, Vec b, ha_cgetype *x1, uvadd VecSize, PetscInt mpisize,
     }
     if(ha_id1==group_size1-1) {
       for(j6=0; j6<group_size1-1; j6++) {
-        MPI_Recv(&lj2,1, MPI_LONG,  MPI_ANY_SOURCE,10, HA1_COMM,&status);
+        MPI_Recv(&lj2,1, MPI_LONG,  MPI_ANY_SOURCE,10, node_tail_comm,&status);
         i=status.MPI_SOURCE;
         obiviindx0=realloc(obiviindx0,(lj2+1)*sizeof(long int));
         obiviindx0[0]=-1;
         biviindx0=obiviindx0;
         biviindx0++;
-        ha_cgetype *vecbivi0= (ha_cgetype *) calloc (lj2,sizeof(ha_cgetype));
+        solve_real *vecbivi0= (solve_real *) calloc (lj2,sizeof(solve_real));
     sindx01=lj2/MAXSSIZE;
     sindx03=0;
     for(sindx02=0; sindx02<sindx01; sindx02++) {
-        if(SORD==1)MPI_Recv(vecbivi0+sindx03,MAXSSIZE, MPI_DOUBLE,i,11*sindx01+sindx02, HA1_COMM,&status);
-        else MPI_Recv(vecbivi0+sindx03,MAXSSIZE, MPI_FLOAT,i,11*sindx01+sindx02, HA1_COMM,&status);
+        if(SORD==1)MPI_Recv(vecbivi0+sindx03,MAXSSIZE, MPI_DOUBLE,i,11*sindx01+sindx02, node_tail_comm,&status);
+        else MPI_Recv(vecbivi0+sindx03,MAXSSIZE, MPI_FLOAT,i,11*sindx01+sindx02, node_tail_comm,&status);
         sindx03+=MAXSSIZE;
     }
-        if(SORD==1)MPI_Recv(vecbivi0+sindx03,lj2-sindx01*MAXSSIZE, MPI_DOUBLE,i,11, HA1_COMM,&status);
-        else MPI_Recv(vecbivi0+sindx03,lj2-sindx01*MAXSSIZE, MPI_FLOAT,i,11, HA1_COMM,&status);
+        if(SORD==1)MPI_Recv(vecbivi0+sindx03,lj2-sindx01*MAXSSIZE, MPI_DOUBLE,i,11, node_tail_comm,&status);
+        else MPI_Recv(vecbivi0+sindx03,lj2-sindx01*MAXSSIZE, MPI_FLOAT,i,11, node_tail_comm,&status);
     sindx03=0;
     for(sindx02=0; sindx02<sindx01; sindx02++) {
-        MPI_Recv(biviindx0+sindx03,MAXSSIZE, MPI_LONG,i,12*sindx01+sindx02, HA1_COMM,&status);
+        MPI_Recv(biviindx0+sindx03,MAXSSIZE, MPI_LONG,i,12*sindx01+sindx02, node_tail_comm,&status);
         sindx03+=MAXSSIZE;
     }
-        MPI_Recv(biviindx0+sindx03,lj2-sindx01*MAXSSIZE, MPI_LONG,i,12, HA1_COMM,&status);
+        MPI_Recv(biviindx0+sindx03,lj2-sindx01*MAXSSIZE, MPI_LONG,i,12, node_tail_comm,&status);
         my_spar_compl_(biviindx1,&nz0,biviindx0,&lj2,&nz1);
-        vecbivi=realloc(vecbivi,nz1*sizeof(ha_cgetype));
+        vecbivi=realloc(vecbivi,nz1*sizeof(solve_real));
         obiviindx1=realloc(obiviindx1,(nz1+1)*sizeof(long int));
         obiviindx1[0]=-1;
         biviindx1=obiviindx1;
@@ -5745,7 +5745,7 @@ int HaNDBBDParSol(Mat A, Vec b, ha_cgetype *x1, uvadd VecSize, PetscInt mpisize,
       }
     }
   }
-  forint vecbiuisize=0;
+  fortran_int vecbiuisize=0;
   vecbiuisize=VecSize-sumrowcolin;
   printf("after bivi rank %d\n",rank);
   HaReduceNoComp(vecbiui,vecbiuisize,mpisize,rank,mpisize-1);
@@ -5755,8 +5755,8 @@ int HaNDBBDParSol(Mat A, Vec b, ha_cgetype *x1, uvadd VecSize, PetscInt mpisize,
     vecbiui=NULL;
   }
   timestr=clock();
-  ha_cgetype *xd;//= (ha_cgetype*)calloc(vecbiuisize,sizeof(ha_cgetype));
-  ha_cgetype *x0;//,*vecbivi0;//= (ha_cgetype*)calloc(VecSize,sizeof(ha_cgetype));
+  solve_real *xd;//= (ha_cgetype*)calloc(vecbiuisize,sizeof(ha_cgetype));
+  solve_real *x0;//,*vecbivi0;//= (ha_cgetype*)calloc(VecSize,sizeof(ha_cgetype));
   long int lnz;
   if(rank==mpisize-1) {
     Mat_SeqAIJ         *aa=(Mat_SeqAIJ*)submatD[0]->data;//*aa=subA->data;
@@ -5788,7 +5788,7 @@ int HaNDBBDParSol(Mat A, Vec b, ha_cgetype *x1, uvadd VecSize, PetscInt mpisize,
     my_spar_compl_(biviindx1,&nz0,biviindx0,&lnz,&nz1);
     printf("nz0 %ld nz %ld nz1 %ld\n",nz0,lnz,nz1);
     ldsize=ceil((laD/100.0)*nz1);
-    vecbivi=realloc(vecbivi,ldsize*sizeof(ha_cgetype));
+    vecbivi=realloc(vecbivi,ldsize*sizeof(solve_real));
     int *irn1=(int *) calloc (nz1,sizeof(int));
     int *jcn=(int *) calloc (ldsize,sizeof(int));
     printf("nz1 %ld obin %ld ond1 %ld\n",nz1,obiviindx1[0],obiviindx0[0]);
@@ -5807,7 +5807,7 @@ int HaNDBBDParSol(Mat A, Vec b, ha_cgetype *x1, uvadd VecSize, PetscInt mpisize,
     insizeD[2]=lnz;
     insizeD[3]=laD;
     insizeD[5]=ldsize;
-    xd=(ha_cgetype *) calloc (vecbiuisize,sizeof(ha_cgetype));//realloc (xd,vecbiuisize*sizeof(ha_cgetype));
+    xd=(solve_real *) calloc (vecbiuisize,sizeof(solve_real));//realloc (xd,vecbiuisize*sizeof(ha_cgetype));
     spec48m_ssol2la_(insizeD,irn1,jcn,vecbivi,vecbiui,xd);
     free(vecbivi);
     vecbivi=NULL;
@@ -5816,7 +5816,7 @@ int HaNDBBDParSol(Mat A, Vec b, ha_cgetype *x1, uvadd VecSize, PetscInt mpisize,
     free(irn1);
     free(jcn);
     free(insizeD);
-    x0=(ha_cgetype *) calloc (VecSize,sizeof(ha_cgetype));//realloc (x0,*sizeof(ha_cgetype));
+    x0=(solve_real *) calloc (VecSize,sizeof(solve_real));//realloc (x0,*sizeof(ha_cgetype));
     for(i=0; i<vecbiuisize; i++) {
       x0[indicesC[i]]=xd[i];
     }
@@ -5829,8 +5829,8 @@ int HaNDBBDParSol(Mat A, Vec b, ha_cgetype *x1, uvadd VecSize, PetscInt mpisize,
   free(vecbivi);
   free(indicesC);
   if(rank!=mpisize-1) {
-    xd=(ha_cgetype *) calloc (vecbiuisize,sizeof(ha_cgetype));//realloc (xd,vecbiuisize*sizeof(ha_cgetype));
-    x0=(ha_cgetype *) calloc (VecSize,sizeof(ha_cgetype));//realloc (x0,*sizeof(ha_cgetype));
+    xd=(solve_real *) calloc (vecbiuisize,sizeof(solve_real));//realloc (xd,vecbiuisize*sizeof(ha_cgetype));
+    x0=(solve_real *) calloc (VecSize,sizeof(solve_real));//realloc (x0,*sizeof(ha_cgetype));
   }
   PetscFree(submatD);
   MPI_Barrier(PETSC_COMM_WORLD);
@@ -5840,12 +5840,12 @@ int HaNDBBDParSol(Mat A, Vec b, ha_cgetype *x1, uvadd VecSize, PetscInt mpisize,
   timestr=clock();
   xi1indx=0;
 
-  omp_set_num_threads(smallthreads);
+  omp_set_num_threads(section_threads);
   #pragma omp parallel private(jthrd,j1,j2,j,i,timestr,ai,aj,vals,nz,nrow,xi1point,xi1indx,ierr,nindices) shared(submatC,submatCij,submatBij,insize,xi1,colindicesbc1,colindicesbc2,x0)
   {
   jthrd=omp_get_thread_num();
-  ha_cgetype *biui0= (ha_cgetype *) calloc (maxrowc,sizeof(ha_cgetype));
-  ha_cgetype *be0 = (ha_cgetype*)calloc(maxrowc,sizeof(ha_cgetype));
+  solve_real *biui0= (solve_real *) calloc (maxrowc,sizeof(solve_real));
+  solve_real *be0 = (solve_real*)calloc(maxrowc,sizeof(solve_real));
   #pragma omp for
   for(j1=0; j1<nmatint; j1++) {
     xi1indx=vecnrowc[j1];
@@ -5886,7 +5886,7 @@ int HaNDBBDParSol(Mat A, Vec b, ha_cgetype *x1, uvadd VecSize, PetscInt mpisize,
   free(be0);
   free(biui0);
   }
-  omp_set_num_threads(mymaxnumthrd);
+  omp_set_num_threads(max_threads);
   free(vecnrowc);
   for(i=0; i<nmatin; i++) {
     ierr = PetscFree(submatCij[i]);
@@ -5923,16 +5923,16 @@ int HaNDBBDParSol(Mat A, Vec b, ha_cgetype *x1, uvadd VecSize, PetscInt mpisize,
 
 
 
-bool NDBBD_sol(PetscInt rank, int begmat,int nreg,int * insize,int insizes, Mat **submatCij,Mat **submatBij,ha_cgetype *b,ha_cgetype *sol,bool ifremove,char** fn01,char** fn02, char** fn03) {
+bool NDBBD_sol(PetscInt rank, int begmat,int nreg,int * insize,int insizes, Mat **submatCij,Mat **submatBij,solve_real *b,solve_real *sol,bool ifremove,char** fn01,char** fn02, char** fn03) {
   FILE* fp1,*fp2,*fp3;
   PetscScalar *vals,*valsc,vecval;
   PetscInt *ai,*aj,*aic,*ajc,nrow,nz,maxrowcij;//,ncol
   PetscInt i,j,j1,j2,indx01,la1;
-  ha_cgetype *b01,*b03,*sol1,*sol2;
+  solve_real *b01,*b03,*sol1,*sol2;
   size_t freadresult;
   int *irne= NULL;//(int*)calloc(1,sizeof(int));
   int *keep= NULL;//(int*)calloc(1,sizeof(int));
-  ha_cgetype *vale = NULL;//(ha_cgetype*)calloc(1,sizeof(ha_cgetype));
+  solve_real *vale = NULL;//(ha_cgetype*)calloc(1,sizeof(ha_cgetype));
   maxrowcij=0;
   b01=b;
   sol1=sol;
@@ -5946,7 +5946,7 @@ bool NDBBD_sol(PetscInt rank, int begmat,int nreg,int * insize,int insizes, Mat 
       la1=ceil((insize[j2+9]/100.0)*insize[j2+2]);
       irne = realloc(irne,la1*sizeof(int));//(int*)calloc(la1,sizeof(int));
       keep = realloc(keep,insize[j2+12]*sizeof(int));//(int*)calloc(insize[j1*insizes+12],sizeof(int));
-      vale = realloc(vale,la1*sizeof(ha_cgetype));//(ha_cgetype*)calloc(la1,sizeof(ha_cgetype));
+      vale = realloc(vale,la1*sizeof(solve_real));//(ha_cgetype*)calloc(la1,sizeof(ha_cgetype));
       fd1 = open(fn01[j1],O_RDONLY);
       frrsl1=read(fd1,irne,sizeof(int)*la1);
       close(fd1);
@@ -5954,14 +5954,14 @@ bool NDBBD_sol(PetscInt rank, int begmat,int nreg,int * insize,int insizes, Mat 
       frrsl2=read(fd2,keep,insize[j2+12]*sizeof(int));
       close(fd2);
       fd3 = open(fn03[j1],O_RDONLY);
-      frrsl3=read(fd3,vale,la1*sizeof(ha_cgetype));
+      frrsl3=read(fd3,vale,la1*sizeof(solve_real));
       close(fd3);
     }
     else {
       la1=ceil((insize[j2+9]/100.0)*insize[j2+2]);
       irne = realloc(irne,la1*sizeof(int));//(int*)calloc(la1,sizeof(int));
       keep = realloc(keep,insize[j2+12]*sizeof(int));//(int*)calloc(insize[j1*insizes+12],sizeof(int));
-      vale = realloc(vale,la1*sizeof(ha_cgetype));//(ha_cgetype*)calloc(la1,sizeof(ha_cgetype));
+      vale = realloc(vale,la1*sizeof(solve_real));//(ha_cgetype*)calloc(la1,sizeof(ha_cgetype));
       fp1 = fopen(fn01[j1], "rb");
       if (fp1==NULL)printf("File opening error\n");
       freadresult=fread(irne,sizeof(int),la1,fp1);
@@ -5972,7 +5972,7 @@ bool NDBBD_sol(PetscInt rank, int begmat,int nreg,int * insize,int insizes, Mat 
       fclose(fp2);
       fp3 = fopen(fn03[j1], "rb");
       if (fp3==NULL)printf("File opening error\n");
-      freadresult=fread(vale,sizeof(ha_cgetype),la1,fp3);
+      freadresult=fread(vale,sizeof(solve_real),la1,fp3);
       fclose(fp3);
     }
     }
@@ -5999,7 +5999,7 @@ bool NDBBD_sol(PetscInt rank, int begmat,int nreg,int * insize,int insizes, Mat 
     la1=ceil((insize[j1*insizes+9]/100.0)*insize[j1*insizes+2]);
     irne = realloc(irne,la1*sizeof(int));//(int*)calloc(la1,sizeof(int));
     keep = realloc(keep,insize[j1*insizes+12]*sizeof(int));//(int*)calloc(insize[j1*insizes+12],sizeof(int));
-    vale = realloc(vale,la1*sizeof(ha_cgetype));//(ha_cgetype*)calloc(la1,sizeof(ha_cgetype));
+    vale = realloc(vale,la1*sizeof(solve_real));//(ha_cgetype*)calloc(la1,sizeof(ha_cgetype));
     fd1 = open(fn01[j2],O_RDONLY);
     frrsl1=read(fd1,irne,sizeof(int)*la1);
     close(fd1);
@@ -6007,14 +6007,14 @@ bool NDBBD_sol(PetscInt rank, int begmat,int nreg,int * insize,int insizes, Mat 
     frrsl2=read(fd2,keep,insize[j1*insizes+12]*sizeof(int));
     close(fd2);
     fd3 = open(fn03[j2],O_RDONLY);
-    frrsl3=read(fd3,vale,la1*sizeof(ha_cgetype));
+    frrsl3=read(fd3,vale,la1*sizeof(solve_real));
     close(fd3);
   }
   else {
     la1=ceil((insize[j1*insizes+9]/100.0)*insize[j1*insizes+2]);
     irne = realloc(irne,la1*sizeof(int));//(int*)calloc(la1,sizeof(int));
     keep = realloc(keep,insize[j1*insizes+12]*sizeof(int));//(int*)calloc(insize[j1*insizes+12],sizeof(int));
-    vale = realloc(vale,la1*sizeof(ha_cgetype));//(ha_cgetype*)calloc(la1,sizeof(ha_cgetype));
+    vale = realloc(vale,la1*sizeof(solve_real));//(ha_cgetype*)calloc(la1,sizeof(ha_cgetype));
     fp1 = fopen(fn01[j2], "rb");
     if (fp1==NULL)printf("File opening error\n");
     freadresult=fread(irne,sizeof(int),la1,fp1);
@@ -6025,7 +6025,7 @@ bool NDBBD_sol(PetscInt rank, int begmat,int nreg,int * insize,int insizes, Mat 
     fclose(fp2);
     fp3 = fopen(fn03[j2], "rb");
     if (fp3==NULL)printf("File opening error\n");
-    freadresult=fread(vale,sizeof(ha_cgetype),la1,fp3);
+    freadresult=fread(vale,sizeof(solve_real),la1,fp3);
     fclose(fp3);
   }
     }
@@ -6036,7 +6036,7 @@ bool NDBBD_sol(PetscInt rank, int begmat,int nreg,int * insize,int insizes, Mat 
   spec48m_esol_(insize+j1*insizes,irne,vale,keep,b01,sol1);
   sol2=sol;
   b03=b;
-  ha_cgetype *b02 = (ha_cgetype*)calloc(maxrowcij,sizeof(ha_cgetype));
+  solve_real *b02 = (solve_real*)calloc(maxrowcij,sizeof(solve_real));
   for (j1=begmat; j1<nreg+begmat; j1++) {
     j2=j1;//-begmat;
     #pragma omp critical(nsol)
@@ -6045,7 +6045,7 @@ bool NDBBD_sol(PetscInt rank, int begmat,int nreg,int * insize,int insizes, Mat 
       la1=ceil((insize[j1*insizes+9]/100.0)*insize[j1*insizes+2]);
       irne = realloc(irne,la1*sizeof(int));//(int*)calloc(la1,sizeof(int));
       keep = realloc(keep,insize[j1*insizes+12]*sizeof(int));//(int*)calloc(insize[j1*insizes+12],sizeof(int));
-      vale = realloc(vale,la1*sizeof(ha_cgetype));//(ha_cgetype*)calloc(la1,sizeof(ha_cgetype));
+      vale = realloc(vale,la1*sizeof(solve_real));//(ha_cgetype*)calloc(la1,sizeof(ha_cgetype));
       fd1 = open(fn01[j2],O_RDONLY);
       frrsl1=read(fd1,irne,sizeof(int)*la1);
       close(fd1);
@@ -6053,14 +6053,14 @@ bool NDBBD_sol(PetscInt rank, int begmat,int nreg,int * insize,int insizes, Mat 
       frrsl2=read(fd2,keep,insize[j1*insizes+12]*sizeof(int));
       close(fd2);
       fd3 = open(fn03[j2],O_RDONLY);
-      frrsl3=read(fd3,vale,la1*sizeof(ha_cgetype));
+      frrsl3=read(fd3,vale,la1*sizeof(solve_real));
       close(fd3);
     }
     else {
       la1=ceil((insize[j1*insizes+9]/100.0)*insize[j1*insizes+2]);
       irne = realloc(irne,la1*sizeof(int));//(int*)calloc(la1,sizeof(int));
       keep = realloc(keep,insize[j1*insizes+12]*sizeof(int));//(int*)calloc(insize[j1*insizes+12],sizeof(int));
-      vale = realloc(vale,la1*sizeof(ha_cgetype));//(ha_cgetype*)calloc(la1,sizeof(ha_cgetype));
+      vale = realloc(vale,la1*sizeof(solve_real));//(ha_cgetype*)calloc(la1,sizeof(ha_cgetype));
       fp1 = fopen(fn01[j2], "rb");
       if (fp1==NULL)printf("File opening error\n");
       freadresult=fread(irne,sizeof(int),la1,fp1);
@@ -6071,7 +6071,7 @@ bool NDBBD_sol(PetscInt rank, int begmat,int nreg,int * insize,int insizes, Mat 
       fclose(fp2);
       fp3 = fopen(fn03[j2], "rb");
       if (fp3==NULL)printf("File opening error\n");
-      freadresult=fread(vale,sizeof(ha_cgetype),la1,fp3);
+      freadresult=fread(vale,sizeof(solve_real),la1,fp3);
       fclose(fp3);
     }
     }
@@ -6098,11 +6098,11 @@ bool NDBBD_sol(PetscInt rank, int begmat,int nreg,int * insize,int insizes, Mat 
 }
 
 
-bool NDBBD_sol_nread1(PetscInt rank, int begmat,int nreg,int * insize,int insizes, Mat **submatCij,Mat **submatBij,ha_cgetype *b,ha_cgetype *sol,int** irnereg,int** keepreg,ha_cgetype** valereg,ha_cgetype *cntl,ha_cgetype *rinfo,ha_cgetype *error1,int *icntl,int *info,ha_cgetype *w,int *iw,ha_cgetype *b02) {
+bool NDBBD_sol_nread1(PetscInt rank, int begmat,int nreg,int * insize,int insizes, Mat **submatCij,Mat **submatBij,solve_real *b,solve_real *sol,int** irnereg,int** keepreg,solve_real** valereg,solve_real *cntl,solve_real *rinfo,solve_real *error1,int *icntl,int *info,solve_real *w,int *iw,solve_real *b02) {
   PetscScalar *vals;//,*valsc;//,vecval;
   PetscInt *ai,*aj,nrow,nz;//,ncol,*aic,*ajc
   PetscInt i,j,j1,j2;//,indx01,la1;
-  ha_cgetype *b01,*b03,*sol1,*sol2;//,*b02
+  solve_real *b01,*b03,*sol1,*sol2;//,*b02
   int * insize1;
   b01=b;
   sol1=sol;
@@ -6150,7 +6150,7 @@ bool NDBBD_sol_nread1(PetscInt rank, int begmat,int nreg,int * insize,int insize
   return true;
 }
 
-int HaReduce(ha_cgetype *vecbivi,forint vecbivisize,PetscInt mpisize,PetscInt rank,PetscInt targetrank) {
+int HaReduce(solve_real *vecbivi,fortran_int vecbivisize,PetscInt mpisize,PetscInt rank,PetscInt targetrank) {
   if(mpisize==1)return 0;
   MPI_Status   status;
   int i,j,j1,j2,j3;
@@ -6165,7 +6165,7 @@ int HaReduce(ha_cgetype *vecbivi,forint vecbivisize,PetscInt mpisize,PetscInt ra
   }
   if(rank==targetrank) j=0;//(VecSize-sumrowcolin)*(VecSize-sumrowcolin);
   int *biviindx= (int *) calloc (j,sizeof(int));
-  ha_cgetype *vecbivi0= (ha_cgetype *) calloc (1,sizeof(ha_cgetype));
+  solve_real *vecbivi0= (solve_real *) calloc (1,sizeof(solve_real));
   j2=0;
   if(rank!=targetrank)for(i=0; i<vecbivisize; i++) {
       if(vecbivi[i]!=0) {
@@ -6176,7 +6176,7 @@ int HaReduce(ha_cgetype *vecbivi,forint vecbivisize,PetscInt mpisize,PetscInt ra
     }
   MPI_Reduce(&j,&j2,1, MPI_INT, MPI_MAX,targetrank,PETSC_COMM_WORLD);
   if(rank==targetrank) {
-    vecbivi0=realloc(vecbivi0,j2*sizeof(ha_cgetype));
+    vecbivi0=realloc(vecbivi0,j2*sizeof(solve_real));
     biviindx=realloc(biviindx,j2*sizeof(int));
   }
 
@@ -6235,14 +6235,14 @@ int HaReduce(ha_cgetype *vecbivi,forint vecbivisize,PetscInt mpisize,PetscInt ra
   return 1;
 }
 
-int HaReduceNoComp(ha_cgetype *vecbivi,forint vecbivisize,PetscInt mpisize,PetscInt rank,PetscInt targetrank) {
+int HaReduceNoComp(solve_real *vecbivi,fortran_int vecbivisize,PetscInt mpisize,PetscInt rank,PetscInt targetrank) {
   if(mpisize==1)return 0;
   MPI_Status   status;
   int i,j,j1,j2,j3;
-  ha_cgetype *vecbivi0= (ha_cgetype *) calloc (1,sizeof(ha_cgetype));
+  solve_real *vecbivi0= (solve_real *) calloc (1,sizeof(solve_real));
 
   if(rank==targetrank) {
-    vecbivi0=realloc(vecbivi0,vecbivisize*sizeof(ha_cgetype));
+    vecbivi0=realloc(vecbivi0,vecbivisize*sizeof(solve_real));
   }
 
   for(j1=0; j1<targetrank; j1++) {
@@ -6290,10 +6290,10 @@ int HaReduceNoComp(ha_cgetype *vecbivi,forint vecbivisize,PetscInt mpisize,Petsc
 
 
 
-bool spline(ha_cgetype* y,ha_cgetype* x,ha_cgetype sx0,ha_cgetype sxn,int size,ha_cgetype* w,int laA){//sizeof(x)=size+1
-  uvadd lasize;
-  ha_cgetype *matval= (ha_cgetype *) calloc (6*4*size,sizeof(ha_cgetype));
-  ha_cgetype *bval= (ha_cgetype *) calloc (4*size,sizeof(ha_cgetype));
+bool spline(solve_real* y,solve_real* x,solve_real sx0,solve_real sxn,int size,solve_real* w,int laA){//sizeof(x)=size+1
+  offset_t lasize;
+  solve_real *matval= (solve_real *) calloc (6*4*size,sizeof(solve_real));
+  solve_real *bval= (solve_real *) calloc (4*size,sizeof(solve_real));
   int *irn= (int *) calloc (6*4*size,sizeof(int));
   int *jcn= (int *) calloc (6*4*size,sizeof(int));
   if(size<3){
@@ -6432,7 +6432,7 @@ bool spline(ha_cgetype* y,ha_cgetype* x,ha_cgetype sx0,ha_cgetype sxn,int size,h
   insize[3]=laA*10;
   irn=realloc(irn,lasize*sizeof(int));
   jcn=realloc(jcn,lasize*sizeof(int));
-  matval=realloc(matval,lasize*sizeof(ha_cgetype));
+  matval=realloc(matval,lasize*sizeof(solve_real));
   spec48_ssol2la_(insize,irn,jcn,matval,bval,w);
     printf("bindx %d val %lf w1 %lf w2 %lf w3 %lf x %lf\n",bindx,w[size-1]+w[size-1+size]*x[size]+w[size-1+2*size]*x[size]*x[size]+w[size-1+3*size]*x[size]*x[size]*x[size],w[size-1],w[size-1+size],w[size-1+2*size],y[size]);
   free(insize);
@@ -6443,19 +6443,19 @@ bool spline(ha_cgetype* y,ha_cgetype* x,ha_cgetype sx0,ha_cgetype sxn,int size,h
   return 1;
 }
 
-bool Johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt* dnnz,PetscInt onz,PetscInt* onnz,Mat B,PetscInt dnzB,PetscInt* dnnzB,PetscInt onzB,PetscInt* onnzB,Vec vecb,Vec vece,PetscInt rank,PetscInt rank_hsl,PetscInt mpisize,char* tabfile, char *commsyntax,ha_cgeset *ha_set,uvdim nset, ha_cgesetele *ha_setele, hcge_cof *ha_cof,uvadd ncof,hcge_cof *ha_var,uvadd nvar, ha_cgevar **ha_cofvar2,uvadd ncofvar,uvadd ncofele,uvadd nvarele,ha_cgeexovar **ha_cgeshock2,uvadd alltimeset,uvadd allregset,uvadd nintraeq,uvdim matsol,PetscInt Istart,PetscInt Iend,  uvadd nreg, uvadd ntime, uvadd *ha_eqadd, uvadd ndblock, uvadd *countvarintra1, uvadd *counteq, uvadd *counteqnoadd,uvdim laA,uvdim laDi,uvdim laD,PetscReal cntl3,PetscReal cntl6,PetscBool presol,uvdim nesteddbbd,int localsize,PetscInt *ndbbddrank1,forint* indata,uvdim mc66,forint *ptx,struct timeval begintime,ha_cgetype **xcf2){ //Johansen
+bool Johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt* dnnz,PetscInt onz,PetscInt* onnz,Mat B,PetscInt dnzB,PetscInt* dnnzB,PetscInt onzB,PetscInt* onnzB,Vec vecb,Vec vece,PetscInt rank,PetscInt rank_hsl,PetscInt mpisize,char* tabfile, char *commsyntax,set_def *ha_set,dim_t nset, set_element *ha_setele, array_def *ha_cof,offset_t ncof,array_def *ha_var,offset_t nvar, elem_value **ha_cofvar2,offset_t ncofvar,offset_t ncofele,offset_t nvarele,closure_entry **ha_cgeshock2,offset_t alltimeset,offset_t allregset,offset_t nintraeq,dim_t matsol,PetscInt Istart,PetscInt Iend,  offset_t nreg, offset_t ntime, offset_t *ha_eqadd, offset_t ndblock, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laDi,dim_t laD,PetscReal cntl3,PetscReal cntl6,PetscBool presol,dim_t nesteddbbd,int localsize,PetscInt *ndbbddrank1,fortran_int* indata,dim_t mc66,fortran_int *ptx,struct timeval begintime,solve_real **xcf2){ //Johansen
   char tempfilenam[256],tempchar[256];
   PetscScalar value,*vals=NULL;
   PetscErrorCode ierr;
   PetscInt count,nz01,*ai=NULL,*aj=NULL;
-  forint k=0,m=1;
-  uvadd i,j,lasize;
-  ha_cgetype *b1=NULL,*x0=NULL;
+  fortran_int k=0,m=1;
+  offset_t i,j,lasize;
+  solve_real *b1=NULL,*x0=NULL;
   bool IsIni;
   FILE* tempvar;
-  ha_cgeexovar *ha_cgeshock;
+  closure_entry *ha_cgeshock;
   ha_cgeshock=*ha_cgeshock2;
-  ha_cgetype *xcf;
+  solve_real *xcf;
   xcf=*xcf2;
 
   clock_t timestr,timeend,timemulti;
@@ -6464,9 +6464,9 @@ bool Johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt* dnnz
   long int start_time=0;
   double rep_time;
   size_t freadresult;
-  ha_cgevar *ha_cofvar;
+  elem_value *ha_cofvar;
   ha_cofvar=*ha_cofvar2;
-  ha_cgevar *ha_cofvar1=NULL;
+  elem_value *ha_cofvar1=NULL;
   
     if(nohsl) {
       MatCreate(PETSC_COMM_WORLD,&A);
@@ -6526,9 +6526,9 @@ bool Johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt* dnnz
     if(rank==0)printf("Matrix calculation time %f\n",(begintime.tv_sec - endtime.tv_sec)+((double)(begintime.tv_usec - endtime.tv_usec))/ 1000000);
 
     for (count=0; count<nvarele; count++) {
-      if (ha_cgeshock[count].ShockId) {
-        value = ha_cgeshock[count].ShockVal;
-        dnz=ha_cgeshock[count].ExoIndx;
+      if (ha_cgeshock[count].is_exogenous) {
+        value = ha_cgeshock[count].shock_value;
+        dnz=ha_cgeshock[count].exo_index;
         VecSetValues(vece,1,&dnz,&value,INSERT_VALUES);
       }
     }
@@ -6538,7 +6538,7 @@ bool Johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt* dnnz
     ierr = VecAssemblyEnd(vece);
     CHKERRQ(ierr);
     if(rank==rank_hsl) {
-      strcpy(tempfilenam,temdir);
+      strcpy(tempfilenam,scratch_dir);
       strcat(tempfilenam,"_tempshock");
       sprintf(tempchar, "%d",rank);
       strcat(tempfilenam,tempchar);
@@ -6546,14 +6546,14 @@ bool Johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt* dnnz
       if ( (tempvar = fopen(tempfilenam, "wb")) == NULL ) {
         printf("Error opening file\n");
       }
-      fwrite(ha_cgeshock, sizeof(ha_cgeexovar),nvarele, tempvar);
+      fwrite(ha_cgeshock, sizeof(closure_entry),nvarele, tempvar);
       fclose(tempvar);
       free(*ha_cgeshock2);//
       *ha_cgeshock2=NULL;//realloc (ha_cgeshock,1*sizeof(ha_cgeexovar));
       ha_cgeshock=*ha_cgeshock2;
     }
     if(rank==rank_hsl) {
-      strcpy(tempfilenam,temdir);
+      strcpy(tempfilenam,scratch_dir);
       strcat(tempfilenam,"_tempvar");
       sprintf(tempchar, "%d",rank);
       strcat(tempfilenam,tempchar);
@@ -6561,7 +6561,7 @@ bool Johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt* dnnz
       if ( (tempvar = fopen(tempfilenam, "wb")) == NULL ) {
         printf("Error opening file\n");
       }
-      fwrite(ha_cofvar, sizeof(ha_cgevar),ncofele+nvarele, tempvar);
+      fwrite(ha_cofvar, sizeof(elem_value),ncofele+nvarele, tempvar);
       fclose(tempvar);
       free(*ha_cofvar2);//
       *ha_cofvar2=NULL;//realloc (ha_cofvar,1*sizeof(ha_cgevar));
@@ -6604,7 +6604,7 @@ bool Johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt* dnnz
       int *ha_ndblocks= (int *) calloc (ndblock,sizeof(int));
       if(matsol==2) {
         HaDBBDMatOder(A,VecSize,mpisize,rank,Istart,Iend,nvarele,ha_eqadd,ha_rows,ha_cols,ndblock,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,cntl6);
-        x0=realloc (x0,VecSize*sizeof(ha_cgetype));
+        x0=realloc (x0,VecSize*sizeof(solve_real));
         HaDBBDParSol(A,vecb,x0,VecSize,mpisize,rank,Istart,Iend,ha_rows,ha_cols,ndblock,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,laD,cntl3);//,iter
       }
       if(matsol==3) {
@@ -6615,7 +6615,7 @@ bool Johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt* dnnz
         }
         presol=0;
         HaNDBBDMatOder(A,VecSize,mpisize,rank,Istart,Iend,nreg,ntime,nvarele,ha_eqadd,ha_rows,ha_cols,ndblock,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,laDi,cntl6,ndbbddrank1,presol);
-        x0=realloc (x0,VecSize*sizeof(ha_cgetype));
+        x0=realloc (x0,VecSize*sizeof(solve_real));
         HaNDBBDParSol(A,vecb,x0,VecSize,mpisize,rank,Istart,Iend,ha_rows,ha_cols,ndblock,nreg,ntime,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,presol);//,iter
       }
       time(&timeend);
@@ -6657,7 +6657,7 @@ bool Johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt* dnnz
         int *irn=(int *) calloc (count,sizeof(int));
         int *irn1=(int *) calloc (nz01,sizeof(int));
         int *jcn=(int *) calloc (count,sizeof(int));
-        ha_cgetype *values= (ha_cgetype *) calloc (count,sizeof(ha_cgetype));
+        solve_real *values= (solve_real *) calloc (count,sizeof(solve_real));
         if(rank==rank_hsl) {
           for(i=0; i<VecSize-1; i++)for(j=ai[i]; j<ai[i+1]; j++) {
               irn1[j]=i+1;
@@ -6677,7 +6677,7 @@ bool Johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt* dnnz
         ierr = MatDestroy(&A);
         CHKERRQ(ierr);
 
-        b1=realloc (b1,VecSize*sizeof(ha_cgetype));
+        b1=realloc (b1,VecSize*sizeof(solve_real));
         if(rank==rank_hsl) {
           VecGetArray(vecb,&vals);
           for(i=0; i<VecSize; i++) {
@@ -6706,7 +6706,7 @@ bool Johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt* dnnz
           neleperrow[k]=j;
           ai1[k]=ai1[k-1]+neleperrow[k-1];
         }
-        x0=realloc (x0,VecSize*sizeof(ha_cgetype));
+        x0=realloc (x0,VecSize*sizeof(solve_real));
         if(mc66!=0)spec48_single_(ptx,irn,jcn,b1,values,x0,neleperrow,ai1,&fcomm);
         free(irn);
         if(mc66==0)spec48_nomc66_(ptx,jcn,b1,values,x0,neleperrow,&fcomm,counteq,countvarintra1);
@@ -6718,12 +6718,12 @@ bool Johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt* dnnz
         b1=NULL;
       }
       else {
-        x0=realloc (x0,VecSize*sizeof(ha_cgetype));
+        x0=realloc (x0,VecSize*sizeof(solve_real));
         lasize=ceil((laA/100.0)*count);
         int *irn=(int *) calloc (lasize,sizeof(int));
         int *irn1=(int *) calloc (nz01,sizeof(int));
         int *jcn=(int *) calloc (lasize,sizeof(int));
-        ha_cgetype *values= (ha_cgetype *) calloc (lasize,sizeof(ha_cgetype));
+        solve_real *values= (solve_real *) calloc (lasize,sizeof(solve_real));
 
         if(rank==rank_hsl) {
           for(i=0; i<VecSize-1; i++)for(j=ai[i]; j<ai[i+1]; j++) {
@@ -6768,13 +6768,13 @@ bool Johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt* dnnz
       if ((tempvar = fopen(tempfilenam, "rb")) == NULL) {
         printf("Error opening file\n");
       }
-      *ha_cofvar2=(ha_cgevar*)realloc (*ha_cofvar2,(ncofele+nvarele)*sizeof(ha_cgevar));
-      freadresult=fread(*ha_cofvar2, sizeof(ha_cgevar),ncofele+nvarele, tempvar);
+      *ha_cofvar2=(elem_value*)realloc (*ha_cofvar2,(ncofele+nvarele)*sizeof(elem_value));
+      freadresult=fread(*ha_cofvar2, sizeof(elem_value),ncofele+nvarele, tempvar);
       fclose(tempvar);
       remove(tempfilenam);
       ha_cofvar=*ha_cofvar2;
 
-      strcpy(tempfilenam,temdir);
+      strcpy(tempfilenam,scratch_dir);
       strcat(tempfilenam,"_tempshock");
       sprintf(tempchar, "%d",rank);
       strcat(tempfilenam,tempchar);
@@ -6782,47 +6782,47 @@ bool Johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt* dnnz
       if ((tempvar = fopen(tempfilenam, "rb")) == NULL) {
         printf("Error opening file\n");
       }
-      *ha_cgeshock2=(ha_cgeexovar*)realloc (*ha_cgeshock2,(nvarele)*sizeof(ha_cgeexovar));
-      freadresult=fread(*ha_cgeshock2, sizeof(ha_cgeexovar),nvarele, tempvar);
+      *ha_cgeshock2=(closure_entry*)realloc (*ha_cgeshock2,(nvarele)*sizeof(closure_entry));
+      freadresult=fread(*ha_cgeshock2, sizeof(closure_entry),nvarele, tempvar);
       fclose(tempvar);
       remove(tempfilenam);
       ha_cgeshock=*ha_cgeshock2;      
     }
-    *xcf2=(ha_cgetype*)realloc (*xcf2,nvarele*sizeof(ha_cgetype));
+    *xcf2=(solve_real*)realloc (*xcf2,nvarele*sizeof(solve_real));
     xcf=*xcf2;
     printf("Hello world1!\n");
     if(rank==rank_hsl) {
       ha_cofvar1=ha_cofvar+ncofele;
       for(i=0; i<nvar; i++) {
         if(ha_var[i].change_real) {
-          for(j=ha_var[i].begadd; j<ha_var[i].matsize+ha_var[i].begadd; j++) {
-            if(ha_cgeshock[j].ShockId) {
-              ha_cofvar1[j].var0=ha_cofvar1[j].varval;
-              ha_cofvar1[j].varval+=ha_cgeshock[j].ShockVal;
-              xcf[j]=ha_cgeshock[j].ShockVal;//varchange[j]
-              ha_cofvar1[j].csolpupd=ha_cgeshock[j].ShockVal;
+          for(j=ha_var[i].offset; j<ha_var[i].nelem+ha_var[i].offset; j++) {
+            if(ha_cgeshock[j].is_exogenous) {
+              ha_cofvar1[j].initial=ha_cofvar1[j].value;
+              ha_cofvar1[j].value+=ha_cgeshock[j].shock_value;
+              xcf[j]=ha_cgeshock[j].shock_value;//varchange[j]
+              ha_cofvar1[j].substep_base=ha_cgeshock[j].shock_value;
             }
             else {
-              ha_cofvar1[j].var0=ha_cofvar1[j].varval;
-              ha_cofvar1[j].varval+=x0[ha_cgeshock[j].ExoIndx];
-              xcf[j]=x0[ha_cgeshock[j].ExoIndx];//varchange[j]
-              ha_cofvar1[j].csolpupd=x0[ha_cgeshock[j].ExoIndx];
+              ha_cofvar1[j].initial=ha_cofvar1[j].value;
+              ha_cofvar1[j].value+=x0[ha_cgeshock[j].exo_index];
+              xcf[j]=x0[ha_cgeshock[j].exo_index];//varchange[j]
+              ha_cofvar1[j].substep_base=x0[ha_cgeshock[j].exo_index];
             }
           }
         }
         else {
-          for(j=ha_var[i].begadd; j<ha_var[i].matsize+ha_var[i].begadd; j++) {
-            if(ha_cgeshock[j].ShockId) {
-              ha_cofvar1[j].var0=ha_cofvar1[j].varval;
-              ha_cofvar1[j].varval+=ha_cgeshock[j].ShockVal*ha_cofvar1[j].var0/100;
-              xcf[j]=ha_cgeshock[j].ShockVal;//varchange[j]
-              ha_cofvar1[j].csolpupd=ha_cgeshock[j].ShockVal;
+          for(j=ha_var[i].offset; j<ha_var[i].nelem+ha_var[i].offset; j++) {
+            if(ha_cgeshock[j].is_exogenous) {
+              ha_cofvar1[j].initial=ha_cofvar1[j].value;
+              ha_cofvar1[j].value+=ha_cgeshock[j].shock_value*ha_cofvar1[j].initial/100;
+              xcf[j]=ha_cgeshock[j].shock_value;//varchange[j]
+              ha_cofvar1[j].substep_base=ha_cgeshock[j].shock_value;
             }
             else {
-              ha_cofvar1[j].var0=ha_cofvar1[j].varval;
-              xcf[j]=x0[ha_cgeshock[j].ExoIndx];//varchange[j]
-              ha_cofvar1[j].varval+=x0[ha_cgeshock[j].ExoIndx]/100*ha_cofvar1[j].varval;
-              ha_cofvar1[j].csolpupd=x0[ha_cgeshock[j].ExoIndx];
+              ha_cofvar1[j].initial=ha_cofvar1[j].value;
+              xcf[j]=x0[ha_cgeshock[j].exo_index];//varchange[j]
+              ha_cofvar1[j].value+=x0[ha_cgeshock[j].exo_index]/100*ha_cofvar1[j].value;
+              ha_cofvar1[j].substep_base=x0[ha_cgeshock[j].exo_index];
             }
           }
         }
@@ -6838,19 +6838,19 @@ bool Johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt* dnnz
     return 1;
   }
 
-bool ModMidPoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt* dnnz,PetscInt onz,PetscInt* onnz,Mat* B1,PetscInt dnzB,PetscInt* dnnzB,PetscInt onzB,PetscInt* onnzB,Vec* vecb1,Vec *vece1,PetscInt rank,PetscInt rank_hsl,PetscInt mpisize,char* tabfile, char *commsyntax,ha_cgeset *ha_set,uvdim nset, ha_cgesetele *ha_setele, hcge_cof *ha_cof,uvadd ncof,hcge_cof *ha_var,uvadd nvar, ha_cgevar **ha_cofvar2,uvadd ncofvar,uvadd ncofele,uvadd nvarele,ha_cgeexovar **ha_cgeshock2,uvadd alltimeset,uvadd allregset,uvadd nintraeq,uvdim matsol,PetscInt Istart,PetscInt Iend,  uvadd nreg, uvadd ntime, uvadd *ha_eqadd, uvadd ndblock, uvadd *countvarintra1, uvadd *counteq, uvadd *counteqnoadd,uvdim laA,uvdim laDi,uvdim laD,PetscReal cntl3,PetscReal cntl6,PetscBool presol,uvdim nesteddbbd,int localsize,PetscInt *ndbbddrank1,forint* indata,uvdim mc66,forint *ptx,struct timeval begintime,uvdim subints,MPI_Fint fcomm,ha_cgetype **xcf2,int Isbiupd){ //Modified midpoint Pearson 1991
+bool ModMidPoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt* dnnz,PetscInt onz,PetscInt* onnz,Mat* B1,PetscInt dnzB,PetscInt* dnnzB,PetscInt onzB,PetscInt* onnzB,Vec* vecb1,Vec *vece1,PetscInt rank,PetscInt rank_hsl,PetscInt mpisize,char* tabfile, char *commsyntax,set_def *ha_set,dim_t nset, set_element *ha_setele, array_def *ha_cof,offset_t ncof,array_def *ha_var,offset_t nvar, elem_value **ha_cofvar2,offset_t ncofvar,offset_t ncofele,offset_t nvarele,closure_entry **ha_cgeshock2,offset_t alltimeset,offset_t allregset,offset_t nintraeq,dim_t matsol,PetscInt Istart,PetscInt Iend,  offset_t nreg, offset_t ntime, offset_t *ha_eqadd, offset_t ndblock, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laDi,dim_t laD,PetscReal cntl3,PetscReal cntl6,PetscBool presol,dim_t nesteddbbd,int localsize,PetscInt *ndbbddrank1,fortran_int* indata,dim_t mc66,fortran_int *ptx,struct timeval begintime,dim_t subints,MPI_Fint fcomm,solve_real **xcf2,int Isbiupd){ //Modified midpoint Pearson 1991
   char tempfilenam[256],tempchar[256],solchar[255];
   PetscScalar value,*vals;
   PetscErrorCode ierr;
   PetscInt count,nz01,*ai,*aj;
-  forint k=0,m=1;
-  forint tindx1;//,tindx2;
-  ha_cgetype temp1,temp2;
-  uvadd i,j,lasize;
-  uvdim subindx;
-  ha_cgetype *b1=NULL;
-  ha_cgetype *x1=NULL;
-  ha_cgetype *xcf;
+  fortran_int k=0,m=1;
+  fortran_int tindx1;//,tindx2;
+  solve_real temp1,temp2;
+  offset_t i,j,lasize;
+  dim_t subindx;
+  solve_real *b1=NULL;
+  solve_real *x1=NULL;
+  solve_real *xcf;
   xcf=*xcf2;
   bool IsIni;
   FILE* tempvar;
@@ -6861,10 +6861,10 @@ bool ModMidPoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
   long int start_time=0;
   double rep_time;
   size_t freadresult;
-  ha_cgevar *ha_cofvar;
+  elem_value *ha_cofvar;
   ha_cofvar=*ha_cofvar2;
-  ha_cgevar *ha_cofvar1;
-  ha_cgeexovar *ha_cgeshock;
+  elem_value *ha_cofvar1;
+  closure_entry *ha_cgeshock;
   ha_cgeshock=*ha_cgeshock2;
   Vec vece,vecb;
   Mat A,B;
@@ -6875,28 +6875,28 @@ bool ModMidPoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
   int stepcount;
   int nsteps=3;
   int sol;
-  ha_cgetype vpercents=1.0,perprecis=0;
+  solve_real vpercents=1.0,perprecis=0;
   FILE* solution;
   int maxsol=3;
-              uvadd *counteqs= (uvadd *) calloc (ndblock+1,sizeof(uvadd));
-              uvadd *counteqnoadds= (uvadd *) calloc (ndblock,sizeof(uvadd));
-              uvadd *countvarintra1s= (uvadd *) calloc (ndblock+1,sizeof(uvadd));
-              memcpy(counteqs,counteq,(ndblock+1)*sizeof(uvadd));
-              memcpy(counteqnoadds,counteqnoadd,(ndblock)*sizeof(uvadd));
-              memcpy(countvarintra1s,countvarintra1,(ndblock+1)*sizeof(uvadd));
+              offset_t *counteqs= (offset_t *) calloc (ndblock+1,sizeof(offset_t));
+              offset_t *counteqnoadds= (offset_t *) calloc (ndblock,sizeof(offset_t));
+              offset_t *countvarintra1s= (offset_t *) calloc (ndblock+1,sizeof(offset_t));
+              memcpy(counteqs,counteq,(ndblock+1)*sizeof(offset_t));
+              memcpy(counteqnoadds,counteqnoadd,(ndblock)*sizeof(offset_t));
+              memcpy(countvarintra1s,countvarintra1,(ndblock+1)*sizeof(offset_t));
     gettimeofday(&begintime, NULL);
-    ha_cgetype *xc0= (ha_cgetype *) calloc (1,sizeof(ha_cgetype));
-    ha_cgetype *xc12= (ha_cgetype *) calloc (1,sizeof(ha_cgetype));
-    ha_cgetype *xc24= (ha_cgetype *) calloc (1,sizeof(ha_cgetype));
+    solve_real *xc0= (solve_real *) calloc (1,sizeof(solve_real));
+    solve_real *xc12= (solve_real *) calloc (1,sizeof(solve_real));
+    solve_real *xc24= (solve_real *) calloc (1,sizeof(solve_real));
     int *xc124= (int *) calloc (1,sizeof(int));
-    ha_cgetype *clag1= (ha_cgetype *) calloc (nvarele,sizeof(ha_cgetype));
-    ha_cgetype *varchange= (ha_cgetype *) calloc (nvarele,sizeof(ha_cgetype));
+    solve_real *clag1= (solve_real *) calloc (nvarele,sizeof(solve_real));
+    solve_real *varchange= (solve_real *) calloc (nvarele,sizeof(solve_real));
     for(subindx=0; subindx<subints; subindx++) {
       for(sol=0; sol<maxsol; sol++) {
-        if(sol==0)nsteps=step1;
-        if(sol==1) nsteps=(int)step1*kindx1;
-        if(sol==2) nsteps=(int)step1*kindx2;
-        vpercents=(ha_cgetype)100/nsteps;
+        if(sol==0)nsteps=steps1;
+        if(sol==1) nsteps=(int)steps1*step_ratio2;
+        if(sol==2) nsteps=(int)steps1*step_ratio3;
+        vpercents=(solve_real)100/nsteps;
         for(stepcount=0; stepcount<nsteps; stepcount++) {
           printf("rank %d subint %d sol %d stepcount %d nsteps %d\n",rank,subindx,sol,stepcount,nsteps);
           MPI_Barrier(PETSC_COMM_WORLD);
@@ -6922,56 +6922,56 @@ bool ModMidPoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
               VecSetOption(vece, VEC_IGNORE_NEGATIVE_INDICES,PETSC_TRUE);
             }
             if(sol==0)for(i=0; i<ncofele; i++) {
-                ha_cofvar[i].var0=ha_cofvar[i].varval;
+                ha_cofvar[i].initial=ha_cofvar[i].value;
               }
             else for(i=0; i<ncofele; i++) {
-                ha_cofvar[i].varval=ha_cofvar[i].var0;
+                ha_cofvar[i].value=ha_cofvar[i].initial;
               }
             printf("rank %d OK!!!\n",rank);
             ha_cofvar1=ha_cofvar+ncofele;
             for(i=0; i<nvar; i++) {
               if(ha_var[i].change_real) {
-                for(tindx1=ha_var[i].begadd; tindx1<ha_var[i].matsize+ha_var[i].begadd; tindx1++) {
-                  if(ha_cgeshock[tindx1].ShockId) {
+                for(tindx1=ha_var[i].offset; tindx1<ha_var[i].nelem+ha_var[i].offset; tindx1++) {
+                  if(ha_cgeshock[tindx1].is_exogenous) {
                     if(sol==0) {
-                      ha_cofvar1[tindx1].var0=ha_cofvar1[tindx1].varval;
+                      ha_cofvar1[tindx1].initial=ha_cofvar1[tindx1].value;
                     }
                     else {
-                      ha_cofvar1[tindx1].varval=ha_cofvar1[tindx1].var0;
+                      ha_cofvar1[tindx1].value=ha_cofvar1[tindx1].initial;
                     }
-                    ha_cofvar1[tindx1].csolpupd=ha_cgeshock[tindx1].ShockVal/nsteps;
-                    VecSetValue(vece,ha_cgeshock[tindx1].ExoIndx,ha_cofvar1[tindx1].csolpupd,INSERT_VALUES);
+                    ha_cofvar1[tindx1].substep_base=ha_cgeshock[tindx1].shock_value/nsteps;
+                    VecSetValue(vece,ha_cgeshock[tindx1].exo_index,ha_cofvar1[tindx1].substep_base,INSERT_VALUES);
                   }
                   else {
                     if(sol==0) {
-                      ha_cofvar1[tindx1].var0=ha_cofvar1[tindx1].varval;
+                      ha_cofvar1[tindx1].initial=ha_cofvar1[tindx1].value;
                     }
                     else {
-                      ha_cofvar1[tindx1].varval=ha_cofvar1[tindx1].var0;
+                      ha_cofvar1[tindx1].value=ha_cofvar1[tindx1].initial;
                     }
                   }
                 }
               }
               else {
-                for(tindx1=ha_var[i].begadd; tindx1<ha_var[i].matsize+ha_var[i].begadd; tindx1++) {
-                  if(ha_cgeshock[tindx1].ShockId) {
+                for(tindx1=ha_var[i].offset; tindx1<ha_var[i].nelem+ha_var[i].offset; tindx1++) {
+                  if(ha_cgeshock[tindx1].is_exogenous) {
                     if(sol==0) {
-                      ha_cofvar1[tindx1].var0=ha_cofvar1[tindx1].varval;
+                      ha_cofvar1[tindx1].initial=ha_cofvar1[tindx1].value;
                     }
                     else {
-                      ha_cofvar1[tindx1].varval=ha_cofvar1[tindx1].var0;
+                      ha_cofvar1[tindx1].value=ha_cofvar1[tindx1].initial;
                     }
-                    temp2=ha_cgeshock[tindx1].ShockVal;//subints;
-                    ha_cofvar1[tindx1].csolpupd=(100+(subindx+1)*temp2)/(100+subindx*temp2)-1;//ha_cgeshock[ha_var[i].begadd+j].ShockVal/nsteps;//(exp(log(1+ha_cgeshock[ha_var[i].begadd+j].ShockVal/100)/nsteps)-1)*100;
-                    ha_cofvar1[tindx1].csolpupd*=vpercents;//nsteps*100;
-                    VecSetValue(vece,ha_cgeshock[tindx1].ExoIndx,ha_cofvar1[tindx1].csolpupd,INSERT_VALUES);
+                    temp2=ha_cgeshock[tindx1].shock_value;//subints;
+                    ha_cofvar1[tindx1].substep_base=(100+(subindx+1)*temp2)/(100+subindx*temp2)-1;//ha_cgeshock[ha_var[i].begadd+j].ShockVal/nsteps;//(exp(log(1+ha_cgeshock[ha_var[i].begadd+j].ShockVal/100)/nsteps)-1)*100;
+                    ha_cofvar1[tindx1].substep_base*=vpercents;//nsteps*100;
+                    VecSetValue(vece,ha_cgeshock[tindx1].exo_index,ha_cofvar1[tindx1].substep_base,INSERT_VALUES);
                   }
                   else {
                     if(sol==0) {
-                      ha_cofvar1[tindx1].var0=ha_cofvar1[tindx1].varval;
+                      ha_cofvar1[tindx1].initial=ha_cofvar1[tindx1].value;
                     }
                     else {
-                      ha_cofvar1[tindx1].varval=ha_cofvar1[tindx1].var0;
+                      ha_cofvar1[tindx1].value=ha_cofvar1[tindx1].initial;
                     }
                   }
                 }
@@ -6986,7 +6986,7 @@ bool ModMidPoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
           printf("OK!!!\n");
           if(rank==rank_hsl) {
 
-            strcpy(tempfilenam,temdir);
+            strcpy(tempfilenam,scratch_dir);
             strcat(tempfilenam,"_tempclag1");
             sprintf(tempchar, "%d",rank);
             strcat(tempfilenam,tempchar);
@@ -6994,12 +6994,12 @@ bool ModMidPoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
             if ( (tempvar = fopen(tempfilenam, "wb")) == NULL ) {
               printf("Error opening file\n");
             }
-            fwrite(clag1, sizeof(ha_cgetype),nvarele, tempvar);
+            fwrite(clag1, sizeof(solve_real),nvarele, tempvar);
             fclose(tempvar);
             free(clag1);
             clag1=NULL;
 
-            strcpy(tempfilenam,temdir);
+            strcpy(tempfilenam,scratch_dir);
             strcat(tempfilenam,"_tempvarchange");
             sprintf(tempchar, "%d",rank);
             strcat(tempfilenam,tempchar);
@@ -7007,7 +7007,7 @@ bool ModMidPoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
             if ( (tempvar = fopen(tempfilenam, "wb")) == NULL ) {
               printf("Error opening file\n");
             }
-            fwrite(varchange, sizeof(ha_cgetype),nvarele, tempvar);
+            fwrite(varchange, sizeof(solve_real),nvarele, tempvar);
             fclose(tempvar);
             free(varchange);
             varchange=NULL;
@@ -7063,7 +7063,7 @@ bool ModMidPoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
             HaNewMatVal(tabfile,commsyntax,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,ha_cofvar,ncofele+nvarele,ncofele,ha_cgeshock,ndblock,alltimeset,allregset,ha_eqadd,counteq,nintraeq,A,B);
           }
           if(rank==rank_hsl) {
-            strcpy(tempfilenam,temdir);
+            strcpy(tempfilenam,scratch_dir);
             strcat(tempfilenam,"_tempvar");
             sprintf(tempchar, "%d",rank);
             strcat(tempfilenam,tempchar);
@@ -7071,13 +7071,13 @@ bool ModMidPoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
             if ( (tempvar = fopen(tempfilenam, "wb")) == NULL ) {
               printf("Error opening file\n");
             }
-            fwrite(ha_cofvar, sizeof(ha_cgevar),ncofele+nvarele, tempvar);
+            fwrite(ha_cofvar, sizeof(elem_value),ncofele+nvarele, tempvar);
             fclose(tempvar);
             free(*ha_cofvar2);
             *ha_cofvar2=NULL;
             ha_cofvar=*ha_cofvar2;
 
-            strcpy(tempfilenam,temdir);
+            strcpy(tempfilenam,scratch_dir);
             strcat(tempfilenam,"_tempshock");
             sprintf(tempchar, "%d",rank);
             strcat(tempfilenam,tempchar);
@@ -7085,7 +7085,7 @@ bool ModMidPoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
             if ( (tempvar = fopen(tempfilenam, "wb")) == NULL ) {
               printf("Error opening file\n");
             }
-            fwrite(ha_cgeshock, sizeof(ha_cgeexovar),nvarele, tempvar);
+            fwrite(ha_cgeshock, sizeof(closure_entry),nvarele, tempvar);
             fclose(tempvar);
             free(*ha_cgeshock2);
             *ha_cgeshock2=NULL;
@@ -7123,20 +7123,20 @@ bool ModMidPoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
 
             if(matsol==2) {
               HaDBBDMatOder(A,VecSize,mpisize,rank,Istart,Iend,nvarele,ha_eqadd,ha_rows,ha_cols,ndblock,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,cntl6);
-              x1=realloc (x1,VecSize*sizeof(ha_cgetype));
+              x1=realloc (x1,VecSize*sizeof(solve_real));
               HaDBBDParSol(A,vecb,x1,VecSize,mpisize,rank,Istart,Iend,ha_rows,ha_cols,ndblock,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,laD,cntl3);//,iter
             }
 
             if(matsol==3) {
               presol=1;
-              memcpy(counteq,counteqs,(ndblock+1)*sizeof(uvadd));
-              memcpy(counteqnoadd,counteqnoadds,(ndblock)*sizeof(uvadd));
-              memcpy(countvarintra1,countvarintra1s,(ndblock+1)*sizeof(uvadd));
+              memcpy(counteq,counteqs,(ndblock+1)*sizeof(offset_t));
+              memcpy(counteqnoadd,counteqnoadds,(ndblock)*sizeof(offset_t));
+              memcpy(countvarintra1,countvarintra1s,(ndblock+1)*sizeof(offset_t));
               HaNDBBDMatOderPre(A,VecSize,mpisize,rank,Istart,Iend,nreg,ntime,nvarele,ha_eqadd,ha_rows,ha_cols,ndblock,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,laDi,cntl6,ndbbddrank1,presol);
               HaNDBBDParPre(A,vecb,x1,VecSize,mpisize,rank,Istart,Iend,ha_rows,ha_cols,ndblock,nreg,ntime,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,presol);//,iter
               presol=0;
               HaNDBBDMatOder(A,VecSize,mpisize,rank,Istart,Iend,nreg,ntime,nvarele,ha_eqadd,ha_rows,ha_cols,ndblock,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,laDi,cntl6,ndbbddrank1,presol);
-              x1=realloc (x1,VecSize*sizeof(ha_cgetype));
+              x1=realloc (x1,VecSize*sizeof(solve_real));
               HaNDBBDParSol(A,vecb,x1,VecSize,mpisize,rank,Istart,Iend,ha_rows,ha_cols,ndblock,nreg,ntime,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,presol);//,iter
             }
 
@@ -7167,7 +7167,7 @@ bool ModMidPoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
               int *irn=(int *) calloc (count,sizeof(int));
               int *irn1=(int *) calloc (nz01,sizeof(int));
               int *jcn=(int *) calloc (count,sizeof(int));
-              ha_cgetype *values= (ha_cgetype *) calloc (count,sizeof(ha_cgetype));
+              solve_real *values= (solve_real *) calloc (count,sizeof(solve_real));
               if(rank==rank_hsl) {
                 for(i=0; i<VecSize-1; i++)for(j=ai[i]; j<ai[i+1]; j++) {
                     irn1[j]=i+1;
@@ -7186,7 +7186,7 @@ bool ModMidPoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
               ierr = MatDestroy(&A);
               CHKERRQ(ierr);
               free(irn1);
-              b1=realloc (b1,VecSize*sizeof(ha_cgetype));
+              b1=realloc (b1,VecSize*sizeof(solve_real));
               if(rank==rank_hsl) {
                 VecGetArray(vecb,&vals);
                 for(i=0; i<VecSize; i++) {
@@ -7218,7 +7218,7 @@ bool ModMidPoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
               indata[1]=VecSize;//.m
               indata[0]=count;//.nz
               ptx = indata;
-              x1=realloc (x1,VecSize*sizeof(ha_cgetype));
+              x1=realloc (x1,VecSize*sizeof(solve_real));
               ierr = PetscGetCPUTime(&time1);
               CHKERRQ(ierr);
               ierr = PetscPrintf(PETSC_COMM_WORLD,"Prepare time %f\n",time1-time0);
@@ -7258,7 +7258,7 @@ bool ModMidPoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
               int *irn=(int *) calloc (lasize,sizeof(int));
               int *irn1=(int *) calloc (nz01,sizeof(int));
               int *jcn=(int *) calloc (lasize,sizeof(int));
-              ha_cgetype *values= (ha_cgetype *) calloc (lasize,sizeof(ha_cgetype));
+              solve_real *values= (solve_real *) calloc (lasize,sizeof(solve_real));
               if(rank==rank_hsl) {
                 for(i=0; i<VecSize-1; i++)for(j=ai[i]; j<ai[i+1]; j++) {
                     irn1[j]=i+1;
@@ -7278,7 +7278,7 @@ bool ModMidPoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
               ierr = MatDestroy(&A);
               CHKERRQ(ierr);
               free(irn1);
-              x1=realloc (x1,VecSize*sizeof(ha_cgetype));
+              x1=realloc (x1,VecSize*sizeof(solve_real));
               ierr = PetscGetCPUTime(&time1);
               CHKERRQ(ierr);
               ierr = PetscPrintf(PETSC_COMM_WORLD,"Prepare time %f\n",time1-time0);
@@ -7309,13 +7309,13 @@ bool ModMidPoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
             if ((tempvar = fopen(tempfilenam, "rb")) == NULL) {
               printf("Error opening file\n");
             }
-            *ha_cgeshock2=(ha_cgeexovar*)realloc (*ha_cgeshock2,(nvarele)*sizeof(ha_cgeexovar));
-            freadresult=fread(*ha_cgeshock2, sizeof(ha_cgeexovar),nvarele, tempvar);
+            *ha_cgeshock2=(closure_entry*)realloc (*ha_cgeshock2,(nvarele)*sizeof(closure_entry));
+            freadresult=fread(*ha_cgeshock2, sizeof(closure_entry),nvarele, tempvar);
             fclose(tempvar);
             remove(tempfilenam);
             ha_cgeshock=*ha_cgeshock2;
 
-            strcpy(tempfilenam,temdir);
+            strcpy(tempfilenam,scratch_dir);
             strcat(tempfilenam,"_tempvar");
             sprintf(tempchar, "%d",rank);
             strcat(tempfilenam,tempchar);
@@ -7323,13 +7323,13 @@ bool ModMidPoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
             if ((tempvar = fopen(tempfilenam, "rb")) == NULL) {
               printf("Error opening file\n");
             }
-            *ha_cofvar2=(ha_cgevar*)realloc (*ha_cofvar2,(ncofele+nvarele)*sizeof(ha_cgevar));
-            freadresult=fread(*ha_cofvar2, sizeof(ha_cgevar),ncofele+nvarele, tempvar);
+            *ha_cofvar2=(elem_value*)realloc (*ha_cofvar2,(ncofele+nvarele)*sizeof(elem_value));
+            freadresult=fread(*ha_cofvar2, sizeof(elem_value),ncofele+nvarele, tempvar);
             fclose(tempvar);
             remove(tempfilenam);
             ha_cofvar=*ha_cofvar2;
 
-            strcpy(tempfilenam,temdir);
+            strcpy(tempfilenam,scratch_dir);
             strcat(tempfilenam,"_tempclag1");
             sprintf(tempchar, "%d",rank);
             strcat(tempfilenam,tempchar);
@@ -7337,12 +7337,12 @@ bool ModMidPoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
             if ((tempvar = fopen(tempfilenam, "rb")) == NULL) {
               printf("Error opening file\n");
             }
-            clag1=realloc (clag1,(nvarele)*sizeof(ha_cgetype));
-            freadresult=fread(clag1, sizeof(ha_cgetype),nvarele, tempvar);
+            clag1=realloc (clag1,(nvarele)*sizeof(solve_real));
+            freadresult=fread(clag1, sizeof(solve_real),nvarele, tempvar);
             fclose(tempvar);
             remove(tempfilenam);
 
-            strcpy(tempfilenam,temdir);
+            strcpy(tempfilenam,scratch_dir);
             strcat(tempfilenam,"_tempvarchange");
             sprintf(tempchar, "%d",rank);
             strcat(tempfilenam,tempchar);
@@ -7350,8 +7350,8 @@ bool ModMidPoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
             if ((tempvar = fopen(tempfilenam, "rb")) == NULL) {
               printf("Error opening file\n");
             }
-            varchange=realloc (varchange,(nvarele)*sizeof(ha_cgetype));
-            freadresult=fread(varchange, sizeof(ha_cgetype),nvarele, tempvar);
+            varchange=realloc (varchange,(nvarele)*sizeof(solve_real));
+            freadresult=fread(varchange, sizeof(solve_real),nvarele, tempvar);
             fclose(tempvar);
             remove(tempfilenam);
 
@@ -7377,31 +7377,31 @@ bool ModMidPoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
           if(stepcount==0) {
             for(i=0; i<nvar; i++) {
               if(ha_var[i].change_real) {
-                for(tindx1=ha_var[i].begadd; tindx1<ha_var[i].matsize+ha_var[i].begadd; tindx1++) {
-                  if(ha_cgeshock[tindx1].ShockId) {
-                    ha_cofvar1[tindx1].varval+=ha_cofvar1[tindx1].csolpupd;
-                    varchange[tindx1]=ha_cofvar1[tindx1].csolpupd;
-                    VecSetValue(vece,ha_cgeshock[tindx1].ExoIndx,ha_cofvar1[tindx1].csolpupd,INSERT_VALUES);
+                for(tindx1=ha_var[i].offset; tindx1<ha_var[i].nelem+ha_var[i].offset; tindx1++) {
+                  if(ha_cgeshock[tindx1].is_exogenous) {
+                    ha_cofvar1[tindx1].value+=ha_cofvar1[tindx1].substep_base;
+                    varchange[tindx1]=ha_cofvar1[tindx1].substep_base;
+                    VecSetValue(vece,ha_cgeshock[tindx1].exo_index,ha_cofvar1[tindx1].substep_base,INSERT_VALUES);
                   }
                   else {
-                    varchange[tindx1]=x1[ha_cgeshock[tindx1].ExoIndx];
-                    ha_cofvar1[tindx1].varval+=x1[ha_cgeshock[tindx1].ExoIndx];
-                    ha_cofvar1[tindx1].csolpupd=x1[ha_cgeshock[tindx1].ExoIndx];
+                    varchange[tindx1]=x1[ha_cgeshock[tindx1].exo_index];
+                    ha_cofvar1[tindx1].value+=x1[ha_cgeshock[tindx1].exo_index];
+                    ha_cofvar1[tindx1].substep_base=x1[ha_cgeshock[tindx1].exo_index];
                     clag1[tindx1]=0;
                   }
                 }
               }
               else {
-                for(tindx1=ha_var[i].begadd; tindx1<ha_var[i].matsize+ha_var[i].begadd; tindx1++) {
-                  if(ha_cgeshock[tindx1].ShockId) {
-                    varchange[tindx1]=ha_cofvar1[tindx1].csolpupd;
-                    ha_cofvar1[tindx1].varval*=(1+ha_cofvar1[tindx1].csolpupd/100);
-                    VecSetValue(vece,ha_cgeshock[tindx1].ExoIndx,ha_cofvar1[tindx1].csolpupd/(1+ha_cofvar1[tindx1].csolpupd/100),INSERT_VALUES);
+                for(tindx1=ha_var[i].offset; tindx1<ha_var[i].nelem+ha_var[i].offset; tindx1++) {
+                  if(ha_cgeshock[tindx1].is_exogenous) {
+                    varchange[tindx1]=ha_cofvar1[tindx1].substep_base;
+                    ha_cofvar1[tindx1].value*=(1+ha_cofvar1[tindx1].substep_base/100);
+                    VecSetValue(vece,ha_cgeshock[tindx1].exo_index,ha_cofvar1[tindx1].substep_base/(1+ha_cofvar1[tindx1].substep_base/100),INSERT_VALUES);
                   }
                   else {
-                    varchange[tindx1]=x1[ha_cgeshock[tindx1].ExoIndx];
-                    ha_cofvar1[tindx1].csolpupd=x1[ha_cgeshock[tindx1].ExoIndx];
-                    ha_cofvar1[tindx1].varval*=(1+ha_cofvar1[tindx1].csolpupd/100);
+                    varchange[tindx1]=x1[ha_cgeshock[tindx1].exo_index];
+                    ha_cofvar1[tindx1].substep_base=x1[ha_cgeshock[tindx1].exo_index];
+                    ha_cofvar1[tindx1].value*=(1+ha_cofvar1[tindx1].substep_base/100);
                     clag1[tindx1]=0;
                   }
                 }
@@ -7411,37 +7411,37 @@ bool ModMidPoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
           else {
             for(i=0; i<nvar; i++) {
               if(ha_var[i].change_real) {
-                for(tindx1=ha_var[i].begadd; tindx1<ha_var[i].matsize+ha_var[i].begadd; tindx1++) {
-                  if(ha_cgeshock[tindx1].ShockId) {
-                    ha_cofvar1[tindx1].varval+=ha_cofvar1[tindx1].csolpupd;
-                    varchange[tindx1]+=ha_cofvar1[tindx1].csolpupd;
-                    VecSetValue(vece,ha_cgeshock[tindx1].ExoIndx,ha_cofvar1[tindx1].csolpupd,INSERT_VALUES);
+                for(tindx1=ha_var[i].offset; tindx1<ha_var[i].nelem+ha_var[i].offset; tindx1++) {
+                  if(ha_cgeshock[tindx1].is_exogenous) {
+                    ha_cofvar1[tindx1].value+=ha_cofvar1[tindx1].substep_base;
+                    varchange[tindx1]+=ha_cofvar1[tindx1].substep_base;
+                    VecSetValue(vece,ha_cgeshock[tindx1].exo_index,ha_cofvar1[tindx1].substep_base,INSERT_VALUES);
                   }
                   else {
-                    temp1=ha_cofvar1[tindx1].varval;//change;
-                    varchange[tindx1]=clag1[tindx1]+2*x1[ha_cgeshock[tindx1].ExoIndx];//+=x1[ha_cgeshock[ha_var[i].begadd+j].ExoIndx];//
-                    ha_cofvar1[tindx1].csolpupd=x1[ha_cgeshock[tindx1].ExoIndx];//ha_cofvar[ncofele+ha_var[i].begadd+j].varchange-temp1;
-                    ha_cofvar1[tindx1].varval=clag1[tindx1]+2*x1[ha_cgeshock[tindx1].ExoIndx];//ha_cofvar[ncofele+ha_var[i].begadd+j].varchange-temp1;//ha_cofvar[ncofele+ha_var[i].begadd+j].csolpupd;
+                    temp1=ha_cofvar1[tindx1].value;//change;
+                    varchange[tindx1]=clag1[tindx1]+2*x1[ha_cgeshock[tindx1].exo_index];//+=x1[ha_cgeshock[ha_var[i].begadd+j].ExoIndx];//
+                    ha_cofvar1[tindx1].substep_base=x1[ha_cgeshock[tindx1].exo_index];//ha_cofvar[ncofele+ha_var[i].begadd+j].varchange-temp1;
+                    ha_cofvar1[tindx1].value=clag1[tindx1]+2*x1[ha_cgeshock[tindx1].exo_index];//ha_cofvar[ncofele+ha_var[i].begadd+j].varchange-temp1;//ha_cofvar[ncofele+ha_var[i].begadd+j].csolpupd;
                     clag1[tindx1]=temp1;
                   }
                 }
               }
               else {
-                for(tindx1=ha_var[i].begadd; tindx1<ha_var[i].matsize+ha_var[i].begadd; tindx1++) {
-                  if(ha_cgeshock[tindx1].ShockId) {
-                    temp2=ha_cgeshock[tindx1].ShockVal;//subints;
+                for(tindx1=ha_var[i].offset; tindx1<ha_var[i].nelem+ha_var[i].offset; tindx1++) {
+                  if(ha_cgeshock[tindx1].is_exogenous) {
+                    temp2=ha_cgeshock[tindx1].shock_value;//subints;
                     temp1=(100+(subindx+1)*temp2)/(100+subindx*temp2)-1;
                     temp1*=vpercents;
-                    ha_cofvar1[tindx1].csolpupd=temp1/(1+varchange[tindx1]/100);
+                    ha_cofvar1[tindx1].substep_base=temp1/(1+varchange[tindx1]/100);
                     varchange[tindx1]+=temp1;//*(1+ha_cofvar[ncofele+ha_var[i].begadd+j].varchange/100)
-                    ha_cofvar1[tindx1].varval=(1+varchange[tindx1]/100)*ha_cofvar1[tindx1].var0;
-                    VecSetValue(vece,ha_cgeshock[tindx1].ExoIndx,temp1/(1+varchange[tindx1]/100),INSERT_VALUES);
+                    ha_cofvar1[tindx1].value=(1+varchange[tindx1]/100)*ha_cofvar1[tindx1].initial;
+                    VecSetValue(vece,ha_cgeshock[tindx1].exo_index,temp1/(1+varchange[tindx1]/100),INSERT_VALUES);
                   }
                   else {
                     temp1=varchange[tindx1];
-                    varchange[tindx1]=clag1[tindx1]+2*x1[ha_cgeshock[tindx1].ExoIndx]*(100+temp1)/100;//+=x1[ha_cgeshock[ha_var[i].begadd+j].ExoIndx]*(1+temp1/100);//
-                    ha_cofvar1[tindx1].csolpupd=x1[ha_cgeshock[tindx1].ExoIndx];//(ha_cofvar[ncofele+ha_var[i].begadd+j].varchange-temp1)/(1+temp1/100);
-                    ha_cofvar1[tindx1].varval=(100+varchange[tindx1])/100*ha_cofvar1[tindx1].var0;
+                    varchange[tindx1]=clag1[tindx1]+2*x1[ha_cgeshock[tindx1].exo_index]*(100+temp1)/100;//+=x1[ha_cgeshock[ha_var[i].begadd+j].ExoIndx]*(1+temp1/100);//
+                    ha_cofvar1[tindx1].substep_base=x1[ha_cgeshock[tindx1].exo_index];//(ha_cofvar[ncofele+ha_var[i].begadd+j].varchange-temp1)/(1+temp1/100);
+                    ha_cofvar1[tindx1].value=(100+varchange[tindx1])/100*ha_cofvar1[tindx1].initial;
                     clag1[tindx1]=temp1;
                   }
                 }
@@ -7483,7 +7483,7 @@ bool ModMidPoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
         if(rank==rank_hsl) {
 
 
-          strcpy(tempfilenam,temdir);
+          strcpy(tempfilenam,scratch_dir);
           strcat(tempfilenam,"_tempclag1");
           sprintf(tempchar, "%d",rank);
           strcat(tempfilenam,tempchar);
@@ -7491,12 +7491,12 @@ bool ModMidPoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
           if ( (tempvar = fopen(tempfilenam, "wb")) == NULL ) {
             printf("Error opening file\n");
           }
-          fwrite(clag1, sizeof(ha_cgetype),nvarele, tempvar);
+          fwrite(clag1, sizeof(solve_real),nvarele, tempvar);
           fclose(tempvar);
           free(clag1);
           clag1=NULL;
 
-          strcpy(tempfilenam,temdir);
+          strcpy(tempfilenam,scratch_dir);
           strcat(tempfilenam,"_tempvarchange");
           sprintf(tempchar, "%d",rank);
           strcat(tempfilenam,tempchar);
@@ -7504,7 +7504,7 @@ bool ModMidPoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
           if ( (tempvar = fopen(tempfilenam, "wb")) == NULL ) {
             printf("Error opening file\n");
           }
-          fwrite(varchange, sizeof(ha_cgetype),nvarele, tempvar);
+          fwrite(varchange, sizeof(solve_real),nvarele, tempvar);
           fclose(tempvar);
           free(varchange);
           varchange=NULL;
@@ -7559,7 +7559,7 @@ bool ModMidPoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
         }
 
         if(rank==rank_hsl) {
-          strcpy(tempfilenam,temdir);
+          strcpy(tempfilenam,scratch_dir);
           strcat(tempfilenam,"_tempvar");
           sprintf(tempchar, "%d",rank);
           strcat(tempfilenam,tempchar);
@@ -7567,13 +7567,13 @@ bool ModMidPoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
           if ( (tempvar = fopen(tempfilenam, "wb")) == NULL ) {
             printf("Error opening file\n");
           }
-          fwrite(ha_cofvar, sizeof(ha_cgevar),ncofele+nvarele, tempvar);
+          fwrite(ha_cofvar, sizeof(elem_value),ncofele+nvarele, tempvar);
           fclose(tempvar);
           free(*ha_cofvar2);
           *ha_cofvar2=NULL;
           ha_cofvar=*ha_cofvar2;
 
-          strcpy(tempfilenam,temdir);
+          strcpy(tempfilenam,scratch_dir);
           strcat(tempfilenam,"_tempshock");
           sprintf(tempchar, "%d",rank);
           strcat(tempfilenam,tempchar);
@@ -7581,7 +7581,7 @@ bool ModMidPoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
           if ( (tempvar = fopen(tempfilenam, "wb")) == NULL ) {
             printf("Error opening file\n");
           }
-          fwrite(ha_cgeshock, sizeof(ha_cgeexovar),nvarele, tempvar);
+          fwrite(ha_cgeshock, sizeof(closure_entry),nvarele, tempvar);
           fclose(tempvar);
           free(*ha_cgeshock2);
           *ha_cgeshock2=NULL;
@@ -7619,20 +7619,20 @@ bool ModMidPoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
 
           if(matsol==2) {
             HaDBBDMatOder(A,VecSize,mpisize,rank,Istart,Iend,nvarele,ha_eqadd,ha_rows,ha_cols,ndblock,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,cntl6);
-            x1=realloc (x1,VecSize*sizeof(ha_cgetype));
+            x1=realloc (x1,VecSize*sizeof(solve_real));
             HaDBBDParSol(A,vecb,x1,VecSize,mpisize,rank,Istart,Iend,ha_rows,ha_cols,ndblock,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,laD,cntl3);//,iter
           }
 
           if(matsol==3) {
             presol=1;
-            memcpy(counteq,counteqs,(ndblock+1)*sizeof(uvadd));
-            memcpy(counteqnoadd,counteqnoadds,(ndblock)*sizeof(uvadd));
-            memcpy(countvarintra1,countvarintra1s,(ndblock+1)*sizeof(uvadd));
+            memcpy(counteq,counteqs,(ndblock+1)*sizeof(offset_t));
+            memcpy(counteqnoadd,counteqnoadds,(ndblock)*sizeof(offset_t));
+            memcpy(countvarintra1,countvarintra1s,(ndblock+1)*sizeof(offset_t));
             HaNDBBDMatOderPre(A,VecSize,mpisize,rank,Istart,Iend,nreg,ntime,nvarele,ha_eqadd,ha_rows,ha_cols,ndblock,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,laDi,cntl6,ndbbddrank1,presol);
             HaNDBBDParPre(A,vecb,x1,VecSize,mpisize,rank,Istart,Iend,ha_rows,ha_cols,ndblock,nreg,ntime,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,presol);//,iter
             presol=0;
             HaNDBBDMatOder(A,VecSize,mpisize,rank,Istart,Iend,nreg,ntime,nvarele,ha_eqadd,ha_rows,ha_cols,ndblock,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,laDi,cntl6,ndbbddrank1,presol);
-            x1=realloc (x1,VecSize*sizeof(ha_cgetype));
+            x1=realloc (x1,VecSize*sizeof(solve_real));
             HaNDBBDParSol(A,vecb,x1,VecSize,mpisize,rank,Istart,Iend,ha_rows,ha_cols,ndblock,nreg,ntime,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,presol);//,iter
           }
 
@@ -7663,7 +7663,7 @@ bool ModMidPoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
             int *irn=(int *) calloc (count,sizeof(int));
             int *irn1=(int *) calloc (nz01,sizeof(int));
             int *jcn=(int *) calloc (count,sizeof(int));
-            ha_cgetype *values= (ha_cgetype *) calloc (count,sizeof(ha_cgetype));
+            solve_real *values= (solve_real *) calloc (count,sizeof(solve_real));
             if(rank==rank_hsl) {
               for(i=0; i<VecSize-1; i++)for(j=ai[i]; j<ai[i+1]; j++) {
                   irn1[j]=i+1;
@@ -7682,7 +7682,7 @@ bool ModMidPoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
             ierr = MatDestroy(&A);
             CHKERRQ(ierr);
             free(irn1);
-            b1=realloc (b1,VecSize*sizeof(ha_cgetype));
+            b1=realloc (b1,VecSize*sizeof(solve_real));
             if(rank==rank_hsl) {
               VecGetArray(vecb,&vals);
               for(i=0; i<VecSize; i++) {
@@ -7714,7 +7714,7 @@ bool ModMidPoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
             indata[1]=VecSize;//.m
             indata[0]=count;//.nz
             ptx = indata;//&
-            x1=realloc (x1,VecSize*sizeof(ha_cgetype));
+            x1=realloc (x1,VecSize*sizeof(solve_real));
             ierr = PetscGetCPUTime(&time1);
             CHKERRQ(ierr);
             ierr = PetscPrintf(PETSC_COMM_WORLD,"Prepare time %f\n",time1-time0);
@@ -7753,7 +7753,7 @@ bool ModMidPoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
             int *irn=(int *) calloc (lasize,sizeof(int));
             int *irn1=(int *) calloc (nz01,sizeof(int));
             int *jcn=(int *) calloc (lasize,sizeof(int));
-            ha_cgetype *values= (ha_cgetype *) calloc (lasize,sizeof(ha_cgetype));
+            solve_real *values= (solve_real *) calloc (lasize,sizeof(solve_real));
             if(rank==rank_hsl) {
               for(i=0; i<VecSize-1; i++)for(j=ai[i]; j<ai[i+1]; j++) {
                   irn1[j]=i+1;
@@ -7773,7 +7773,7 @@ bool ModMidPoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
             ierr = MatDestroy(&A);
             CHKERRQ(ierr);
             free(irn1);
-            x1=realloc (x1,VecSize*sizeof(ha_cgetype));
+            x1=realloc (x1,VecSize*sizeof(solve_real));
             ierr = PetscGetCPUTime(&time1);
             CHKERRQ(ierr);
             ierr = PetscPrintf(PETSC_COMM_WORLD,"Prepare time %f\n",time1-time0);
@@ -7804,13 +7804,13 @@ bool ModMidPoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
           if ((tempvar = fopen(tempfilenam, "rb")) == NULL) {
             printf("Error opening file\n");
           }
-          *ha_cgeshock2=(ha_cgeexovar*)realloc (*ha_cgeshock2,(nvarele)*sizeof(ha_cgeexovar));
-          freadresult=fread(*ha_cgeshock2, sizeof(ha_cgeexovar),nvarele, tempvar);
+          *ha_cgeshock2=(closure_entry*)realloc (*ha_cgeshock2,(nvarele)*sizeof(closure_entry));
+          freadresult=fread(*ha_cgeshock2, sizeof(closure_entry),nvarele, tempvar);
           fclose(tempvar);
           remove(tempfilenam);
           ha_cgeshock=*ha_cgeshock2;
 
-          strcpy(tempfilenam,temdir);
+          strcpy(tempfilenam,scratch_dir);
           strcat(tempfilenam,"_tempvar");
           sprintf(tempchar, "%d",rank);
           strcat(tempfilenam,tempchar);
@@ -7818,13 +7818,13 @@ bool ModMidPoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
           if ((tempvar = fopen(tempfilenam, "rb")) == NULL) {
             printf("Error opening file\n");
           }
-          *ha_cofvar2=(ha_cgevar*)realloc (*ha_cofvar2,(ncofele+nvarele)*sizeof(ha_cgevar));
-          freadresult=fread(*ha_cofvar2, sizeof(ha_cgevar),ncofele+nvarele, tempvar);
+          *ha_cofvar2=(elem_value*)realloc (*ha_cofvar2,(ncofele+nvarele)*sizeof(elem_value));
+          freadresult=fread(*ha_cofvar2, sizeof(elem_value),ncofele+nvarele, tempvar);
           fclose(tempvar);
           remove(tempfilenam);
           ha_cofvar=*ha_cofvar2;
 
-          strcpy(tempfilenam,temdir);
+          strcpy(tempfilenam,scratch_dir);
           strcat(tempfilenam,"_tempclag1");
           sprintf(tempchar, "%d",rank);
           strcat(tempfilenam,tempchar);
@@ -7832,12 +7832,12 @@ bool ModMidPoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
           if ((tempvar = fopen(tempfilenam, "rb")) == NULL) {
             printf("Error opening file\n");
           }
-          clag1=realloc (clag1,(nvarele)*sizeof(ha_cgetype));
-          freadresult=fread(clag1, sizeof(ha_cgetype),nvarele, tempvar);
+          clag1=realloc (clag1,(nvarele)*sizeof(solve_real));
+          freadresult=fread(clag1, sizeof(solve_real),nvarele, tempvar);
           fclose(tempvar);
           remove(tempfilenam);
 
-          strcpy(tempfilenam,temdir);
+          strcpy(tempfilenam,scratch_dir);
           strcat(tempfilenam,"_tempvarchange");
           sprintf(tempchar, "%d",rank);
           strcat(tempfilenam,tempchar);
@@ -7845,8 +7845,8 @@ bool ModMidPoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
           if ((tempvar = fopen(tempfilenam, "rb")) == NULL) {
             printf("Error opening file\n");
           }
-          varchange=realloc (varchange,(nvarele)*sizeof(ha_cgetype));
-          freadresult=fread(varchange, sizeof(ha_cgetype),nvarele, tempvar);
+          varchange=realloc (varchange,(nvarele)*sizeof(solve_real));
+          freadresult=fread(varchange, sizeof(solve_real),nvarele, tempvar);
           fclose(tempvar);
           remove(tempfilenam);
 
@@ -7854,25 +7854,25 @@ bool ModMidPoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
         ha_cofvar1=ha_cofvar+ncofele;
         for(i=0; i<nvar; i++) {
           if(ha_var[i].change_real) {
-            for(tindx1=ha_var[i].begadd; tindx1<ha_var[i].matsize+ha_var[i].begadd; tindx1++) {
-              if(ha_cgeshock[tindx1].ShockId) {
-                ha_cofvar1[tindx1].varval=0;
+            for(tindx1=ha_var[i].offset; tindx1<ha_var[i].nelem+ha_var[i].offset; tindx1++) {
+              if(ha_cgeshock[tindx1].is_exogenous) {
+                ha_cofvar1[tindx1].value=0;
               }
               else {
-                varchange[tindx1]=0.5*(varchange[tindx1]+clag1[tindx1]+x1[ha_cgeshock[tindx1].ExoIndx]);
-                ha_cofvar1[tindx1].varval=0;//ha_cofvar[tindx2].var0+varchange[tindx1];//no distortion between steps
+                varchange[tindx1]=0.5*(varchange[tindx1]+clag1[tindx1]+x1[ha_cgeshock[tindx1].exo_index]);
+                ha_cofvar1[tindx1].value=0;//ha_cofvar[tindx2].var0+varchange[tindx1];//no distortion between steps
                 clag1[tindx1]=0;
               }
             }
           }
           else {
-            for(tindx1=ha_var[i].begadd; tindx1<ha_var[i].matsize+ha_var[i].begadd; tindx1++) {
-              if(ha_cgeshock[tindx1].ShockId) {
-                ha_cofvar1[tindx1].varval=0;
+            for(tindx1=ha_var[i].offset; tindx1<ha_var[i].nelem+ha_var[i].offset; tindx1++) {
+              if(ha_cgeshock[tindx1].is_exogenous) {
+                ha_cofvar1[tindx1].value=0;
               }
               else {
-                varchange[tindx1]=0.5*(varchange[tindx1]+clag1[tindx1]+x1[ha_cgeshock[tindx1].ExoIndx]*(1+varchange[tindx1]/100));
-                ha_cofvar1[tindx1].varval=0;//ha_cofvar[tindx2].varval*varchange[tindx1]/100;
+                varchange[tindx1]=0.5*(varchange[tindx1]+clag1[tindx1]+x1[ha_cgeshock[tindx1].exo_index]*(1+varchange[tindx1]/100));
+                ha_cofvar1[tindx1].value=0;//ha_cofvar[tindx2].varval*varchange[tindx1]/100;
                 clag1[tindx1]=0;
               }
             }
@@ -7880,7 +7880,7 @@ bool ModMidPoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
         }
         if(rank==rank_hsl) {
           if(subindx!=0||sol!=0) {
-            strcpy(tempfilenam,temdir);
+            strcpy(tempfilenam,scratch_dir);
             strcat(tempfilenam,"_tempxcf");
             sprintf(tempchar, "%d",rank);
             strcat(tempfilenam,tempchar);
@@ -7888,13 +7888,13 @@ bool ModMidPoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
             if ((tempvar = fopen(tempfilenam, "rb")) == NULL) {
               printf("Error opening file\n");
             }
-            *xcf2=(ha_cgetype*)realloc (*xcf2,(nvarele)*sizeof(ha_cgetype));
+            *xcf2=(solve_real*)realloc (*xcf2,(nvarele)*sizeof(solve_real));
             xcf=*xcf2;
-            freadresult=fread(xcf, sizeof(ha_cgetype),nvarele, tempvar);
+            freadresult=fread(xcf, sizeof(solve_real),nvarele, tempvar);
             fclose(tempvar);
             remove(tempfilenam);
 
-            strcpy(tempfilenam,temdir);
+            strcpy(tempfilenam,scratch_dir);
             strcat(tempfilenam,"_tempxc12");
             sprintf(tempchar, "%d",rank);
             strcat(tempfilenam,tempchar);
@@ -7902,11 +7902,11 @@ bool ModMidPoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
             if ((tempvar = fopen(tempfilenam, "rb")) == NULL) {
               printf("Error opening file\n");
             }
-            xc12=realloc (xc12,(nvarele)*sizeof(ha_cgetype));
-            freadresult=fread(xc12, sizeof(ha_cgetype),nvarele, tempvar);
+            xc12=realloc (xc12,(nvarele)*sizeof(solve_real));
+            freadresult=fread(xc12, sizeof(solve_real),nvarele, tempvar);
             fclose(tempvar);
             remove(tempfilenam);
-            strcpy(tempfilenam,temdir);
+            strcpy(tempfilenam,scratch_dir);
             strcat(tempfilenam,"_tempxc24");
             sprintf(tempchar, "%d",rank);
             strcat(tempfilenam,tempchar);
@@ -7914,14 +7914,14 @@ bool ModMidPoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
             if ((tempvar = fopen(tempfilenam, "rb")) == NULL) {
               printf("Error opening file\n");
             }
-            xc24=realloc (xc24,(nvarele)*sizeof(ha_cgetype));
-            freadresult=fread(xc24, sizeof(ha_cgetype),nvarele, tempvar);
+            xc24=realloc (xc24,(nvarele)*sizeof(solve_real));
+            freadresult=fread(xc24, sizeof(solve_real),nvarele, tempvar);
             fclose(tempvar);
             remove(tempfilenam);
             
-            xc0=realloc (xc0,(nvarele)*sizeof(ha_cgetype));
+            xc0=realloc (xc0,(nvarele)*sizeof(solve_real));
             if(subindx>0&&sol>0){
-            strcpy(tempfilenam,temdir);
+            strcpy(tempfilenam,scratch_dir);
             strcat(tempfilenam,"_tempxcO");
             sprintf(tempchar, "%d",rank);
             strcat(tempfilenam,tempchar);
@@ -7929,77 +7929,77 @@ bool ModMidPoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
             if ((tempvar = fopen(tempfilenam, "rb")) == NULL) {
               printf("Error opening file\n");
             }
-            freadresult=fread(xc0, sizeof(ha_cgetype),nvarele, tempvar);
+            freadresult=fread(xc0, sizeof(solve_real),nvarele, tempvar);
             fclose(tempvar);
             if(subindx==subints-1&&sol==maxsol-1)remove(tempfilenam);
             }
 
           }
           if(subindx==0&&sol==0) {
-            xc0=realloc (xc0,nvarele*sizeof(ha_cgetype));
-            *xcf2=(ha_cgetype*)realloc (*xcf2,nvarele*sizeof(ha_cgetype));
+            xc0=realloc (xc0,nvarele*sizeof(solve_real));
+            *xcf2=(solve_real*)realloc (*xcf2,nvarele*sizeof(solve_real));
             xcf=*xcf2;
             for(i=0; i<nvarele; i++)xcf[i]=0;
           }
-          if(sol==0)xc12=realloc (xc12,nvarele*sizeof(ha_cgetype));
-          if(sol==0)xc24=realloc (xc24,nvarele*sizeof(ha_cgetype));
+          if(sol==0)xc12=realloc (xc12,nvarele*sizeof(solve_real));
+          if(sol==0)xc24=realloc (xc24,nvarele*sizeof(solve_real));
           if(subindx>0) {
             if(sol==0)for(i=0; i<nvarele; i++) xc0[i]=1+xcf[i]/100;//if(i==1287)printf("sol!!!!!!!!!!!!!!!!!! %d step %d xc %lf xc0 %lf k %d\n",sol,stepcount,1.0+xc[k]/100,xc0[i],i);}
             if(sol==0) {
-              kval1=1.0/(kindx1*kindx1-1.0);
-              kval2=1.0/(1-kindx1*kindx1)/(1.0-kindx2*kindx2);
+              extrap_w1=1.0/(step_ratio2*step_ratio2-1.0);
+              extrap_w2=1.0/(1-step_ratio2*step_ratio2)/(1.0-step_ratio3*step_ratio3);
               for(i=0; i<nvar; i++) {
                 if(ha_var[i].change_real) {
-                  for(k=ha_var[i].begadd; k<ha_var[i].matsize+ha_var[i].begadd; k++) {
-                    xc12[k]=xcf[k]-varchange[k]*kval1;
+                  for(k=ha_var[i].offset; k<ha_var[i].nelem+ha_var[i].offset; k++) {
+                    xc12[k]=xcf[k]-varchange[k]*extrap_w1;
                     xc24[k]=xcf[k];
-                    xcf[k]+=varchange[k]*kval2;
+                    xcf[k]+=varchange[k]*extrap_w2;
                   }
                 }
                 else {
-                  for(k=ha_var[i].begadd; k<ha_var[i].matsize+ha_var[i].begadd; k++) {
+                  for(k=ha_var[i].offset; k<ha_var[i].nelem+ha_var[i].offset; k++) {
                     xc24[k]=xcf[k];
-                    xc12[k]=xcf[k]-varchange[k]*xc0[k]*kval1;
-                    xcf[k]+=varchange[k]*xc0[k]*kval2;//(100+xc0[k])*(100+varchange[k]/45)/100-100;//varchange[k]/45;
+                    xc12[k]=xcf[k]-varchange[k]*xc0[k]*extrap_w1;
+                    xcf[k]+=varchange[k]*xc0[k]*extrap_w2;//(100+xc0[k])*(100+varchange[k]/45)/100-100;//varchange[k]/45;
                   }
                 }
               }
             }
             if(sol==1) {
-              kval1=kindx1*kindx1/(kindx1*kindx1-1.0);
-              kval2=kindx1*kindx1/(kindx2*kindx2-kindx1*kindx1);
-              kval3=kindx1*kindx1*kindx1*kindx1/(kindx1*kindx1-kindx2*kindx2)/(1.0-kindx1*kindx1);
+              extrap_w1=step_ratio2*step_ratio2/(step_ratio2*step_ratio2-1.0);
+              extrap_w2=step_ratio2*step_ratio2/(step_ratio3*step_ratio3-step_ratio2*step_ratio2);
+              extrap_w3=step_ratio2*step_ratio2*step_ratio2*step_ratio2/(step_ratio2*step_ratio2-step_ratio3*step_ratio3)/(1.0-step_ratio2*step_ratio2);
               for(i=0; i<nvar; i++) {
                 if(ha_var[i].change_real) {
-                  for(k=ha_var[i].begadd; k<ha_var[i].matsize+ha_var[i].begadd; k++) {
-                    xc24[k]-=varchange[k]*kval2;
-                    xc12[k]+=varchange[k]*kval1;
-                    xcf[k]-=varchange[k]*kval3;
+                  for(k=ha_var[i].offset; k<ha_var[i].nelem+ha_var[i].offset; k++) {
+                    xc24[k]-=varchange[k]*extrap_w2;
+                    xc12[k]+=varchange[k]*extrap_w1;
+                    xcf[k]-=varchange[k]*extrap_w3;
                   }
                 }
                 else {
-                  for(k=ha_var[i].begadd; k<ha_var[i].matsize+ha_var[i].begadd; k++) {
-                    xc24[k]-=varchange[k]*xc0[k]*kval2;
-                    xc12[k]+=varchange[k]*xc0[k]*kval1;
-                    xcf[k]-=varchange[k]*xc0[k]*kval3;//(100+xc0[k])*(100-20*varchange[k]/45)/100-100;
+                  for(k=ha_var[i].offset; k<ha_var[i].nelem+ha_var[i].offset; k++) {
+                    xc24[k]-=varchange[k]*xc0[k]*extrap_w2;
+                    xc12[k]+=varchange[k]*xc0[k]*extrap_w1;
+                    xcf[k]-=varchange[k]*xc0[k]*extrap_w3;//(100+xc0[k])*(100-20*varchange[k]/45)/100-100;
                   }
                 }
               }
             }
             if(sol==2) {
-              kval2=kindx2*kindx2/(kindx2*kindx2-kindx1*kindx1);
-              kval3=kindx2*kindx2*kindx2*kindx2/(kindx1*kindx1-kindx2*kindx2)/(1.0-kindx2*kindx2);
+              extrap_w2=step_ratio3*step_ratio3/(step_ratio3*step_ratio3-step_ratio2*step_ratio2);
+              extrap_w3=step_ratio3*step_ratio3*step_ratio3*step_ratio3/(step_ratio2*step_ratio2-step_ratio3*step_ratio3)/(1.0-step_ratio3*step_ratio3);
               for(i=0; i<nvar; i++) {
                 if(ha_var[i].change_real) {
-                  for(k=ha_var[i].begadd; k<ha_var[i].matsize+ha_var[i].begadd; k++) {
-                    xc24[k]+=varchange[k]*kval2;
-                    xcf[k]+=varchange[k]*kval3;
+                  for(k=ha_var[i].offset; k<ha_var[i].nelem+ha_var[i].offset; k++) {
+                    xc24[k]+=varchange[k]*extrap_w2;
+                    xcf[k]+=varchange[k]*extrap_w3;
                   }
                 }
                 else {
-                  for(k=ha_var[i].begadd; k<ha_var[i].matsize+ha_var[i].begadd; k++) {
-                    xc24[k]+=varchange[k]*xc0[k]*kval2;
-                    xcf[k]+=varchange[k]*xc0[k]*kval3;//(100+xc0[k])*(100+64*varchange[k]/45)/100-100;
+                  for(k=ha_var[i].offset; k<ha_var[i].nelem+ha_var[i].offset; k++) {
+                    xc24[k]+=varchange[k]*xc0[k]*extrap_w2;
+                    xcf[k]+=varchange[k]*xc0[k]*extrap_w3;//(100+xc0[k])*(100+64*varchange[k]/45)/100-100;
                   }
                 }
               }
@@ -8007,29 +8007,29 @@ bool ModMidPoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
           }
           else {
             if(sol==0){
-              kval1=1.0/(kindx1*kindx1-1);
-              kval2=1.0/(1-kindx1*kindx1)/(1-kindx2*kindx2);
+              extrap_w1=1.0/(step_ratio2*step_ratio2-1);
+              extrap_w2=1.0/(1-step_ratio2*step_ratio2)/(1-step_ratio3*step_ratio3);
               for(i=0; i<nvarele; i++) {
-                xc12[i]=-varchange[i]*kval1;
-                xcf[i]+=varchange[i]*kval2;
+                xc12[i]=-varchange[i]*extrap_w1;
+                xcf[i]+=varchange[i]*extrap_w2;
               }
             }
             if(sol==1) {
-              kval1=kindx1*kindx1/(kindx1*kindx1-1.0);
-              kval2=kindx1*kindx1/(kindx2*kindx2-kindx1*kindx1);
-              kval3=kindx1*kindx1*kindx1*kindx1/(kindx1*kindx1-kindx2*kindx2)/(1.0-kindx1*kindx1);
+              extrap_w1=step_ratio2*step_ratio2/(step_ratio2*step_ratio2-1.0);
+              extrap_w2=step_ratio2*step_ratio2/(step_ratio3*step_ratio3-step_ratio2*step_ratio2);
+              extrap_w3=step_ratio2*step_ratio2*step_ratio2*step_ratio2/(step_ratio2*step_ratio2-step_ratio3*step_ratio3)/(1.0-step_ratio2*step_ratio2);
               for(i=0; i<nvarele; i++) {
-                xc24[i]=-varchange[i]*kval2;
-                xc12[i]+=varchange[i]*kval1;
-                xcf[i]-=varchange[i]*kval3;
+                xc24[i]=-varchange[i]*extrap_w2;
+                xc12[i]+=varchange[i]*extrap_w1;
+                xcf[i]-=varchange[i]*extrap_w3;
               }
             }
             if(sol==2) {
-              kval2=kindx2*kindx2/(kindx2*kindx2-kindx1*kindx1);
-              kval3=kindx2*kindx2*kindx2*kindx2/(kindx1*kindx1-kindx2*kindx2)/(1.0-kindx2*kindx2);
+              extrap_w2=step_ratio3*step_ratio3/(step_ratio3*step_ratio3-step_ratio2*step_ratio2);
+              extrap_w3=step_ratio3*step_ratio3*step_ratio3*step_ratio3/(step_ratio2*step_ratio2-step_ratio3*step_ratio3)/(1.0-step_ratio3*step_ratio3);
               for(i=0; i<nvarele; i++) {
-                xc24[i]+=varchange[i]*kval2;
-                xcf[i]+=varchange[i]*kval3;
+                xc24[i]+=varchange[i]*extrap_w2;
+                xcf[i]+=varchange[i]*extrap_w3;
               }
             }
           }
@@ -8037,18 +8037,18 @@ bool ModMidPoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
           if(sol==maxsol-1){
           if(subindx==0){
           for(i=0; i<nvar; i++) {
-            for(tindx1=ha_var[i].begadd; tindx1<ha_var[i].matsize+ha_var[i].begadd; tindx1++) {
-               ha_cofvar1[tindx1].csolpupd=xcf[tindx1];
+            for(tindx1=ha_var[i].offset; tindx1<ha_var[i].nelem+ha_var[i].offset; tindx1++) {
+               ha_cofvar1[tindx1].substep_base=xcf[tindx1];
             }
           }
           }else{
           for(i=0; i<nvar; i++) {
-            for(tindx1=ha_var[i].begadd; tindx1<ha_var[i].matsize+ha_var[i].begadd; tindx1++) {
-               ha_cofvar1[tindx1].csolpupd=(100+xcf[tindx1])/xc0[tindx1]-100;
+            for(tindx1=ha_var[i].offset; tindx1<ha_var[i].nelem+ha_var[i].offset; tindx1++) {
+               ha_cofvar1[tindx1].substep_base=(100+xcf[tindx1])/xc0[tindx1]-100;
             }
           }
           }
-          for(i=0; i<ncofele; i++) ha_cofvar[i].varval=ha_cofvar[i].var0;
+          for(i=0; i<ncofele; i++) ha_cofvar[i].value=ha_cofvar[i].initial;
           hnew_gupd(tabfile,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,ha_cofvar,ncofele+nvarele,ncofele);
           if(Isbiupd==1)hnew_biupd(rank,tabfile,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,ha_cofvar,ncofele+nvarele,ncofele,ha_cgeshock,nvarele,laA,subints,1,0,nsteps);
           if(Isbiupd==2)hnew_biupd(rank,tabfile,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,ha_cofvar,ncofele+nvarele,ncofele,ha_cgeshock,nvarele,laA,subints,1,2,nsteps);
@@ -8056,8 +8056,8 @@ bool ModMidPoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
           IsIni=false;
           hnew_calcff(tabfile,commsyntax,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,ha_cofvar,ncofele+nvarele,ncofele,IsIni);
           for(i=0; i<nvar; i++) {
-            for(tindx1=ha_var[i].begadd; tindx1<ha_var[i].matsize+ha_var[i].begadd; tindx1++) {
-               ha_cofvar1[tindx1].csolpupd=0;
+            for(tindx1=ha_var[i].offset; tindx1<ha_var[i].nelem+ha_var[i].offset; tindx1++) {
+               ha_cofvar1[tindx1].substep_base=0;
             }
           }
 
@@ -8070,7 +8070,7 @@ bool ModMidPoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
 
           
           if(!(subindx==subints-1&&sol==maxsol-1)) {
-            strcpy(tempfilenam,temdir);
+            strcpy(tempfilenam,scratch_dir);
             strcat(tempfilenam,"_tempxcf");
             sprintf(tempchar, "%d",rank);
             strcat(tempfilenam,tempchar);
@@ -8078,13 +8078,13 @@ bool ModMidPoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
             if ( (tempvar = fopen(tempfilenam, "wb")) == NULL ) {
               printf("Error opening file\n");
             }
-            fwrite(xcf, sizeof(ha_cgetype),nvarele, tempvar);
+            fwrite(xcf, sizeof(solve_real),nvarele, tempvar);
             fclose(tempvar);
             free(*xcf2);
             *xcf2=NULL;
             xcf=*xcf2;
             
-            if(subindx>0&&sol==0){            strcpy(tempfilenam,temdir);
+            if(subindx>0&&sol==0){            strcpy(tempfilenam,scratch_dir);
             strcat(tempfilenam,"_tempxcO");
             sprintf(tempchar, "%d",rank);
             strcat(tempfilenam,tempchar);
@@ -8092,7 +8092,7 @@ bool ModMidPoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
             if ( (tempvar = fopen(tempfilenam, "wb")) == NULL ) {
               printf("Error opening file\n");
             }
-            fwrite(xc0, sizeof(ha_cgetype),nvarele, tempvar);
+            fwrite(xc0, sizeof(solve_real),nvarele, tempvar);
             fclose(tempvar);
             }
             free(xc0);
@@ -8104,7 +8104,7 @@ bool ModMidPoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
               xc124=realloc (xc124,nvarele*sizeof(int));
               for(i=0; i<nvarele; i++)xc124[i]=6;
             }else{
-            strcpy(tempfilenam,temdir);
+            strcpy(tempfilenam,scratch_dir);
             strcat(tempfilenam,"_tempxc124");
             sprintf(tempchar, "%d",rank);
             strcat(tempfilenam,tempchar);
@@ -8154,7 +8154,7 @@ bool ModMidPoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
         }
       }
       if(subindx!=subints-1){
-            strcpy(tempfilenam,temdir);
+            strcpy(tempfilenam,scratch_dir);
             strcat(tempfilenam,"_tempxc124");
             sprintf(tempchar, "%d",rank);
             strcat(tempfilenam,tempchar);
@@ -8170,7 +8170,7 @@ bool ModMidPoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
     }
             
           if(!(subindx==subints-1&&sol==maxsol-1)) {
-            strcpy(tempfilenam,temdir);
+            strcpy(tempfilenam,scratch_dir);
             strcat(tempfilenam,"_tempxc12");
             sprintf(tempchar, "%d",rank);
             strcat(tempfilenam,tempchar);
@@ -8178,11 +8178,11 @@ bool ModMidPoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
             if ( (tempvar = fopen(tempfilenam, "wb")) == NULL ) {
               printf("Error opening file\n");
             }
-            fwrite(xc12, sizeof(ha_cgetype),nvarele, tempvar);
+            fwrite(xc12, sizeof(solve_real),nvarele, tempvar);
             fclose(tempvar);
             free(xc12);
             xc12=NULL;
-            strcpy(tempfilenam,temdir);
+            strcpy(tempfilenam,scratch_dir);
             strcat(tempfilenam,"_tempxc24");
             sprintf(tempchar, "%d",rank);
             strcat(tempfilenam,tempchar);
@@ -8190,14 +8190,14 @@ bool ModMidPoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
             if ( (tempvar = fopen(tempfilenam, "wb")) == NULL ) {
               printf("Error opening file\n");
             }
-            fwrite(xc24, sizeof(ha_cgetype),nvarele, tempvar);
+            fwrite(xc24, sizeof(solve_real),nvarele, tempvar);
             fclose(tempvar);
             free(xc24);
             xc24=NULL;
           }
           
           
-          strcpy(solchar,temdir);
+          strcpy(solchar,scratch_dir);
           if(subindx<10)strcat(solchar,"_tempsol0");
           else strcat(solchar,"_tempsol");
           sprintf(tempchar, "%d", subindx);
@@ -8210,7 +8210,7 @@ bool ModMidPoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
             printf("Error opening file\n");
             return 1;
           }
-          fwrite(xcf, sizeof(ha_cgetype),nvarele, solution);
+          fwrite(xcf, sizeof(solve_real),nvarele, solution);
           fclose(solution);
         }
         free(x1);
@@ -8244,7 +8244,7 @@ bool ModMidPoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
     if(rank==0)printf("Accurate at 6 digits        %ld\nAccurate at 5 digits        %ld\nAccurate at 4 digits        %ld\nAccurate at 3 digits        %ld\nAccurate at 2 digits        %ld\nAccurate at 1 digit or none %ld\n",precis[5],precis[4],precis[3],precis[2],precis[1],precis[0]);
     }
     free(precis);
-    xc0=realloc (xc0,sizeof(ha_cgetype));
+    xc0=realloc (xc0,sizeof(solve_real));
     free(xc0);
     xc0=NULL;
     free(xc12);

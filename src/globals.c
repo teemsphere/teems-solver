@@ -3,9 +3,9 @@
 #include <ha_cgeglobal.h>
 
 int isLinux;
-int smallthreads;
-int mymaxnumthrd;
-double kindx1, kindx2, kval1, kval2, kval3;
-int step1, step2, step3;
-MPI_Comm HA_COMM, HA1_COMM;
-char temdir[NAMESIZE] = "/tmp/";
+int section_threads;
+int max_threads;
+double step_ratio2, step_ratio3, extrap_w1, extrap_w2, extrap_w3;
+int steps1, steps2, steps3;
+MPI_Comm node_comm, node_tail_comm;
+char scratch_dir[NAMESIZE] = "/tmp/";

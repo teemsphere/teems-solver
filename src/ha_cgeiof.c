@@ -18,10 +18,10 @@ int hcge_niodata(char *fname,char *comsyntax) {
   return j;
 }
 
-int ha_cgerdvar1(char *varname, char *filename,uvdim *vsize, char *longname,uvdim *d1) {
+int ha_cgerdvar1(char *varname, char *filename,dim_t *vsize, char *longname,dim_t *d1) {
   FILE * filehandle;
   char line[TABREADLINE+1],linecopy[TABREADLINE+1];
-  uvdim nlength=0,nlength1=0,vsizein=0,din1=0;
+  dim_t nlength=0,nlength1=0,vsizein=0,din1=0;
   int succ=0;
   char *readitem=NULL;
   while (varname[nlength] != '\0') nlength++;
@@ -61,10 +61,10 @@ int ha_cgerdvar1(char *varname, char *filename,uvdim *vsize, char *longname,uvdi
   return succ;
 }
 
-int ha_cgermvar1(char *varname, char *filename,uvdim d1, ha_cgemvar1 *record) {
+int ha_cgermvar1(char *varname, char *filename,dim_t d1, datafile_labels *record) {
   FILE * dfile;
   char line[DATREADLINE],header[NAMESIZE],varnamecpy[NAMESIZE];
-  uvdim nlength=0,nhead=0,reccount = 0, count1=0,i;
+  dim_t nlength=0,nhead=0,reccount = 0, count1=0,i;
   char *readitem=NULL;
   strcpy(varnamecpy,varname);
   while (ha_cgefrstr(varnamecpy," ", ""));
@@ -104,7 +104,7 @@ int ha_cgermvar1(char *varname, char *filename,uvdim d1, ha_cgemvar1 *record) {
   return 0;
 }
 
-int hcge_rcmd(char *filename, int niodata, hcge_iodata *iodata, char *tabfile, char *closure, char *shock) {
+int hcge_rcmd(char *filename, int niodata, cmf_file_entry *iodata, char *tabfile, char *closure, char *shock) {
   FILE * filehandle;
   char line[TABREADLINE],*readitem,commsyntax[NAMESIZE];
   int j=0,k;
@@ -776,7 +776,7 @@ int hcge_wtab(char *filename, char *newtabfile) {
   return 1;
 }
 
-int hcge_wdata(char *filename, char *newdatlogname, char *newdatfile,ha_cgeset *ha_set,uvdim nset, ha_cgesetele *ha_setele,hcge_cof *ha_cof,uvadd ncof,uvadd ncofele,hcge_cof *ha_var,uvadd nvar,uvadd nvarele, ha_cgevar *ha_cofvar) {
+int hcge_wdata(char *filename, char *newdatlogname, char *newdatfile,set_def *ha_set,dim_t nset, set_element *ha_setele,array_def *ha_cof,offset_t ncof,offset_t ncofele,array_def *ha_var,offset_t nvar,offset_t nvarele, elem_value *ha_cofvar) {
   FILE * filehandle,*fout;
   char line[TABREADLINE]="\0",*readline,comsyntax[TABREADLINE],longname[TABREADLINE],datline[DATREADLINE],varname[NAMESIZE],*vname1,header[NAMESIZE],setsize[DATREADLINE],tempname[NAMESIZE];
   filehandle = fopen(filename,"r");
@@ -819,7 +819,7 @@ int hcge_wdata(char *filename, char *newdatlogname, char *newdatfile,ha_cgeset *
             strcat(setsize,longname);
             strcat(setsize,"\";\n");
             fprintf(fout,"%s",setsize);
-            for (j=0; j<ha_set[i].size; j++)fprintf(fout,"%s\n",ha_setele[ha_set[i].begadd+j].setele);
+            for (j=0; j<ha_set[i].size; j++)fprintf(fout,"%s\n",ha_setele[ha_set[i].offset+j].setele);
             fprintf(fout,"\n");
           }
         }
@@ -882,7 +882,7 @@ int hcge_wdata(char *filename, char *newdatlogname, char *newdatfile,ha_cgeset *
             indx=0;
             if(ha_cof[i].size<2) {
               for(j=0; j<innerloop; j++) {
-                fprintf(fout,"%f\n",ha_cofvar[ha_cof[i].begadd+j].varval);
+                fprintf(fout,"%f\n",ha_cofvar[ha_cof[i].offset+j].value);
               }
               fprintf(fout,"\n");
             } else {
@@ -900,11 +900,11 @@ int hcge_wdata(char *filename, char *newdatlogname, char *newdatfile,ha_cgeset *
                   setindx[0]=j/ha_set[ha_cof[i].setid[1]].size;
                   setindx[1]=j-ha_set[ha_cof[i].setid[1]].size*setindx[0];
                   indx=0;
-                  for (l=0; l<ha_cof[i].size; l++)indx+=ha_cof[i].antidims[l]*setindx[l];
+                  for (l=0; l<ha_cof[i].size; l++)indx+=ha_cof[i].strides[l]*setindx[l];
                   if(setindx[1]==ha_set[ha_cof[i].setid[1]].size-1){
-                    fprintf(fout,"%f\n",ha_cofvar[ha_cof[i].begadd+indx].varval);
+                    fprintf(fout,"%f\n",ha_cofvar[ha_cof[i].offset+indx].value);
                   }else{
-                    fprintf(fout,"%f,",ha_cofvar[ha_cof[i].begadd+indx].varval);
+                    fprintf(fout,"%f,",ha_cofvar[ha_cof[i].offset+indx].value);
                   }
                 }
                 fprintf(fout,"\n");
@@ -921,11 +921,11 @@ int hcge_wdata(char *filename, char *newdatlogname, char *newdatfile,ha_cgeset *
   return 1;
 }
 
-int hcge_wvar(char *filename, char *newtabfile,hcge_cof *ha_var,uvadd nvar) {
+int hcge_wvar(char *filename, char *newtabfile,array_def *ha_var,offset_t nvar) {
   FILE * filehandle,*fout;
   char line[TABREADLINE+1]="\0",*p;//,nvarname[nvar][NAMESIZE+2],*p;//,line1[DATREADLINE];//,*ne,*np;//,*n2;
   filehandle = fopen(filename,"r");
-  uvadd i,n,j,l,l1,linelght;
+  offset_t i,n,j,l,l1,linelght;
   int lvar;
   fout = fopen(newtabfile,"w");
   while (fgets(line,TABREADLINE,filehandle)) {
@@ -964,7 +964,7 @@ int hcge_wvar(char *filename, char *newtabfile,hcge_cof *ha_var,uvadd nvar) {
 int hcge_rsetname(char *filename, char *varname, int indx, char *setname) {
   FILE * filehandle;
   int n,i;
-  uvadd lsize;
+  offset_t lsize;
   lsize=TABREADLINE+1;
   char commsyntax[NAMESIZE],varname1[NAMESIZE+2],indxname[NAMESIZE],line[TABREADLINE+1],line1[TABREADLINE+1],*p,tmp[TABREADLINE+1];//,varname2[NAMESIZE+2],varname3[NAMESIZE+2]
   strcpy(varname1,")");

@@ -26,9 +26,9 @@ int main(int argc,char **args) {
   clock_t timestr,timeend,timemulti;
   struct timeval begintime, endtime,gettime_now;
   size_t freadresult;
-  uvadd lasize=1;
-  uvadd i,j;
-  uvadd j2=0,j1=0,j0=0,j3,j4,j5,j6;
+  offset_t lasize=1;
+  offset_t i,j;
+  offset_t j2=0,j1=0,j0=0,j3,j4,j5,j6;
   PetscInitialize(&argc,&args,(char *)0,help);
   MPI_Comm_rank(PETSC_COMM_WORLD,&rank);
   MPI_Comm_size(PETSC_COMM_WORLD,&mpisize);
@@ -67,12 +67,12 @@ int main(int argc,char **args) {
   }
   free(vec_pr_name);
   free(vec_pr_sname);
-  MPI_Comm_split(PETSC_COMM_WORLD,color,rank,&HA_COMM);
-  MPI_Comm_rank( HA_COMM, &ha_id);
-  MPI_Comm_size(HA_COMM,&group_size);
+  MPI_Comm_split(PETSC_COMM_WORLD,color,rank,&node_comm);
+  MPI_Comm_rank( node_comm, &ha_id);
+  MPI_Comm_size(node_comm,&group_size);
   if(ha_id==group_size-1)color=1;
   else color=0;
-  MPI_Comm_split(PETSC_COMM_WORLD,color,rank,&HA1_COMM);
+  MPI_Comm_split(PETSC_COMM_WORLD,color,rank,&node_tail_comm);
 
   gettimeofday(&begintime, NULL);
   bool sbbd_overrid=false;
@@ -88,9 +88,9 @@ int main(int argc,char **args) {
   char tabfile[TABREADLINE],newtabfile[TABREADLINE]="_temp_tab_file",newtabfile1[TABREADLINE]="_temp_tab_new_file",closure[TABREADLINE],shock[TABREADLINE],filename[TABREADLINE],longname[TABREADLINE],vname[NAMESIZE],copyline[TABREADLINE],regset[NAMESIZE];
   char tempfilenam[255],tempchar[255],solmed[NAMESIZE],solchar[255];
   int niodata=0,nj,mem_fac=0,noutdata=0,nsoldata=0,nowrites=0;
-  uvadd nsetspace=0,dcount,ndblock=0,netcut=0,ndblock1,nreg=0,ntime=0;
-  uvdim nset=0,vsize,dim1,nlength=0,matsol=0,laA=2,laDi=2,laD=2,nsbbdblocks=2,nesteddbbd=0,mc66=0,subints=1,subindx,StoIter=1;
-  uvadd alltimeset=-1,allregset=-1;
+  offset_t nsetspace=0,dcount,ndblock=0,netcut=0,ndblock1,nreg=0,ntime=0;
+  dim_t nset=0,vsize,dim1,nlength=0,matsol=0,laA=2,laDi=2,laD=2,nsbbdblocks=2,nesteddbbd=0,mc66=0,subints=1,subindx,StoIter=1;
+  offset_t alltimeset=-1,allregset=-1;
   PetscReal cntl6=0,cntl3;
   if(rank<10) {
     strcat(newtabfile,"000");
@@ -120,60 +120,60 @@ int main(int argc,char **args) {
   PetscOptionsGetInt(NULL,NULL,"-laDi",&laDi,NULL);
   if(laDi==0)laDi=2;
   PetscOptionsGetInt(NULL,NULL,"-withmc66",&mc66,NULL);
-  PetscOptionsGetInt(NULL,NULL,"-step1",&step1,NULL);
-  if(step1==0)step1=2;
-  PetscOptionsGetInt(NULL,NULL,"-step2",&step2,NULL);
-  if(step2==0)step2=4;
-  PetscOptionsGetInt(NULL,NULL,"-step3",&step3,NULL);
-  if(step3==0)step3=8;
-  kindx1=step1/(double)2;
-  i=(uvadd)step1/2;
-  if(kindx1!=i){
+  PetscOptionsGetInt(NULL,NULL,"-step1",&steps1,NULL);
+  if(steps1==0)steps1=2;
+  PetscOptionsGetInt(NULL,NULL,"-step2",&steps2,NULL);
+  if(steps2==0)steps2=4;
+  PetscOptionsGetInt(NULL,NULL,"-step3",&steps3,NULL);
+  if(steps3==0)steps3=8;
+  step_ratio2=steps1/(double)2;
+  i=(offset_t)steps1/2;
+  if(step_ratio2!=i){
     //odd
-    kindx1=step2/(double)2;
-    i=(uvadd)step2/2;
-    if(kindx1==i){
+    step_ratio2=steps2/(double)2;
+    i=(offset_t)steps2/2;
+    if(step_ratio2==i){
       printf("Error!!! steps must be all odd or even\n");
       return 0;
     }
-    kindx1=step3/(double)2;
-    i=(uvadd)step3/2;
-    if(kindx1==i){
+    step_ratio2=steps3/(double)2;
+    i=(offset_t)steps3/2;
+    if(step_ratio2==i){
       printf("Error!!! steps must be all odd or even\n");
       return 0;
     }
   }else{
     //even
-    kindx1=step2/(double)2;
-    i=(uvadd)step2/2;
-    if(kindx1!=i){
+    step_ratio2=steps2/(double)2;
+    i=(offset_t)steps2/2;
+    if(step_ratio2!=i){
       printf("Error!!! steps must be all odd or even\n");
       return 0;
     }
-    kindx1=step3/(double)2;
-    i=(uvadd)step3/2;
-    if(kindx1!=i){
+    step_ratio2=steps3/(double)2;
+    i=(offset_t)steps3/2;
+    if(step_ratio2!=i){
       printf("Error!!! steps must be all odd or even\n");
       return 0;
     }
   }
   
-  kindx1=step2/(double)step1;
-  step2=(PetscInt)step2/step1;
-  kindx2=step3/(double)step1;
-  step3=(PetscInt)step3/step1;
-  smallthreads=0;
-  mymaxnumthrd=1;
-  PetscOptionsGetInt(NULL,NULL,"-maxthreads",&mymaxnumthrd,NULL);
-  if(mymaxnumthrd>1&&mymaxnumthrd<=omp_get_max_threads( )){
-    omp_set_num_threads(mymaxnumthrd);
+  step_ratio2=steps2/(double)steps1;
+  steps2=(PetscInt)steps2/steps1;
+  step_ratio3=steps3/(double)steps1;
+  steps3=(PetscInt)steps3/steps1;
+  section_threads=0;
+  max_threads=1;
+  PetscOptionsGetInt(NULL,NULL,"-maxthreads",&max_threads,NULL);
+  if(max_threads>1&&max_threads<=omp_get_max_threads( )){
+    omp_set_num_threads(max_threads);
   }else{
-    printf("Max Threads Num = %d\nPlease set OMP_NUM_THREADS <=maxthreads!!! I am setting it to 1!\n",mymaxnumthrd);
-    mymaxnumthrd=1;
-    omp_set_num_threads(mymaxnumthrd);
+    printf("Max Threads Num = %d\nPlease set OMP_NUM_THREADS <=maxthreads!!! I am setting it to 1!\n",max_threads);
+    max_threads=1;
+    omp_set_num_threads(max_threads);
   }
-  PetscOptionsGetInt(NULL,NULL,"-smllthreads",&smallthreads,NULL);
-  if(smallthreads==0)smallthreads=mymaxnumthrd;
+  PetscOptionsGetInt(NULL,NULL,"-smllthreads",&section_threads,NULL);
+  if(section_threads==0)section_threads=max_threads;
   PetscOptionsGetInt(NULL,NULL,"-nsubints",&subints,NULL);
   PetscOptionsGetInt(NULL,NULL,"-nsbbdblocks",&nsbbdblocks,NULL);
   PetscOptionsGetInt(NULL,NULL,"-nesteddbbd",&nesteddbbd,NULL);
@@ -210,10 +210,10 @@ int main(int argc,char **args) {
         tmpopt[tlen]='/';
         tmpopt[tlen+1]='\0';
       }
-      strcpy(temdir,tmpopt);
+      strcpy(scratch_dir,tmpopt);
     }
-    if(access(temdir,W_OK)!=0) {
-      if(rank==0)printf("Error!!! tempdir is not a writable directory: %s\n",temdir);
+    if(access(scratch_dir,W_OK)!=0) {
+      if(rank==0)printf("Error!!! tempdir is not a writable directory: %s\n",scratch_dir);
       PetscFinalize();
       return 1;
     }
@@ -275,7 +275,7 @@ int main(int argc,char **args) {
     MPI_Bcast(&noutdata,sizeof(int), MPI_BYTE,0, PETSC_COMM_WORLD);
     MPI_Bcast(&nsoldata,sizeof(int), MPI_BYTE,0, PETSC_COMM_WORLD);
   }
-  hcge_iodata *iodata= (hcge_iodata *) calloc (niodata+noutdata+nsoldata,sizeof(hcge_iodata));
+  cmf_file_entry *iodata= (cmf_file_entry *) calloc (niodata+noutdata+nsoldata,sizeof(cmf_file_entry));
   if(rank==rank_hsl) {
     hcge_rcmd(filename,niodata,iodata,tabfile,closure,shock);
     for (nj=0; nj<niodata+noutdata+nsoldata; nj++) printf("rank %d logname %s fname %s\n",rank,iodata[nj].logname,iodata[nj].filname);
@@ -287,12 +287,12 @@ int main(int argc,char **args) {
   strcpy(tabfile,newtabfile);
   if(rank==0)nset=ha_cgenset(tabfile);
   if(nohsl) {
-    MPI_Bcast(iodata,niodata*sizeof(hcge_iodata), MPI_BYTE,0, PETSC_COMM_WORLD);
+    MPI_Bcast(iodata,niodata*sizeof(cmf_file_entry), MPI_BYTE,0, PETSC_COMM_WORLD);
     MPI_Bcast(closure,TABREADLINE*sizeof(char), MPI_BYTE,0, PETSC_COMM_WORLD);
     MPI_Bcast(shock,TABREADLINE*sizeof(char), MPI_BYTE,0, PETSC_COMM_WORLD);
-    MPI_Bcast(&nset,sizeof(uvdim), MPI_BYTE,0, PETSC_COMM_WORLD);
+    MPI_Bcast(&nset,sizeof(dim_t), MPI_BYTE,0, PETSC_COMM_WORLD);
   }
-  ha_cgeset *ha_set= (ha_cgeset *) calloc (nset,sizeof(ha_cgeset));
+  set_def *ha_set= (set_def *) calloc (nset,sizeof(set_def));
   for(i=0; i<nset; i++) {
     ha_set[i].subsetid[0]=i;
     for(j=0; j<MAXSUPSET; j++)ha_set[i].subsetid[j]=-1;
@@ -301,7 +301,7 @@ int main(int argc,char **args) {
     ha_cgerset(tabfile,niodata,iodata, ha_set,nset);
     hcge_rinterset(tabfile,niodata,iodata, ha_set,nset);
     for (i=0; i<nset; i++) {
-      ha_set[i].begadd=nsetspace;
+      ha_set[i].offset=nsetspace;
       nsetspace=nsetspace+ha_set[i].size;
     }
     if(regset[0]!='\0')for (i=0; i<nset; i++)if(strcmp(regset,ha_set[i].setname)==0) {
@@ -310,14 +310,14 @@ int main(int argc,char **args) {
         }
   }
   if(nohsl) {
-    MPI_Bcast(ha_set,nset*sizeof(ha_cgeset), MPI_BYTE,0, PETSC_COMM_WORLD);
-    MPI_Bcast(&allregset,sizeof(uvadd), MPI_BYTE,0, PETSC_COMM_WORLD);
-    MPI_Bcast(&nsetspace,sizeof(uvadd), MPI_BYTE,0, PETSC_COMM_WORLD);
+    MPI_Bcast(ha_set,nset*sizeof(set_def), MPI_BYTE,0, PETSC_COMM_WORLD);
+    MPI_Bcast(&allregset,sizeof(offset_t), MPI_BYTE,0, PETSC_COMM_WORLD);
+    MPI_Bcast(&nsetspace,sizeof(offset_t), MPI_BYTE,0, PETSC_COMM_WORLD);
   }
   printf("rank %d regset %s indx %ld\n",rank,regset,allregset);
-  ha_cgesetele *ha_setele= (ha_cgesetele *) calloc (nsetspace,sizeof(ha_cgesetele));
+  set_element *ha_setele= (set_element *) calloc (nsetspace,sizeof(set_element));
   printf("nset %d nsetspace %ld\n",nset,nsetspace);
-  for (i=0; i<nsetspace; i++)for (j=0; j<MAXSUPSET; j++)ha_setele[i].setsh[j]=-1;
+  for (i=0; i<nsetspace; i++)for (j=0; j<MAXSUPSET; j++)ha_setele[i].superset_pos[j]=-1;
   if(rank==0) {
     for (i=0; i<nset; i++) {
       strcpy(vname,ha_set[i].header);
@@ -327,7 +327,7 @@ int main(int argc,char **args) {
       }
       if (nlength>0) {
         ha_cgerdvar1(vname,iodata[ha_set[i].fileid].filname,&vsize,longname,&dim1);
-        ha_cgemvar1 *matvar1= (ha_cgemvar1 *) calloc (dim1,sizeof(ha_cgemvar1));
+        datafile_labels *matvar1= (datafile_labels *) calloc (dim1,sizeof(datafile_labels));
         ha_cgermvar1(vname,iodata[ha_set[i].fileid].filname,dim1,matvar1);
         for (j=0; j<dim1; j++) {
           nj=0;
@@ -335,8 +335,8 @@ int main(int argc,char **args) {
             matvar1[j].ch[nj]=tolower((int) matvar1[j].ch[nj]);
             nj++;
           }
-          strncpy(ha_setele[j+ha_set[i].begadd].setele,matvar1[j].ch,strlen(matvar1[j].ch));
-          ha_setele[j+ha_set[i].begadd].setsh[0]=j;
+          strncpy(ha_setele[j+ha_set[i].offset].setele,matvar1[j].ch,strlen(matvar1[j].ch));
+          ha_setele[j+ha_set[i].offset].superset_pos[0]=j;
         }
         free(matvar1);
       }
@@ -361,8 +361,8 @@ int main(int argc,char **args) {
                 readitem = strtok(readitem,"=");
                 j1=atoi(readitem);
                 for (j=0; j<dim1; j++) {
-                  strcpy(ha_setele[j+ha_set[i].begadd].setele,ha_setele[j+ha_set[j1].begadd].setele);
-                  ha_setele[j+ha_set[i].begadd].setsh[0]=j;
+                  strcpy(ha_setele[j+ha_set[i].offset].setele,ha_setele[j+ha_set[j1].offset].setele);
+                  ha_setele[j+ha_set[i].offset].superset_pos[0]=j;
                 }
               }
               else {
@@ -371,12 +371,12 @@ int main(int argc,char **args) {
                 strcat(copyline,",");
                 while (ha_cgefrstr(copyline," ", ""));
                 readitem = strtok(copyline,",");
-                strcpy(ha_setele[ha_set[i].begadd].setele,readitem);
-                ha_setele[ha_set[i].begadd].setsh[0]=0;
+                strcpy(ha_setele[ha_set[i].offset].setele,readitem);
+                ha_setele[ha_set[i].offset].superset_pos[0]=0;
                 for (j=1; j<dim1; j++) {
                   readitem = strtok(NULL,",");
-                  strcpy(ha_setele[j+ha_set[i].begadd].setele,readitem);
-                  ha_setele[j+ha_set[i].begadd].setsh[0]=j;
+                  strcpy(ha_setele[j+ha_set[i].offset].setele,readitem);
+                  ha_setele[j+ha_set[i].offset].superset_pos[0]=j;
                 }
               }
             }
@@ -444,13 +444,13 @@ int main(int argc,char **args) {
   }
   MPI_Barrier(PETSC_COMM_WORLD);
   if(nohsl) {
-    MPI_Bcast(&alltimeset,sizeof(uvadd), MPI_BYTE,0, PETSC_COMM_WORLD);
-    MPI_Bcast(&allregset,sizeof(uvadd), MPI_BYTE,0, PETSC_COMM_WORLD);
-    MPI_Bcast(ha_set,nset*sizeof(ha_cgeset), MPI_BYTE,0, PETSC_COMM_WORLD);
-    MPI_Bcast(ha_setele,nsetspace*sizeof(ha_cgesetele), MPI_BYTE,0, PETSC_COMM_WORLD);
-    MPI_Bcast(&ndblock1,sizeof(uvadd), MPI_BYTE,0, PETSC_COMM_WORLD);
-    MPI_Bcast(&ntime,sizeof(uvadd), MPI_BYTE,0, PETSC_COMM_WORLD);
-    MPI_Bcast(&nreg,sizeof(uvadd), MPI_BYTE,0, PETSC_COMM_WORLD);
+    MPI_Bcast(&alltimeset,sizeof(offset_t), MPI_BYTE,0, PETSC_COMM_WORLD);
+    MPI_Bcast(&allregset,sizeof(offset_t), MPI_BYTE,0, PETSC_COMM_WORLD);
+    MPI_Bcast(ha_set,nset*sizeof(set_def), MPI_BYTE,0, PETSC_COMM_WORLD);
+    MPI_Bcast(ha_setele,nsetspace*sizeof(set_element), MPI_BYTE,0, PETSC_COMM_WORLD);
+    MPI_Bcast(&ndblock1,sizeof(offset_t), MPI_BYTE,0, PETSC_COMM_WORLD);
+    MPI_Bcast(&ntime,sizeof(offset_t), MPI_BYTE,0, PETSC_COMM_WORLD);
+    MPI_Bcast(&nreg,sizeof(offset_t), MPI_BYTE,0, PETSC_COMM_WORLD);
   }
   if(nesteddbbd==1&&ntime!=ndbbdrank) {
     ndbbdrank=ntime;
@@ -469,7 +469,7 @@ int main(int argc,char **args) {
   //**************************************************************************************
   char commsyntax[NAMESIZE];
   strcpy(commsyntax,"coefficient");
-  uvadd ncof=0,ncofele=0,ncof1,ncofele1;
+  offset_t ncof=0,ncofele=0,ncof1,ncofele1;
   if(rank==0) {
     printf("tabfile %s\n",tabfile);
     ncof=ha_cgencof(tabfile,commsyntax);
@@ -478,17 +478,17 @@ int main(int argc,char **args) {
   }
   MPI_Barrier(PETSC_COMM_WORLD);
   printf("rank %d ncof %ld\n",rank,ncof);
-  if(nohsl)MPI_Bcast(&ncof1,sizeof(uvadd), MPI_BYTE,0, PETSC_COMM_WORLD);
+  if(nohsl)MPI_Bcast(&ncof1,sizeof(offset_t), MPI_BYTE,0, PETSC_COMM_WORLD);
   ncof=ncof1;
-  hcge_cof *ha_cof= (hcge_cof *) calloc (ncof,sizeof(hcge_cof));//recycle ha_cgeset
+  array_def *ha_cof= (array_def *) calloc (ncof,sizeof(array_def));//recycle ha_cgeset
   if(rank==0) {
     ncofele=hcge_rcof(tabfile,commsyntax,ha_cof,ncof,ha_set,nset);
     if(ncofele==-1)return 0;
     ncofele1=ncofele;
   }
   if(nohsl) {
-    MPI_Bcast(&ncofele1,sizeof(uvadd), MPI_BYTE,0, PETSC_COMM_WORLD);
-    MPI_Bcast(ha_cof,ncof*sizeof(hcge_cof), MPI_BYTE,0, PETSC_COMM_WORLD);
+    MPI_Bcast(&ncofele1,sizeof(offset_t), MPI_BYTE,0, PETSC_COMM_WORLD);
+    MPI_Bcast(ha_cof,ncof*sizeof(array_def), MPI_BYTE,0, PETSC_COMM_WORLD);
   }
   ncofele=ncofele1;
   printf("rank %d ncofele %ld\n",rank,ncofele);
@@ -500,14 +500,14 @@ int main(int argc,char **args) {
   //****************************** READ VARIABLE NAME*************************************
   //**************************************************************************************
   strcpy(commsyntax,"variable");
-  uvadd nvar=0,nvarele=0,nvar1,nvarele1;
+  offset_t nvar=0,nvarele=0,nvar1,nvarele1;
   if(rank==0) {
     nvar=ha_cgencof(tabfile,commsyntax);
     nvar1=nvar;
   }
-  if(nohsl)MPI_Bcast(&nvar1,sizeof(uvadd), MPI_BYTE,0, PETSC_COMM_WORLD);
+  if(nohsl)MPI_Bcast(&nvar1,sizeof(offset_t), MPI_BYTE,0, PETSC_COMM_WORLD);
   nvar=nvar1;
-  hcge_cof *ha_var= (hcge_cof *) calloc (nvar,sizeof(hcge_cof));//recycle ha_cgeset
+  array_def *ha_var= (array_def *) calloc (nvar,sizeof(array_def));//recycle ha_cgeset
   bool *var_inter= (bool *) calloc (nvar,sizeof(bool));//recycle ha_cgeset
   printf("nvarele %ld\n",nvarele);
   if(rank==0) {
@@ -517,8 +517,8 @@ int main(int argc,char **args) {
   }
   printf("nvarele %ld\n",nvarele);
   if(nohsl) {
-    MPI_Bcast(&nvarele1,sizeof(uvadd), MPI_BYTE,0, PETSC_COMM_WORLD);
-    MPI_Bcast(ha_var,nvar*sizeof(hcge_cof), MPI_BYTE,0, PETSC_COMM_WORLD);
+    MPI_Bcast(&nvarele1,sizeof(offset_t), MPI_BYTE,0, PETSC_COMM_WORLD);
+    MPI_Bcast(ha_var,nvar*sizeof(array_def), MPI_BYTE,0, PETSC_COMM_WORLD);
   }
   nvarele=nvarele1;
   if(rank==0){
@@ -532,25 +532,25 @@ int main(int argc,char **args) {
   }
   }
   printf("nvarele %ld\n",nvarele);
-  ha_cgevar *ha_cofvar= (ha_cgevar *) calloc ((ncofele+nvarele),sizeof(ha_cgevar));
-  ha_cgecofele *ha_cofele= (ha_cgecofele *) calloc (ncofele,sizeof(ha_cgecofele));
-  ha_cgecofele *ha_varele= (ha_cgecofele *) calloc (nvarele,sizeof(ha_cgecofele));
+  elem_value *ha_cofvar= (elem_value *) calloc ((ncofele+nvarele),sizeof(elem_value));
+  elem_store *ha_cofele= (elem_store *) calloc (ncofele,sizeof(elem_store));
+  elem_store *ha_varele= (elem_store *) calloc (nvarele,sizeof(elem_store));
   printf("rankasd %d nvar %ld\n",rank,nvar);
   if(rank==0) {
     hcge_rcofele(ha_cof,ncof,ha_set,nset,ha_cofele);
   }
   if(nohsl) {
-    if(ncofele*sizeof(ha_cgecofele)>1500000000) {
-      j1=1500000000/sizeof(ha_cgecofele);
+    if(ncofele*sizeof(elem_store)>1500000000) {
+      j1=1500000000/sizeof(elem_store);
       i=ncofele/j1;
       for(j=0; j<i; j++) {
-        MPI_Bcast(ha_cofele+j*j1,j1*sizeof(ha_cgecofele), MPI_BYTE,0, PETSC_COMM_WORLD);
+        MPI_Bcast(ha_cofele+j*j1,j1*sizeof(elem_store), MPI_BYTE,0, PETSC_COMM_WORLD);
       }
       i=ncofele-j*j1;
-      MPI_Bcast(ha_cofele+j*j1,i*sizeof(ha_cgecofele), MPI_BYTE,0, PETSC_COMM_WORLD);
+      MPI_Bcast(ha_cofele+j*j1,i*sizeof(elem_store), MPI_BYTE,0, PETSC_COMM_WORLD);
     }
     else {
-      MPI_Bcast(ha_cofele,ncofele*sizeof(ha_cgecofele), MPI_BYTE,0, PETSC_COMM_WORLD);
+      MPI_Bcast(ha_cofele,ncofele*sizeof(elem_store), MPI_BYTE,0, PETSC_COMM_WORLD);
     }
   }
   printf("rank %d ncofele %ld\n",rank,ncofele);
@@ -561,7 +561,7 @@ int main(int argc,char **args) {
   if(rank==rank_hsl)hcge_wvar(tabfile,newtabfile1,ha_var,nvar);
   strcpy(tabfile,newtabfile1);
   if(nohsl) {
-    MPI_Bcast(ha_set,nset*sizeof(ha_cgeset), MPI_BYTE,0, PETSC_COMM_WORLD);
+    MPI_Bcast(ha_set,nset*sizeof(set_def), MPI_BYTE,0, PETSC_COMM_WORLD);
   }
   //**************************************************************************************
   //****************************** END READ VARIABLE NAME*********************************
@@ -583,20 +583,20 @@ int main(int argc,char **args) {
   //***************** CALCULATE VARIABLE, COEFFICIENT VALUE FROM FORMULA******************
   //**************************************************************************************
 
-  uvadd nexo=0,nexo1;
-  ha_cgevar *ha_cofvar1;
+  offset_t nexo=0,nexo1;
+  elem_value *ha_cofvar1;
   if(rank==0) {
     for (i=0; i<ncofele; i++) {
-      ha_cofvar[i].varval=ha_cofele[i].cofval;
+      ha_cofvar[i].value=ha_cofele[i].value;
     }
     for (i=ncofele; i<nvarele+ncofele; i++) {
-      ha_cofvar[i].varval=ha_varele[i-ncofele].cofval;
+      ha_cofvar[i].value=ha_varele[i-ncofele].value;
     }
   }
   printf("rank %d ncofvar %ld\n",rank,ncofele+nvarele);
   free(ha_cofele);
   free(ha_varele);
-  ha_cgeexovar *ha_cgeshock= (ha_cgeexovar *) calloc (nvarele,sizeof(ha_cgeexovar));
+  closure_entry *ha_cgeshock= (closure_entry *) calloc (nvarele,sizeof(closure_entry));
   if(rank==0) {
     strcpy(commsyntax,"exogenous");
     nexo=hcge_rexo(closure,commsyntax,ha_cgeshock,ha_var,nvar,ha_set,nset,ha_setele);
@@ -606,19 +606,19 @@ int main(int argc,char **args) {
   }
   printf("rank %d OK???\n",rank);
   if(nohsl) {
-    if(nvarele*sizeof(ha_cgeexovar)>1500000000) {
-      j1=1500000000/sizeof(ha_cgeexovar);
+    if(nvarele*sizeof(closure_entry)>1500000000) {
+      j1=1500000000/sizeof(closure_entry);
       i=nvarele/j1;
       for(j=0; j<i; j++) {
-        MPI_Bcast(ha_cgeshock+j*j1,j1*sizeof(ha_cgeexovar), MPI_BYTE,0, PETSC_COMM_WORLD);
+        MPI_Bcast(ha_cgeshock+j*j1,j1*sizeof(closure_entry), MPI_BYTE,0, PETSC_COMM_WORLD);
       }
       i=nvarele-j*j1;
-      MPI_Bcast(ha_cgeshock+j*j1,i*sizeof(ha_cgeexovar), MPI_BYTE,0, PETSC_COMM_WORLD);
+      MPI_Bcast(ha_cgeshock+j*j1,i*sizeof(closure_entry), MPI_BYTE,0, PETSC_COMM_WORLD);
     }
     else {
-      MPI_Bcast(ha_cgeshock,nvarele*sizeof(ha_cgeexovar), MPI_BYTE,0, PETSC_COMM_WORLD);
+      MPI_Bcast(ha_cgeshock,nvarele*sizeof(closure_entry), MPI_BYTE,0, PETSC_COMM_WORLD);
     }
-    MPI_Bcast(&nexo1,sizeof(uvadd), MPI_BYTE,0, PETSC_COMM_WORLD);
+    MPI_Bcast(&nexo1,sizeof(offset_t), MPI_BYTE,0, PETSC_COMM_WORLD);
   }
   nexo=nexo1;
   strcpy(commsyntax,"formula");
@@ -630,17 +630,17 @@ int main(int argc,char **args) {
   gettimeofday(&endtime, NULL);
   if(rank==0)printf("Calculation of variables time %f\n",(endtime.tv_sec - begintime.tv_sec)+((double)(endtime.tv_usec - begintime.tv_usec))/ 1000000);
   if(nohsl) { //Overcome MPI_Bcast limit
-    if((nvarele+ncofele)*sizeof(ha_cgevar)>1500000000) {
-      j1=1500000000/sizeof(ha_cgevar);
+    if((nvarele+ncofele)*sizeof(elem_value)>1500000000) {
+      j1=1500000000/sizeof(elem_value);
       i=(nvarele+ncofele)/j1;
       for(j=0; j<i; j++) {
-        MPI_Bcast(ha_cofvar+j*j1,j1*sizeof(ha_cgevar), MPI_BYTE,0, PETSC_COMM_WORLD);
+        MPI_Bcast(ha_cofvar+j*j1,j1*sizeof(elem_value), MPI_BYTE,0, PETSC_COMM_WORLD);
       }
       i=nvarele+ncofele-j*j1;
-      MPI_Bcast(ha_cofvar+j*j1,i*sizeof(ha_cgevar), MPI_BYTE,0, PETSC_COMM_WORLD);
+      MPI_Bcast(ha_cofvar+j*j1,i*sizeof(elem_value), MPI_BYTE,0, PETSC_COMM_WORLD);
     }
     else {
-      MPI_Bcast(ha_cofvar,(nvarele+ncofele)*sizeof(ha_cgevar), MPI_BYTE,0, PETSC_COMM_WORLD);
+      MPI_Bcast(ha_cofvar,(nvarele+ncofele)*sizeof(elem_value), MPI_BYTE,0, PETSC_COMM_WORLD);
     }
   }
   //**************************************************************************************
@@ -654,34 +654,34 @@ int main(int argc,char **args) {
   VecSize = (PetscInt) nvarele-nexo;
   PetscPrintf(PETSC_COMM_SELF,"VecSize %d exo %ld\n",VecSize,nexo);
   strcpy(commsyntax,"equation");
-  uvadd neq=0,neq1;
+  offset_t neq=0,neq1;
   if(rank==0) {
     neq=ha_cgencof(tabfile,commsyntax);
     neq1=neq;
   }
   if(nohsl) {
-    MPI_Bcast(&neq1,sizeof(uvadd), MPI_BYTE,0, PETSC_COMM_WORLD);
+    MPI_Bcast(&neq1,sizeof(offset_t), MPI_BYTE,0, PETSC_COMM_WORLD);
   }
   neq=neq1;
   if(rank==rank_hsl) {
     printf("neq %ld\n",neq);
   }
-  uvadd *countvarintra1= (uvadd *) calloc (ndblock+1,sizeof(uvadd));
-  hcge_cof *ha_eq= (hcge_cof *) calloc (neq,sizeof(hcge_cof));//recycle ha_cgeset
+  offset_t *countvarintra1= (offset_t *) calloc (ndblock+1,sizeof(offset_t));
+  array_def *ha_eq= (array_def *) calloc (neq,sizeof(array_def));//recycle ha_cgeset
   bool *ha_eqint= (bool *) calloc (neq,sizeof(bool));//recycle ha_cgeset
-  uvdim *orderintra= (uvdim *) malloc (nvar*sizeof(uvdim));
-  uvdim *orderreg= (uvdim *) malloc (nvar*sizeof(uvdim));
+  dim_t *orderintra= (dim_t *) malloc (nvar*sizeof(dim_t));
+  dim_t *orderreg= (dim_t *) malloc (nvar*sizeof(dim_t));
   for(i=0; i<nvar; i++) {
     orderintra[i]=-1;
     orderreg[i]=-1;
   }
-  uvdim *ha_eqtime= (uvdim *) malloc (neq*sizeof(uvdim));//recycle ha_cgeset
-  uvdim *ha_eqreg= (uvdim *) malloc (neq*sizeof(uvdim));//recycle ha_cgeset
+  dim_t *ha_eqtime= (dim_t *) malloc (neq*sizeof(dim_t));//recycle ha_cgeset
+  dim_t *ha_eqreg= (dim_t *) malloc (neq*sizeof(dim_t));//recycle ha_cgeset
   for(i=0; i<neq; i++) {
     ha_eqtime[i]=-1;
     ha_eqreg[i]=-1;
   }
-  uvadd nintraendovar,summat;
+  offset_t nintraendovar,summat;
   printf("rank %d\n",rank);
   if(rank==rank_hsl) {
     if(nesteddbbd==1)NestedMatvarRead(tabfile,commsyntax,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,ha_cofvar,ncofele+nvarele,ncofele,ha_cgeshock,var_inter,ha_eq,ha_eqint,ha_eqtime,ha_eqreg,allregset,alltimeset,orderintra,orderreg);
@@ -691,32 +691,32 @@ int main(int argc,char **args) {
   switch (nesteddbbd) {
   case 1 :
     if(!(alltimeset>=0&&allregset>=0))printf("Not a intertemporal regional CGE model!\n");
-    uvadd *countvarintra= (uvadd *) calloc (ndblock,sizeof(uvadd));
+    offset_t *countvarintra= (offset_t *) calloc (ndblock,sizeof(offset_t));
     j3=0;
     for (i=0; i<nvar; i++) {
-      for (j=0; j<ha_var[i].matsize; j++) {
-        if(!ha_cgeshock[j3+j].ShockId) {
+      for (j=0; j<ha_var[i].nelem; j++) {
+        if(!ha_cgeshock[j3+j].is_exogenous) {
           if(!var_inter[i]) {
             j0=j;
             j2=-1;
             for(j1=0; j1<orderintra[i]+1; j1++) {
-              j2=j0/ha_var[i].antidims[j1];
-              j0-=j2*ha_var[i].antidims[j1];
+              j2=j0/ha_var[i].strides[j1];
+              j0-=j2*ha_var[i].strides[j1];
             }
             j0=j;
             j4=-1;
             for(j1=0; j1<orderreg[i]+1; j1++) {
-              j4=j0/ha_var[i].antidims[j1];
-              j0-=j4*ha_var[i].antidims[j1];
+              j4=j0/ha_var[i].strides[j1];
+              j0-=j4*ha_var[i].strides[j1];
             }
-            if(j4>-1)if(ha_set[ha_var[i].setid[orderreg[i]]].regsup>0)j4=ha_setele[ha_set[ha_var[i].setid[orderreg[i]]].begadd+j4].setsh[ha_set[ha_var[i].setid[orderreg[i]]].regsup];
-            if(ha_set[ha_var[i].setid[orderintra[i]]].intsup>0)j2=ha_setele[ha_set[ha_var[i].setid[orderintra[i]]].begadd+j2].setsh[ha_set[ha_var[i].setid[orderintra[i]]].intsup];
+            if(j4>-1)if(ha_set[ha_var[i].setid[orderreg[i]]].regsup>0)j4=ha_setele[ha_set[ha_var[i].setid[orderreg[i]]].offset+j4].superset_pos[ha_set[ha_var[i].setid[orderreg[i]]].regsup];
+            if(ha_set[ha_var[i].setid[orderintra[i]]].intsup>0)j2=ha_setele[ha_set[ha_var[i].setid[orderintra[i]]].offset+j2].superset_pos[ha_set[ha_var[i].setid[orderintra[i]]].intsup];
             if(orderreg[i]>-1)countvarintra[j2*(nreg+1)+j4]++;
             else countvarintra[j2*(nreg+1)+nreg]++;
           }
         }
       }
-      j3+=ha_var[i].matsize;
+      j3+=ha_var[i].nelem;
     }
     if(rank==rank_hsl) {
       j2=countvarintra[0];
@@ -736,48 +736,48 @@ int main(int argc,char **args) {
     j3=0;
     j4=nintraendovar;
     for (i=0; i<nvar; i++) {
-      for (j=0; j<ha_var[i].matsize; j++) {
+      for (j=0; j<ha_var[i].nelem; j++) {
         j5=j3+j;
-        if(!ha_cgeshock[j5].ShockId) {
+        if(!ha_cgeshock[j5].is_exogenous) {
           if(!var_inter[i]) {
             j0=j;
             j2=-1;
             for(j1=0; j1<orderintra[i]+1; j1++) {
-              j2=j0/ha_var[i].antidims[j1];
-              j0-=j2*ha_var[i].antidims[j1];
+              j2=j0/ha_var[i].strides[j1];
+              j0-=j2*ha_var[i].strides[j1];
             }
             j0=j;
             j6=-1;
             for(j1=0; j1<orderreg[i]+1; j1++) {
-              j6=j0/ha_var[i].antidims[j1];
-              j0-=j6*ha_var[i].antidims[j1];
+              j6=j0/ha_var[i].strides[j1];
+              j0-=j6*ha_var[i].strides[j1];
             }
-            if(ha_set[ha_var[i].setid[orderintra[i]]].intsup>0)j2=ha_setele[ha_set[ha_var[i].setid[orderintra[i]]].begadd+j2].setsh[ha_set[ha_var[i].setid[orderintra[i]]].intsup];
-            if(j6>-1)if(ha_set[ha_var[i].setid[orderreg[i]]].regsup>0)j6=ha_setele[ha_set[ha_var[i].setid[orderreg[i]]].begadd+j6].setsh[ha_set[ha_var[i].setid[orderreg[i]]].regsup];
+            if(ha_set[ha_var[i].setid[orderintra[i]]].intsup>0)j2=ha_setele[ha_set[ha_var[i].setid[orderintra[i]]].offset+j2].superset_pos[ha_set[ha_var[i].setid[orderintra[i]]].intsup];
+            if(j6>-1)if(ha_set[ha_var[i].setid[orderreg[i]]].regsup>0)j6=ha_setele[ha_set[ha_var[i].setid[orderreg[i]]].offset+j6].superset_pos[ha_set[ha_var[i].setid[orderreg[i]]].regsup];
             if(orderreg[i]>-1) {
-              ha_cgeshock[j5].ExoIndx=countvarintra[j2*(nreg+1)+j6];
+              ha_cgeshock[j5].exo_index=countvarintra[j2*(nreg+1)+j6];
               countvarintra[j2*(nreg+1)+j6]++;
             }
             else {
-              ha_cgeshock[j5].ExoIndx=countvarintra[j2*(nreg+1)+nreg];
+              ha_cgeshock[j5].exo_index=countvarintra[j2*(nreg+1)+nreg];
               countvarintra[j2*(nreg+1)+nreg]++;
             }
           }
           else {
-            ha_cgeshock[j5].ExoIndx=j4;
+            ha_cgeshock[j5].exo_index=j4;
             j4++;
           }
         }
       }
-      j3+=ha_var[i].matsize;
+      j3+=ha_var[i].nelem;
     }
     if(rank==rank_hsl) {
       countvarintra1[ndblock]=countvarintra[ndblock-1];
     }
     j1=0;
     for (i=0; i<nvarele; i++) {
-      if (ha_cgeshock[i].ShockId) {
-        ha_cgeshock[i].ExoIndx+=j1;
+      if (ha_cgeshock[i].is_exogenous) {
+        ha_cgeshock[i].exo_index+=j1;
         j1++;
       }
     }
@@ -786,24 +786,24 @@ int main(int argc,char **args) {
     break;
   default :
     if(alltimeset>=0) {
-      uvadd *countvarintra= (uvadd *) calloc (ndblock,sizeof(uvadd));
+      offset_t *countvarintra= (offset_t *) calloc (ndblock,sizeof(offset_t));
       j3=0;
       for (i=0; i<nvar; i++) {
-        for (j=0; j<ha_var[i].matsize; j++) {
-          if(!ha_cgeshock[j3+j].ShockId) {
+        for (j=0; j<ha_var[i].nelem; j++) {
+          if(!ha_cgeshock[j3+j].is_exogenous) {
             if(!var_inter[i]) {
               j0=j;
               for(j1=0; j1<orderintra[i]+1; j1++) {
-                j2=j0/ha_var[i].antidims[j1];
-                j0-=j2*ha_var[i].antidims[j1];
+                j2=j0/ha_var[i].strides[j1];
+                j0-=j2*ha_var[i].strides[j1];
               }
               if(allregset>=0) {
                 j0=j;
                 for(j1=0; j1<orderreg[i]+1; j1++) {
-                  j4=j0/ha_var[i].antidims[j1];
-                  j0-=j4*ha_var[i].antidims[j1];
+                  j4=j0/ha_var[i].strides[j1];
+                  j0-=j4*ha_var[i].strides[j1];
                 }
-                if(ha_set[ha_var[i].setid[orderreg[i]]].regsup>0)j4=ha_setele[ha_set[ha_var[i].setid[orderreg[i]]].begadd+j4].setsh[ha_set[ha_var[i].setid[orderreg[i]]].regsup];
+                if(ha_set[ha_var[i].setid[orderreg[i]]].regsup>0)j4=ha_setele[ha_set[ha_var[i].setid[orderreg[i]]].offset+j4].superset_pos[ha_set[ha_var[i].setid[orderreg[i]]].regsup];
                 countvarintra[j2*nreg+j4]++;
               }
               else {
@@ -812,7 +812,7 @@ int main(int argc,char **args) {
             }
           }
         }
-        j3+=ha_var[i].matsize;
+        j3+=ha_var[i].nelem;
       }
       if(rank==rank_hsl) {
         j2=countvarintra[0];
@@ -832,45 +832,45 @@ int main(int argc,char **args) {
       j3=0;
       j4=nintraendovar;
       for (i=0; i<nvar; i++) {
-        for (j=0; j<ha_var[i].matsize; j++) {
+        for (j=0; j<ha_var[i].nelem; j++) {
           j5=j3+j;
-          if(!ha_cgeshock[j5].ShockId) {
+          if(!ha_cgeshock[j5].is_exogenous) {
             if(!var_inter[i]) {
               j0=j;
               for(j1=0; j1<orderintra[i]+1; j1++) {
-                j2=j0/ha_var[i].antidims[j1];
-                j0-=j2*ha_var[i].antidims[j1];
+                j2=j0/ha_var[i].strides[j1];
+                j0-=j2*ha_var[i].strides[j1];
               }
               if(allregset>=0) {
                 j0=j;
                 for(j1=0; j1<orderreg[i]+1; j1++) {
-                  j6=j0/ha_var[i].antidims[j1];
-                  j0-=j6*ha_var[i].antidims[j1];
+                  j6=j0/ha_var[i].strides[j1];
+                  j0-=j6*ha_var[i].strides[j1];
                 }
-                if(ha_set[ha_var[i].setid[orderreg[i]]].regsup>0)j6=ha_setele[ha_set[ha_var[i].setid[orderreg[i]]].begadd+j6].setsh[ha_set[ha_var[i].setid[orderreg[i]]].regsup];
-                ha_cgeshock[j5].ExoIndx=countvarintra[j2*ha_set[allregset].size+j6];
+                if(ha_set[ha_var[i].setid[orderreg[i]]].regsup>0)j6=ha_setele[ha_set[ha_var[i].setid[orderreg[i]]].offset+j6].superset_pos[ha_set[ha_var[i].setid[orderreg[i]]].regsup];
+                ha_cgeshock[j5].exo_index=countvarintra[j2*ha_set[allregset].size+j6];
                 countvarintra[j2*ha_set[allregset].size+j6]++;
               }
               else {
-                ha_cgeshock[j5].ExoIndx=countvarintra[j2];
+                ha_cgeshock[j5].exo_index=countvarintra[j2];
                 countvarintra[j2]++;
               }
             }
             else {
-              ha_cgeshock[j5].ExoIndx=j4;
+              ha_cgeshock[j5].exo_index=j4;
               j4++;
             }
           }
         }
-        j3+=ha_var[i].matsize;
+        j3+=ha_var[i].nelem;
       }
       if(rank==rank_hsl) {
         countvarintra1[ndblock]=countvarintra[ndblock-1];
       }
       j1=0;
       for (i=0; i<nvarele; i++) {
-        if (ha_cgeshock[i].ShockId) {
-          ha_cgeshock[i].ExoIndx+=j1;
+        if (ha_cgeshock[i].is_exogenous) {
+          ha_cgeshock[i].exo_index+=j1;
           j1++;
         }
       }
@@ -878,23 +878,23 @@ int main(int argc,char **args) {
     }
     else {
       if(allregset>=0) {
-        uvadd *countvarintra= (uvadd *) calloc (ndblock,sizeof(uvadd));
+        offset_t *countvarintra= (offset_t *) calloc (ndblock,sizeof(offset_t));
         j3=0;
         for (i=0; i<nvar; i++) {
-          for (j=0; j<ha_var[i].matsize; j++) {
-            if(!ha_cgeshock[j3+j].ShockId) {
+          for (j=0; j<ha_var[i].nelem; j++) {
+            if(!ha_cgeshock[j3+j].is_exogenous) {
               if(!var_inter[i]) {
                 j0=j;
                 for(j1=0; j1<orderreg[i]+1; j1++) {
-                  j4=j0/ha_var[i].antidims[j1];
-                  j0-=j4*ha_var[i].antidims[j1];
+                  j4=j0/ha_var[i].strides[j1];
+                  j0-=j4*ha_var[i].strides[j1];
                 }
-                if(ha_set[ha_var[i].setid[orderreg[i]]].regsup>0)j4=ha_setele[ha_set[ha_var[i].setid[orderreg[i]]].begadd+j4].setsh[ha_set[ha_var[i].setid[orderreg[i]]].regsup];
+                if(ha_set[ha_var[i].setid[orderreg[i]]].regsup>0)j4=ha_setele[ha_set[ha_var[i].setid[orderreg[i]]].offset+j4].superset_pos[ha_set[ha_var[i].setid[orderreg[i]]].regsup];
                 countvarintra[j4]++;
               }
             }
           }
-          j3+=ha_var[i].matsize;
+          j3+=ha_var[i].nelem;
         }
         if(rank==rank_hsl) {
           j2=countvarintra[0];
@@ -914,34 +914,34 @@ int main(int argc,char **args) {
         j3=0;
         j4=nintraendovar;
         for (i=0; i<nvar; i++) {
-          for (j=0; j<ha_var[i].matsize; j++) {
+          for (j=0; j<ha_var[i].nelem; j++) {
             j5=j3+j;
-            if(!ha_cgeshock[j5].ShockId) {
+            if(!ha_cgeshock[j5].is_exogenous) {
               if(!var_inter[i]) {
                 j0=j;
                 for(j1=0; j1<orderreg[i]+1; j1++) {
-                  j6=j0/ha_var[i].antidims[j1];
-                  j0-=j6*ha_var[i].antidims[j1];
+                  j6=j0/ha_var[i].strides[j1];
+                  j0-=j6*ha_var[i].strides[j1];
                 }
-                if(ha_set[ha_var[i].setid[orderreg[i]]].regsup>0)j6=ha_setele[ha_set[ha_var[i].setid[orderreg[i]]].begadd+j6].setsh[ha_set[ha_var[i].setid[orderreg[i]]].regsup];
-                ha_cgeshock[j5].ExoIndx=countvarintra[j6];
+                if(ha_set[ha_var[i].setid[orderreg[i]]].regsup>0)j6=ha_setele[ha_set[ha_var[i].setid[orderreg[i]]].offset+j6].superset_pos[ha_set[ha_var[i].setid[orderreg[i]]].regsup];
+                ha_cgeshock[j5].exo_index=countvarintra[j6];
                 countvarintra[j6]++;
               }
               else {
-                ha_cgeshock[j5].ExoIndx=j4;
+                ha_cgeshock[j5].exo_index=j4;
                 j4++;
               }
             }
           }
-          j3+=ha_var[i].matsize;
+          j3+=ha_var[i].nelem;
         }
         if(rank==rank_hsl) {
           countvarintra1[ndblock]=countvarintra[ndblock-1];
         }
         j1=0;
         for (i=0; i<nvarele; i++) {
-          if (ha_cgeshock[i].ShockId) {
-            ha_cgeshock[i].ExoIndx+=j1;
+          if (ha_cgeshock[i].is_exogenous) {
+            ha_cgeshock[i].exo_index+=j1;
             j1++;
           }
         }
@@ -951,19 +951,19 @@ int main(int argc,char **args) {
         j1=0;
         j2=0;
         for (i=0; i<nvar; i++) {
-          for (j=0; j<ha_var[i].matsize; j++) {
+          for (j=0; j<ha_var[i].nelem; j++) {
             j3=j0+j;
 
-            if (!ha_cgeshock[j3].ShockId) {
-              ha_cgeshock[j3].ExoIndx+=j2;
+            if (!ha_cgeshock[j3].is_exogenous) {
+              ha_cgeshock[j3].exo_index+=j2;
               j2++;
             }
-            if (ha_cgeshock[j3].ShockId) {
-              ha_cgeshock[j3].ExoIndx+=j1;
+            if (ha_cgeshock[j3].is_exogenous) {
+              ha_cgeshock[j3].exo_index+=j1;
               j1++;
             }
           }
-          j0+=ha_var[i].matsize;
+          j0+=ha_var[i].nelem;
         }
       }
     }
@@ -973,36 +973,36 @@ int main(int argc,char **args) {
 
   free(var_inter);
   strcpy(commsyntax,"equation");
-  uvadd *ha_eqadd= (uvadd *) calloc (VecSize,sizeof(uvadd));//recycle ha_cgeset
-  uvadd *ha_eqtimesbegad= (uvadd *) calloc (neq,sizeof(uvadd));
-  uvadd *ha_eqregsbegad= (uvadd *) calloc (neq,sizeof(uvadd));
-  uvadd *counteq= (uvadd *) calloc (ndblock+1,sizeof(uvadd));
-  uvadd *counteqnoadd= (uvadd *) calloc (ndblock,sizeof(uvadd));
-  uvadd nintraeq=0;
+  offset_t *ha_eqadd= (offset_t *) calloc (VecSize,sizeof(offset_t));//recycle ha_cgeset
+  offset_t *ha_eqtimesbegad= (offset_t *) calloc (neq,sizeof(offset_t));
+  offset_t *ha_eqregsbegad= (offset_t *) calloc (neq,sizeof(offset_t));
+  offset_t *counteq= (offset_t *) calloc (ndblock+1,sizeof(offset_t));
+  offset_t *counteqnoadd= (offset_t *) calloc (ndblock,sizeof(offset_t));
+  offset_t nintraeq=0;
   if(alltimeset>=0&&allregset<0) {
     for(i=0; i<neq; i++) {
       j3=1;
-      if(ha_eqtime[i]>-1)ha_eqtimesbegad[i]=ha_set[ha_eq[i].setid[ha_eqtime[i]]].begadd;
-      ha_eq[i].antidims[ha_eq[i].size-1]=1;
+      if(ha_eqtime[i]>-1)ha_eqtimesbegad[i]=ha_set[ha_eq[i].setid[ha_eqtime[i]]].offset;
+      ha_eq[i].strides[ha_eq[i].size-1]=1;
       if(ha_eq[i].size>1) {
         for (j2=ha_eq[i].size-2; j2>-1; j2--) {
-          ha_eq[i].antidims[j2]=ha_eq[i].antidims[j2+1]*ha_set[ha_eq[i].setid[j2+1]].size;
+          ha_eq[i].strides[j2]=ha_eq[i].strides[j2+1]*ha_set[ha_eq[i].setid[j2+1]].size;
         }
       }
     }
     j3=0;
     for (i=0; i<neq; i++) {
       if(ha_eqint[i]) {
-        for (j=0; j<ha_eq[i].matsize; j++) {
+        for (j=0; j<ha_eq[i].nelem; j++) {
           j0=j;
           for(j1=0; j1<ha_eqtime[i]+1; j1++) {
-            j2=j0/ha_eq[i].antidims[j1];
-            j0-=j2*ha_eq[i].antidims[j1];
+            j2=j0/ha_eq[i].strides[j1];
+            j0-=j2*ha_eq[i].strides[j1];
           }
-          if(ha_eqtime[i]>-1)if(ha_eq[i].setid[ha_eqtime[i]]==alltimeset)counteq[ha_setele[ha_eqtimesbegad[i]+j2].setsh[0]]++;
+          if(ha_eqtime[i]>-1)if(ha_eq[i].setid[ha_eqtime[i]]==alltimeset)counteq[ha_setele[ha_eqtimesbegad[i]+j2].superset_pos[0]]++;
             else {
               for(j3=1; j3<MAXSUPSET; j3++)if(ha_set[ha_eq[i].setid[ha_eqtime[i]]].subsetid[j3]=alltimeset)break;
-              counteq[ha_setele[ha_eqtimesbegad[i]+j2].setsh[j3]]++;
+              counteq[ha_setele[ha_eqtimesbegad[i]+j2].superset_pos[j3]]++;
             }
         }
       }
@@ -1028,24 +1028,24 @@ int main(int argc,char **args) {
   if(alltimeset<0&&allregset>=0) {
     for(i=0; i<neq; i++) {
       j3=1;
-      if(ha_eqreg[i]>-1)ha_eqtimesbegad[i]=ha_set[ha_eq[i].setid[ha_eqreg[i]]].begadd;
-      ha_eq[i].antidims[ha_eq[i].size-1]=1;
+      if(ha_eqreg[i]>-1)ha_eqtimesbegad[i]=ha_set[ha_eq[i].setid[ha_eqreg[i]]].offset;
+      ha_eq[i].strides[ha_eq[i].size-1]=1;
       if(ha_eq[i].size>1) {
         for (j2=ha_eq[i].size-2; j2>-1; j2--) {
-          ha_eq[i].antidims[j2]=ha_eq[i].antidims[j2+1]*ha_set[ha_eq[i].setid[j2+1]].size;
+          ha_eq[i].strides[j2]=ha_eq[i].strides[j2+1]*ha_set[ha_eq[i].setid[j2+1]].size;
         }
       }
     }
     j3=0;
     for (i=0; i<neq; i++) {
       if(ha_eqint[i]) { //for (j=0; j<ha_set[allregset].size; j++)counteq[j]+=(uvadd)ha_eq[i].matsize/ha_set[allregset].size;
-        for (j=0; j<ha_eq[i].matsize; j++) {
+        for (j=0; j<ha_eq[i].nelem; j++) {
           j0=j;
           for(j1=0; j1<ha_eqreg[i]+1; j1++) {
-            j2=j0/ha_eq[i].antidims[j1];
-            j0-=j2*ha_eq[i].antidims[j1];
+            j2=j0/ha_eq[i].strides[j1];
+            j0-=j2*ha_eq[i].strides[j1];
           }
-          counteq[ha_setele[ha_eqtimesbegad[i]+j2].setsh[0]]++;
+          counteq[ha_setele[ha_eqtimesbegad[i]+j2].superset_pos[0]]++;
         }
       }
     }
@@ -1073,13 +1073,13 @@ int main(int argc,char **args) {
     switch (nesteddbbd) {
     case 1 :
       for (i=0; i<neq; i++) {
-        if(ha_eqtime[i]>-1)ha_eqtimesbegad[i]=ha_set[ha_eq[i].setid[ha_eqtime[i]]].begadd;
-        if(ha_eqreg[i]>-1)ha_eqregsbegad[i]=ha_set[ha_eq[i].setid[ha_eqreg[i]]].begadd;
+        if(ha_eqtime[i]>-1)ha_eqtimesbegad[i]=ha_set[ha_eq[i].setid[ha_eqtime[i]]].offset;
+        if(ha_eqreg[i]>-1)ha_eqregsbegad[i]=ha_set[ha_eq[i].setid[ha_eqreg[i]]].offset;
         if(ha_eqint[i]) {
           for (j=0; j<ha_set[ha_eq[i].setid[ha_eqtime[i]]].size; j++)
             if(ha_eqreg[i]>-1)for(j1=0; j1<ha_set[ha_eq[i].setid[ha_eqreg[i]]].size; j1++)
-                counteq[ha_setele[ha_eqtimesbegad[i]+j].setsh[ha_set[ha_eq[i].setid[ha_eqtime[i]]].intsup]*(nreg+1)+ha_setele[ha_eqregsbegad[i]+j1].setsh[ha_set[ha_eq[i].setid[ha_eqreg[i]]].regsup]]+=ha_eq[i].matsize/ha_set[ha_eq[i].setid[ha_eqtime[i]]].size/ha_set[ha_eq[i].setid[ha_eqreg[i]]].size;
-            else counteq[ha_setele[ha_eqtimesbegad[i]+j].setsh[ha_set[ha_eq[i].setid[ha_eqtime[i]]].intsup]*(nreg+1)+nreg]+=ha_eq[i].matsize/ha_set[ha_eq[i].setid[ha_eqtime[i]]].size;
+                counteq[ha_setele[ha_eqtimesbegad[i]+j].superset_pos[ha_set[ha_eq[i].setid[ha_eqtime[i]]].intsup]*(nreg+1)+ha_setele[ha_eqregsbegad[i]+j1].superset_pos[ha_set[ha_eq[i].setid[ha_eqreg[i]]].regsup]]+=ha_eq[i].nelem/ha_set[ha_eq[i].setid[ha_eqtime[i]]].size/ha_set[ha_eq[i].setid[ha_eqreg[i]]].size;
+            else counteq[ha_setele[ha_eqtimesbegad[i]+j].superset_pos[ha_set[ha_eq[i].setid[ha_eqtime[i]]].intsup]*(nreg+1)+nreg]+=ha_eq[i].nelem/ha_set[ha_eq[i].setid[ha_eqtime[i]]].size;
         }
       }
       if(rank==rank_hsl) {
@@ -1103,19 +1103,19 @@ int main(int argc,char **args) {
 
     default :
       for(i=0; i<neq; i++) {
-        if(ha_eqtime[i]>-1)ha_eqtimesbegad[i]=ha_set[ha_eq[i].setid[ha_eqtime[i]]].begadd;
-        if(ha_eqreg[i]>-1)ha_eqregsbegad[i]=ha_set[ha_eq[i].setid[ha_eqreg[i]]].begadd;
+        if(ha_eqtime[i]>-1)ha_eqtimesbegad[i]=ha_set[ha_eq[i].setid[ha_eqtime[i]]].offset;
+        if(ha_eqreg[i]>-1)ha_eqregsbegad[i]=ha_set[ha_eq[i].setid[ha_eqreg[i]]].offset;
       }
       for (i=0; i<neq; i++) {
         if(ha_eqint[i]) {
           for (j=0; j<ha_set[ha_eq[i].setid[ha_eqtime[i]]].size; j++)
             if(ha_eq[i].setid[ha_eqtime[i]]==alltimeset)
               for(j1=0; j1<ha_set[ha_eq[i].setid[ha_eqreg[i]]].size; j1++)
-                counteq[ha_setele[ha_eqtimesbegad[i]+j].setsh[0]*ha_set[ha_eq[i].setid[ha_eqreg[i]]].size+ha_setele[ha_eqregsbegad[i]+j1].setsh[0]]+=ha_eq[i].matsize/ha_set[ha_eq[i].setid[ha_eqtime[i]]].size/ha_set[ha_eq[i].setid[ha_eqreg[i]]].size;
+                counteq[ha_setele[ha_eqtimesbegad[i]+j].superset_pos[0]*ha_set[ha_eq[i].setid[ha_eqreg[i]]].size+ha_setele[ha_eqregsbegad[i]+j1].superset_pos[0]]+=ha_eq[i].nelem/ha_set[ha_eq[i].setid[ha_eqtime[i]]].size/ha_set[ha_eq[i].setid[ha_eqreg[i]]].size;
             else {
               for(j3=1; j3<MAXSUPSET; j3++)if(ha_set[ha_eq[i].setid[ha_eqtime[i]]].subsetid[j3]=alltimeset)break;
               for(j1=0; j1<ha_set[ha_eq[i].setid[ha_eqreg[i]]].size; j1++)
-                counteq[ha_setele[ha_eqtimesbegad[i]+j].setsh[j3]*ha_set[ha_eq[i].setid[ha_eqreg[i]]].size+ha_setele[ha_eqregsbegad[i]+j1].setsh[0]]+=ha_eq[i].matsize/ha_set[ha_eq[i].setid[ha_eqtime[i]]].size/ha_set[ha_eq[i].setid[ha_eqreg[i]]].size;
+                counteq[ha_setele[ha_eqtimesbegad[i]+j].superset_pos[j3]*ha_set[ha_eq[i].setid[ha_eqreg[i]]].size+ha_setele[ha_eqregsbegad[i]+j1].superset_pos[0]]+=ha_eq[i].nelem/ha_set[ha_eq[i].setid[ha_eqtime[i]]].size/ha_set[ha_eq[i].setid[ha_eqreg[i]]].size;
             }
         }
       }
@@ -1244,25 +1244,25 @@ int main(int argc,char **args) {
   FILE *ofp;
   int sol;
 
-  forint indata[5];
+  fortran_int indata[5];
   indata[1]=VecSize;
   indata[2]=mpisize;
   indata[3]=ndblock;
   indata[4]=nsbbdblocks;
-  forint *ptx=NULL;
+  fortran_int *ptx=NULL;
   ptx = indata;
 
-  ha_cgetype *x1=NULL;//= (ha_cgetype *) calloc (VecSize,sizeof(ha_cgetype));
-  ha_cgetype *xcf=NULL;
-  ha_cgetype *x0=NULL;// (ha_cgetype *) calloc (1,sizeof(ha_cgetype));
-  ha_cgetype *b1=NULL;//= (ha_cgetype *) calloc (VecSize,sizeof(ha_cgetype));
-  extern void spec48_ssol2la_(int *INSIZE,int *IRN, int *JCN, ha_cgetype *VA, ha_cgetype *B, ha_cgetype *X);
-  extern void spec48_single_(forint *indata,int *irn, int *jcn,ha_cgetype *b1, ha_cgetype *values,ha_cgetype *x1, int *neleperrow,int *ai1, MPI_Fint *fcomm);
-  extern void spec48_nomc66_(forint *indata, int *jcn,ha_cgetype *b1, ha_cgetype *values,ha_cgetype *x1, int *neleperrow, MPI_Fint *fcomm,forint *rowptrin, forint *colptrin);
+  solve_real *x1=NULL;//= (ha_cgetype *) calloc (VecSize,sizeof(ha_cgetype));
+  solve_real *xcf=NULL;
+  solve_real *x0=NULL;// (ha_cgetype *) calloc (1,sizeof(ha_cgetype));
+  solve_real *b1=NULL;//= (ha_cgetype *) calloc (VecSize,sizeof(ha_cgetype));
+  extern void spec48_ssol2la_(int *INSIZE,int *IRN, int *JCN, solve_real *VA, solve_real *B, solve_real *X);
+  extern void spec48_single_(fortran_int *indata,int *irn, int *jcn,solve_real *b1, solve_real *values,solve_real *x1, int *neleperrow,int *ai1, MPI_Fint *fcomm);
+  extern void spec48_nomc66_(fortran_int *indata, int *jcn,solve_real *b1, solve_real *values,solve_real *x1, int *neleperrow, MPI_Fint *fcomm,fortran_int *rowptrin, fortran_int *colptrin);
 
-  forint k=0,m=1;
-  ha_cgetype temp1,temp2;
-  forint tindx1;
+  fortran_int k=0,m=1;
+  solve_real temp1,temp2;
+  fortran_int tindx1;
   printf("rank %d ncof %ld\n",rank,ncof);
   
 
@@ -1270,7 +1270,7 @@ int main(int argc,char **args) {
   
   int stepcount;
   int nsteps=3;
-  ha_cgetype vpercents=1.0,perprecis=0;
+  solve_real vpercents=1.0,perprecis=0;
   FILE* solution;
   int maxsol=3;
 
@@ -1325,7 +1325,7 @@ int main(int argc,char **args) {
       printf("Error opening file\n");
       return 1;
     }
-    fwrite(xcf, sizeof(ha_cgetype),nvarele, solution);
+    fwrite(xcf, sizeof(solve_real),nvarele, solution);
     fclose(solution);
     strcpy(solchar,tempchar);
     strcat(solchar,".var");
@@ -1334,7 +1334,7 @@ int main(int argc,char **args) {
       printf("Error opening file\n");
       return 1;
     }
-    fwrite(ha_var, sizeof(hcge_cof),nvar, solution);
+    fwrite(ha_var, sizeof(array_def),nvar, solution);
     fclose(solution);
     strcpy(solchar,tempchar);
     strcat(solchar,".set");
@@ -1342,7 +1342,7 @@ int main(int argc,char **args) {
       printf("Error opening file\n");
       return 1;
     }
-    fwrite(ha_set, sizeof(ha_cgeset),nset, solution);
+    fwrite(ha_set, sizeof(set_def),nset, solution);
     fclose(solution);
     strcpy(solchar,tempchar);
     strcat(solchar,".sel");
@@ -1350,20 +1350,20 @@ int main(int argc,char **args) {
       printf("Error opening file\n");
       return 1;
     }
-    fwrite(ha_setele, sizeof(ha_cgesetele),nsetspace, solution);
+    fwrite(ha_setele, sizeof(set_element),nsetspace, solution);
     fclose(solution);
-    uvadd modeldes[4];
+    offset_t modeldes[4];
     modeldes[0]=nsetspace;
     modeldes[1]=nvar;
     modeldes[2]=nvarele;
-    modeldes[3]=(uvadd)nset;
+    modeldes[3]=(offset_t)nset;
     strcpy(solchar,tempchar);
     strcat(solchar,".mds");
     if ( (solution = fopen(solchar, "wb")) == NULL ) {
       printf("Error opening file\n");
       return 1;
     }
-    fwrite(modeldes, sizeof(uvadd),4, solution);
+    fwrite(modeldes, sizeof(offset_t),4, solution);
     fclose(solution);
   }
   MPI_Barrier(PETSC_COMM_WORLD);
@@ -1398,8 +1398,8 @@ int main(int argc,char **args) {
   CHKERRQ(ierr);
   ierr = PetscFree(onnz);
   CHKERRQ(ierr);
-  MPI_Comm_free(&HA_COMM);
-  MPI_Comm_free(&HA1_COMM);
+  MPI_Comm_free(&node_comm);
+  MPI_Comm_free(&node_tail_comm);
   ierr = PetscFinalize();
   CHKERRQ(ierr);
   return 0;
