@@ -212,6 +212,9 @@ int main(int argc,char **args) {
       }
       strcpy(scratch_dir,tmpopt);
     }
+    /* export for the Fortran kernels, which build their factor-file
+       paths themselves (hsl_kernels.f90) */
+    setenv("TEEMS_SCRATCH",scratch_dir,1);
     if(access(scratch_dir,W_OK)!=0) {
       if(rank==0)printf("Error!!! tempdir is not a writable directory: %s\n",scratch_dir);
       PetscFinalize();

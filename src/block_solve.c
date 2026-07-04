@@ -95,17 +95,17 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
       if(j1>=1000)j1name[0]='\0';
       sprintf(filename, "%d",j1);
       strcat(j1name,filename);
-      strcpy(filename,"_irnv");
+      strcpy(filename,scratch_dir);strcat(filename,"_irnv");
       strcat(filename,rankname);
       strcat(filename,j1name);
       strcat(filename,".bin");
       strcpy(fn01[j1],filename);
-      strcpy(filename,"_keep");
+      strcpy(filename,scratch_dir);strcat(filename,"_keep");
       strcat(filename,rankname);
       strcat(filename,j1name);
       strcat(filename,".bin");
       strcpy(fn02[j1],filename);
-      strcpy(filename,"_vav");
+      strcpy(filename,scratch_dir);strcat(filename,"_vav");
       strcat(filename,rankname);
       strcat(filename,j1name);
       strcat(filename,".bin");
@@ -891,17 +891,17 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
       if(j1>=1000)j1name[0]='\0';
       sprintf(filename, "%d",j1);
       strcat(j1name,filename);
-      strcpy(filename,"_irnv");
+      strcpy(filename,scratch_dir);strcat(filename,"_irnv");
       strcat(filename,rankname);
       strcat(filename,j1name);
       strcat(filename,".bin");
       strcpy(fn01[j1],filename);
-      strcpy(filename,"_keep");
+      strcpy(filename,scratch_dir);strcat(filename,"_keep");
       strcat(filename,rankname);
       strcat(filename,j1name);
       strcat(filename,".bin");
       strcpy(fn02[j1],filename);
-      strcpy(filename,"_vav");
+      strcpy(filename,scratch_dir);strcat(filename,"_vav");
       strcat(filename,rankname);
       strcat(filename,j1name);
       strcat(filename,".bin");
@@ -1316,7 +1316,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
     sprintf(filename, "%d",j3);
     strcat(j1name,filename);
     if(isLinux==0) {
-      strcpy(filename,"_bivi");
+      strcpy(filename,scratch_dir);strcat(filename,"_bivi");
       strcat(filename,rankname);
       strcat(filename,j1name);
       strcat(filename,".bin");
@@ -1326,7 +1326,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
       fwrt=fwrite(vecbivi, sizeof(solve_real),nz1, presolfile);
       if(fwrt==0)printf("File write error.");
       fclose(presolfile);
-      strcpy(filename,"_rbvi");
+      strcpy(filename,scratch_dir);strcat(filename,"_rbvi");
       strcat(filename,rankname);
       strcat(filename,j1name);
       strcat(filename,".bin");
@@ -1336,7 +1336,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
       fwrt=fwrite(irn1, sizeof(int), nz1, presolfile);
       if(fwrt== 0) printf("File write error.");
       fclose(presolfile);
-      strcpy(filename,"_cbvi");
+      strcpy(filename,scratch_dir);strcat(filename,"_cbvi");
       strcat(filename,rankname);
       strcat(filename,j1name);
       strcat(filename,".bin");
@@ -1348,21 +1348,21 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
       fclose(presolfile);
     }
     else {
-      strcpy(filename,"_bivi");
+      strcpy(filename,scratch_dir);strcat(filename,"_bivi");
       strcat(filename,rankname);
       strcat(filename,j1name);
       strcat(filename,".bin");
       fd1 = open(filename,O_WRONLY|O_CREAT|O_TRUNC, 0644);
       fwrt = write(fd1,vecbivi, sizeof(solve_real)*nz1);
       close(fd1);
-      strcpy(filename,"_rbvi");
+      strcpy(filename,scratch_dir);strcat(filename,"_rbvi");
       strcat(filename,rankname);
       strcat(filename,j1name);
       strcat(filename,".bin");
       fd1 = open(filename,O_WRONLY|O_CREAT|O_TRUNC, 0644);
       fwrt = write(fd1,irn1, sizeof(int)*nz1);
       close(fd1);
-      strcpy(filename,"_cbvi");
+      strcpy(filename,scratch_dir);strcat(filename,"_cbvi");
       strcat(filename,rankname);
       strcat(filename,j1name);
       strcat(filename,".bin");
@@ -1400,7 +1400,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
       if(j3>=1000)j1name[0]='\0';
       sprintf(filename, "%d",j3);
       strcat(j1name,filename);
-      strcpy(filename,"_rank");
+      strcpy(filename,scratch_dir);strcat(filename,"_rank");
       strcat(filename,rankname);
       strcat(filename,j1name);
       strcat(filename,".bin");
@@ -1472,7 +1472,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
     if(j3>=1000)j1name[0]='\0';
     sprintf(filename, "%d",j3);
     strcat(j1name,filename);
-    strcpy(filename,"_rank");
+    strcpy(filename,scratch_dir);strcat(filename,"_rank");
     strcat(filename,rankname);
     strcat(filename,j1name);
     strcat(filename,".bin");
@@ -1487,7 +1487,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
     ncol=insizeda[1];
     nz1=insizeda[2];
     nz=nz1;
-      strcpy(filename,"_bivi");
+      strcpy(filename,scratch_dir);strcat(filename,"_bivi");
       strcat(filename,rankname);
       strcat(filename,j1name);
       strcat(filename,".bin");
@@ -1497,7 +1497,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
       fwrt=fread(vecbivi, sizeof(solve_real), insizeda[2], presolfile);
       if(fwrt== 0) printf("File read error %ld %d.\n",fwrt,insizeda[2]);
       fclose(presolfile);
-      strcpy(filename,"_rbvi");
+      strcpy(filename,scratch_dir);strcat(filename,"_rbvi");
       strcat(filename,rankname);
       strcat(filename,j1name);
       strcat(filename,".bin");
@@ -1507,7 +1507,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
       fwrt=fread(irn1, sizeof(int), insizeda[2], presolfile);
       if(fwrt== 0) printf("File read error.\n");
       fclose(presolfile);
-      strcpy(filename,"_cbvi");
+      strcpy(filename,scratch_dir);strcat(filename,"_cbvi");
       strcat(filename,rankname);
       strcat(filename,j1name);
       strcat(filename,".bin");
@@ -1549,7 +1549,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
       if(j3>=1000)j1name[0]='\0';
       sprintf(filename, "%d",j3);
       strcat(j1name,filename);
-      strcpy(filename,"_rank");
+      strcpy(filename,scratch_dir);strcat(filename,"_rank");
       strcat(filename,rankname);
       strcat(filename,j1name);
       strcat(filename,".bin");
@@ -1560,7 +1560,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
       fwrt=fwrite(insized, sizeof(int), 5+nreg*insizes, presolfile);
       if(fwrt==0)printf("File write error.");
       fclose(presolfile);
-      strcpy(filename,"_row");
+      strcpy(filename,scratch_dir);strcat(filename,"_row");
       strcat(filename,rankname);
       strcat(filename,j1name);
       strcat(filename,".bin");
@@ -1570,7 +1570,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
       fwrt=fwrite(irn, sizeof(int), nrow, presolfile);
       if(fwrt== 0) printf("File write error.");
       fclose(presolfile);
-      strcpy(filename,"_col");
+      strcpy(filename,scratch_dir);strcat(filename,"_col");
       strcat(filename,rankname);
       strcat(filename,j1name);
       strcat(filename,".bin");
@@ -1748,17 +1748,17 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
       if(j1>=1000)j1name[0]='\0';
       sprintf(filename, "%d",j1);
       strcat(j1name,filename);
-      strcpy(filename,"_irnv");
+      strcpy(filename,scratch_dir);strcat(filename,"_irnv");
       strcat(filename,rankname);
       strcat(filename,j1name);
       strcat(filename,".bin");
       strcpy(fn01[j1],filename);
-      strcpy(filename,"_keep");
+      strcpy(filename,scratch_dir);strcat(filename,"_keep");
       strcat(filename,rankname);
       strcat(filename,j1name);
       strcat(filename,".bin");
       strcpy(fn02[j1],filename);
-      strcpy(filename,"_vav");
+      strcpy(filename,scratch_dir);strcat(filename,"_vav");
       strcat(filename,rankname);
       strcat(filename,j1name);
       strcat(filename,".bin");
@@ -2071,7 +2071,7 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
     if(j3>=1000)j1name[0]='\0';
     sprintf(filename, "%d",j3);
     strcat(j1name,filename);
-    strcpy(filename,"_rank");
+    strcpy(filename,scratch_dir);strcat(filename,"_rank");
     strcat(filename,rankname);
     strcat(filename,j1name);
     strcat(filename,".bin");
@@ -2119,7 +2119,7 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
     if(j3>=1000)j1name[0]='\0';
     sprintf(filename, "%d",j3);
     strcat(j1name,filename);
-    strcpy(filename,"_rank");
+    strcpy(filename,scratch_dir);strcat(filename,"_rank");
     strcat(filename,rankname);
     strcat(filename,j1name);
     strcat(filename,".bin");
@@ -2140,7 +2140,7 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
         insize[(i+j3*(nreg+1))*insizes+j]=insizeda[i*insizes+5+j];
       }
     }
-    strcpy(filename,"_row");
+    strcpy(filename,scratch_dir);strcat(filename,"_row");
     strcat(filename,rankname);
     strcat(filename,j1name);
     strcat(filename,".bin");
@@ -2151,7 +2151,7 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
     if(frd == 0)printf("File read error.");
     fclose(presolfile);
     remove(filename);
-    strcpy(filename,"_col");
+    strcpy(filename,scratch_dir);strcat(filename,"_col");
     strcat(filename,rankname);
     strcat(filename,j1name);
     strcat(filename,".bin");
@@ -2163,7 +2163,7 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
     fclose(presolfile);
     remove(filename);
     if(isLinux==0) {
-      strcpy(filename,"_bivi");
+      strcpy(filename,scratch_dir);strcat(filename,"_bivi");
       strcat(filename,rankname);
       strcat(filename,j1name);
       strcat(filename,".bin");
@@ -2174,7 +2174,7 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
       if(frd== 0) printf("File read error %ld %d.\n",frd,insizeda[2]);
       fclose(presolfile);
       remove(filename);
-      strcpy(filename,"_rbvi");
+      strcpy(filename,scratch_dir);strcat(filename,"_rbvi");
       strcat(filename,rankname);
       strcat(filename,j1name);
       strcat(filename,".bin");
@@ -2185,7 +2185,7 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
       if(frd== 0) printf("File read error.\n");
       fclose(presolfile);
       remove(filename);
-      strcpy(filename,"_cbvi");
+      strcpy(filename,scratch_dir);strcat(filename,"_cbvi");
       strcat(filename,rankname);
       strcat(filename,j1name);
       strcat(filename,".bin");
@@ -2198,7 +2198,7 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
       remove(filename);
     }
     else {
-      strcpy(filename,"_bivi");
+      strcpy(filename,scratch_dir);strcat(filename,"_bivi");
       strcat(filename,rankname);
       strcat(filename,j1name);
       strcat(filename,".bin");
@@ -2206,7 +2206,7 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
       frd = read(fd1,vecbivi0, sizeof(solve_real)*insizeda[2]);
       close(fd1);
       remove(filename);
-      strcpy(filename,"_rbvi");
+      strcpy(filename,scratch_dir);strcat(filename,"_rbvi");
       strcat(filename,rankname);
       strcat(filename,j1name);
       strcat(filename,".bin");
@@ -2214,7 +2214,7 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
       frd = read(fd1,irn1, sizeof(int)*insizeda[2]);
       close(fd1);
       remove(filename);
-      strcpy(filename,"_cbvi");
+      strcpy(filename,scratch_dir);strcat(filename,"_cbvi");
       strcat(filename,rankname);
       strcat(filename,j1name);
       strcat(filename,".bin");

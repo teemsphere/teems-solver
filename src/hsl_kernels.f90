@@ -396,6 +396,8 @@ SUBROUTINE SPEC48M_MSOL(INSIZE,IRN,JCN,VA,B,X,IRNC,JCNC,VAC,IRNB,JCNB,VALUESB,VE
   real(kind=DPC), pointer :: CNTL(:),RINFO(:),W(:),ERROR1(:),SOL(:)!,VOUT(:)!,RHS(:)A(:),
   integer, pointer :: ICNTL(:),INFO(:),IW(:),KEEP(:),JCNB1(:)!,IRNOUT(:),JCNOUT(:)!,JCN1(:),IRN1(:)
   character(len=1024) :: filename
+  character(len=512) :: scrdir
+  integer :: slen
   M=INSIZE(1)
   N=INSIZE(2)
   NE=INSIZE(3)
@@ -564,6 +566,8 @@ SUBROUTINE SPEC48M_MSOL(INSIZE,IRN,JCN,VA,B,X,IRNC,JCNC,VAC,IRNB,JCNB,VALUESB,VE
     inquire(unit=J, opened=isopen)
   END DO
   write (filename, "(A4,I4.4,I4.4,A4)") "_vav",RANK,J1,".bin"
+  call get_environment_variable("TEEMS_SCRATCH", scrdir, slen)
+  if (slen>0) filename = scrdir(1:slen)//trim(filename)
   OPEN(J, FILE=filename, STATUS='UNKNOWN', ACCESS='STREAM')
   WRITE (J) VA(1:LA)
   CLOSE(J)
@@ -576,6 +580,8 @@ SUBROUTINE SPEC48M_MSOL(INSIZE,IRN,JCN,VA,B,X,IRNC,JCNC,VAC,IRNB,JCNB,VALUESB,VE
     inquire(unit=J, opened=isopen)
   END DO
   write (filename, "(A5,I4.4,I4.4,A4)") "_irnv",RANK,J1,".bin"
+  call get_environment_variable("TEEMS_SCRATCH", scrdir, slen)
+  if (slen>0) filename = scrdir(1:slen)//trim(filename)
   OPEN(J, FILE=filename, STATUS='UNKNOWN', ACCESS='STREAM')
   WRITE (J) IRN(1:LA)
   CLOSE(J)
@@ -588,6 +594,8 @@ SUBROUTINE SPEC48M_MSOL(INSIZE,IRN,JCN,VA,B,X,IRNC,JCNC,VAC,IRNB,JCNB,VALUESB,VE
     inquire(unit=J, opened=isopen)
   END DO
   write (filename, "(A5,I4.4,I4.4,A4)") "_keep",RANK,J1,".bin"
+  call get_environment_variable("TEEMS_SCRATCH", scrdir, slen)
+  if (slen>0) filename = scrdir(1:slen)//trim(filename)
   OPEN(J, FILE=filename, STATUS='UNKNOWN', ACCESS='STREAM')
   WRITE (J) KEEP(1:T)
   CLOSE(J)
@@ -1036,6 +1044,8 @@ SUBROUTINE PREP48_ALU1(INSIZE,IRN,JCN,VA,W,IW,KEEP)
   real(kind=DPC), pointer :: CNTL(:),RINFO(:)
   integer, pointer :: ICNTL(:),INFO(:)
   character(len=1024) :: filename
+  character(len=512) :: scrdir
+  integer :: slen
   M=INSIZE(1)
   N=INSIZE(2)
   NE=INSIZE(3)
@@ -1097,6 +1107,8 @@ SUBROUTINE PREP48_ALU1(INSIZE,IRN,JCN,VA,W,IW,KEEP)
     inquire(unit=J, opened=isopen)
   END DO
   write (filename, "(A4,I4.4,I4.4,A4)") "_vav",RANK,J1,".bin"
+  call get_environment_variable("TEEMS_SCRATCH", scrdir, slen)
+  if (slen>0) filename = scrdir(1:slen)//trim(filename)
   OPEN(J, FILE=filename, STATUS='UNKNOWN', ACCESS='STREAM')
   WRITE (J) VA(1:LA)
   CLOSE(J)
@@ -1109,6 +1121,8 @@ SUBROUTINE PREP48_ALU1(INSIZE,IRN,JCN,VA,W,IW,KEEP)
     inquire(unit=J, opened=isopen)
   END DO
   write (filename, "(A5,I4.4,I4.4,A4)") "_irnv",RANK,J1,".bin"
+  call get_environment_variable("TEEMS_SCRATCH", scrdir, slen)
+  if (slen>0) filename = scrdir(1:slen)//trim(filename)
   OPEN(J, FILE=filename, STATUS='UNKNOWN', ACCESS='STREAM')
   WRITE (J) IRN(1:LA)
   CLOSE(J)
@@ -1121,6 +1135,8 @@ SUBROUTINE PREP48_ALU1(INSIZE,IRN,JCN,VA,W,IW,KEEP)
     inquire(unit=J, opened=isopen)
   END DO
   write (filename, "(A5,I4.4,I4.4,A4)") "_keep",RANK,J1,".bin"
+  call get_environment_variable("TEEMS_SCRATCH", scrdir, slen)
+  if (slen>0) filename = scrdir(1:slen)//trim(filename)
   OPEN(J, FILE=filename, STATUS='UNKNOWN', ACCESS='STREAM')
   WRITE (J) KEEP(1:T)
   CLOSE(J)
@@ -1146,6 +1162,8 @@ SUBROUTINE PREP48M_MSOL(INSIZE,IRN,JCN,VA,IRNC,JCNC,VAC,IRNB,JCNB,VALUESB,VECBIV
   real(kind=DPC), pointer :: CNTL(:),RINFO(:),ERROR1(:)!,VOUT(:)!,RHS(:)A(:),,SOL(:),B(:),W(:)
   integer, pointer :: ICNTL(:),INFO(:)!,IRNOUT(:),JCNOUT(:)!,JCN1(:),IRN1(:),JCNB1(:),IW(:),KEEP(:)
   character(len=1024) :: filename
+  character(len=512) :: scrdir
+  integer :: slen
   M=INSIZE(1)
   N=INSIZE(2)
   NE=INSIZE(3)
@@ -1289,6 +1307,8 @@ SUBROUTINE PREP48M_MSOL(INSIZE,IRN,JCN,VA,IRNC,JCNC,VAC,IRNB,JCNB,VALUESB,VECBIV
     inquire(unit=J, opened=isopen)
   END DO
   write (filename, "(A4,I4.4,I4.4,A4)") "_vav",RANK,J1,".bin"
+  call get_environment_variable("TEEMS_SCRATCH", scrdir, slen)
+  if (slen>0) filename = scrdir(1:slen)//trim(filename)
   OPEN(J, FILE=filename, STATUS='UNKNOWN', ACCESS='STREAM')
   WRITE (J) VA(1:LA)
   CLOSE(J)
@@ -1301,6 +1321,8 @@ SUBROUTINE PREP48M_MSOL(INSIZE,IRN,JCN,VA,IRNC,JCNC,VAC,IRNB,JCNB,VALUESB,VECBIV
     inquire(unit=J, opened=isopen)
   END DO
   write (filename, "(A5,I4.4,I4.4,A4)") "_irnv",RANK,J1,".bin"
+  call get_environment_variable("TEEMS_SCRATCH", scrdir, slen)
+  if (slen>0) filename = scrdir(1:slen)//trim(filename)
   OPEN(J, FILE=filename, STATUS='UNKNOWN', ACCESS='STREAM')
   WRITE (J) IRN(1:LA)
   CLOSE(J)
@@ -1313,6 +1335,8 @@ SUBROUTINE PREP48M_MSOL(INSIZE,IRN,JCN,VA,IRNC,JCNC,VAC,IRNB,JCNB,VALUESB,VECBIV
     inquire(unit=J, opened=isopen)
   END DO
   write (filename, "(A5,I4.4,I4.4,A4)") "_keep",RANK,J1,".bin"
+  call get_environment_variable("TEEMS_SCRATCH", scrdir, slen)
+  if (slen>0) filename = scrdir(1:slen)//trim(filename)
   OPEN(J, FILE=filename, STATUS='UNKNOWN', ACCESS='STREAM')
   WRITE (J) KEEP(1:T)
   CLOSE(J)

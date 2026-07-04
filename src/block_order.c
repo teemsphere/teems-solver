@@ -470,7 +470,7 @@ int ndbbd_order(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscI
       if(j1>=1000)j1name[0]='\0';
       sprintf(filename, "%d",j1);
       strcat(j1name,filename);
-      strcpy(filename,"_rank");
+      strcpy(filename,scratch_dir);strcat(filename,"_rank");
       strcat(filename,rankname);
       strcat(filename,j1name);
       strcat(filename,".bin");
@@ -483,7 +483,7 @@ int ndbbd_order(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscI
       if(ndbbdrank[j4]>insized[3]) {
         int *irn1=(int *) calloc (insized[0],sizeof(int));
         int *jcn1=(int *) calloc (insized[1],sizeof(int));
-        strcpy(filename,"_row");
+        strcpy(filename,scratch_dir);strcat(filename,"_row");
         strcat(filename,rankname);
         strcat(filename,j1name);
         strcat(filename,".bin");
@@ -493,7 +493,7 @@ int ndbbd_order(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscI
         frd=fread(irn1, sizeof(int), insized[0], presolfile);
         if(frd == 0)printf("File read error.");
         fclose(presolfile);
-        strcpy(filename,"_col");
+        strcpy(filename,scratch_dir);strcat(filename,"_col");
         strcat(filename,rankname);
         strcat(filename,j1name);
         strcat(filename,".bin");
