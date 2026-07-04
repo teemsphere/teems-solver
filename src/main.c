@@ -185,7 +185,7 @@ int main(int argc,char **args) {
   PetscOptionsGetInt(NULL,NULL,"-stoiter",&StoIter,NULL);
   inmemory=-1;
   PetscOptionsGetInt(NULL,NULL,"-inmemory",&inmemory,NULL);/* keep value arrays resident instead of spilling to scratch */
-  if(inmemory<0)inmemory=(matsol==MM_LU||matsol==MM_SBBD)?1:0;/* default: resident for methods with no factor-file traffic; DBBD/NDBBD factor I/O wants the page cache that spilling frees */
+  if(inmemory<0)inmemory=(matsol==MM_NDBBD)?0:1;/* default: resident except NDBBD, whose factor-file I/O wants the page cache that spilling frees (measured; LU/SBBD gain, DBBD neutral on both domains) */
   {
     /* Scratch directory for solver temp files: -tempdir option, else
        TMPDIR, else the compiled-in default (/tmp/). Capped at 200

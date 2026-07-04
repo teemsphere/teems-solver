@@ -38,10 +38,14 @@ time; see `docker/expedited_build/Dockerfile` for the canonical flow:
 
 `-inmemory 1` keeps the value arrays resident (skipping the per-step
 scratch spills) and, unless `-tempdir`/`TMPDIR` is set, places scratch on
-tmpfs. Default is method-dependent: **on** for LU and SBBD (which write
-nothing to scratch in this mode — MP48 holds SBBD factors in memory,
-sized by laA/laDi), **off** for DBBD and NDBBD, whose block-factor file
-traffic wants the page cache that array spilling frees. Measured on a
+tmpfs. Default is method-dependent: **on** for every method except NDBBD.
+LU and SBBD write nothing to scratch in this mode (MP48 holds SBBD
+factors in memory, sized by laA/laDi) and gain ~7%; DBBD measures
+neutral on both static (its production domain) and intertemporal
+benchmarks; NDBBD stays **off** because its block-factor file traffic
+wants the page cache that array spilling frees. The Johansen disk path
+also orphans its spill files (~76MB/run at 1.35M equations) — residency
+avoids that. Measured on a
 4.4M-equation intertemporal run (2 ranks, 30GB node): SBBD ~7% faster
 with no scratch debris; DBBD neutral; NDBBD ~6-11% slower with residency
 forced on. The sign for DBBD/NDBBD depends on factor-file traffic vs
