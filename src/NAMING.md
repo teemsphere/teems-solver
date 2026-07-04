@@ -165,5 +165,7 @@ Variables named after the papers' symbols are kept with documentation:
 `vecbivi` (B_i·V_i product, [KH19] step 1c), `netcut` [HK16 §4],
 `biviindx`, `insize` (solver metadata block), `counteq*`, `countvarintra*`.
 
-Local loop temporaries (`i1`, `j2`, `l2`…) are out of scope for this pass;
+All ha_*/hcge_*/hnew_*/hlin_* identifiers are gone, including parameters,
+locals, and the generated-name prefixes (now gen_sum/gen_par/gen_pow/
+gen_mul/gen_add). Pure loop temporaries (i1, j2, l2...) remain.
 they are renamed only where a function is otherwise touched.
