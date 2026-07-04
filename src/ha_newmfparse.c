@@ -18,7 +18,7 @@ extern void spar_mulnoadd_(solve_real* sol,int* nrow,int* nz,int* irn,int* jcn,s
 extern void spar_vbiviadd_(solve_real* sol,int* bvcol,long int* bvrow,long int* bvsize,int* nrow,int *ncol,int* nz,int* irn,int* jcn,solve_real* va,solve_real* res);
 extern void patio_mat_(int* insizeda,int* IRN,int* JCN,solve_real* VBIVI,int* IRN1A,int* JCN1A);
 
-int HaNewMatVal(char *fname, char *commsyntax,set_def *ha_set,offset_t nset, set_element *ha_setele, array_def *ha_cof,offset_t ncof,array_def *ha_var,offset_t nvar, elem_value *ha_cofvar,offset_t ncofvar,offset_t ncofele,closure_entry *ha_cgeshock,offset_t ndblock,offset_t alltimeset,offset_t allregset,offset_t *ha_eqadd,offset_t *counteq,offset_t nintraeq,Mat A,Mat B) {
+int jacobian_fill(char *fname, char *commsyntax,set_def *ha_set,offset_t nset, set_element *ha_setele, array_def *ha_cof,offset_t ncof,array_def *ha_var,offset_t nvar, elem_value *ha_cofvar,offset_t ncofvar,offset_t ncofele,closure_entry *ha_cgeshock,offset_t ndblock,offset_t alltimeset,offset_t allregset,offset_t *ha_eqadd,offset_t *counteq,offset_t nintraeq,Mat A,Mat B) {
   FILE * filehandle;
   char tline[TABREADLINE],line[TABREADLINE],line1[TABREADLINE],leftline[TABREADLINE],linecopy[TABREADLINE];//,set1[NAMESIZE],set2[NAMESIZE];
   char vname[TABREADLINE],sumsyntax[NAMESIZE],lintmp[TABREADLINE];//,*p1=NULL;
@@ -44,17 +44,17 @@ int HaNewMatVal(char *fname, char *commsyntax,set_def *ha_set,offset_t nset, set
   filehandle = fopen(fname,"r");
   matrow=0;//nintraeq;
 
-  while (ha_cgertabl1(commsyntax,filehandle,line,ha_cofvar,ha_cof,ncof,&zerodivide,TABREADLINE)) {
+  while (tab_next_statement_resolved(commsyntax,filehandle,line,ha_cofvar,ha_cof,ncof,&zerodivide,TABREADLINE)) {
     if (strstr(line,"(default")==NULL) {
-      ha_cgefrstr1(line, commsyntax, "");
-      ha_cgefrstr1(line, "(linear)", "");
-      while (ha_cgefrstr(line,"  ", " "));
-      while (ha_cgefrchr(line, '[', '('));
-      while (ha_cgefrchr(line, ']', ')'));
-      while (ha_cgefrchr(line, '{', '('));
-      while (ha_cgefrchr(line, '}', ')'));
+      str_replace_first(line, commsyntax, "");
+      str_replace_first(line, "(linear)", "");
+      while (str_replace_all(line,"  ", " "));
+      while (str_replace_char(line, '[', '('));
+      while (str_replace_char(line, ']', ')'));
+      while (str_replace_char(line, '{', '('));
+      while (str_replace_char(line, '}', ')'));
       strcpy(linecopy,line);
-      fdim=ha_cgenfind(line, "(all,");
+      fdim=str_count_ci(line, "(all,");
       if (fdim==0) {
         readitem = strtok(line+1," ");
         readitem = strtok(NULL,"=");
@@ -68,7 +68,7 @@ int HaNewMatVal(char *fname, char *commsyntax,set_def *ha_set,offset_t nset, set
         strcat(readitem,")");
       }
       else {
-        i=ha_cgerevfind(line, "(all,");
+        i=str_rfind_ci(line, "(all,");
         readitem=line+i;
         readitem = strtok(readitem,")");
         readitem = strtok(NULL,"=");
@@ -81,23 +81,23 @@ int HaNewMatVal(char *fname, char *commsyntax,set_def *ha_set,offset_t nset, set
         strcat(readitem,vname);
         strcat(readitem,")");
       }
-      while (ha_cgefrstr(readitem," ", ""));
-      while (ha_cgerecovar(readitem)==1);
-      hnew_intrpl(readitem);
+      while (str_replace_all(readitem," ", ""));
+      while (formula_normalize(readitem)==1);
+      leadlag_encode(readitem);
       strcpy(tline,readitem);
       strcpy(line1,readitem);
-      npow=ha_cgenchf(readitem, '^');
-      nmul=ha_cgenchf(readitem, '*');
-      ndiv=ha_cgenchf(readitem, '/');
+      npow=str_count_char(readitem, '^');
+      nmul=str_count_char(readitem, '*');
+      ndiv=str_count_char(readitem, '/');
       nmul=nmul+ndiv;
-      nplu=ha_cgenchf(readitem, '+');
-      nmin=ha_cgenchf(readitem, '-');
+      nplu=str_count_char(readitem, '+');
+      nmin=str_count_char(readitem, '-');
       nplu=nplu+nmin;
-      npar=ha_cgenchf(readitem, '(');
+      npar=str_count_char(readitem, '(');
 
       strcpy(line,line1);
       readitem=line;
-      np=ha_cgenfind(readitem,"p_");
+      np=str_count_ci(readitem,"p_");
       ha_calvardim=2*(npow+nmul+nplu+npar+1);
       formula_op *ha_calvar= (formula_op *) calloc (ha_calvardim,sizeof(formula_op));
       eq_var_ref *LinVars= (eq_var_ref *) calloc (np,sizeof(eq_var_ref));
@@ -106,7 +106,7 @@ int HaNewMatVal(char *fname, char *commsyntax,set_def *ha_set,offset_t nset, set
       for (i=0; i<np; i++) {
         varindx2=0;
         while(-1<0) {
-          varindx1=ha_cgefind(readitem+varindx2,"p_");
+          varindx1=str_find_ci(readitem+varindx2,"p_");
           if(varindx1==-1) break;
           varindx2=varindx2+varindx1;
           if(varindx2==0||readitem[varindx2-1]=='*'||readitem[varindx2-1]=='+'||readitem[varindx2-1]=='-'||readitem[varindx2-1]=='('||readitem[varindx2-1]==',') break;
@@ -140,13 +140,13 @@ int HaNewMatVal(char *fname, char *commsyntax,set_def *ha_set,offset_t nset, set
             p = strtok(tline,"{");
             p = strtok(NULL,"}");
             leadlag=0;
-            hnew_arset(p,&leadlag);
+            parse_index_leadlag(p,&leadlag);
             strcpy(LinVars[i3].dimnames[0],p);
             LinVars[i3].dimleadlag[0]=leadlag;
             strcpy(lintmp,"(all,");
             strcat(lintmp,p);
             strcat(lintmp,",");
-            l1=ha_cgefind(linecopy,lintmp);
+            l1=str_find_ci(linecopy,lintmp);
             if (l1>-1) {
               p1=&linecopy[0]+l1;
               strncpy(LinVars[i3].dimsetnames[0],p1+strlen(lintmp),strchr(p1,')')-p1-strlen(lintmp));
@@ -155,10 +155,10 @@ int HaNewMatVal(char *fname, char *commsyntax,set_def *ha_set,offset_t nset, set
               strcpy(lintmp,"sum(");
               strcat(lintmp,p);
               strcat(lintmp,",");
-              lvar1=ha_cgenfind(linecopy,lintmp);
-              lvar3=ha_cgefind(linecopy,lintmp);
+              lvar1=str_count_ci(linecopy,lintmp);
+              lvar3=str_find_ci(linecopy,lintmp);
               if (lvar1>1) for(lvar2=0; lvar2<lvar1; lvar2++) {
-                  lvar4=ha_cgefind(&linecopy[lvar3+4],lintmp);
+                  lvar4=str_find_ci(&linecopy[lvar3+4],lintmp);
                   if (lvar4>-1&&lvar4<lvar) {
                     lvar3=lvar3+lvar4+4;
                   }
@@ -176,13 +176,13 @@ int HaNewMatVal(char *fname, char *commsyntax,set_def *ha_set,offset_t nset, set
             for (i4=0; i4<ha_var[l].size-1; i4++) {
               p = strtok(NULL,",");
               leadlag=0;
-              hnew_arset(p,&leadlag);
+              parse_index_leadlag(p,&leadlag);
               strcpy(LinVars[i3].dimnames[i4],p);
               LinVars[i3].dimleadlag[i4]=leadlag;
               strcpy(lintmp,"(all,");
               strcat(lintmp,p);
               strcat(lintmp,",");
-              l1=ha_cgefind(linecopy,lintmp);
+              l1=str_find_ci(linecopy,lintmp);
               if (l1>-1) {
                 p1=&linecopy[0]+l1;
                 strncpy(LinVars[i3].dimsetnames[i4],p1+strlen(lintmp),strchr(p1,')')-p1-strlen(lintmp));
@@ -191,10 +191,10 @@ int HaNewMatVal(char *fname, char *commsyntax,set_def *ha_set,offset_t nset, set
                 strcpy(lintmp,"sum(");
                 strcat(lintmp,p);
                 strcat(lintmp,",");
-                lvar1=ha_cgenfind(linecopy,lintmp);
-                lvar3=ha_cgefind(linecopy,lintmp);
+                lvar1=str_count_ci(linecopy,lintmp);
+                lvar3=str_find_ci(linecopy,lintmp);
                 if (lvar1>1) for(lvar2=0; lvar2<lvar1; lvar2++) {
-                    lvar4=ha_cgefind(&linecopy[lvar3+4],lintmp);
+                    lvar4=str_find_ci(&linecopy[lvar3+4],lintmp);
                     if (lvar4>-1&&lvar4<lvar) {
                       lvar3=lvar3+lvar4+4;
                     }
@@ -209,13 +209,13 @@ int HaNewMatVal(char *fname, char *commsyntax,set_def *ha_set,offset_t nset, set
             }
             p = strtok(NULL,"}");
             leadlag=0;
-            hnew_arset(p,&leadlag);
+            parse_index_leadlag(p,&leadlag);
             strcpy(LinVars[i3].dimnames[i4],p);
             LinVars[i3].dimleadlag[i4]=leadlag;
             strcpy(lintmp,"(all,");
             strcat(lintmp,p);
             strcat(lintmp,",");
-            l1=ha_cgefind(linecopy,lintmp);
+            l1=str_find_ci(linecopy,lintmp);
             if (l1>-1) {
               p1=&linecopy[0]+l1;
               strncpy(LinVars[i3].dimsetnames[i4],p1+strlen(lintmp),strchr(p1,')')-p1-strlen(lintmp));
@@ -224,10 +224,10 @@ int HaNewMatVal(char *fname, char *commsyntax,set_def *ha_set,offset_t nset, set
               strcpy(lintmp,"sum(");
               strcat(lintmp,p);
               strcat(lintmp,",");
-              lvar1=ha_cgenfind(linecopy,lintmp);
-              lvar3=ha_cgefind(linecopy,lintmp);
+              lvar1=str_count_ci(linecopy,lintmp);
+              lvar3=str_find_ci(linecopy,lintmp);
               if (lvar1>1) for(lvar2=0; lvar2<lvar1; lvar2++) {
-                  lvar4=ha_cgefind(&linecopy[lvar3+4],lintmp);
+                  lvar4=str_find_ci(&linecopy[lvar3+4],lintmp);
                   if (lvar4>-1&&lvar4<lvar) {
                     lvar3=lvar3+lvar4+4;
                   }
@@ -300,10 +300,10 @@ int HaNewMatVal(char *fname, char *commsyntax,set_def *ha_set,offset_t nset, set
         strcpy(line,line1);
         readitem=line;
         strcpy(sumsyntax,"sum(");
-        totalsum=hcge_nsum(readitem,sumsyntax);
+        totalsum=sum_count(readitem,sumsyntax);
         sum_def *sum_cof= (sum_def *) calloc (totalsum*nlinvars+1,sizeof(sum_def));
         sumcount=0;
-        while (hcge_dsum(readitem,sumsyntax,sum_cof,arSet,ha_set,nset,fdim+1,sumcount)==1) {
+        while (sum_parse(readitem,sumsyntax,sum_cof,arSet,ha_set,nset,fdim+1,sumcount)==1) {
           sumcount++;
         }
         totalsum=sumcount;
@@ -322,7 +322,7 @@ int HaNewMatVal(char *fname, char *commsyntax,set_def *ha_set,offset_t nset, set
         strcpy(line,line1);
         readitem=line;
         sumcount=0;
-        while (hlin_dsum(readitem,sumsyntax,sum_cof,arSet,ha_set,nset,fdim+1,sumcount)==1) {
+        while (eq_sum_parse(readitem,sumsyntax,sum_cof,arSet,ha_set,nset,fdim+1,sumcount)==1) {
           sumcount++;
         }
         totalsum=sumcount;
@@ -347,7 +347,7 @@ int HaNewMatVal(char *fname, char *commsyntax,set_def *ha_set,offset_t nset, set
         strcpy(line,line1);
         readitem=line;
         sumindx=0;
-        while (hlin_calsum(readitem,sumsyntax,ha_set,nset,ha_setele,ha_cofvar,ncofvar,ncofele,ha_cof,ncof,ha_var,nvar,sum_cof,totalsum,ha_sumele,nsumele,ha_calvar,arSet,fdim+1,&sumindx,sumcount,zerodivide)==1) {
+        while (eq_sum_eval(readitem,sumsyntax,ha_set,nset,ha_setele,ha_cofvar,ncofvar,ncofele,ha_cof,ncof,ha_var,nvar,sum_cof,totalsum,ha_sumele,nsumele,ha_calvar,arSet,fdim+1,&sumindx,sumcount,zerodivide)==1) {
           sumcount++;
         }
         strcpy(line1,readitem);
@@ -401,15 +401,15 @@ int HaNewMatVal(char *fname, char *commsyntax,set_def *ha_set,offset_t nset, set
             }
 
           strcpy(leftline,line1);
-          hcge_rlinzero(leftline,i);
-          hcge_repllin(leftline,0);
+          eq_zero_linvar(leftline,i);
+          eq_replace_linvar(leftline,0);
           strcpy(sumsyntax,"sum(");
-          hlin_replsum(leftline,sumsyntax,i,LinVars,ha_var);
-          hlin_rlinone(leftline,LinVars,i,ha_var);
+          eq_sum_replace(leftline,sumsyntax,i,LinVars,ha_var);
+          eq_linvar_read(leftline,LinVars,i,ha_var);
           strcpy(line,leftline);
           readitem=line;
           sumcount1=sumcount;
-          while (hcge_dsum(readitem,sumsyntax,sum_cof,arSet,ha_set,nset,fdimlin+1,sumcount1)==1) {
+          while (sum_parse(readitem,sumsyntax,sum_cof,arSet,ha_set,nset,fdimlin+1,sumcount1)==1) {
             sumcount1++;
           }
           totalsum=sumcount1;
@@ -431,11 +431,11 @@ int HaNewMatVal(char *fname, char *commsyntax,set_def *ha_set,offset_t nset, set
           }
           strcpy(line,leftline);
           readitem=line;
-          while (hnew_calsum(readitem,sumsyntax,ha_set,nset,ha_setele,ha_cofvar,ncofvar,ncofele,ha_cof,ncof,ha_var,nvar,sum_cof,totalsum,ha_sumele,nsumele1,ha_calvar,arSet,fdimlin+1,&sumindx,sumcount,zerodivide)==1) {
+          while (sum_eval(readitem,sumsyntax,ha_set,nset,ha_setele,ha_cofvar,ncofvar,ncofele,ha_cof,ncof,ha_var,nvar,sum_cof,totalsum,ha_sumele,nsumele1,ha_calvar,arSet,fdimlin+1,&sumindx,sumcount,zerodivide)==1) {
             sumcount++;
           }
           ha_calvarsize=0;
-          ha_newfparse(readitem,ha_set,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,&ha_calvarsize,arSet,fdimlin);
+          formula_compile(readitem,ha_set,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,&ha_calvarsize,arSet,fdimlin);
           for (dcount=0; dcount<ha_var[LinVars[i].LinVarIndx].size; dcount++) {
             for (i4=0; i4<fdimlin; i4++) {
               if (strcmp(LinVars[i].dimnames[dcount],arSet[i4].index_name)==0) {
@@ -491,7 +491,7 @@ int HaNewMatVal(char *fname, char *commsyntax,set_def *ha_set,offset_t nset, set
                   li3=li3+(ha_setele[ha_set[arSet1[dcountdim3[dcount]].setid].offset+arSet1[dcountdim3[dcount]].indx].superset_pos[supset[dcount]]+LinVars[i].dimleadlag[dcount])*ha_var[LinVars[i].LinVarIndx].strides[dcount];
                 }
               }
-              vval=ha_newfpcal(ha_cofvar,ha_set,ha_setele,ha_sumele,ha_calvar1,ha_calvarsize,arSet1,fdimlin,zerodivide);
+              vval=formula_eval(ha_cofvar,ha_set,ha_setele,ha_sumele,ha_calvar1,ha_calvarsize,arSet1,fdimlin,zerodivide);
               Iindx=ha_cgeshock[ha_var[LinVars[i].LinVarIndx].offset+li3].exo_index;
               if (!ha_cgeshock[ha_var[LinVars[i].LinVarIndx].offset+li3].is_exogenous&&vval!=0) {
                 value[i3]=vval;
@@ -538,7 +538,7 @@ int HaNewMatVal(char *fname, char *commsyntax,set_def *ha_set,offset_t nset, set
   return 1;
 }
 
-int hlin_dsum(char *formulain, char *commsyntax, sum_def *sum_cof,quantifier *arSet,set_def *ha_set,dim_t nset,dim_t fdim,int j) {
+int eq_sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifier *arSet,set_def *ha_set,dim_t nset,dim_t fdim,int j) {
   char *readitem,*p,*p1,*p2,interchar2[NAMESIZE],argu[TABREADLINE],tempname[NAMESIZE];//,line5[TABREADLINE]
   char interchar[NAMESIZE],interchar1[NAMESIZE],line[TABREADLINE],line1[TABREADLINE],line2[TABREADLINE],line3[TABREADLINE],line4[TABREADLINE];
   dim_t l,l1,l2,l3,l4,l5,l6,l7;
@@ -546,7 +546,7 @@ int hlin_dsum(char *formulain, char *commsyntax, sum_def *sum_cof,quantifier *ar
   length=strlen(formulain);
   readitem=formulain;
   while (i<length) {
-    k=ha_cgefind(readitem,commsyntax);
+    k=str_find_ci(readitem,commsyntax);
     if (k==-1) {
       return 0;
     }
@@ -554,14 +554,14 @@ int hlin_dsum(char *formulain, char *commsyntax, sum_def *sum_cof,quantifier *ar
       readitem=formulain+i+k;
       strcpy(line,readitem);
       strcpy(line1,readitem);
-      ha_cgecutsum(line);
-      k1=ha_cgefind(line+4,commsyntax);
+      sum_extract(line);
+      k1=str_find_ci(line+4,commsyntax);
       if (k1!=-1) {
         i=i+k+4;
         readitem=formulain+i;
       }
       else {
-        if(ha_cgefind(line,",p_")>-1||ha_cgefind(line,"*p_")>-1||ha_cgefind(line,"+p_")>-1||ha_cgefind(line,"-p_")>-1||ha_cgefind(line,"(p_")>-1) {
+        if(str_find_ci(line,",p_")>-1||str_find_ci(line,"*p_")>-1||str_find_ci(line,"+p_")>-1||str_find_ci(line,"-p_")>-1||str_find_ci(line,"(p_")>-1) {
           i=i+k+4;
           readitem=formulain+i;
         }
@@ -600,7 +600,7 @@ int hlin_dsum(char *formulain, char *commsyntax, sum_def *sum_cof,quantifier *ar
               break;
             }
 
-          ncur=ha_cgenfind(line2, "{");
+          ncur=str_count_ci(line2, "{");
           l2=0;
           l3=0;
           for (ncuri=0; ncuri<ncur; ncuri++) {
@@ -611,7 +611,7 @@ int hlin_dsum(char *formulain, char *commsyntax, sum_def *sum_cof,quantifier *ar
             l2=p-line2;
             strcpy(argu,p);
             strcat(argu,",");
-            l=ha_cgenfind(argu, ",");
+            l=str_count_ci(argu, ",");
             if (l<2) {
               if(strcmp(p,sum_cof[j].sumindx)!=0) {
                 strcat(interchar,sum_cof[j].sumindx);
@@ -633,7 +633,7 @@ int hlin_dsum(char *formulain, char *commsyntax, sum_def *sum_cof,quantifier *ar
                     strcat(interchar1,p);
                     strcpy(line3,formulain);
                     line3[readitem-formulain]='\0';
-                    l7=ha_cgerevfind(line3,interchar1);
+                    l7=str_rfind_ci(line3,interchar1);
                     p1=&line3[l7+2];
                     p1 = strtok(p1,",");
                     for (l7=0; l7<nset; l7++) if(strcmp(p1,ha_set[l7].setname)==0) {
@@ -674,7 +674,7 @@ int hlin_dsum(char *formulain, char *commsyntax, sum_def *sum_cof,quantifier *ar
                       strcat(interchar1,p);
                       strcpy(line3,formulain);
                       line3[readitem-formulain]='\0';
-                      l7=ha_cgerevfind(line3,interchar1);
+                      l7=str_rfind_ci(line3,interchar1);
                       p1=&line3[l7+2];
                       p2=strchr(p1,',');
                       strncpy(tempname,p1,p2-p1);
@@ -701,7 +701,7 @@ int hlin_dsum(char *formulain, char *commsyntax, sum_def *sum_cof,quantifier *ar
               strcat(interchar,"}");
             }
           }
-          while(ha_cgefrstr(formulain,line4,interchar));
+          while(str_replace_all(formulain,line4,interchar));
           sum_cof[j].size=l3;
           return 1;
         }
@@ -712,14 +712,14 @@ int hlin_dsum(char *formulain, char *commsyntax, sum_def *sum_cof,quantifier *ar
       readitem=formulain+i+k;
       strcpy(line,readitem);
       strcpy(line1,readitem);
-      ha_cgecutsum(line);
-      k1=ha_cgefind(line+4,commsyntax);
+      sum_extract(line);
+      k1=str_find_ci(line+4,commsyntax);
       if (k1!=-1) {
         i=i+k+4;
         readitem=formulain+i;
       }
       else {
-        if(ha_cgefind(line,",p_")>-1||ha_cgefind(line,"*p_")>-1||ha_cgefind(line,"+p_")>-1||ha_cgefind(line,"-p_")>-1||ha_cgefind(line,"(p_")>-1) {
+        if(str_find_ci(line,",p_")>-1||str_find_ci(line,"*p_")>-1||str_find_ci(line,"+p_")>-1||str_find_ci(line,"-p_")>-1||str_find_ci(line,"(p_")>-1) {
           i=i+k+4;
           readitem=formulain+i;
         }
@@ -758,7 +758,7 @@ int hlin_dsum(char *formulain, char *commsyntax, sum_def *sum_cof,quantifier *ar
               break;
             }
 
-          ncur=ha_cgenfind(line2, "{");
+          ncur=str_count_ci(line2, "{");
           l2=0;
           l3=0;
           for (ncuri=0; ncuri<ncur; ncuri++) {
@@ -769,7 +769,7 @@ int hlin_dsum(char *formulain, char *commsyntax, sum_def *sum_cof,quantifier *ar
             l2=p-line2;
             strcpy(argu,p);
             strcat(argu,",");
-            l=ha_cgenfind(argu, ",");
+            l=str_count_ci(argu, ",");
             if (l<2) {
               if(strcmp(p,sum_cof[j].sumindx)!=0) {
                 for (l4=0; l4<l3; l4++) {
@@ -791,7 +791,7 @@ int hlin_dsum(char *formulain, char *commsyntax, sum_def *sum_cof,quantifier *ar
                     strcat(interchar1,p);
                     strcpy(line3,formulain);
                     line3[readitem-formulain]='\0';
-                    l7=ha_cgerevfind(line3,interchar1);
+                    l7=str_rfind_ci(line3,interchar1);
                     p1=&line3[l7+2];
                     p1 = strtok(p1,",");
                     for (l7=0; l7<nset; l7++) if(strcmp(p1,ha_set[l7].setname)==0) {
@@ -832,7 +832,7 @@ int hlin_dsum(char *formulain, char *commsyntax, sum_def *sum_cof,quantifier *ar
                       strcat(interchar1,p);
                       strcpy(line3,formulain);
                       line3[readitem-formulain]='\0';
-                      l7=ha_cgerevfind(line3,interchar1);
+                      l7=str_rfind_ci(line3,interchar1);
                       p1=&line3[l7+2];
                       p2=strchr(p1,',');
                       strncpy(tempname,p1,p2-p1);
@@ -859,7 +859,7 @@ int hlin_dsum(char *formulain, char *commsyntax, sum_def *sum_cof,quantifier *ar
               strcat(interchar,"}");
             }
           }
-          while(ha_cgefrstr(formulain,line4,interchar));
+          while(str_replace_all(formulain,line4,interchar));
           sum_cof[j].size=l3;
           return 1;
         }
@@ -874,7 +874,7 @@ int hlin_dsum(char *formulain, char *commsyntax, sum_def *sum_cof,quantifier *ar
   return 0;
 }
 
-int hlin_calsum(char *formulain, char *commsyntax,set_def *ha_set,dim_t nset, set_element *ha_setele,elem_value *ha_cofvar,offset_t ncofvar,offset_t ncofele, array_def *ha_cof,offset_t ncof,array_def *ha_var,offset_t nvar,sum_def *sum_cof,int totalsum,sum_value *ha_sumele,offset_t nsumele,formula_op *ha_calvar,quantifier *arSet1,dim_t fdim,int *sumindx,int j, solve_real zerodivide) {
+int eq_sum_eval(char *formulain, char *commsyntax,set_def *ha_set,dim_t nset, set_element *ha_setele,elem_value *ha_cofvar,offset_t ncofvar,offset_t ncofele, array_def *ha_cof,offset_t ncof,array_def *ha_var,offset_t nvar,sum_def *sum_cof,int totalsum,sum_value *ha_sumele,offset_t nsumele,formula_op *ha_calvar,quantifier *arSet1,dim_t fdim,int *sumindx,int j, solve_real zerodivide) {
   char *readitem,*p;//,*p1,interchar2[NAMESIZE],line5[TABREADLINE];
   char interchar[NAMESIZE],line[TABREADLINE],line1[TABREADLINE],line2[TABREADLINE];//,line3[TABREADLINE],line4[TABREADLINE];//,interchar1[NAMESIZE]
   int i=0,k=0,k1=0,length;//,simpl=0;//,ncur=0,ncuri,l3,l4,l5,l6,l7
@@ -888,21 +888,21 @@ int hlin_calsum(char *formulain, char *commsyntax,set_def *ha_set,dim_t nset, se
   length=strlen(formulain);
   readitem=formulain;
   while (i<length) {
-    k=ha_cgefind(readitem,commsyntax);
+    k=str_find_ci(readitem,commsyntax);
     if (k==-1) {
       return 0;
     }
     if (k==0) {
       readitem=formulain+i+k;
       strcpy(line,readitem);
-      ha_cgecutsum(line);
-      k1=ha_cgefind(line+4,commsyntax);
+      sum_extract(line);
+      k1=str_find_ci(line+4,commsyntax);
       if (k1!=-1) {
         i=i+k+4;
         readitem=formulain+i;
       }
       else {
-        if(ha_cgefind(line,",p_")>-1||ha_cgefind(line,"*p_")>-1||ha_cgefind(line,"+p_")>-1||ha_cgefind(line,"-p_")>-1||ha_cgefind(line,"(p_")>-1) {
+        if(str_find_ci(line,",p_")>-1||str_find_ci(line,"*p_")>-1||str_find_ci(line,"+p_")>-1||str_find_ci(line,"-p_")>-1||str_find_ci(line,"(p_")>-1) {
           i=i+k+4;
           readitem=formulain+i;
         }
@@ -934,7 +934,7 @@ int hlin_calsum(char *formulain, char *commsyntax,set_def *ha_set,dim_t nset, se
           strcpy(arSet[sum_cof[j].size].index_name,sum_cof[j].sumindx);
           fdimsumcof=sum_cof[j].size+1;
           ha_calvarsize=0;
-          ha_newfparse(p,ha_set,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,&ha_calvarsize,arSet,fdimsumcof);
+          formula_compile(p,ha_set,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,&ha_calvarsize,arSet,fdimsumcof);
         #pragma omp parallel private(l3,l1,l2,dcount,superset_pos,vval,arSet2,ha_calvar1) shared(ha_cofvar,arSet,ha_sumele)
         {
         if(omp_get_thread_num()!=0){
@@ -957,7 +957,7 @@ int hlin_calsum(char *formulain, char *commsyntax,set_def *ha_set,dim_t nset, se
             vval=0;
             for (l1=0; l1<ha_set[sum_cof[j].sumsetid].size; l1++) {
               arSet2[sum_cof[j].size].indx=l1;
-              vval+=ha_newfpcal(ha_cofvar,ha_set,ha_setele,ha_sumele,ha_calvar1,ha_calvarsize,arSet2,fdimsumcof,zerodivide);
+              vval+=formula_eval(ha_cofvar,ha_set,ha_setele,ha_sumele,ha_calvar1,ha_calvarsize,arSet2,fdimsumcof,zerodivide);
             }
             ha_sumele[*sumindx+l3].value=vval;
           }
@@ -989,7 +989,7 @@ int hlin_calsum(char *formulain, char *commsyntax,set_def *ha_set,dim_t nset, se
               strcat(interchar,"}");
             }
           }
-          while(ha_cgefrstr(formulain,line1,interchar)!=NULL);
+          while(str_replace_all(formulain,line1,interchar)!=NULL);
           free(arSet);
           return 1;
         }
@@ -999,14 +999,14 @@ int hlin_calsum(char *formulain, char *commsyntax,set_def *ha_set,dim_t nset, se
     else if (formulain[i+k-1]=='+'||formulain[i+k-1]=='-'||formulain[i+k-1]=='*'||formulain[i+k-1]=='/'||formulain[i+k-1]=='^'||formulain[i+k-1]=='('||formulain[i+k-1]==',') {
       readitem=formulain+i+k;
       strcpy(line,readitem);
-      ha_cgecutsum(line);
-      k1=ha_cgefind(line+4,commsyntax);
+      sum_extract(line);
+      k1=str_find_ci(line+4,commsyntax);
       if (k1!=-1) {
         i=i+k+4;
         readitem=formulain+i;
       }
       else {
-        if(ha_cgefind(line,",p_")>-1||ha_cgefind(line,"*p_")>-1||ha_cgefind(line,"+p_")>-1||ha_cgefind(line,"-p_")>-1||ha_cgefind(line,"(p_")>-1) {
+        if(str_find_ci(line,",p_")>-1||str_find_ci(line,"*p_")>-1||str_find_ci(line,"+p_")>-1||str_find_ci(line,"-p_")>-1||str_find_ci(line,"(p_")>-1) {
           i=i+k+4;
           readitem=formulain+i;
         }
@@ -1037,7 +1037,7 @@ int hlin_calsum(char *formulain, char *commsyntax,set_def *ha_set,dim_t nset, se
           strcpy(arSet[sum_cof[j].size].index_name,sum_cof[j].sumindx);
           fdimsumcof=sum_cof[j].size+1;
           ha_calvarsize=0;
-          ha_newfparse(p,ha_set,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,&ha_calvarsize,arSet,fdimsumcof);
+          formula_compile(p,ha_set,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,&ha_calvarsize,arSet,fdimsumcof);
         #pragma omp parallel private(l3,l1,l2,dcount,superset_pos,vval,arSet2,ha_calvar1) shared(ha_cofvar,arSet,ha_sumele)
         {
         if(omp_get_thread_num()!=0){
@@ -1060,7 +1060,7 @@ int hlin_calsum(char *formulain, char *commsyntax,set_def *ha_set,dim_t nset, se
             vval=0;
             for (l1=0; l1<ha_set[sum_cof[j].sumsetid].size; l1++) {
               arSet2[sum_cof[j].size].indx=l1;
-              vval+=ha_newfpcal(ha_cofvar,ha_set,ha_setele,ha_sumele,ha_calvar1,ha_calvarsize,arSet2,fdimsumcof,zerodivide);
+              vval+=formula_eval(ha_cofvar,ha_set,ha_setele,ha_sumele,ha_calvar1,ha_calvarsize,arSet2,fdimsumcof,zerodivide);
             }
             ha_sumele[(offset_t)*sumindx+l3].value=vval;//ha_sumele[*sumindx+l2].varval=vval;
           }
@@ -1092,7 +1092,7 @@ int hlin_calsum(char *formulain, char *commsyntax,set_def *ha_set,dim_t nset, se
               strcat(interchar,"}");
             }
           }
-          while(ha_cgefrstr(formulain,line1,interchar));
+          while(str_replace_all(formulain,line1,interchar));
           free(arSet);
           return 1;
         }
@@ -1106,36 +1106,36 @@ int hlin_calsum(char *formulain, char *commsyntax,set_def *ha_set,dim_t nset, se
   return 0;
 }
 
-int hlin_replsum(char *formulain, char *commsyntax,int LinIndx, eq_var_ref *LinVars,array_def *ha_var) {
+int eq_sum_replace(char *formulain, char *commsyntax,int LinIndx, eq_var_ref *LinVars,array_def *ha_var) {
   char *readitem,line[TABREADLINE],line1[TABREADLINE],line2[TABREADLINE],line3[TABREADLINE],argu[TABREADLINE],*p0,*p1;
   int i=0,k=0,k1=0,k2,k3,length,tsum,j,l;
   bool IsRemSum;
   length=strlen(formulain);
   readitem=formulain;
   while (i<length) {
-    k=ha_cgefind(formulain+i,commsyntax);
+    k=str_find_ci(formulain+i,commsyntax);
     if (k==-1) {
       return 0;
     }
     if (k==0) {
       readitem=formulain+i+k;
       strcpy(line,readitem);
-      ha_cgecutsum(line);
+      sum_extract(line);
       strcpy(line3,line);
-      if(ha_cgefind(line,",p_")>-1||ha_cgefind(line,"*p_")>-1||ha_cgefind(line,"+p_")>-1||ha_cgefind(line,"-p_")>-1||ha_cgefind(line,"(p_")>-1) {
-        tsum=hcge_nsum(line,commsyntax);
+      if(str_find_ci(line,",p_")>-1||str_find_ci(line,"*p_")>-1||str_find_ci(line,"+p_")>-1||str_find_ci(line,"-p_")>-1||str_find_ci(line,"(p_")>-1) {
+        tsum=sum_count(line,commsyntax);
         IsRemSum=false;
         for (j=tsum; j>1; j--) {
           k2=1;
           k1=0;
           while(k2<j) {
             k3=k1;
-            k1=ha_cgefind(line+k1+3,commsyntax);
+            k1=str_find_ci(line+k1+3,commsyntax);
             k1=k3+k1+3;//printf("k1 %d line %s\n",k1,line+k1-1);
             if (line[k1-1]=='+'||line[k1-1]=='-'||line[k1-1]=='*'||line[k1-1]=='/'||line[k1-1]=='^'||line[k1-1]=='('||line[k1-1]==',') k2++;//printf("k1 %d line %s\n",k1,line+k1-1);}
           }
           strcpy(line1,&line[k1]);
-          ha_cgecutsum(line1);
+          sum_extract(line1);
           p0=strchr(line1,'(');
           p0++;
           p1=strchr(line1,',');
@@ -1148,7 +1148,7 @@ int hlin_replsum(char *formulain, char *commsyntax,int LinIndx, eq_var_ref *LinV
               p1++;
               strncpy(line2,p1,strlen(line1)-(p1-line1)-1);
               line2[strlen(line1)-(p1-line1)-1]='\0';
-              ha_cgefrstr(line,line1,line2);
+              str_replace_all(line,line1,line2);
               IsRemSum=true;
               break;
             }
@@ -1174,35 +1174,35 @@ int hlin_replsum(char *formulain, char *commsyntax,int LinIndx, eq_var_ref *LinV
           }
         }
         if(IsRemSum) {
-          ha_cgefrstr(formulain,line3,line);
+          str_replace_all(formulain,line3,line);
           i=i+k+strlen(line);
         }
         else i=i+k+strlen(line3);
       }
       else {
-        ha_cgefrstr(formulain,line,"0");
+        str_replace_all(formulain,line,"0");
         i=i+k+1;
       }
     }
     else if (formulain[i+k-1]=='+'||formulain[i+k-1]=='-'||formulain[i+k-1]=='*'||formulain[i+k-1]=='/'||formulain[i+k-1]=='^'||formulain[i+k-1]=='('||formulain[i+k-1]==',') {
       readitem=formulain+i+k;
       strcpy(line,readitem);
-      ha_cgecutsum(line);
+      sum_extract(line);
       strcpy(line3,line);
-      if(ha_cgefind(line,",p_")>-1||ha_cgefind(line,"*p_")>-1||ha_cgefind(line,"+p_")>-1||ha_cgefind(line,"-p_")>-1||ha_cgefind(line,"(p_")>-1) {
-        tsum=hcge_nsum(line,commsyntax);
+      if(str_find_ci(line,",p_")>-1||str_find_ci(line,"*p_")>-1||str_find_ci(line,"+p_")>-1||str_find_ci(line,"-p_")>-1||str_find_ci(line,"(p_")>-1) {
+        tsum=sum_count(line,commsyntax);
         IsRemSum=false;
         for (j=tsum; j>1; j--) {
           k2=1;
           k1=0;
           while(k2<j) {
             k3=k1;
-            k1=ha_cgefind(line+k1+3,commsyntax);
+            k1=str_find_ci(line+k1+3,commsyntax);
             k1=k3+k1+3;//printf("k1 %d line %s\n",k1,line+k1-1);
             if (line[k1-1]=='+'||line[k1-1]=='-'||line[k1-1]=='*'||line[k1-1]=='/'||line[k1-1]=='^'||line[k1-1]=='('||line[k1-1]==',') k2++;//printf("k1 %d line %s\n",k1,line+k1-1);}
           }
           strcpy(line1,&line[k1]);
-          ha_cgecutsum(line1);
+          sum_extract(line1);
           p0=strchr(line1,'(');
           p0++;
           p1=strchr(line1,',');
@@ -1215,7 +1215,7 @@ int hlin_replsum(char *formulain, char *commsyntax,int LinIndx, eq_var_ref *LinV
               p1++;
               strncpy(line2,p1,strlen(line1)-(p1-line1)-1);
               line2[strlen(line1)-(p1-line1)-1]='\0';
-              ha_cgefrstr(line,line1,line2);
+              str_replace_all(line,line1,line2);
               IsRemSum=true;
               break;
             }
@@ -1241,13 +1241,13 @@ int hlin_replsum(char *formulain, char *commsyntax,int LinIndx, eq_var_ref *LinV
           }
         }
         if(IsRemSum) {
-          ha_cgefrstr(formulain,line3,line);
+          str_replace_all(formulain,line3,line);
           i=i+k+strlen(line);
         }
         else i=i+k+strlen(line3);
       }
       else {
-        ha_cgefrstr(formulain,line,"0");
+        str_replace_all(formulain,line,"0");
         i=i+k+1;
       }
     }
@@ -1259,7 +1259,7 @@ int hlin_replsum(char *formulain, char *commsyntax,int LinIndx, eq_var_ref *LinV
   return 0;
 }
 
-int hlin_rlinone(char *formulain,eq_var_ref *LinVars,int linindx,array_def *ha_var) {
+int eq_linvar_read(char *formulain,eq_var_ref *LinVars,int linindx,array_def *ha_var) {
   char line[TABREADLINE];
   int i1,i2,i3,l;//,l,d;
   line[0]='p';
@@ -1270,14 +1270,14 @@ int hlin_rlinone(char *formulain,eq_var_ref *LinVars,int linindx,array_def *ha_v
   i3=0;
   i1=0;
   while (i3==0) {
-    i1=ha_cgefind(formulain+i1,line);
+    i1=str_find_ci(formulain+i1,line);
     if (i1==-1) break;
     if (i1==0) {
       if(ha_var[LinVars[linindx].LinVarIndx].size==0) {
         i2=l-1;
       }
       else
-        i2=ha_cgefind(formulain,"}");
+        i2=str_find_ci(formulain,"}");
       formulain[0]='1';
       memmove(formulain+1,formulain+i2+1,l-i2);
       i3=1;
@@ -1287,7 +1287,7 @@ int hlin_rlinone(char *formulain,eq_var_ref *LinVars,int linindx,array_def *ha_v
         if(ha_var[LinVars[linindx].LinVarIndx].size==0) {
           i2=strlen(line)-1;
         }
-        else i2=ha_cgefind(formulain+i1,"}");
+        else i2=str_find_ci(formulain+i1,"}");
         formulain[i1]='1';
         memmove(formulain+i1+1,formulain+i1+i2+1,l-i2-i1);
         i3=1;
@@ -1298,7 +1298,7 @@ int hlin_rlinone(char *formulain,eq_var_ref *LinVars,int linindx,array_def *ha_v
   return 1;
 }
 
-int NewMatvarRead(char *fname, char *commsyntax,set_def *ha_set,dim_t nset,set_element *ha_setele,array_def *ha_cof,offset_t ncof,array_def *ha_var,offset_t nvar,elem_value *ha_cofvar,offset_t ncofvar,offset_t ncofele,closure_entry *ha_cgeshock,bool *var_inter,array_def *ha_eq,bool *ha_eqint,dim_t *eq_orderintra,dim_t *eq_orderreg,offset_t allregset,offset_t alltimeset,dim_t *orderintra,dim_t *orderreg) {
+int equation_order_read(char *fname, char *commsyntax,set_def *ha_set,dim_t nset,set_element *ha_setele,array_def *ha_cof,offset_t ncof,array_def *ha_var,offset_t nvar,elem_value *ha_cofvar,offset_t ncofvar,offset_t ncofele,closure_entry *ha_cgeshock,bool *var_inter,array_def *ha_eq,bool *ha_eqint,dim_t *eq_orderintra,dim_t *eq_orderreg,offset_t allregset,offset_t alltimeset,dim_t *orderintra,dim_t *orderreg) {
   FILE * filehandle;
   char tline[TABREADLINE],line[TABREADLINE],line1[TABREADLINE],linecopy[TABREADLINE];//,set1[NAMESIZE],set2[NAMESIZE];
   char vname[TABREADLINE],lintmp[TABREADLINE];//,*p1=NULL;
@@ -1312,17 +1312,17 @@ int NewMatvarRead(char *fname, char *commsyntax,set_def *ha_set,dim_t nset,set_e
   filehandle = fopen(fname,"r");
   matrow=0;
 
-  while (ha_cgertabl1(commsyntax,filehandle,line,ha_cofvar,ha_cof,ncof,&zerodivide,TABREADLINE)) {
+  while (tab_next_statement_resolved(commsyntax,filehandle,line,ha_cofvar,ha_cof,ncof,&zerodivide,TABREADLINE)) {
     if (strstr(line,"(default")==NULL) {
-      ha_cgefrstr1(line, commsyntax, "");
-      ha_cgefrstr1(line, "(linear)", "");
-      while (ha_cgefrstr(line,"  ", " "));
-      while (ha_cgefrchr(line, '[', '('));
-      while (ha_cgefrchr(line, ']', ')'));
-      while (ha_cgefrchr(line, '{', '('));
-      while (ha_cgefrchr(line, '}', ')'));
+      str_replace_first(line, commsyntax, "");
+      str_replace_first(line, "(linear)", "");
+      while (str_replace_all(line,"  ", " "));
+      while (str_replace_char(line, '[', '('));
+      while (str_replace_char(line, ']', ')'));
+      while (str_replace_char(line, '{', '('));
+      while (str_replace_char(line, '}', ')'));
       strcpy(linecopy,line);
-      fdim=ha_cgenfind(line, "(all,");
+      fdim=str_count_ci(line, "(all,");
       if (fdim==0) {
         readitem = strtok(line+1," ");
         strcpy(ha_eq[eqindx].cofname,readitem);
@@ -1340,7 +1340,7 @@ int NewMatvarRead(char *fname, char *commsyntax,set_def *ha_set,dim_t nset,set_e
         readitem = strtok(line+1,"(");
         strcpy(ha_eq[eqindx].cofname,readitem);
         strcpy(line,linecopy);
-        i=ha_cgerevfind(line, "(all,");
+        i=str_rfind_ci(line, "(all,");
         readitem=line+i;
         readitem = strtok(readitem,")");
         readitem = strtok(NULL,"=");
@@ -1353,19 +1353,19 @@ int NewMatvarRead(char *fname, char *commsyntax,set_def *ha_set,dim_t nset,set_e
         strcat(readitem,vname);
         strcat(readitem,")");
       }
-      while (ha_cgefrstr(readitem," ", ""));
-      while (ha_cgerecovar(readitem)==1);
-      hnew_intrpl(readitem);
+      while (str_replace_all(readitem," ", ""));
+      while (formula_normalize(readitem)==1);
+      leadlag_encode(readitem);
       strcpy(tline,readitem);
       strcpy(line1,readitem);
-      np=ha_cgenfind(readitem,"p_");
+      np=str_count_ci(readitem,"p_");
       eq_var_ref *LinVars= (eq_var_ref *) calloc (np+1,sizeof(eq_var_ref));
       i3=0;
       lvar=0;
       for (i=0; i<np; i++) {
         varindx2=0;
         while(-1<0) {
-          varindx1=ha_cgefind(readitem+varindx2,"p_");
+          varindx1=str_find_ci(readitem+varindx2,"p_");
           if(varindx1==-1) break;
           varindx2=varindx2+varindx1;
           if(varindx2==0||readitem[varindx2-1]=='*'||readitem[varindx2-1]=='+'||readitem[varindx2-1]=='-'||readitem[varindx2-1]=='('||readitem[varindx2-1]==',') break;
@@ -1398,13 +1398,13 @@ int NewMatvarRead(char *fname, char *commsyntax,set_def *ha_set,dim_t nset,set_e
             p = strtok(tline,"{");
             p = strtok(NULL,"}");
             leadlag=0;
-            hnew_arset(p,&leadlag);
+            parse_index_leadlag(p,&leadlag);
             if(leadlag!=0)var_inter[l]=true;//printf("var %s\n",ha_var[l].cofname);}
             strcpy(LinVars[i3].dimnames[0],p);
             strcpy(lintmp,"(all,");
             strcat(lintmp,p);
             strcat(lintmp,",");
-            l1=ha_cgefind(linecopy,lintmp);
+            l1=str_find_ci(linecopy,lintmp);
             if (l1>-1) {
               p1=&linecopy[0]+l1;
               strncpy(LinVars[i3].dimsetnames[0],p1+strlen(lintmp),strchr(p1,')')-p1-strlen(lintmp));
@@ -1413,10 +1413,10 @@ int NewMatvarRead(char *fname, char *commsyntax,set_def *ha_set,dim_t nset,set_e
               strcpy(lintmp,"sum(");
               strcat(lintmp,p);
               strcat(lintmp,",");
-              lvar1=ha_cgenfind(linecopy,lintmp);
-              lvar3=ha_cgefind(linecopy,lintmp);
+              lvar1=str_count_ci(linecopy,lintmp);
+              lvar3=str_find_ci(linecopy,lintmp);
               if (lvar1>1) for(lvar2=0; lvar2<lvar1; lvar2++) {
-                  lvar4=ha_cgefind(&linecopy[lvar3+4],lintmp);
+                  lvar4=str_find_ci(&linecopy[lvar3+4],lintmp);
                   if (lvar4>-1&&lvar4<lvar) {
                     lvar3=lvar3+lvar4+4;
                   }
@@ -1434,13 +1434,13 @@ int NewMatvarRead(char *fname, char *commsyntax,set_def *ha_set,dim_t nset,set_e
             for (i4=0; i4<ha_var[l].size-1; i4++) {
               p = strtok(NULL,",");
               leadlag=0;
-              hnew_arset(p,&leadlag);
+              parse_index_leadlag(p,&leadlag);
               if(leadlag!=0)var_inter[l]=true;//printf("var %s\n",ha_var[l].cofname);}
               strcpy(LinVars[i3].dimnames[i4],p);
               strcpy(lintmp,"(all,");
               strcat(lintmp,p);
               strcat(lintmp,",");
-              l1=ha_cgefind(linecopy,lintmp);
+              l1=str_find_ci(linecopy,lintmp);
               if (l1>-1) {
                 p1=&linecopy[0]+l1;
                 strncpy(LinVars[i3].dimsetnames[i4],p1+strlen(lintmp),strchr(p1,')')-p1-strlen(lintmp));
@@ -1449,10 +1449,10 @@ int NewMatvarRead(char *fname, char *commsyntax,set_def *ha_set,dim_t nset,set_e
                 strcpy(lintmp,"sum(");
                 strcat(lintmp,p);
                 strcat(lintmp,",");
-                lvar1=ha_cgenfind(linecopy,lintmp);
-                lvar3=ha_cgefind(linecopy,lintmp);
+                lvar1=str_count_ci(linecopy,lintmp);
+                lvar3=str_find_ci(linecopy,lintmp);
                 if (lvar1>1) for(lvar2=0; lvar2<lvar1; lvar2++) {
-                    lvar4=ha_cgefind(&linecopy[lvar3+4],lintmp);
+                    lvar4=str_find_ci(&linecopy[lvar3+4],lintmp);
                     if (lvar4>-1&&lvar4<lvar) {
                       lvar3=lvar3+lvar4+4;
                     }
@@ -1467,13 +1467,13 @@ int NewMatvarRead(char *fname, char *commsyntax,set_def *ha_set,dim_t nset,set_e
             }
             p = strtok(NULL,"}");
             leadlag=0;
-            hnew_arset(p,&leadlag);
+            parse_index_leadlag(p,&leadlag);
             if(leadlag!=0)var_inter[l]=true;//printf("var %s\n",ha_var[l].cofname);}
             strcpy(LinVars[i3].dimnames[i4],p);
             strcpy(lintmp,"(all,");
             strcat(lintmp,p);
             strcat(lintmp,",");
-            l1=ha_cgefind(linecopy,lintmp);
+            l1=str_find_ci(linecopy,lintmp);
             if (l1>-1) {
               p1=&linecopy[0]+l1;
               strncpy(LinVars[i3].dimsetnames[i4],p1+strlen(lintmp),strchr(p1,')')-p1-strlen(lintmp));
@@ -1482,10 +1482,10 @@ int NewMatvarRead(char *fname, char *commsyntax,set_def *ha_set,dim_t nset,set_e
               strcpy(lintmp,"sum(");
               strcat(lintmp,p);
               strcat(lintmp,",");
-              lvar1=ha_cgenfind(linecopy,lintmp);
-              lvar3=ha_cgefind(linecopy,lintmp);
+              lvar1=str_count_ci(linecopy,lintmp);
+              lvar3=str_find_ci(linecopy,lintmp);
               if (lvar1>1) for(lvar2=0; lvar2<lvar1; lvar2++) {
-                  lvar4=ha_cgefind(&linecopy[lvar3+4],lintmp);
+                  lvar4=str_find_ci(&linecopy[lvar3+4],lintmp);
                   if (lvar4>-1&&lvar4<lvar) {
                     lvar3=lvar3+lvar4+4;
                   }
@@ -1662,7 +1662,7 @@ int NewMatvarRead(char *fname, char *commsyntax,set_def *ha_set,dim_t nset,set_e
   return 1;
 }
 
-int NestedMatvarRead(char *fname, char *commsyntax,set_def *ha_set,dim_t nset,set_element *ha_setele,array_def *ha_cof,offset_t ncof,array_def *ha_var,offset_t nvar,elem_value *ha_cofvar,offset_t ncofvar,offset_t ncofele,closure_entry *ha_cgeshock,bool *var_inter,array_def *ha_eq,bool *ha_eqint,dim_t *eq_orderintra,dim_t *eq_orderreg,offset_t allregset,offset_t alltimeset,dim_t *orderintra,dim_t *orderreg) {
+int equation_order_read_nested(char *fname, char *commsyntax,set_def *ha_set,dim_t nset,set_element *ha_setele,array_def *ha_cof,offset_t ncof,array_def *ha_var,offset_t nvar,elem_value *ha_cofvar,offset_t ncofvar,offset_t ncofele,closure_entry *ha_cgeshock,bool *var_inter,array_def *ha_eq,bool *ha_eqint,dim_t *eq_orderintra,dim_t *eq_orderreg,offset_t allregset,offset_t alltimeset,dim_t *orderintra,dim_t *orderreg) {
   FILE * filehandle;
   char tline[TABREADLINE],line[TABREADLINE],line1[TABREADLINE],linecopy[TABREADLINE];//,set1[NAMESIZE],set2[NAMESIZE];
   char vname[TABREADLINE],lintmp[TABREADLINE];//,*p1=NULL;
@@ -1677,17 +1677,17 @@ int NestedMatvarRead(char *fname, char *commsyntax,set_def *ha_set,dim_t nset,se
   filehandle = fopen(fname,"r");
   matrow=0;
 
-  while (ha_cgertabl1(commsyntax,filehandle,line,ha_cofvar,ha_cof,ncof,&zerodivide,TABREADLINE)) {
+  while (tab_next_statement_resolved(commsyntax,filehandle,line,ha_cofvar,ha_cof,ncof,&zerodivide,TABREADLINE)) {
     if (strstr(line,"(default")==NULL) {
-      ha_cgefrstr1(line, commsyntax, "");
-      ha_cgefrstr1(line, "(linear)", "");
-      while (ha_cgefrstr(line,"  ", " "));
-      while (ha_cgefrchr(line, '[', '('));
-      while (ha_cgefrchr(line, ']', ')'));
-      while (ha_cgefrchr(line, '{', '('));
-      while (ha_cgefrchr(line, '}', ')'));
+      str_replace_first(line, commsyntax, "");
+      str_replace_first(line, "(linear)", "");
+      while (str_replace_all(line,"  ", " "));
+      while (str_replace_char(line, '[', '('));
+      while (str_replace_char(line, ']', ')'));
+      while (str_replace_char(line, '{', '('));
+      while (str_replace_char(line, '}', ')'));
       strcpy(linecopy,line);
-      fdim=ha_cgenfind(line, "(all,");
+      fdim=str_count_ci(line, "(all,");
       if (fdim==0) {
         readitem = strtok(line+1," ");
         strcpy(ha_eq[eqindx].cofname,readitem);
@@ -1705,7 +1705,7 @@ int NestedMatvarRead(char *fname, char *commsyntax,set_def *ha_set,dim_t nset,se
         readitem = strtok(line+1,"(");
         strcpy(ha_eq[eqindx].cofname,readitem);
         strcpy(line,linecopy);
-        i=ha_cgerevfind(line, "(all,");
+        i=str_rfind_ci(line, "(all,");
         readitem=line+i;
         readitem = strtok(readitem,")");
         readitem = strtok(NULL,"=");
@@ -1718,19 +1718,19 @@ int NestedMatvarRead(char *fname, char *commsyntax,set_def *ha_set,dim_t nset,se
         strcat(readitem,vname);
         strcat(readitem,")");
       }
-      while (ha_cgefrstr(readitem," ", ""));
-      while (ha_cgerecovar(readitem)==1);
-      hnew_intrpl(readitem);
+      while (str_replace_all(readitem," ", ""));
+      while (formula_normalize(readitem)==1);
+      leadlag_encode(readitem);
       strcpy(tline,readitem);
       strcpy(line1,readitem);
-      np=ha_cgenfind(readitem,"p_");
+      np=str_count_ci(readitem,"p_");
       eq_var_ref *LinVars= (eq_var_ref *) calloc (np+1,sizeof(eq_var_ref));
       i3=0;
       lvar=0;
       for (i=0; i<np; i++) {
         varindx2=0;
         while(-1<0) {
-          varindx1=ha_cgefind(readitem+varindx2,"p_");
+          varindx1=str_find_ci(readitem+varindx2,"p_");
           if(varindx1==-1) break;
           varindx2=varindx2+varindx1;
           if(varindx2==0||readitem[varindx2-1]=='*'||readitem[varindx2-1]=='+'||readitem[varindx2-1]=='-'||readitem[varindx2-1]=='('||readitem[varindx2-1]==',') break;
@@ -1763,7 +1763,7 @@ int NestedMatvarRead(char *fname, char *commsyntax,set_def *ha_set,dim_t nset,se
             p = strtok(tline,"{");
             p = strtok(NULL,"}");
             leadlag=0;
-            hnew_arset(p,&leadlag);
+            parse_index_leadlag(p,&leadlag);
             if(leadlag!=0) {
               var_inter[l]=true;
               orderintra[l]=-1;
@@ -1773,7 +1773,7 @@ int NestedMatvarRead(char *fname, char *commsyntax,set_def *ha_set,dim_t nset,se
             strcpy(lintmp,"(all,");
             strcat(lintmp,p);
             strcat(lintmp,",");
-            l01=ha_cgefind(linecopy,lintmp);
+            l01=str_find_ci(linecopy,lintmp);
             if (l01>-1) {
               p1=&linecopy[0]+l01;
               strncpy(LinVars[i3].dimsetnames[0],p1+strlen(lintmp),strchr(p1,')')-p1-strlen(lintmp));
@@ -1782,10 +1782,10 @@ int NestedMatvarRead(char *fname, char *commsyntax,set_def *ha_set,dim_t nset,se
               strcpy(lintmp,"sum(");
               strcat(lintmp,p);
               strcat(lintmp,",");
-              lvar1=ha_cgenfind(linecopy,lintmp);
-              lvar3=ha_cgefind(linecopy,lintmp);
+              lvar1=str_count_ci(linecopy,lintmp);
+              lvar3=str_find_ci(linecopy,lintmp);
               if (lvar1>1) for(lvar2=0; lvar2<lvar1; lvar2++) {
-                  lvar4=ha_cgefind(&linecopy[lvar3+4],lintmp);
+                  lvar4=str_find_ci(&linecopy[lvar3+4],lintmp);
                   if (lvar4>-1&&lvar4<lvar) {
                     lvar3=lvar3+lvar4+4;
                   }
@@ -1803,7 +1803,7 @@ int NestedMatvarRead(char *fname, char *commsyntax,set_def *ha_set,dim_t nset,se
             for (i4=0; i4<ha_var[l].size-1; i4++) {
               p = strtok(NULL,",");
               leadlag=0;
-              hnew_arset(p,&leadlag);
+              parse_index_leadlag(p,&leadlag);
               if(leadlag!=0) {
                 var_inter[l]=true;
                 orderintra[l]=-1;
@@ -1813,7 +1813,7 @@ int NestedMatvarRead(char *fname, char *commsyntax,set_def *ha_set,dim_t nset,se
               strcpy(lintmp,"(all,");
               strcat(lintmp,p);
               strcat(lintmp,",");
-              l01=ha_cgefind(linecopy,lintmp);
+              l01=str_find_ci(linecopy,lintmp);
               if (l01>-1) {
                 p1=&linecopy[0]+l01;
                 strncpy(LinVars[i3].dimsetnames[i4],p1+strlen(lintmp),strchr(p1,')')-p1-strlen(lintmp));
@@ -1822,10 +1822,10 @@ int NestedMatvarRead(char *fname, char *commsyntax,set_def *ha_set,dim_t nset,se
                 strcpy(lintmp,"sum(");
                 strcat(lintmp,p);
                 strcat(lintmp,",");
-                lvar1=ha_cgenfind(linecopy,lintmp);
-                lvar3=ha_cgefind(linecopy,lintmp);
+                lvar1=str_count_ci(linecopy,lintmp);
+                lvar3=str_find_ci(linecopy,lintmp);
                 if (lvar1>1) for(lvar2=0; lvar2<lvar1; lvar2++) {
-                    lvar4=ha_cgefind(&linecopy[lvar3+4],lintmp);
+                    lvar4=str_find_ci(&linecopy[lvar3+4],lintmp);
                     if (lvar4>-1&&lvar4<lvar) {
                       lvar3=lvar3+lvar4+4;
                     }
@@ -1840,7 +1840,7 @@ int NestedMatvarRead(char *fname, char *commsyntax,set_def *ha_set,dim_t nset,se
             }
             p = strtok(NULL,"}");
             leadlag=0;
-            hnew_arset(p,&leadlag);
+            parse_index_leadlag(p,&leadlag);
             if(leadlag!=0) {
               var_inter[l]=true;
               orderintra[l]=-1;
@@ -1850,7 +1850,7 @@ int NestedMatvarRead(char *fname, char *commsyntax,set_def *ha_set,dim_t nset,se
             strcpy(lintmp,"(all,");
             strcat(lintmp,p);
             strcat(lintmp,",");
-            l01=ha_cgefind(linecopy,lintmp);
+            l01=str_find_ci(linecopy,lintmp);
             if (l01>-1) {
               p1=&linecopy[0]+l01;
               strncpy(LinVars[i3].dimsetnames[i4],p1+strlen(lintmp),strchr(p1,')')-p1-strlen(lintmp));
@@ -1859,10 +1859,10 @@ int NestedMatvarRead(char *fname, char *commsyntax,set_def *ha_set,dim_t nset,se
               strcpy(lintmp,"sum(");
               strcat(lintmp,p);
               strcat(lintmp,",");
-              lvar1=ha_cgenfind(linecopy,lintmp);
-              lvar3=ha_cgefind(linecopy,lintmp);
+              lvar1=str_count_ci(linecopy,lintmp);
+              lvar3=str_find_ci(linecopy,lintmp);
               if (lvar1>1) for(lvar2=0; lvar2<lvar1; lvar2++) {
-                  lvar4=ha_cgefind(&linecopy[lvar3+4],lintmp);
+                  lvar4=str_find_ci(&linecopy[lvar3+4],lintmp);
                   if (lvar4>-1&&lvar4<lvar) {
                     lvar3=lvar3+lvar4+4;
                   }
@@ -2038,7 +2038,7 @@ int NestedMatvarRead(char *fname, char *commsyntax,set_def *ha_set,dim_t nset,se
   return 1;
 }
 
-int NewMatreadele(char *fname, char *commsyntax,set_def *ha_set,dim_t nset,set_element *ha_setele,array_def *ha_cof,offset_t ncof,array_def *ha_var,offset_t nvar,elem_value *ha_cofvar,offset_t ncofvar,offset_t ncofele, offset_t nexo,closure_entry *ha_cgeshock,offset_t ndblock,offset_t alltimeset,offset_t allregset,bool *ha_eqint,offset_t *ha_eqadd,dim_t *ha_eqtime,dim_t *ha_eqreg,offset_t *counteq,offset_t nintraeq,bool *sbbd_overrid,PetscInt Istart,PetscInt Iend,PetscInt *dnz,PetscInt *dnnz,PetscInt *onz,PetscInt *onnz,PetscInt *dnzB,PetscInt *dnnzB,PetscInt *onzB,PetscInt *onnzB,int nesteddbbd) {
+int jacobian_preallocate(char *fname, char *commsyntax,set_def *ha_set,dim_t nset,set_element *ha_setele,array_def *ha_cof,offset_t ncof,array_def *ha_var,offset_t nvar,elem_value *ha_cofvar,offset_t ncofvar,offset_t ncofele, offset_t nexo,closure_entry *ha_cgeshock,offset_t ndblock,offset_t alltimeset,offset_t allregset,bool *ha_eqint,offset_t *ha_eqadd,dim_t *ha_eqtime,dim_t *ha_eqreg,offset_t *counteq,offset_t nintraeq,bool *sbbd_overrid,PetscInt Istart,PetscInt Iend,PetscInt *dnz,PetscInt *dnnz,PetscInt *onz,PetscInt *onnz,PetscInt *dnzB,PetscInt *dnnzB,PetscInt *onzB,PetscInt *onnzB,int nesteddbbd) {
   FILE * filehandle;
   char tline[TABREADLINE],line[TABREADLINE],line1[TABREADLINE],linecopy[TABREADLINE];//,set1[NAMESIZE],set2[NAMESIZE];
   char vname[TABREADLINE],lintmp[TABREADLINE];//,*p1=NULL;
@@ -2058,17 +2058,17 @@ int NewMatreadele(char *fname, char *commsyntax,set_def *ha_set,dim_t nset,set_e
   matroworg=0;
   Jindx=0;
 
-  while (ha_cgertabl1(commsyntax,filehandle,line,ha_cofvar,ha_cof,ncof,&zerodivide,TABREADLINE)) {
+  while (tab_next_statement_resolved(commsyntax,filehandle,line,ha_cofvar,ha_cof,ncof,&zerodivide,TABREADLINE)) {
     if (strstr(line,"(default")==NULL) {
-      ha_cgefrstr1(line, commsyntax, "");
-      ha_cgefrstr1(line, "(linear)", "");
-      while (ha_cgefrstr(line,"  ", " "));
-      while (ha_cgefrchr(line, '[', '('));
-      while (ha_cgefrchr(line, ']', ')'));
-      while (ha_cgefrchr(line, '{', '('));
-      while (ha_cgefrchr(line, '}', ')'));
+      str_replace_first(line, commsyntax, "");
+      str_replace_first(line, "(linear)", "");
+      while (str_replace_all(line,"  ", " "));
+      while (str_replace_char(line, '[', '('));
+      while (str_replace_char(line, ']', ')'));
+      while (str_replace_char(line, '{', '('));
+      while (str_replace_char(line, '}', ')'));
       strcpy(linecopy,line);
-      fdim=ha_cgenfind(line, "(all,");
+      fdim=str_count_ci(line, "(all,");
       if (fdim==0) {
         readitem = strtok(line+1," ");
         readitem = strtok(NULL,"=");
@@ -2082,7 +2082,7 @@ int NewMatreadele(char *fname, char *commsyntax,set_def *ha_set,dim_t nset,set_e
         strcat(readitem,")");
       }
       else {
-        i=ha_cgerevfind(line, "(all,");
+        i=str_rfind_ci(line, "(all,");
         readitem=line+i;
         readitem = strtok(readitem,")");
         readitem = strtok(NULL,"=");
@@ -2095,19 +2095,19 @@ int NewMatreadele(char *fname, char *commsyntax,set_def *ha_set,dim_t nset,set_e
         strcat(readitem,vname);
         strcat(readitem,")");
       }
-      while (ha_cgefrstr(readitem," ", ""));
-      while (ha_cgerecovar(readitem)==1);
-      hnew_intrpl(readitem);
+      while (str_replace_all(readitem," ", ""));
+      while (formula_normalize(readitem)==1);
+      leadlag_encode(readitem);
       strcpy(tline,readitem);
       strcpy(line1,readitem);
-      np=ha_cgenfind(readitem,"p_");
+      np=str_count_ci(readitem,"p_");
       eq_var_ref *LinVars= (eq_var_ref *) calloc (np+1,sizeof(eq_var_ref));
       i3=0;
       lvar=0;
       for (i=0; i<np; i++) {
         varindx2=0;
         while(-1<0) {
-          varindx1=ha_cgefind(readitem+varindx2,"p_");
+          varindx1=str_find_ci(readitem+varindx2,"p_");
           if(varindx1==-1) break;
           varindx2=varindx2+varindx1;
           if(varindx2==0||readitem[varindx2-1]=='*'||readitem[varindx2-1]=='+'||readitem[varindx2-1]=='-'||readitem[varindx2-1]=='('||readitem[varindx2-1]==',') break;
@@ -2140,13 +2140,13 @@ int NewMatreadele(char *fname, char *commsyntax,set_def *ha_set,dim_t nset,set_e
             p = strtok(tline,"{");
             p = strtok(NULL,"}");
             leadlag=0;
-            hnew_arset(p,&leadlag);
+            parse_index_leadlag(p,&leadlag);
             strcpy(LinVars[i3].dimnames[0],p);
             LinVars[i3].dimleadlag[0]=leadlag;
             strcpy(lintmp,"(all,");
             strcat(lintmp,p);
             strcat(lintmp,",");
-            l1=ha_cgefind(linecopy,lintmp);
+            l1=str_find_ci(linecopy,lintmp);
             if (l1>-1) {
               p1=&linecopy[0]+l1;
               strncpy(LinVars[i3].dimsetnames[0],p1+strlen(lintmp),strchr(p1,')')-p1-strlen(lintmp));
@@ -2155,10 +2155,10 @@ int NewMatreadele(char *fname, char *commsyntax,set_def *ha_set,dim_t nset,set_e
               strcpy(lintmp,"sum(");
               strcat(lintmp,p);
               strcat(lintmp,",");
-              lvar1=ha_cgenfind(linecopy,lintmp);
-              lvar3=ha_cgefind(linecopy,lintmp);
+              lvar1=str_count_ci(linecopy,lintmp);
+              lvar3=str_find_ci(linecopy,lintmp);
               if (lvar1>1) for(lvar2=0; lvar2<lvar1; lvar2++) {
-                  lvar4=ha_cgefind(&linecopy[lvar3+4],lintmp);
+                  lvar4=str_find_ci(&linecopy[lvar3+4],lintmp);
                   if (lvar4>-1&&lvar4<lvar) {
                     lvar3=lvar3+lvar4+4;
                   }
@@ -2176,13 +2176,13 @@ int NewMatreadele(char *fname, char *commsyntax,set_def *ha_set,dim_t nset,set_e
             for (i4=0; i4<ha_var[l].size-1; i4++) {
               p = strtok(NULL,",");
               leadlag=0;
-              hnew_arset(p,&leadlag);
+              parse_index_leadlag(p,&leadlag);
               strcpy(LinVars[i3].dimnames[i4],p);
               LinVars[i3].dimleadlag[i4]=leadlag;
               strcpy(lintmp,"(all,");
               strcat(lintmp,p);
               strcat(lintmp,",");
-              l1=ha_cgefind(linecopy,lintmp);
+              l1=str_find_ci(linecopy,lintmp);
               if (l1>-1) {
                 p1=&linecopy[0]+l1;
                 strncpy(LinVars[i3].dimsetnames[i4],p1+strlen(lintmp),strchr(p1,')')-p1-strlen(lintmp));
@@ -2191,10 +2191,10 @@ int NewMatreadele(char *fname, char *commsyntax,set_def *ha_set,dim_t nset,set_e
                 strcpy(lintmp,"sum(");
                 strcat(lintmp,p);
                 strcat(lintmp,",");
-                lvar1=ha_cgenfind(linecopy,lintmp);
-                lvar3=ha_cgefind(linecopy,lintmp);
+                lvar1=str_count_ci(linecopy,lintmp);
+                lvar3=str_find_ci(linecopy,lintmp);
                 if (lvar1>1) for(lvar2=0; lvar2<lvar1; lvar2++) {
-                    lvar4=ha_cgefind(&linecopy[lvar3+4],lintmp);
+                    lvar4=str_find_ci(&linecopy[lvar3+4],lintmp);
                     if (lvar4>-1&&lvar4<lvar) {
                       lvar3=lvar3+lvar4+4;
                     }
@@ -2209,13 +2209,13 @@ int NewMatreadele(char *fname, char *commsyntax,set_def *ha_set,dim_t nset,set_e
             }
             p = strtok(NULL,"}");
             leadlag=0;
-            hnew_arset(p,&leadlag);
+            parse_index_leadlag(p,&leadlag);
             strcpy(LinVars[i3].dimnames[i4],p);
             LinVars[i3].dimleadlag[i4]=leadlag;
             strcpy(lintmp,"(all,");
             strcat(lintmp,p);
             strcat(lintmp,",");
-            l1=ha_cgefind(linecopy,lintmp);
+            l1=str_find_ci(linecopy,lintmp);
             if (l1>-1) {
               p1=&linecopy[0]+l1;
               strncpy(LinVars[i3].dimsetnames[i4],p1+strlen(lintmp),strchr(p1,')')-p1-strlen(lintmp));
@@ -2224,10 +2224,10 @@ int NewMatreadele(char *fname, char *commsyntax,set_def *ha_set,dim_t nset,set_e
               strcpy(lintmp,"sum(");
               strcat(lintmp,p);
               strcat(lintmp,",");
-              lvar1=ha_cgenfind(linecopy,lintmp);
-              lvar3=ha_cgefind(linecopy,lintmp);
+              lvar1=str_count_ci(linecopy,lintmp);
+              lvar3=str_find_ci(linecopy,lintmp);
               if (lvar1>1) for(lvar2=0; lvar2<lvar1; lvar2++) {
-                  lvar4=ha_cgefind(&linecopy[lvar3+4],lintmp);
+                  lvar4=str_find_ci(&linecopy[lvar3+4],lintmp);
                   if (lvar4>-1&&lvar4<lvar) {
                     lvar3=lvar3+lvar4+4;
                   }
@@ -2522,7 +2522,7 @@ int NewMatreadele(char *fname, char *commsyntax,set_def *ha_set,dim_t nset,set_e
   return 1;
 }
 
-int HaDBBDMatOder(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscInt Istart, PetscInt Iend, offset_t nvarele, offset_t *ha_eqadd,int *ha_rows,int *ha_cols, offset_t ndblock,int *ha_ndblocks, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,solve_real cntl6) {
+int dbbd_order(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscInt Istart, PetscInt Iend, offset_t nvarele, offset_t *ha_eqadd,int *ha_rows,int *ha_cols, offset_t ndblock,int *ha_ndblocks, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,solve_real cntl6) {
   IS *rowindices,*colindices;//,isrow,iscol;
   PetscInt bfirst,bend,sblockin,nmatin,nmatinplus,nrowcolin,sumrowcolin;
   Mat *submatA;
@@ -2657,7 +2657,7 @@ int HaDBBDMatOder(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, Pets
 }
 
 
-int HaNDBBDMatOderPre(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscInt Istart, PetscInt Iend,int nreg, int ntime, offset_t nvarele, offset_t *ha_eqadd,int *ha_rows,int *ha_cols, offset_t ndblock,int *ha_ndblocks, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laDi,solve_real cntl6,PetscInt* ndbbdrank,PetscBool presol) {
+int ndbbd_order_presolve(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscInt Istart, PetscInt Iend,int nreg, int ntime, offset_t nvarele, offset_t *ha_eqadd,int *ha_rows,int *ha_cols, offset_t ndblock,int *ha_ndblocks, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laDi,solve_real cntl6,PetscInt* ndbbdrank,PetscBool presol) {
   FILE *presolfile;
   char j1name[1024],filename[1024],rankname[1024];
   size_t frd;
@@ -2930,7 +2930,7 @@ int HaNDBBDMatOderPre(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, 
   return 1;
 }
 
-int HaNDBBDMatOder(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscInt Istart, PetscInt Iend,int nreg, int ntime, offset_t nvarele, offset_t *ha_eqadd,int *ha_rows,int *ha_cols, offset_t ndblock,int *ha_ndblocks, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laDi,solve_real cntl6,PetscInt* ndbbdrank,PetscBool presol) {
+int ndbbd_order(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscInt Istart, PetscInt Iend,int nreg, int ntime, offset_t nvarele, offset_t *ha_eqadd,int *ha_rows,int *ha_cols, offset_t ndblock,int *ha_ndblocks, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laDi,solve_real cntl6,PetscInt* ndbbdrank,PetscBool presol) {
   FILE *presolfile;
   char j1name[1024],filename[1024],rankname[1024];
   size_t frd;
@@ -3059,7 +3059,7 @@ int HaNDBBDMatOder(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, Pet
 }
 
 
-int HaDBBDParSol(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscInt Istart, PetscInt Iend,int *ha_rows,int *ha_cols, offset_t ndblock,int *ha_ndblocks, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laD,PetscReal cntl3) {//,bool iter
+int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscInt Istart, PetscInt Iend,int *ha_rows,int *ha_cols, offset_t ndblock,int *ha_ndblocks, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laD,PetscReal cntl3) {//,bool iter
   IS *rowindices,*colindices,*Cindices,*Bindices,*BBindices,*BBiindices;
   const PetscInt *nindices;
   PetscInt bfirst,bend,sblockin,nmatin,nmatinplus,nrowcolin,sumrowcolin,i,i1,j,j0,j1,j2,j3,j4,j5,j6,l0,l1,l2,l3,l4,l5,rank1,proc1=0,nnzmax,j1nz,j1irnbs;
@@ -3189,7 +3189,7 @@ int HaDBBDParSol(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisiz
       }
       VecGetValues(b,bend,indices,yi0);
 
-      HaReduce(yi0,(fortran_int)bend,mpisize,rank,j);
+      reduce_to_rank(yi0,(fortran_int)bend,mpisize,rank,j);
       if(rank==j&&i<nmatin) {
         memcpy (yi1[i],yi0,bend*sizeof(solve_real));
       }
@@ -3663,7 +3663,7 @@ int HaDBBDParSol(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisiz
   fortran_int vecbiuisize=0;
   vecbiuisize=VecSize-sumrowcolin;
   printf("after bivi rank %d\n",rank);
-  HaReduceNoComp(vecbiui,vecbiuisize,mpisize,rank,mpisize-1);
+  reduce_to_rank_nocompress(vecbiui,vecbiuisize,mpisize,rank,mpisize-1);
   printf("Completed MPI_Reduce Operation! Rank %d time %f\n",rank,((double)clock()-timestr)/CLOCKS_PER_SEC);
   if(rank!=mpisize-1){
     free(vecbiui);
@@ -3852,7 +3852,7 @@ int HaDBBDParSol(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisiz
   return 0;
 }
 
-int HaNDBBDParPre(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscInt Istart, PetscInt Iend,int *ha_rows,int *ha_cols, offset_t ndblock,offset_t nreg,offset_t ntime,int *ha_ndblocks, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laDi,dim_t laD,PetscReal cntl3,PetscReal cntl6,PetscBool presol) {//,bool iter
+int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscInt Istart, PetscInt Iend,int *ha_rows,int *ha_cols, offset_t ndblock,offset_t nreg,offset_t ntime,int *ha_ndblocks, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laDi,dim_t laD,PetscReal cntl3,PetscReal cntl6,PetscBool presol) {//,bool iter
   IS *rowindices=NULL,*colindices=NULL,*colindicesbc1=NULL,*rowBBij=NULL,*colBBij=NULL;//,*colindicesbcpm,*colindicesbcpm1
   PetscInt bfirst,bend,sblockin,nmatin,nmatinplus,nmatint,nmatinplust,nmatminust,nrowcolin,i,i1,j,j0,j1,j2,j3,j4,j5,j6,j7,l0,l1,l2,l3,l4,l5,rank1,proc1=0,nnzmax,j1nz,j1irnbs;//,sumrowcolin
   Mat *submatAij=NULL,*submatBBij=NULL;//,*submatCij,*submatBij;,*submatB
@@ -4667,7 +4667,7 @@ int HaNDBBDParPre(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisi
 }
 
 
-int HaNDBBDParSol(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscInt Istart, PetscInt Iend,int *ha_rows,int *ha_cols, offset_t ndblock,offset_t nreg,offset_t ntime,int *ha_ndblocks, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laDi,dim_t laD,PetscReal cntl3,PetscReal cntl6,PetscBool presol) {//,bool iter
+int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscInt Istart, PetscInt Iend,int *ha_rows,int *ha_cols, offset_t ndblock,offset_t nreg,offset_t ntime,int *ha_ndblocks, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laDi,dim_t laD,PetscReal cntl3,PetscReal cntl6,PetscBool presol) {//,bool iter
   IS *rowindices=NULL,*colindices=NULL,*rowindicesbc=NULL,*colindicesbc1=NULL,*colindicesbc2=NULL,*Cindices=NULL,*Bindices=NULL,Cindicesc,Bindicesc,*BBindices=NULL,*BBiindices=NULL,*rowBBij=NULL,*colBBij=NULL;//,*colindicesbcpm,*colindicesbcpm1
   const PetscInt *nindices;
   PetscInt bfirst,bend,sblockin,nmatin,nmatinplus,nmatint,nmatinplust,nmatminust,nrowcolin,sumrowcolin,i,i1,j,j0,j1,j2,j3,j4,j5,j6,j7,l0,l1,l2,l3,l4,l5,rank1,proc1=0,nnzmax,j1nz,j1irnbs;
@@ -4840,7 +4840,7 @@ int HaNDBBDParSol(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisi
         else indices[j1]=-1;
       }
       VecGetValues(b,bend,indices,yi0);
-      HaReduce(yi0,(fortran_int)bend,mpisize,rank,j);
+      reduce_to_rank(yi0,(fortran_int)bend,mpisize,rank,j);
       if(rank==j&&i<nmatin) {
         memcpy (yi2[i],yi0,bend*sizeof(solve_real));
       }
@@ -5520,7 +5520,7 @@ int HaNDBBDParSol(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisi
     printf("OK here11a nrowc %d ncolc %d maxrow %d!\n",nrowc,ncolc,maxrowcij);
     solve_real *b02 = (solve_real*)calloc(maxrowcij,sizeof(solve_real));
 
-    NDBBD_sol_nread1(rank,j1*(nreg+1),nreg,insize,insizes,submatCij,submatBij,yi1[j1],xi1point,irnereg,keepreg,valereg,cntl,rinfo,error1,icntl,info,w,iw,b02);
+    ndbbd_block_solve_mem(rank,j1*(nreg+1),nreg,insize,insizes,submatCij,submatBij,yi1[j1],xi1point,irnereg,keepreg,valereg,cntl,rinfo,error1,icntl,info,w,iw,b02);
     solve_real *bccol= (solve_real*)calloc(ncolc,sizeof(solve_real));
     longsize=ncolc*sizeof(solve_real);
     for(i=0; i<nrowc-1; i++) {
@@ -5529,7 +5529,7 @@ int HaNDBBDParSol(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisi
         for(j=aic[i]; j<aic[i+1]; j++) {
           yi1[j1][ajc[j]]=valsc[j];
         }
-        NDBBD_sol_nread1(rank,j1*(nreg+1),nreg,insize,insizes,submatCij,submatBij,yi1[j1],bccol,irnereg,keepreg,valereg,cntl,rinfo,error1,icntl,info,w,iw,b02);
+        ndbbd_block_solve_mem(rank,j1*(nreg+1),nreg,insize,insizes,submatCij,submatBij,yi1[j1],bccol,irnereg,keepreg,valereg,cntl,rinfo,error1,icntl,info,w,iw,b02);
         spar_vbiviadd_(bccol,bivinzcol+i,bivinzrow,&vecbivisize,&nrowb,&ncolc,&nz,ai12,aj12,vals12,vecbivi);
       }
     }
@@ -5538,7 +5538,7 @@ int HaNDBBDParSol(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisi
       for(j=aic[i]; j<nzc; j++) {
         yi1[j1][ajc[j]]=valsc[j];
       }
-      NDBBD_sol_nread1(rank,j1*(nreg+1),nreg,insize,insizes,submatCij,submatBij,yi1[j1],bccol,irnereg,keepreg,valereg,cntl,rinfo,error1,icntl,info,w,iw,b02);
+      ndbbd_block_solve_mem(rank,j1*(nreg+1),nreg,insize,insizes,submatCij,submatBij,yi1[j1],bccol,irnereg,keepreg,valereg,cntl,rinfo,error1,icntl,info,w,iw,b02);
       spar_vbiviadd_(bccol,bivinzcol+i,bivinzrow,&vecbivisize,&nrowb,&ncolc,&nz,ai12,aj12,vals12,vecbivi);
     }
     free(bccol);
@@ -5748,7 +5748,7 @@ int HaNDBBDParSol(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisi
   fortran_int vecbiuisize=0;
   vecbiuisize=VecSize-sumrowcolin;
   printf("after bivi rank %d\n",rank);
-  HaReduceNoComp(vecbiui,vecbiuisize,mpisize,rank,mpisize-1);
+  reduce_to_rank_nocompress(vecbiui,vecbiuisize,mpisize,rank,mpisize-1);
   printf("Completed MPI_Reduce Operation! Rank %d time %f\n",rank,((double)(clock()-timestr))/CLOCKS_PER_SEC);
   if(rank!=mpisize-1){
     free(vecbiui);
@@ -5860,7 +5860,7 @@ int HaNDBBDParSol(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisi
     spar_mulnoadd_(xd,&nrow,&nz,ai,aj,vals,be0);
     MatDestroy(&submatC[j1]);
     ifremove=true;
-    NDBBD_sol(rank,j2,nreg,insize,insizes,submatCij,submatBij,be0,biui0,ifremove,fn01,fn02,fn03);
+    ndbbd_block_solve(rank,j2,nreg,insize,insizes,submatCij,submatBij,be0,biui0,ifremove,fn01,fn02,fn03);
     for(i=0; i<nreg; i++) {
       MatDestroy(&submatCij[j2+i][0]);
       MatDestroy(&submatBij[j2+i][0]);
@@ -5923,7 +5923,7 @@ int HaNDBBDParSol(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisi
 
 
 
-bool NDBBD_sol(PetscInt rank, int begmat,int nreg,int * insize,int insizes, Mat **submatCij,Mat **submatBij,solve_real *b,solve_real *sol,bool ifremove,char** fn01,char** fn02, char** fn03) {
+bool ndbbd_block_solve(PetscInt rank, int begmat,int nreg,int * insize,int insizes, Mat **submatCij,Mat **submatBij,solve_real *b,solve_real *sol,bool ifremove,char** fn01,char** fn02, char** fn03) {
   FILE* fp1,*fp2,*fp3;
   PetscScalar *vals,*valsc,vecval;
   PetscInt *ai,*aj,*aic,*ajc,nrow,nz,maxrowcij;//,ncol
@@ -6098,7 +6098,7 @@ bool NDBBD_sol(PetscInt rank, int begmat,int nreg,int * insize,int insizes, Mat 
 }
 
 
-bool NDBBD_sol_nread1(PetscInt rank, int begmat,int nreg,int * insize,int insizes, Mat **submatCij,Mat **submatBij,solve_real *b,solve_real *sol,int** irnereg,int** keepreg,solve_real** valereg,solve_real *cntl,solve_real *rinfo,solve_real *error1,int *icntl,int *info,solve_real *w,int *iw,solve_real *b02) {
+bool ndbbd_block_solve_mem(PetscInt rank, int begmat,int nreg,int * insize,int insizes, Mat **submatCij,Mat **submatBij,solve_real *b,solve_real *sol,int** irnereg,int** keepreg,solve_real** valereg,solve_real *cntl,solve_real *rinfo,solve_real *error1,int *icntl,int *info,solve_real *w,int *iw,solve_real *b02) {
   PetscScalar *vals;//,*valsc;//,vecval;
   PetscInt *ai,*aj,nrow,nz;//,ncol,*aic,*ajc
   PetscInt i,j,j1,j2;//,indx01,la1;
@@ -6150,7 +6150,7 @@ bool NDBBD_sol_nread1(PetscInt rank, int begmat,int nreg,int * insize,int insize
   return true;
 }
 
-int HaReduce(solve_real *vecbivi,fortran_int vecbivisize,PetscInt mpisize,PetscInt rank,PetscInt targetrank) {
+int reduce_to_rank(solve_real *vecbivi,fortran_int vecbivisize,PetscInt mpisize,PetscInt rank,PetscInt targetrank) {
   if(mpisize==1)return 0;
   MPI_Status   status;
   int i,j,j1,j2,j3;
@@ -6235,7 +6235,7 @@ int HaReduce(solve_real *vecbivi,fortran_int vecbivisize,PetscInt mpisize,PetscI
   return 1;
 }
 
-int HaReduceNoComp(solve_real *vecbivi,fortran_int vecbivisize,PetscInt mpisize,PetscInt rank,PetscInt targetrank) {
+int reduce_to_rank_nocompress(solve_real *vecbivi,fortran_int vecbivisize,PetscInt mpisize,PetscInt rank,PetscInt targetrank) {
   if(mpisize==1)return 0;
   MPI_Status   status;
   int i,j,j1,j2,j3;
@@ -6290,7 +6290,7 @@ int HaReduceNoComp(solve_real *vecbivi,fortran_int vecbivisize,PetscInt mpisize,
 
 
 
-bool spline(solve_real* y,solve_real* x,solve_real sx0,solve_real sxn,int size,solve_real* w,int laA){//sizeof(x)=size+1
+bool cubic_spline(solve_real* y,solve_real* x,solve_real sx0,solve_real sxn,int size,solve_real* w,int laA){//sizeof(x)=size+1
   offset_t lasize;
   solve_real *matval= (solve_real *) calloc (6*4*size,sizeof(solve_real));
   solve_real *bval= (solve_real *) calloc (4*size,sizeof(solve_real));
@@ -6443,7 +6443,7 @@ bool spline(solve_real* y,solve_real* x,solve_real sx0,solve_real sxn,int size,s
   return 1;
 }
 
-bool Johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt* dnnz,PetscInt onz,PetscInt* onnz,Mat B,PetscInt dnzB,PetscInt* dnnzB,PetscInt onzB,PetscInt* onnzB,Vec vecb,Vec vece,PetscInt rank,PetscInt rank_hsl,PetscInt mpisize,char* tabfile, char *commsyntax,set_def *ha_set,dim_t nset, set_element *ha_setele, array_def *ha_cof,offset_t ncof,array_def *ha_var,offset_t nvar, elem_value **ha_cofvar2,offset_t ncofvar,offset_t ncofele,offset_t nvarele,closure_entry **ha_cgeshock2,offset_t alltimeset,offset_t allregset,offset_t nintraeq,dim_t matsol,PetscInt Istart,PetscInt Iend,  offset_t nreg, offset_t ntime, offset_t *ha_eqadd, offset_t ndblock, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laDi,dim_t laD,PetscReal cntl3,PetscReal cntl6,PetscBool presol,dim_t nesteddbbd,int localsize,PetscInt *ndbbddrank1,fortran_int* indata,dim_t mc66,fortran_int *ptx,struct timeval begintime,solve_real **xcf2){ //Johansen
+bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt* dnnz,PetscInt onz,PetscInt* onnz,Mat B,PetscInt dnzB,PetscInt* dnnzB,PetscInt onzB,PetscInt* onnzB,Vec vecb,Vec vece,PetscInt rank,PetscInt rank_hsl,PetscInt mpisize,char* tabfile, char *commsyntax,set_def *ha_set,dim_t nset, set_element *ha_setele, array_def *ha_cof,offset_t ncof,array_def *ha_var,offset_t nvar, elem_value **ha_cofvar2,offset_t ncofvar,offset_t ncofele,offset_t nvarele,closure_entry **ha_cgeshock2,offset_t alltimeset,offset_t allregset,offset_t nintraeq,dim_t matsol,PetscInt Istart,PetscInt Iend,  offset_t nreg, offset_t ntime, offset_t *ha_eqadd, offset_t ndblock, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laDi,dim_t laD,PetscReal cntl3,PetscReal cntl6,PetscBool presol,dim_t nesteddbbd,int localsize,PetscInt *ndbbddrank1,fortran_int* indata,dim_t mc66,fortran_int *ptx,struct timeval begintime,solve_real **xcf2){ //Johansen
   char tempfilenam[256],tempchar[256];
   PetscScalar value,*vals=NULL;
   PetscErrorCode ierr;
@@ -6519,7 +6519,7 @@ bool Johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt* dnnz
     if(rank==0)printf("Matrix preparation time %f\n",(endtime.tv_sec - begintime.tv_sec)+((double)(endtime.tv_usec - begintime.tv_usec))/ 1000000);
     
     if(rank==rank_hsl) {
-      HaNewMatVal(tabfile,commsyntax,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,ha_cofvar,ncofele+nvarele,ncofele,ha_cgeshock,ndblock,alltimeset,allregset,ha_eqadd,counteq,nintraeq,A,B);
+      jacobian_fill(tabfile,commsyntax,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,ha_cofvar,ncofele+nvarele,ncofele,ha_cgeshock,ndblock,alltimeset,allregset,ha_eqadd,counteq,nintraeq,A,B);
     }
 
     gettimeofday(&begintime, NULL);
@@ -6603,20 +6603,20 @@ bool Johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt* dnnz
       int *ha_cols= (int *) calloc (VecSize,sizeof(int));
       int *ha_ndblocks= (int *) calloc (ndblock,sizeof(int));
       if(matsol==2) {
-        HaDBBDMatOder(A,VecSize,mpisize,rank,Istart,Iend,nvarele,ha_eqadd,ha_rows,ha_cols,ndblock,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,cntl6);
+        dbbd_order(A,VecSize,mpisize,rank,Istart,Iend,nvarele,ha_eqadd,ha_rows,ha_cols,ndblock,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,cntl6);
         x0=realloc (x0,VecSize*sizeof(solve_real));
-        HaDBBDParSol(A,vecb,x0,VecSize,mpisize,rank,Istart,Iend,ha_rows,ha_cols,ndblock,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,laD,cntl3);//,iter
+        dbbd_solve(A,vecb,x0,VecSize,mpisize,rank,Istart,Iend,ha_rows,ha_cols,ndblock,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,laD,cntl3);//,iter
       }
       if(matsol==3) {
         presol=1;
         if(presol){
-        HaNDBBDMatOderPre(A,VecSize,mpisize,rank,Istart,Iend,nreg,ntime,nvarele,ha_eqadd,ha_rows,ha_cols,ndblock,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,laDi,cntl6,ndbbddrank1,presol);
-        HaNDBBDParPre(A,vecb,x0,VecSize,mpisize,rank,Istart,Iend,ha_rows,ha_cols,ndblock,nreg,ntime,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,presol);//,iter
+        ndbbd_order_presolve(A,VecSize,mpisize,rank,Istart,Iend,nreg,ntime,nvarele,ha_eqadd,ha_rows,ha_cols,ndblock,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,laDi,cntl6,ndbbddrank1,presol);
+        ndbbd_presolve(A,vecb,x0,VecSize,mpisize,rank,Istart,Iend,ha_rows,ha_cols,ndblock,nreg,ntime,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,presol);//,iter
         }
         presol=0;
-        HaNDBBDMatOder(A,VecSize,mpisize,rank,Istart,Iend,nreg,ntime,nvarele,ha_eqadd,ha_rows,ha_cols,ndblock,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,laDi,cntl6,ndbbddrank1,presol);
+        ndbbd_order(A,VecSize,mpisize,rank,Istart,Iend,nreg,ntime,nvarele,ha_eqadd,ha_rows,ha_cols,ndblock,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,laDi,cntl6,ndbbddrank1,presol);
         x0=realloc (x0,VecSize*sizeof(solve_real));
-        HaNDBBDParSol(A,vecb,x0,VecSize,mpisize,rank,Istart,Iend,ha_rows,ha_cols,ndblock,nreg,ntime,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,presol);//,iter
+        ndbbd_solve(A,vecb,x0,VecSize,mpisize,rank,Istart,Iend,ha_rows,ha_cols,ndblock,nreg,ntime,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,presol);//,iter
       }
       time(&timeend);
       gettimeofday(&endtime, NULL);
@@ -6827,10 +6827,10 @@ bool Johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt* dnnz
           }
         }
       }
-      hnew_update(tabfile,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,ha_cofvar,ncofele+nvarele,ncofele,0);
+      updates_apply(tabfile,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,ha_cofvar,ncofele+nvarele,ncofele,0);
       strcpy(commsyntax,"formula");
       IsIni=false;
-      hnew_calcff(tabfile,commsyntax,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,ha_cofvar,ncofele+nvarele,ncofele,IsIni);
+      formulas_execute(tabfile,commsyntax,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,ha_cofvar,ncofele+nvarele,ncofele,IsIni);
 
     }
     ha_cofvar1=NULL;
@@ -6838,7 +6838,7 @@ bool Johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt* dnnz
     return 1;
   }
 
-bool ModMidPoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt* dnnz,PetscInt onz,PetscInt* onnz,Mat* B1,PetscInt dnzB,PetscInt* dnnzB,PetscInt onzB,PetscInt* onnzB,Vec* vecb1,Vec *vece1,PetscInt rank,PetscInt rank_hsl,PetscInt mpisize,char* tabfile, char *commsyntax,set_def *ha_set,dim_t nset, set_element *ha_setele, array_def *ha_cof,offset_t ncof,array_def *ha_var,offset_t nvar, elem_value **ha_cofvar2,offset_t ncofvar,offset_t ncofele,offset_t nvarele,closure_entry **ha_cgeshock2,offset_t alltimeset,offset_t allregset,offset_t nintraeq,dim_t matsol,PetscInt Istart,PetscInt Iend,  offset_t nreg, offset_t ntime, offset_t *ha_eqadd, offset_t ndblock, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laDi,dim_t laD,PetscReal cntl3,PetscReal cntl6,PetscBool presol,dim_t nesteddbbd,int localsize,PetscInt *ndbbddrank1,fortran_int* indata,dim_t mc66,fortran_int *ptx,struct timeval begintime,dim_t subints,MPI_Fint fcomm,solve_real **xcf2,int Isbiupd){ //Modified midpoint Pearson 1991
+bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt* dnnz,PetscInt onz,PetscInt* onnz,Mat* B1,PetscInt dnzB,PetscInt* dnnzB,PetscInt onzB,PetscInt* onnzB,Vec* vecb1,Vec *vece1,PetscInt rank,PetscInt rank_hsl,PetscInt mpisize,char* tabfile, char *commsyntax,set_def *ha_set,dim_t nset, set_element *ha_setele, array_def *ha_cof,offset_t ncof,array_def *ha_var,offset_t nvar, elem_value **ha_cofvar2,offset_t ncofvar,offset_t ncofele,offset_t nvarele,closure_entry **ha_cgeshock2,offset_t alltimeset,offset_t allregset,offset_t nintraeq,dim_t matsol,PetscInt Istart,PetscInt Iend,  offset_t nreg, offset_t ntime, offset_t *ha_eqadd, offset_t ndblock, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laDi,dim_t laD,PetscReal cntl3,PetscReal cntl6,PetscBool presol,dim_t nesteddbbd,int localsize,PetscInt *ndbbddrank1,fortran_int* indata,dim_t mc66,fortran_int *ptx,struct timeval begintime,dim_t subints,MPI_Fint fcomm,solve_real **xcf2,int Isbiupd){ //Modified midpoint Pearson 1991
   char tempfilenam[256],tempchar[256],solchar[255];
   PetscScalar value,*vals;
   PetscErrorCode ierr;
@@ -7060,7 +7060,7 @@ bool ModMidPoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
           printf("OKB!!!\n");
 
           if(rank==rank_hsl) {
-            HaNewMatVal(tabfile,commsyntax,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,ha_cofvar,ncofele+nvarele,ncofele,ha_cgeshock,ndblock,alltimeset,allregset,ha_eqadd,counteq,nintraeq,A,B);
+            jacobian_fill(tabfile,commsyntax,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,ha_cofvar,ncofele+nvarele,ncofele,ha_cgeshock,ndblock,alltimeset,allregset,ha_eqadd,counteq,nintraeq,A,B);
           }
           if(rank==rank_hsl) {
             strcpy(tempfilenam,scratch_dir);
@@ -7122,9 +7122,9 @@ bool ModMidPoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
             time(&timestr);
 
             if(matsol==2) {
-              HaDBBDMatOder(A,VecSize,mpisize,rank,Istart,Iend,nvarele,ha_eqadd,ha_rows,ha_cols,ndblock,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,cntl6);
+              dbbd_order(A,VecSize,mpisize,rank,Istart,Iend,nvarele,ha_eqadd,ha_rows,ha_cols,ndblock,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,cntl6);
               x1=realloc (x1,VecSize*sizeof(solve_real));
-              HaDBBDParSol(A,vecb,x1,VecSize,mpisize,rank,Istart,Iend,ha_rows,ha_cols,ndblock,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,laD,cntl3);//,iter
+              dbbd_solve(A,vecb,x1,VecSize,mpisize,rank,Istart,Iend,ha_rows,ha_cols,ndblock,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,laD,cntl3);//,iter
             }
 
             if(matsol==3) {
@@ -7132,12 +7132,12 @@ bool ModMidPoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
               memcpy(counteq,counteqs,(ndblock+1)*sizeof(offset_t));
               memcpy(counteqnoadd,counteqnoadds,(ndblock)*sizeof(offset_t));
               memcpy(countvarintra1,countvarintra1s,(ndblock+1)*sizeof(offset_t));
-              HaNDBBDMatOderPre(A,VecSize,mpisize,rank,Istart,Iend,nreg,ntime,nvarele,ha_eqadd,ha_rows,ha_cols,ndblock,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,laDi,cntl6,ndbbddrank1,presol);
-              HaNDBBDParPre(A,vecb,x1,VecSize,mpisize,rank,Istart,Iend,ha_rows,ha_cols,ndblock,nreg,ntime,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,presol);//,iter
+              ndbbd_order_presolve(A,VecSize,mpisize,rank,Istart,Iend,nreg,ntime,nvarele,ha_eqadd,ha_rows,ha_cols,ndblock,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,laDi,cntl6,ndbbddrank1,presol);
+              ndbbd_presolve(A,vecb,x1,VecSize,mpisize,rank,Istart,Iend,ha_rows,ha_cols,ndblock,nreg,ntime,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,presol);//,iter
               presol=0;
-              HaNDBBDMatOder(A,VecSize,mpisize,rank,Istart,Iend,nreg,ntime,nvarele,ha_eqadd,ha_rows,ha_cols,ndblock,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,laDi,cntl6,ndbbddrank1,presol);
+              ndbbd_order(A,VecSize,mpisize,rank,Istart,Iend,nreg,ntime,nvarele,ha_eqadd,ha_rows,ha_cols,ndblock,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,laDi,cntl6,ndbbddrank1,presol);
               x1=realloc (x1,VecSize*sizeof(solve_real));
-              HaNDBBDParSol(A,vecb,x1,VecSize,mpisize,rank,Istart,Iend,ha_rows,ha_cols,ndblock,nreg,ntime,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,presol);//,iter
+              ndbbd_solve(A,vecb,x1,VecSize,mpisize,rank,Istart,Iend,ha_rows,ha_cols,ndblock,nreg,ntime,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,presol);//,iter
             }
 
             time(&timeend);
@@ -7458,16 +7458,16 @@ bool ModMidPoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
           CHKERRQ(ierr);
           if(rank==rank_hsl) {
             if(stepcount==0) {
-              hnew_update(tabfile,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,ha_cofvar,ncofele+nvarele,ncofele,0);
+              updates_apply(tabfile,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,ha_cofvar,ncofele+nvarele,ncofele,0);
             }
             else {
-              hnew_update(tabfile,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,ha_cofvar,ncofele+nvarele,ncofele,1);
+              updates_apply(tabfile,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,ha_cofvar,ncofele+nvarele,ncofele,1);
             }
-            if(Isbiupd==1)hnew_biupd(rank,tabfile,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,ha_cofvar,ncofele+nvarele,ncofele,ha_cgeshock,nvarele,laA,subints,1,0,nsteps);
-            if(Isbiupd==2)hnew_biupd(rank,tabfile,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,ha_cofvar,ncofele+nvarele,ncofele,ha_cgeshock,nvarele,laA,subints,1,2,nsteps);
+            if(Isbiupd==1)subinterval_update(rank,tabfile,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,ha_cofvar,ncofele+nvarele,ncofele,ha_cgeshock,nvarele,laA,subints,1,0,nsteps);
+            if(Isbiupd==2)subinterval_update(rank,tabfile,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,ha_cofvar,ncofele+nvarele,ncofele,ha_cgeshock,nvarele,laA,subints,1,2,nsteps);
             strcpy(commsyntax,"formula");
             IsIni=false;
-            hnew_calcff(tabfile,commsyntax,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,ha_cofvar,ncofele+nvarele,ncofele,IsIni);
+            formulas_execute(tabfile,commsyntax,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,ha_cofvar,ncofele+nvarele,ncofele,IsIni);
           }
           MPI_Barrier(PETSC_COMM_WORLD);
           ierr = PetscGetCPUTime(&time1);
@@ -7555,7 +7555,7 @@ bool ModMidPoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
         }
 
         if(rank==rank_hsl) {
-          HaNewMatVal(tabfile,commsyntax,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,ha_cofvar,ncofele+nvarele,ncofele,ha_cgeshock,ndblock,alltimeset,allregset,ha_eqadd,counteq,nintraeq,A,B);
+          jacobian_fill(tabfile,commsyntax,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,ha_cofvar,ncofele+nvarele,ncofele,ha_cgeshock,ndblock,alltimeset,allregset,ha_eqadd,counteq,nintraeq,A,B);
         }
 
         if(rank==rank_hsl) {
@@ -7618,9 +7618,9 @@ bool ModMidPoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
           time(&timestr);
 
           if(matsol==2) {
-            HaDBBDMatOder(A,VecSize,mpisize,rank,Istart,Iend,nvarele,ha_eqadd,ha_rows,ha_cols,ndblock,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,cntl6);
+            dbbd_order(A,VecSize,mpisize,rank,Istart,Iend,nvarele,ha_eqadd,ha_rows,ha_cols,ndblock,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,cntl6);
             x1=realloc (x1,VecSize*sizeof(solve_real));
-            HaDBBDParSol(A,vecb,x1,VecSize,mpisize,rank,Istart,Iend,ha_rows,ha_cols,ndblock,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,laD,cntl3);//,iter
+            dbbd_solve(A,vecb,x1,VecSize,mpisize,rank,Istart,Iend,ha_rows,ha_cols,ndblock,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,laD,cntl3);//,iter
           }
 
           if(matsol==3) {
@@ -7628,12 +7628,12 @@ bool ModMidPoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
             memcpy(counteq,counteqs,(ndblock+1)*sizeof(offset_t));
             memcpy(counteqnoadd,counteqnoadds,(ndblock)*sizeof(offset_t));
             memcpy(countvarintra1,countvarintra1s,(ndblock+1)*sizeof(offset_t));
-            HaNDBBDMatOderPre(A,VecSize,mpisize,rank,Istart,Iend,nreg,ntime,nvarele,ha_eqadd,ha_rows,ha_cols,ndblock,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,laDi,cntl6,ndbbddrank1,presol);
-            HaNDBBDParPre(A,vecb,x1,VecSize,mpisize,rank,Istart,Iend,ha_rows,ha_cols,ndblock,nreg,ntime,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,presol);//,iter
+            ndbbd_order_presolve(A,VecSize,mpisize,rank,Istart,Iend,nreg,ntime,nvarele,ha_eqadd,ha_rows,ha_cols,ndblock,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,laDi,cntl6,ndbbddrank1,presol);
+            ndbbd_presolve(A,vecb,x1,VecSize,mpisize,rank,Istart,Iend,ha_rows,ha_cols,ndblock,nreg,ntime,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,presol);//,iter
             presol=0;
-            HaNDBBDMatOder(A,VecSize,mpisize,rank,Istart,Iend,nreg,ntime,nvarele,ha_eqadd,ha_rows,ha_cols,ndblock,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,laDi,cntl6,ndbbddrank1,presol);
+            ndbbd_order(A,VecSize,mpisize,rank,Istart,Iend,nreg,ntime,nvarele,ha_eqadd,ha_rows,ha_cols,ndblock,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,laDi,cntl6,ndbbddrank1,presol);
             x1=realloc (x1,VecSize*sizeof(solve_real));
-            HaNDBBDParSol(A,vecb,x1,VecSize,mpisize,rank,Istart,Iend,ha_rows,ha_cols,ndblock,nreg,ntime,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,presol);//,iter
+            ndbbd_solve(A,vecb,x1,VecSize,mpisize,rank,Istart,Iend,ha_rows,ha_cols,ndblock,nreg,ntime,ha_ndblocks,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,presol);//,iter
           }
 
           time(&timeend);
@@ -8049,12 +8049,12 @@ bool ModMidPoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
           }
           }
           for(i=0; i<ncofele; i++) ha_cofvar[i].value=ha_cofvar[i].initial;
-          hnew_gupd(tabfile,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,ha_cofvar,ncofele+nvarele,ncofele);
-          if(Isbiupd==1)hnew_biupd(rank,tabfile,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,ha_cofvar,ncofele+nvarele,ncofele,ha_cgeshock,nvarele,laA,subints,1,0,nsteps);
-          if(Isbiupd==2)hnew_biupd(rank,tabfile,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,ha_cofvar,ncofele+nvarele,ncofele,ha_cgeshock,nvarele,laA,subints,1,2,nsteps);
+          updates_apply_product(tabfile,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,ha_cofvar,ncofele+nvarele,ncofele);
+          if(Isbiupd==1)subinterval_update(rank,tabfile,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,ha_cofvar,ncofele+nvarele,ncofele,ha_cgeshock,nvarele,laA,subints,1,0,nsteps);
+          if(Isbiupd==2)subinterval_update(rank,tabfile,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,ha_cofvar,ncofele+nvarele,ncofele,ha_cgeshock,nvarele,laA,subints,1,2,nsteps);
           strcpy(commsyntax,"formula");
           IsIni=false;
-          hnew_calcff(tabfile,commsyntax,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,ha_cofvar,ncofele+nvarele,ncofele,IsIni);
+          formulas_execute(tabfile,commsyntax,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,ha_cofvar,ncofele+nvarele,ncofele,IsIni);
           for(i=0; i<nvar; i++) {
             for(tindx1=ha_var[i].offset; tindx1<ha_var[i].nelem+ha_var[i].offset; tindx1++) {
                ha_cofvar1[tindx1].substep_base=0;

@@ -1,5 +1,5 @@
 #include <ha_cgeglobal.h>
-int ha_chrfrall(char *line, int finditem, int replitem)
+int str_replace_char_all(char *line, int finditem, int replitem)
 {
   long int i=0;
   while (line[i]!='\0')
@@ -12,7 +12,7 @@ int ha_chrfrall(char *line, int finditem, int replitem)
   return 0;
 }
 
-char* ha_revstrpbrk(char *line, char *finditems)
+char* str_rfind_any(char *line, char *finditems)
 {
   int count1=0,j=0,l=0,i=0;
   while (line[count1] != '\0') count1++;
@@ -25,7 +25,7 @@ char* ha_revstrpbrk(char *line, char *finditems)
 }
 
 
-int ha_cgerevfind(char *line, char *finditem)
+int str_rfind_ci(char *line, char *finditem)
 {
   int count1=0,j=0,l=0,i=0;
   char *t1,*t2;
@@ -47,7 +47,7 @@ int ha_cgerevfind(char *line, char *finditem)
   return -1;
 }
 
-int ha_cgenchf(char *line, int finditem)
+int str_count_char(char *line, int finditem)
 {
   int i=0,j=0;
   while (line[i]!='\0')
@@ -58,7 +58,7 @@ int ha_cgenchf(char *line, int finditem)
   return j;
 }
 
-int ha_cgenfind(char *line, char *finditem)
+int str_count_ci(char *line, char *finditem)
 {
   int i=0, count1=0,j=0,l=0,q,count2=0;
   char *t1,*t2;
@@ -87,7 +87,7 @@ aabb:
   return count2;
 }
 
-char* ha_cgeeqfind(char *line, int finditem)
+char* str_rfind_toplevel(char *line, int finditem)
 {
   int count1=0,j=0,i=0,j1,j2;
   while (line[count1] != '\0') count1++;

@@ -223,7 +223,7 @@ int main(int argc,char **args) {
   if (!flg) {
     strcpy(filename,"./ndbbd_drank.csv");//orani03.cmf");
   }
-  if (flg)intreadCSV(filename,ndbbddrank1,ndbbdrank);//
+  if (flg)csv_read_ints(filename,ndbbddrank1,ndbbdrank);//
   printf("matsol %d\n",matsol);
   PetscOptionsGetString(NULL,NULL,"-cmdfile",filename,TABREADLINE,&flg);
   if (!flg) {
@@ -264,11 +264,11 @@ int main(int argc,char **args) {
   char *readitem=NULL;
   if(rank==0) {
     printf("OK!!!\n");
-    niodata=hcge_niodata(filename,"iodata");
+    niodata=cmf_count_files(filename,"iodata");
     if(niodata==-1)return 0;
     printf("OK!!!\n");
-    noutdata=hcge_niodata(filename,"outdata");
-    nsoldata=hcge_niodata(filename,"soldata");
+    noutdata=cmf_count_files(filename,"outdata");
+    nsoldata=cmf_count_files(filename,"soldata");
   }
   if(nohsl) {
     MPI_Bcast(&niodata,sizeof(int), MPI_BYTE,0, PETSC_COMM_WORLD);
@@ -277,15 +277,15 @@ int main(int argc,char **args) {
   }
   cmf_file_entry *iodata= (cmf_file_entry *) calloc (niodata+noutdata+nsoldata,sizeof(cmf_file_entry));
   if(rank==rank_hsl) {
-    hcge_rcmd(filename,niodata,iodata,tabfile,closure,shock);
+    cmf_read(filename,niodata,iodata,tabfile,closure,shock);
     for (nj=0; nj<niodata+noutdata+nsoldata; nj++) printf("rank %d logname %s fname %s\n",rank,iodata[nj].logname,iodata[nj].filname);
-    if(hcge_wtab(tabfile,newtabfile)==-1)return 0;
+    if(tab_preprocess(tabfile,newtabfile)==-1)return 0;
     printf("OK1!\n");
   }
   printf("rank %d OKK1\n",rank);
 
   strcpy(tabfile,newtabfile);
-  if(rank==0)nset=ha_cgenset(tabfile);
+  if(rank==0)nset=sets_count(tabfile);
   if(nohsl) {
     MPI_Bcast(iodata,niodata*sizeof(cmf_file_entry), MPI_BYTE,0, PETSC_COMM_WORLD);
     MPI_Bcast(closure,TABREADLINE*sizeof(char), MPI_BYTE,0, PETSC_COMM_WORLD);
@@ -298,8 +298,8 @@ int main(int argc,char **args) {
     for(j=0; j<MAXSUPSET; j++)ha_set[i].subsetid[j]=-1;
   }
   if(rank==0) {
-    ha_cgerset(tabfile,niodata,iodata, ha_set,nset);
-    hcge_rinterset(tabfile,niodata,iodata, ha_set,nset);
+    sets_read(tabfile,niodata,iodata, ha_set,nset);
+    sets_read_intertemporal(tabfile,niodata,iodata, ha_set,nset);
     for (i=0; i<nset; i++) {
       ha_set[i].offset=nsetspace;
       nsetspace=nsetspace+ha_set[i].size;
@@ -326,9 +326,9 @@ int main(int argc,char **args) {
         nlength++;
       }
       if (nlength>0) {
-        ha_cgerdvar1(vname,iodata[ha_set[i].fileid].filname,&vsize,longname,&dim1);
+        datafile_read_header_info(vname,iodata[ha_set[i].fileid].filname,&vsize,longname,&dim1);
         datafile_labels *matvar1= (datafile_labels *) calloc (dim1,sizeof(datafile_labels));
-        ha_cgermvar1(vname,iodata[ha_set[i].fileid].filname,dim1,matvar1);
+        datafile_read_labels(vname,iodata[ha_set[i].fileid].filname,dim1,matvar1);
         for (j=0; j<dim1; j++) {
           nj=0;
           while(matvar1[j].ch[nj]!='\0') {
@@ -342,21 +342,21 @@ int main(int argc,char **args) {
       }
       else {
         if (ha_set[i].readele[0]=='-'&&ha_set[i].readele[1]==',') {
-          ha_setminus(ha_setele, ha_set,nset,i);
+          set_difference(ha_setele, ha_set,nset,i);
         }
         else {
           if (ha_set[i].readele[0]=='+'&&ha_set[i].readele[1]==',') {
-            ha_setplus(ha_setele, ha_set,nset,i);
+            set_union_op(ha_setele, ha_set,nset,i);
           }
           else {
             if (ha_set[i].readele[0]=='^'&&ha_set[i].readele[1]==',') {
-              ha_setunion(ha_setele, ha_set,nset,i);
+              set_union_named(ha_setele, ha_set,nset,i);
             }
             else {
               if(ha_set[i].readele[0]=='=') {
                 dim1=ha_set[i].size;
                 strcpy(copyline,ha_set[i].readele);
-                while (ha_cgefrstr(copyline," ", ""));
+                while (str_replace_all(copyline," ", ""));
                 readitem = strtok(copyline,"=");
                 readitem = strtok(readitem,"=");
                 j1=atoi(readitem);
@@ -369,7 +369,7 @@ int main(int argc,char **args) {
                 dim1=ha_set[i].size;
                 strcpy(copyline,ha_set[i].readele);
                 strcat(copyline,",");
-                while (ha_cgefrstr(copyline," ", ""));
+                while (str_replace_all(copyline," ", ""));
                 readitem = strtok(copyline,",");
                 strcpy(ha_setele[ha_set[i].offset].setele,readitem);
                 ha_setele[ha_set[i].offset].superset_pos[0]=0;
@@ -385,11 +385,11 @@ int main(int argc,char **args) {
       }
 
     }
-    ha_cgersubset(tabfile, ha_setele, ha_set,nset);
+    subsets_read(tabfile, ha_setele, ha_set,nset);
     j2=1;
-    while(j2==1)for(i=1; i<MAXSUPSET; i++)ha_cgesubsetchck(ha_setele,ha_set,nset,&j2); //printf("check %d\n",i);}
+    while(j2==1)for(i=1; i<MAXSUPSET; i++)subset_map_build(ha_setele,ha_set,nset,&j2); //printf("check %d\n",i);}
     if(sbbd_overuser) {
-      alltimeset=ha_cgeralltime(ha_set,nset);
+      alltimeset=set_find_alltime(ha_set,nset);
     }
     if(alltimeset>=0||allregset>=0) {
       if(alltimeset>=0&&allregset>=0) {
@@ -472,7 +472,7 @@ int main(int argc,char **args) {
   offset_t ncof=0,ncofele=0,ncof1,ncofele1;
   if(rank==0) {
     printf("tabfile %s\n",tabfile);
-    ncof=ha_cgencof(tabfile,commsyntax);
+    ncof=tab_count_statements(tabfile,commsyntax);
     printf("tabfile %s ncof %ld\n",tabfile,ncof);
     ncof1=ncof;
   }
@@ -482,7 +482,7 @@ int main(int argc,char **args) {
   ncof=ncof1;
   array_def *ha_cof= (array_def *) calloc (ncof,sizeof(array_def));//recycle ha_cgeset
   if(rank==0) {
-    ncofele=hcge_rcof(tabfile,commsyntax,ha_cof,ncof,ha_set,nset);
+    ncofele=coefficients_read(tabfile,commsyntax,ha_cof,ncof,ha_set,nset);
     if(ncofele==-1)return 0;
     ncofele1=ncofele;
   }
@@ -502,7 +502,7 @@ int main(int argc,char **args) {
   strcpy(commsyntax,"variable");
   offset_t nvar=0,nvarele=0,nvar1,nvarele1;
   if(rank==0) {
-    nvar=ha_cgencof(tabfile,commsyntax);
+    nvar=tab_count_statements(tabfile,commsyntax);
     nvar1=nvar;
   }
   if(nohsl)MPI_Bcast(&nvar1,sizeof(offset_t), MPI_BYTE,0, PETSC_COMM_WORLD);
@@ -511,8 +511,8 @@ int main(int argc,char **args) {
   bool *var_inter= (bool *) calloc (nvar,sizeof(bool));//recycle ha_cgeset
   printf("nvarele %ld\n",nvarele);
   if(rank==0) {
-    hcge_defvar(tabfile,ha_var,nvar);
-    nvarele=hcge_rvar(tabfile,commsyntax,ha_var,nvar,ha_set,nset);
+    variables_read_defaults(tabfile,ha_var,nvar);
+    nvarele=variables_read(tabfile,commsyntax,ha_var,nvar,ha_set,nset);
     nvarele1=nvarele;
   }
   printf("nvarele %ld\n",nvarele);
@@ -537,7 +537,7 @@ int main(int argc,char **args) {
   elem_store *ha_varele= (elem_store *) calloc (nvarele,sizeof(elem_store));
   printf("rankasd %d nvar %ld\n",rank,nvar);
   if(rank==0) {
-    hcge_rcofele(ha_cof,ncof,ha_set,nset,ha_cofele);
+    coef_resolve_sets(ha_cof,ncof,ha_set,nset,ha_cofele);
   }
   if(nohsl) {
     if(ncofele*sizeof(elem_store)>1500000000) {
@@ -555,10 +555,10 @@ int main(int argc,char **args) {
   }
   printf("rank %d ncofele %ld\n",rank,ncofele);
 
-  if(rank==0)hcge_rcofele(ha_var,nvar,ha_set,nset,ha_varele);
+  if(rank==0)coef_resolve_sets(ha_var,nvar,ha_set,nset,ha_varele);
   printf("rank %d OK!!!\n",rank);
 
-  if(rank==rank_hsl)hcge_wvar(tabfile,newtabfile1,ha_var,nvar);
+  if(rank==rank_hsl)tab_write_variables(tabfile,newtabfile1,ha_var,nvar);
   strcpy(tabfile,newtabfile1);
   if(nohsl) {
     MPI_Bcast(ha_set,nset*sizeof(set_def), MPI_BYTE,0, PETSC_COMM_WORLD);
@@ -572,7 +572,7 @@ int main(int argc,char **args) {
   //**************************************************************************************
   if(rank==0) {
     strcpy(commsyntax,"read");
-    if(hcge_readff(tabfile,niodata,iodata,commsyntax,ha_set,nset,ha_setele,ha_cof,ncof,ha_cofele,ncofele,ha_var,nvar,ha_varele,nvarele)==-1)return 0;
+    if(data_read_files(tabfile,niodata,iodata,commsyntax,ha_set,nset,ha_setele,ha_cof,ncof,ha_cofele,ncofele,ha_var,nvar,ha_varele,nvarele)==-1)return 0;
   }
   printf("rank %d OK???\n",rank);
   //**************************************************************************************
@@ -599,10 +599,10 @@ int main(int argc,char **args) {
   closure_entry *ha_cgeshock= (closure_entry *) calloc (nvarele,sizeof(closure_entry));
   if(rank==0) {
     strcpy(commsyntax,"exogenous");
-    nexo=hcge_rexo(closure,commsyntax,ha_cgeshock,ha_var,nvar,ha_set,nset,ha_setele);
+    nexo=closure_read(closure,commsyntax,ha_cgeshock,ha_var,nvar,ha_set,nset,ha_setele);
     nexo1=nexo;
     strcpy(commsyntax,"shock");
-    if(hcge_rshock(shock,commsyntax,ha_cgeshock,nvarele,ha_var,nvar,ha_set,nset,ha_setele,subints)==-1)return 0;
+    if(shocks_read(shock,commsyntax,ha_cgeshock,nvarele,ha_var,nvar,ha_set,nset,ha_setele,subints)==-1)return 0;
   }
   printf("rank %d OK???\n",rank);
   if(nohsl) {
@@ -625,7 +625,7 @@ int main(int argc,char **args) {
   bool IsIni=true;
   printf("OK???\n");
   if(rank==0) {
-    hnew_calcff(tabfile,commsyntax,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,ha_cofvar,ncofele+nvarele,ncofele,IsIni);
+    formulas_execute(tabfile,commsyntax,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,ha_cofvar,ncofele+nvarele,ncofele,IsIni);
   }
   gettimeofday(&endtime, NULL);
   if(rank==0)printf("Calculation of variables time %f\n",(endtime.tv_sec - begintime.tv_sec)+((double)(endtime.tv_usec - begintime.tv_usec))/ 1000000);
@@ -656,7 +656,7 @@ int main(int argc,char **args) {
   strcpy(commsyntax,"equation");
   offset_t neq=0,neq1;
   if(rank==0) {
-    neq=ha_cgencof(tabfile,commsyntax);
+    neq=tab_count_statements(tabfile,commsyntax);
     neq1=neq;
   }
   if(nohsl) {
@@ -684,8 +684,8 @@ int main(int argc,char **args) {
   offset_t nintraendovar,summat;
   printf("rank %d\n",rank);
   if(rank==rank_hsl) {
-    if(nesteddbbd==1)NestedMatvarRead(tabfile,commsyntax,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,ha_cofvar,ncofele+nvarele,ncofele,ha_cgeshock,var_inter,ha_eq,ha_eqint,ha_eqtime,ha_eqreg,allregset,alltimeset,orderintra,orderreg);
-    else NewMatvarRead(tabfile,commsyntax,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,ha_cofvar,ncofele+nvarele,ncofele,ha_cgeshock,var_inter,ha_eq,ha_eqint,ha_eqtime,ha_eqreg,allregset,alltimeset,orderintra,orderreg);
+    if(nesteddbbd==1)equation_order_read_nested(tabfile,commsyntax,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,ha_cofvar,ncofele+nvarele,ncofele,ha_cgeshock,var_inter,ha_eq,ha_eqint,ha_eqtime,ha_eqreg,allregset,alltimeset,orderintra,orderreg);
+    else equation_order_read(tabfile,commsyntax,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,ha_cofvar,ncofele+nvarele,ncofele,ha_cgeshock,var_inter,ha_eq,ha_eqint,ha_eqtime,ha_eqreg,allregset,alltimeset,orderintra,orderreg);
     if(alltimeset>=0||allregset>=0)for(i=0; i<neq; i++)ha_eqint[i]=!ha_eqint[i];
   }
   switch (nesteddbbd) {
@@ -1198,7 +1198,7 @@ int main(int argc,char **args) {
   }
   printf("rank11 %d Istart %d I end %d\n",rank, Istart,Iend);
   if(rank==rank_hsl) {
-    NewMatreadele(tabfile,commsyntax,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,ha_cofvar,ncofele+nvarele,ncofele,nexo,ha_cgeshock,ndblock,alltimeset,allregset,ha_eqint,ha_eqadd,ha_eqtime,ha_eqreg,counteq,nintraeq,&sbbd_overrid,Istart,Iend,&dnz,dnnz,&onz,onnz,&dnzB,dnnzB,&onzB,onnzB,nesteddbbd);
+    jacobian_preallocate(tabfile,commsyntax,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,ha_cofvar,ncofele+nvarele,ncofele,nexo,ha_cgeshock,ndblock,alltimeset,allregset,ha_eqint,ha_eqadd,ha_eqtime,ha_eqreg,counteq,nintraeq,&sbbd_overrid,Istart,Iend,&dnz,dnnz,&onz,onnz,&dnzB,dnnzB,&onzB,onnzB,nesteddbbd);
   }
   printf("OKla!!!\n");
   if(sbbd_overrid&&!sbbd_overuser) {
@@ -1266,7 +1266,7 @@ int main(int argc,char **args) {
   printf("rank %d ncof %ld\n",rank,ncof);
   
 
-  if(solmethod==10)Johansen(nohsl,VecSize,A,dnz,dnnz,onz,onnz,B,dnzB,dnnzB,onzB,onnzB,vecb,vece,rank,rank_hsl,mpisize,tabfile,commsyntax,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,&ha_cofvar,ncofele+nvarele,ncofele,nvarele,&ha_cgeshock,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,ha_eqadd,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,presol,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,&xcf);
+  if(solmethod==10)solve_johansen(nohsl,VecSize,A,dnz,dnnz,onz,onnz,B,dnzB,dnnzB,onzB,onnzB,vecb,vece,rank,rank_hsl,mpisize,tabfile,commsyntax,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,&ha_cofvar,ncofele+nvarele,ncofele,nvarele,&ha_cgeshock,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,ha_eqadd,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,presol,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,&xcf);
   
   int stepcount;
   int nsteps=3;
@@ -1274,7 +1274,7 @@ int main(int argc,char **args) {
   FILE* solution;
   int maxsol=3;
 
-    if(solmethod==1)ModMidPoint(nohsl,VecSize,&A,dnz,dnnz,onz,onnz,&B,dnzB,dnnzB,onzB,onnzB,&vecb,&vece,rank,rank_hsl,mpisize,tabfile,commsyntax,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,&ha_cofvar,ncofele+nvarele,ncofele,nvarele,&ha_cgeshock,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,ha_eqadd,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,presol,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,subints,fcomm,&xcf,0);
+    if(solmethod==1)solve_modified_midpoint(nohsl,VecSize,&A,dnz,dnnz,onz,onnz,&B,dnzB,dnnzB,onzB,onnzB,&vecb,&vece,rank,rank_hsl,mpisize,tabfile,commsyntax,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,&ha_cofvar,ncofele+nvarele,ncofele,nvarele,&ha_cgeshock,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,ha_eqadd,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,presol,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,subints,fcomm,&xcf,0);
     
   if(solmethod==20){
     MPI_Barrier(PETSC_COMM_WORLD);
@@ -1296,16 +1296,16 @@ int main(int argc,char **args) {
               else VecSetSizes(vece,PETSC_DECIDE,VecSize);
               VecSetOption(vece, VEC_IGNORE_NEGATIVE_INDICES,PETSC_TRUE);
     }
-      if(rank==rank_hsl)hnew_biupd(rank,tabfile,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,ha_cofvar,ncofele+nvarele,ncofele,ha_cgeshock,nvarele,10*laA,subints,1,1,0);
+      if(rank==rank_hsl)subinterval_update(rank,tabfile,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,ha_cofvar,ncofele+nvarele,ncofele,ha_cgeshock,nvarele,10*laA,subints,1,1,0);
       
-      ModMidPoint(nohsl,VecSize,&A,dnz,dnnz,onz,onnz,&B,dnzB,dnnzB,onzB,onnzB,&vecb,&vece,rank,rank_hsl,mpisize,tabfile,commsyntax,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,&ha_cofvar,ncofele+nvarele,ncofele,nvarele,&ha_cgeshock,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,ha_eqadd,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,presol,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,subints,fcomm,&xcf,0);
+      solve_modified_midpoint(nohsl,VecSize,&A,dnz,dnnz,onz,onnz,&B,dnzB,dnnzB,onzB,onnzB,&vecb,&vece,rank,rank_hsl,mpisize,tabfile,commsyntax,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,&ha_cofvar,ncofele+nvarele,ncofele,nvarele,&ha_cgeshock,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,ha_eqadd,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,presol,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,subints,fcomm,&xcf,0);
   printf("ncof %ld rank %d\n",ncof,rank);
   }
   }
   if(solmethod==21){
     MPI_Barrier(PETSC_COMM_WORLD);
     printf("Heere rank %d\n",rank);
-      ModMidPoint(nohsl,VecSize,&A,dnz,dnnz,onz,onnz,&B,dnzB,dnnzB,onzB,onnzB,&vecb,&vece,rank,rank_hsl,mpisize,tabfile,commsyntax,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,&ha_cofvar,ncofele+nvarele,ncofele,nvarele,&ha_cgeshock,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,ha_eqadd,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,presol,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,subints,fcomm,&xcf,2);
+      solve_modified_midpoint(nohsl,VecSize,&A,dnz,dnnz,onz,onnz,&B,dnzB,dnnzB,onzB,onnzB,&vecb,&vece,rank,rank_hsl,mpisize,tabfile,commsyntax,ha_set,nset,ha_setele,ha_cof,ncof,ha_var,nvar,&ha_cofvar,ncofele+nvarele,ncofele,nvarele,&ha_cgeshock,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,ha_eqadd,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,presol,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,subints,fcomm,&xcf,2);
   }
     
   if(rank==rank_hsl) {
@@ -1368,7 +1368,7 @@ int main(int argc,char **args) {
   }
   MPI_Barrier(PETSC_COMM_WORLD);
   if(nowrites==0&&rank==0)for(i=0; i<noutdata; i++){
-    hcge_wdata(tabfile,iodata[i+niodata].logname,iodata[i+niodata].filname,ha_set,nset,ha_setele,ha_cof,ncof,ncofele,ha_var,nvar,nvarele,ha_cofvar);
+    outputs_write_csv(tabfile,iodata[i+niodata].logname,iodata[i+niodata].filname,ha_set,nset,ha_setele,ha_cof,ncof,ncofele,ha_var,nvar,nvarele,ha_cofvar);
     printf("outfile %s\n",iodata[i+niodata].logname);
   }
   free(iodata);

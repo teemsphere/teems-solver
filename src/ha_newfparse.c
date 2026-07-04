@@ -1,8 +1,8 @@
 #include <ha_cgeglobal.h>
 
-solve_real hnew_simplrpl(char *var2, elem_value *record, array_def *ha_cof,offset_t ncof) {
+solve_real formula_subst_scalar(char *var2, elem_value *record, array_def *ha_cof,offset_t ncof) {
   offset_t index;
-  while (ha_cgefrstr(var2," ", ""));
+  while (str_replace_all(var2," ", ""));
   solve_real eval=0;
   if (var2[0]>='0'&&var2[0]<='9') {
     eval=atof(var2);
@@ -19,7 +19,7 @@ solve_real hnew_simplrpl(char *var2, elem_value *record, array_def *ha_cof,offse
 }
 
 
-int hnew_varrepl(char *var2, set_def *ha_set,array_def *ha_cof,offset_t ncof, array_def *ha_var,offset_t nvar,offset_t ncofele,sum_def *sum_cof,int totalsum,formula_op *ha_calvar,int ha_calvarsize,quantifier *arSet,dim_t fdim,int varindex) {
+int formula_bind_operand(char *var2, set_def *ha_set,array_def *ha_cof,offset_t ncof, array_def *ha_var,offset_t nvar,offset_t ncofele,sum_def *sum_cof,int totalsum,formula_op *ha_calvar,int ha_calvarsize,quantifier *arSet,dim_t fdim,int varindex) {
   offset_t index;
   char *p=NULL;//,copyvar[TABREADLINE];//,*p1=NULL,*p2=NULL,*p3=NULL,*p4=NULL;
   dim_t l1,l,sup;//,svar2;//=0,i2=0,i3=0,i4=0,svar1,svar2,checkvar20=0,checkvar10=0,checkvar11=0,checkvar12=0,checkvar16=0,checkvar14=0,l;
@@ -58,7 +58,7 @@ int hnew_varrepl(char *var2, set_def *ha_set,array_def *ha_cof,offset_t ncof, ar
       case 1:
         p=strtok(NULL,"}");
         leadlag=0;
-        hnew_arset(p,&leadlag);
+        parse_index_leadlag(p,&leadlag);
        for (l=0; l<fdim; l++) {
              if(varindex==2) {
               ha_calvar[ha_calvarsize].Var2ADims[l]=0;
@@ -103,7 +103,7 @@ int hnew_varrepl(char *var2, set_def *ha_set,array_def *ha_cof,offset_t ncof, ar
         for (l=0; l<ha_cof[index].size-1; l++) {
           p=strtok(NULL,",");
           leadlag=0;
-          hnew_arset(p,&leadlag);
+          parse_index_leadlag(p,&leadlag);
           for (l1=0; l1<fdim; l1++) {
             if (strcmp(p,arSet[l1].index_name)==0) {
               if(varindex==2) {
@@ -127,7 +127,7 @@ int hnew_varrepl(char *var2, set_def *ha_set,array_def *ha_cof,offset_t ncof, ar
         }
         p=strtok(NULL,"}");
         leadlag=0;
-        hnew_arset(p,&leadlag);
+        parse_index_leadlag(p,&leadlag);
         for (l1=0; l1<fdim; l1++) {
           if (strcmp(p,arSet[l1].index_name)==0) {
             if(varindex==2) {
@@ -181,7 +181,7 @@ int hnew_varrepl(char *var2, set_def *ha_set,array_def *ha_cof,offset_t ncof, ar
       case 1:
         p=strtok(NULL,"}");
         leadlag=0;
-        hnew_arset(p,&leadlag);
+        parse_index_leadlag(p,&leadlag);
         for (l=0; l<fdim; l++) {
              if(varindex==2) {
               ha_calvar[ha_calvarsize].Var2ADims[l]=0;
@@ -226,7 +226,7 @@ int hnew_varrepl(char *var2, set_def *ha_set,array_def *ha_cof,offset_t ncof, ar
         for (l=0; l<ha_var[index].size-1; l++) {
           p=strtok(NULL,",");
           leadlag=0;
-          hnew_arset(p,&leadlag);
+          parse_index_leadlag(p,&leadlag);
           for (l1=0; l1<fdim; l1++) {
             if (strcmp(p,arSet[l1].index_name)==0) {
               if(varindex==2) {
@@ -250,7 +250,7 @@ int hnew_varrepl(char *var2, set_def *ha_set,array_def *ha_cof,offset_t ncof, ar
         }
         p=strtok(NULL,"}");
         leadlag=0;
-        hnew_arset(p,&leadlag);
+        parse_index_leadlag(p,&leadlag);
         for (l1=0; l1<fdim; l1++) {
           if (strcmp(p,arSet[l1].index_name)==0) {
             if(varindex==2) {
@@ -373,7 +373,7 @@ int hnew_varrepl(char *var2, set_def *ha_set,array_def *ha_cof,offset_t ncof, ar
   return 0;
 }
 
-int hnew_intrpl(char *line) {
+int leadlag_encode(char *line) {
   char *p1,*p2,*p3;
   p1=strchr(line,'{');
   while (p1!=NULL) {
@@ -399,7 +399,7 @@ int hnew_intrpl(char *line) {
   return 1;
 }
 
-int hnew_arset(char *p,int *leadlag) {
+int parse_index_leadlag(char *p,int *leadlag) {
   char *plussign,*minsign;
   plussign=strchr(p,'#');
   minsign=strchr(p,'!');
@@ -414,28 +414,28 @@ int hnew_arset(char *p,int *leadlag) {
   return 1;
 }
 
-int ha_newfparse(char *fomulain, set_def *ha_set,array_def *ha_cof, offset_t ncof, array_def *ha_var,offset_t nvar,offset_t ncofele,sum_def *sum_cof,dim_t totalsum,formula_op *ha_calvar,dim_t *ha_calvarsize,quantifier *arSet,dim_t fdim) {
+int formula_compile(char *fomulain, set_def *ha_set,array_def *ha_cof, offset_t ncof, array_def *ha_var,offset_t nvar,offset_t ncofele,sum_def *sum_cof,dim_t totalsum,formula_op *ha_calvar,dim_t *ha_calvarsize,quantifier *arSet,dim_t fdim) {
   int npar=0,npow=0,nmul=0,ndiv=0,nplu=0,nmin=0,j;
   *ha_calvarsize=0;
-  npar=ha_cgenchf(fomulain, ')');
+  npar=str_count_char(fomulain, ')');
   if (npar==0) {
-    npow=ha_cgenchf(fomulain, '^');
+    npow=str_count_char(fomulain, '^');
     if (npow>0) {
-      ha_newfppow(fomulain,ha_set,npow,0,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,ha_calvarsize,arSet,fdim);
+      formula_compile_pow(fomulain,ha_set,npow,0,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,ha_calvarsize,arSet,fdim);
     }
-    nmul=ha_cgenchf(fomulain, '*');
-    ndiv=ha_cgenchf(fomulain, '/');
+    nmul=str_count_char(fomulain, '*');
+    ndiv=str_count_char(fomulain, '/');
     nmul=nmul+ndiv;
     if (nmul>0) {
-      ha_newfpmuldiv(fomulain,ha_set,nmul,0,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,ha_calvarsize,arSet,fdim);
+      formula_compile_muldiv(fomulain,ha_set,nmul,0,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,ha_calvarsize,arSet,fdim);
     }
-    nplu=ha_cgenchf(fomulain, '+');
-    nmin=ha_cgenchf(fomulain, '-');
+    nplu=str_count_char(fomulain, '+');
+    nmin=str_count_char(fomulain, '-');
     nplu=nplu+nmin;
     if (nplu>0) {
-      ha_newfpplumin(fomulain,ha_set,nplu,0,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,ha_calvarsize,arSet,fdim);
+      formula_compile_addsub(fomulain,ha_set,nplu,0,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,ha_calvarsize,arSet,fdim);
     }
-      hnew_varrepl(fomulain,ha_set,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,*ha_calvarsize,arSet,fdim,1);
+      formula_bind_operand(fomulain,ha_set,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,*ha_calvarsize,arSet,fdim,1);
       ha_calvar[*ha_calvarsize].Oper=0;
       ha_calvar[*ha_calvarsize].TmpVarName[0]='\0';
       *ha_calvarsize=*ha_calvarsize+1;
@@ -466,24 +466,24 @@ int ha_newfparse(char *fomulain, set_def *ha_set,array_def *ha_cof, offset_t nco
       strcpy(fpart2,fomulain);
       fpart3[0]='\0';
     }
-    npow=ha_cgenchf(fpart2, '^');
+    npow=str_count_char(fpart2, '^');
     if (npow>0) {
-      ha_newfppow(fpart2,ha_set,npow,i,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,ha_calvarsize,arSet,fdim);
+      formula_compile_pow(fpart2,ha_set,npow,i,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,ha_calvarsize,arSet,fdim);
     }
-    nmul=ha_cgenchf(fpart2, '*');
-    ndiv=ha_cgenchf(fpart2, '/');
+    nmul=str_count_char(fpart2, '*');
+    ndiv=str_count_char(fpart2, '/');
     nmul=nmul+ndiv;
     if (nmul>0) {
-      ha_newfpmuldiv(fpart2,ha_set,nmul,i,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,ha_calvarsize,arSet,fdim);
+      formula_compile_muldiv(fpart2,ha_set,nmul,i,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,ha_calvarsize,arSet,fdim);
     }
-    nplu=ha_cgenchf(fpart2, '+');
-    nmin=ha_cgenchf(fpart2, '-');
+    nplu=str_count_char(fpart2, '+');
+    nmin=str_count_char(fpart2, '-');
     nplu=nplu+nmin;
     if (nplu>0) {
-      ha_newfpplumin(fpart2,ha_set,nplu,i,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,ha_calvarsize,arSet,fdim);
+      formula_compile_addsub(fpart2,ha_set,nplu,i,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,ha_calvarsize,arSet,fdim);
     }
       if(strpbrk(fpart2,"=<>")==NULL){
-      hnew_varrepl(fpart2,ha_set,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,*ha_calvarsize,arSet,fdim,1);
+      formula_bind_operand(fpart2,ha_set,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,*ha_calvarsize,arSet,fdim,1);
       ha_calvar[*ha_calvarsize].Oper=0;
       ha_calvar[*ha_calvarsize].TmpVarName[0]='\0';
       *ha_calvarsize=*ha_calvarsize+1;
@@ -529,11 +529,11 @@ int ha_newfparse(char *fomulain, set_def *ha_set,array_def *ha_cof, offset_t nco
           fpart1[j-3]='\0';
         }
     if (j==2) if (fpart1[j-1]=='f'&&fpart1[j-2]=='i') {
-        ha_newfpif(fpart2,ha_set,2,i,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,ha_calvarsize,arSet,fdim);
+        formula_compile_if(fpart2,ha_set,2,i,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,ha_calvarsize,arSet,fdim);
         fpart1[j-2]='\0';
       }
     if (j>2) if (fpart1[j-1]=='f'&&fpart1[j-2]=='i') if(j==2||fpart1[j-3]==' '||fpart1[j-3]=='('||fpart1[j-3]=='+'||fpart1[j-3]=='-'||fpart1[j-3]=='*'||fpart1[j-3]=='/'||fpart1[j-3]=='^'||fpart1[j-3]==',') {
-          ha_newfpif(fpart2,ha_set,2,i,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,ha_calvarsize,arSet,fdim);
+          formula_compile_if(fpart2,ha_set,2,i,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,ha_calvarsize,arSet,fdim);
           fpart1[j-2]='\0';
         }
     *ha_calvarsize=*ha_calvarsize+1;
@@ -544,7 +544,7 @@ int ha_newfparse(char *fomulain, set_def *ha_set,array_def *ha_cof, offset_t nco
   return 1;
 }
 
-solve_real ha_newfpcal(elem_value *record,set_def *ha_set,set_element *ha_setele,sum_value *ha_sumele,formula_op *ha_calvar,int ha_calvarsize,quantifier *arSet,dim_t fdim, solve_real zerodivide) {
+solve_real formula_eval(elem_value *record,set_def *ha_set,set_element *ha_setele,sum_value *ha_sumele,formula_op *ha_calvar,int ha_calvarsize,quantifier *arSet,dim_t fdim, solve_real zerodivide) {
   int i;
   dim_t j;
   offset_t l=0,l1=0;
@@ -1012,7 +1012,7 @@ solve_real ha_newfpcal(elem_value *record,set_def *ha_set,set_element *ha_setele
 
 
 
-int ha_newfppow(char *fomulain, set_def *ha_set,int npow,int ipar,array_def *ha_cof,offset_t ncof, array_def *ha_var,offset_t nvar,offset_t ncofele,sum_def *sum_cof,int totalsum,formula_op *ha_calvar,int *ha_calvarsize,quantifier *arSet,dim_t fdim) {
+int formula_compile_pow(char *fomulain, set_def *ha_set,int npow,int ipar,array_def *ha_cof,offset_t ncof, array_def *ha_var,offset_t nvar,offset_t ncofele,sum_def *sum_cof,int totalsum,formula_op *ha_calvar,int *ha_calvarsize,quantifier *arSet,dim_t fdim) {
   int i,i1,i2,i3,i4,i0,ibar=0,index,j,j1,i5,p1;
   char *p=NULL;//,*p1=NULL,*p2=NULL,*p3=NULL,*p4=NULL;
   char fpart1[TABREADLINE],fpart2[TABREADLINE],fpart3[TABREADLINE],var1[TABREADLINE],var2[TABREADLINE],interchar[TABREADLINE],interchar1[TABREADLINE];
@@ -1025,7 +1025,7 @@ int ha_newfppow(char *fomulain, set_def *ha_set,int npow,int ipar,array_def *ha_
     strcpy(fpart3,fomulain+index+1);
 
     i1=-1;
-    p=ha_revstrpbrk(fpart1,"^*/+-=<>");
+    p=str_rfind_any(fpart1,"^*/+-=<>");
     if (p!=NULL) {
       i1=p-fpart1;
     }
@@ -1067,8 +1067,8 @@ int ha_newfppow(char *fomulain, set_def *ha_set,int npow,int ipar,array_def *ha_
     var2[index] = '\0';
     strcpy(fpart2,fpart3+index);
 
-    hnew_varrepl(var1,ha_set,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,*ha_calvarsize,arSet,fdim,1);
-    hnew_varrepl(var2,ha_set,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,*ha_calvarsize,arSet,fdim,2);
+    formula_bind_operand(var1,ha_set,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,*ha_calvarsize,arSet,fdim,1);
+    formula_bind_operand(var2,ha_set,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,*ha_calvarsize,arSet,fdim,2);
 
     sprintf(interchar1, "%d", ipar);
     interchar[0]='\0';
@@ -1102,7 +1102,7 @@ int ha_newfppow(char *fomulain, set_def *ha_set,int npow,int ipar,array_def *ha_
   }
   return 1;
 }
-int ha_newfpmuldiv(char *fomulain, set_def *ha_set,int nmul,int ipar,array_def *ha_cof,offset_t ncof, array_def *ha_var,offset_t nvar,offset_t ncofele,sum_def *sum_cof,int totalsum,formula_op *ha_calvar,int *ha_calvarsize,quantifier *arSet,dim_t fdim) {
+int formula_compile_muldiv(char *fomulain, set_def *ha_set,int nmul,int ipar,array_def *ha_cof,offset_t ncof, array_def *ha_var,offset_t nvar,offset_t ncofele,sum_def *sum_cof,int totalsum,formula_op *ha_calvar,int *ha_calvarsize,quantifier *arSet,dim_t fdim) {
   int i,i1,i2,i3,i4,i5,ibar=0,index,j,j1,p1;
   char *p=NULL;//,*p1=NULL,*p2=NULL,*p3=NULL,*p4=NULL;
   char fpart1[TABREADLINE],fpart2[TABREADLINE],fpart3[TABREADLINE],var1[TABREADLINE],var2[TABREADLINE],interchar[TABREADLINE],interchar1[TABREADLINE];
@@ -1121,7 +1121,7 @@ int ha_newfpmuldiv(char *fomulain, set_def *ha_set,int nmul,int ipar,array_def *
     fpart1[index] = '\0';
     strcpy(fpart3,fomulain+index+1);
     i1=-1;
-    p=ha_revstrpbrk(fpart1,"*/+-=<>");
+    p=str_rfind_any(fpart1,"*/+-=<>");
     if (p!=NULL) {
       i1=p-fpart1;
     }
@@ -1163,8 +1163,8 @@ int ha_newfpmuldiv(char *fomulain, set_def *ha_set,int nmul,int ipar,array_def *
     var2[index] = '\0';
     strcpy(fpart2,fpart3+index);
 
-    hnew_varrepl(var1,ha_set,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,*ha_calvarsize,arSet,fdim,1);
-    hnew_varrepl(var2,ha_set,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,*ha_calvarsize,arSet,fdim,2);
+    formula_bind_operand(var1,ha_set,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,*ha_calvarsize,arSet,fdim,1);
+    formula_bind_operand(var2,ha_set,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,*ha_calvarsize,arSet,fdim,2);
 
     sprintf(interchar1, "%d", ipar);
     interchar[0]='\0';
@@ -1198,7 +1198,7 @@ int ha_newfpmuldiv(char *fomulain, set_def *ha_set,int nmul,int ipar,array_def *
   return 1;
 }
 
-int ha_newfpplumin(char *fomulain, set_def *ha_set,int nplu,int ipar,array_def *ha_cof,offset_t ncof, array_def *ha_var,offset_t nvar,offset_t ncofele,sum_def *sum_cof,int totalsum,formula_op *ha_calvar,int *ha_calvarsize,quantifier *arSet,dim_t fdim) {
+int formula_compile_addsub(char *fomulain, set_def *ha_set,int nplu,int ipar,array_def *ha_cof,offset_t ncof, array_def *ha_var,offset_t nvar,offset_t ncofele,sum_def *sum_cof,int totalsum,formula_op *ha_calvar,int *ha_calvarsize,quantifier *arSet,dim_t fdim) {
   int i,i1,i3,i4,i5,ibar=0,index,j,j1,p1;
   char *p=NULL;//,*p1=NULL,*p2=NULL,*p3=NULL,*p4=NULL;
   char fpart1[TABREADLINE],fpart2[TABREADLINE],fpart3[TABREADLINE],var1[TABREADLINE],var2[TABREADLINE],interchar[TABREADLINE],interchar1[TABREADLINE];
@@ -1217,7 +1217,7 @@ int ha_newfpplumin(char *fomulain, set_def *ha_set,int nplu,int ipar,array_def *
     fpart1[index] = '\0';
     strcpy(fpart3,fomulain+index+1);
     i1=-1;
-    p=ha_revstrpbrk(fpart1,"+-=<>");
+    p=str_rfind_any(fpart1,"+-=<>");
     if (p!=NULL) {
       i1=p-fpart1;
     }
@@ -1263,12 +1263,12 @@ int ha_newfpplumin(char *fomulain, set_def *ha_set,int nplu,int ipar,array_def *
         ha_calvar[*ha_calvarsize].Var1Type=5;
         ha_calvar[*ha_calvarsize].Var1Val=0;
     }
-    else hnew_varrepl(var1,ha_set,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,*ha_calvarsize,arSet,fdim,1);
+    else formula_bind_operand(var1,ha_set,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,*ha_calvarsize,arSet,fdim,1);
     if(i==1&&var2[0]=='\0'){
         ha_calvar[*ha_calvarsize].Var2Type=5;
         ha_calvar[*ha_calvarsize].Var2Val=0;
     }
-    else hnew_varrepl(var2,ha_set,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,*ha_calvarsize,arSet,fdim,2);
+    else formula_bind_operand(var2,ha_set,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,*ha_calvarsize,arSet,fdim,2);
 
     sprintf(interchar1, "%d", ipar);
     interchar[0]='\0';
@@ -1303,7 +1303,7 @@ int ha_newfpplumin(char *fomulain, set_def *ha_set,int nplu,int ipar,array_def *
 }
 
 
-int ha_newfpif(char *fomulain, set_def *ha_set,int nif,int ipar,array_def *ha_cof,offset_t ncof, array_def *ha_var,offset_t nvar,offset_t ncofele,sum_def *sum_cof,int totalsum,formula_op *ha_calvar,int *ha_calvarsize,quantifier *arSet,dim_t fdim) {
+int formula_compile_if(char *fomulain, set_def *ha_set,int nif,int ipar,array_def *ha_cof,offset_t ncof, array_def *ha_var,offset_t nvar,offset_t ncofele,sum_def *sum_cof,int totalsum,formula_op *ha_calvar,int *ha_calvarsize,quantifier *arSet,dim_t fdim) {
   char *p=NULL,*p1,*p3,var1[NAMESIZE],var2[NAMESIZE],var3[NAMESIZE];
   int i,j1,j2,j3,l;//,varindex;
   p1=fomulain;
@@ -1338,8 +1338,8 @@ int ha_newfpif(char *fomulain, set_def *ha_set,int nif,int ipar,array_def *ha_co
   strncpy(var2,p,j1);
   var2[j1]='\0';
   strcpy(var3,p+j1+1);
-  hnew_varrepl(var1,ha_set,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,*ha_calvarsize,arSet,fdim,1);
-  hnew_varrepl(var3,ha_set,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,*ha_calvarsize,arSet,fdim,2);
+  formula_bind_operand(var1,ha_set,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,*ha_calvarsize,arSet,fdim,1);
+  formula_bind_operand(var3,ha_set,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,*ha_calvarsize,arSet,fdim,2);
   ha_calvar[*ha_calvarsize].Var3Type=ha_calvar[*ha_calvarsize].Var2Type;
   ha_calvar[*ha_calvarsize].Var3BegAdd=ha_calvar[*ha_calvarsize].Var2BegAdd;
   for(i=0;i<fdim;i++){
@@ -1349,11 +1349,11 @@ int ha_newfpif(char *fomulain, set_def *ha_set,int nif,int ipar,array_def *ha_co
   ha_calvar[*ha_calvarsize].Var3ADims[i]=ha_calvar[*ha_calvarsize].Var2ADims[i];
   }
   ha_calvar[*ha_calvarsize].Var3Val=ha_calvar[*ha_calvarsize].Var2Val;
-  hnew_varrepl(var2,ha_set,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,*ha_calvarsize,arSet,fdim,2);
+  formula_bind_operand(var2,ha_set,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,*ha_calvarsize,arSet,fdim,2);
   return 1;
 }
 
-offset_t hnew_calcff(char *fname, char *commsyntax,set_def *ha_set,dim_t nset, set_element *ha_setele, array_def *ha_cof,offset_t ncof,array_def *ha_var,offset_t nvar, elem_value *ha_cofvar,offset_t ncofvar,offset_t ncofele,bool IsIni) {
+offset_t formulas_execute(char *fname, char *commsyntax,set_def *ha_set,dim_t nset, set_element *ha_setele, array_def *ha_cof,offset_t ncof,array_def *ha_var,offset_t nvar, elem_value *ha_cofvar,offset_t ncofvar,offset_t ncofele,bool IsIni) {
   FILE * filehandle;
   char line[TABREADLINE],line1[TABREADLINE],line2[TABREADLINE],linecopy[TABREADLINE],condvar[MAXVARDIM][NAMESIZE];
   char vname[NAMESIZE],sumsyntax[NAMESIZE],argu[NAMESIZE],tempset[NAMESIZE];
@@ -1368,45 +1368,45 @@ offset_t hnew_calcff(char *fname, char *commsyntax,set_def *ha_set,dim_t nset, s
   formula_op *ha_calvar1= NULL;
 
   filehandle = fopen(fname,"r");
-  while (ha_cgertabl1(commsyntax,filehandle,line,ha_cofvar,ha_cof,ncof,&zerodivide,TABREADLINE)) {
+  while (tab_next_statement_resolved(commsyntax,filehandle,line,ha_cofvar,ha_cof,ncof,&zerodivide,TABREADLINE)) {
     if (strstr(line,"(default=initial)")!=NULL) IsDefFomIni=true;
     if (strstr(line,"(default")==NULL) {
       IsFomIni=IsDefFomIni;
       if(strstr(line, "(initial)")!=NULL) {
-        ha_cgefrstr1(line, "(initial)", "");
+        str_replace_first(line, "(initial)", "");
         IsFomIni=true;
       }
       if(strstr(line, "(always)")!=NULL) {
-        ha_cgefrstr1(line, "(always)", "");
+        str_replace_first(line, "(always)", "");
         IsFomIni=false;
       }
       if(!(IsFomIni&&!IsIni)) {
         ncond=0;
         for (i=0; i<MAXVARDIM; i++)logioper[i]=0;
-        ha_cgefrstr1(line, commsyntax, "");
-        while (ha_cgefrstr(line," ", ""));
-        while (ha_cgefrchr(line, '[', '('));
-        while (ha_cgefrchr(line, ']', ')'));
-        while (ha_cgefrchr(line, '{', '('));
-        while (ha_cgefrchr(line, '}', ')'));
+        str_replace_first(line, commsyntax, "");
+        while (str_replace_all(line," ", ""));
+        while (str_replace_char(line, '[', '('));
+        while (str_replace_char(line, ']', ')'));
+        while (str_replace_char(line, '{', '('));
+        while (str_replace_char(line, '}', ')'));
         strcpy(linecopy,line);
-        totalsum=ha_cgenfind(line, "sum(");
-        neqsign=ha_cgenchf(line, '=');
+        totalsum=str_count_ci(line, "sum(");
+        neqsign=str_count_char(line, '=');
         readitem = strtok(line,"=");
         for(i=1; i<neqsign; i++)readitem = strtok(NULL,"=");
         readitem = strtok(NULL,";");
-        npow=ha_cgenchf(readitem, '^');
-        nmul=ha_cgenchf(readitem, '*');
-        ndiv=ha_cgenchf(readitem, '/');
+        npow=str_count_char(readitem, '^');
+        nmul=str_count_char(readitem, '*');
+        ndiv=str_count_char(readitem, '/');
         nmul=nmul+ndiv;
-        nplu=ha_cgenchf(readitem, '+');
-        nmin=ha_cgenchf(readitem, '-');
+        nplu=str_count_char(readitem, '+');
+        nmin=str_count_char(readitem, '-');
         nplu=nplu+nmin;
 
         strcpy(line,linecopy);
-        readitem =ha_cgeeqfind(line,'=');//readitem =strrchr(line,'=');
+        readitem =str_rfind_toplevel(line,'=');//readitem =strrchr(line,'=');
         line[readitem-line]='\0';
-        fdim=ha_cgenchf(line, '(');
+        fdim=str_count_char(line, '(');
         if (fdim==1) {
           fdim=fdim+1;
         }
@@ -1502,20 +1502,20 @@ offset_t hnew_calcff(char *fname, char *commsyntax,set_def *ha_set,dim_t nset, s
         }
         strcpy(vname,readitem);
         strcpy(line,linecopy);
-        readitem =ha_cgeeqfind(line,'=');
+        readitem =str_rfind_toplevel(line,'=');
         readitem++;
         readitem = strtok(readitem,";");
-        while (ha_cgerecovar(readitem)==1);
-        hnew_intrpl(readitem);
-        npar=ha_cgenchf(readitem, '(');
+        while (formula_normalize(readitem)==1);
+        leadlag_encode(readitem);
+        npar=str_count_char(readitem, '(');
         strcpy(sumsyntax,"sum(");
-        totalsum=hcge_nsum(readitem,sumsyntax);
+        totalsum=sum_count(readitem,sumsyntax);
         sum_def *sum_cof= (sum_def *) calloc (totalsum,sizeof(sum_def));
         sumcount=0;
         strcpy(line1,readitem);
         strcpy(line2,line1);
         readitem=line2;
-        while (hcge_dsum(readitem,sumsyntax,sum_cof,arSet,ha_set,nset,fdim,sumcount)==1) {
+        while (sum_parse(readitem,sumsyntax,sum_cof,arSet,ha_set,nset,fdim,sumcount)==1) {
           sumcount++;
         }
         totalsum=sumcount;
@@ -1543,7 +1543,7 @@ offset_t hnew_calcff(char *fname, char *commsyntax,set_def *ha_set,dim_t nset, s
         strcpy(line2,line1);
         readitem=line2;
         sumindx=0;
-        while (hnew_calsum(readitem,sumsyntax,ha_set,nset,ha_setele,ha_cofvar,ncofvar,ncofele,ha_cof,ncof,ha_var,nvar,sum_cof,totalsum,ha_sumele,nsumele,ha_calvar,arSet,fdim,&sumindx,sumcount,zerodivide)==1) {
+        while (sum_eval(readitem,sumsyntax,ha_set,nset,ha_setele,ha_cofvar,ncofvar,ncofele,ha_cof,ncof,ha_var,nvar,sum_cof,totalsum,ha_sumele,nsumele,ha_calvar,arSet,fdim,&sumindx,sumcount,zerodivide)==1) {
           sumcount++;
         }
         strcpy(line1,readitem);
@@ -1603,7 +1603,7 @@ offset_t hnew_calcff(char *fname, char *commsyntax,set_def *ha_set,dim_t nset, s
                 }
             }
         }
-        ha_newfparse(line1,ha_set,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,&ha_calvarsize,arSet,fdim-1);
+        formula_compile(line1,ha_set,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,&ha_calvarsize,arSet,fdim-1);
         if(ncond>0) {
           for(i=0; i<MAXVARDIM; i++)for(j=0; j<MAXVARDIM; j++){
             logiantidim[i][j]=0;
@@ -1722,7 +1722,7 @@ offset_t hnew_calcff(char *fname, char *commsyntax,set_def *ha_set,dim_t nset, s
               if(logioper[i1]==6)if(eval>=cond[i1])logi++;
               }
             }
-            if(logi==ncond)ha_cofvar[offset+l2].value=ha_newfpcal(ha_cofvar,ha_set,ha_setele,ha_sumele,ha_calvar1,ha_calvarsize,arSet1,fdim-1,zerodivide);
+            if(logi==ncond)ha_cofvar[offset+l2].value=formula_eval(ha_cofvar,ha_set,ha_setele,ha_sumele,ha_calvar1,ha_calvarsize,arSet1,fdim-1,zerodivide);
           }
         if(omp_get_thread_num()!=0){
           free(arSet1);
@@ -1777,7 +1777,7 @@ offset_t hnew_calcff(char *fname, char *commsyntax,set_def *ha_set,dim_t nset, s
                 }
               }
             }
-            ha_cofvar[offset+l2].value=ha_newfpcal(ha_cofvar,ha_set,ha_setele,ha_sumele,ha_calvar1,ha_calvarsize,arSet1,fdim-1,zerodivide);
+            ha_cofvar[offset+l2].value=formula_eval(ha_cofvar,ha_set,ha_setele,ha_sumele,ha_calvar1,ha_calvarsize,arSet1,fdim-1,zerodivide);
           }
         if(omp_get_thread_num()!=0){
           free(arSet1);
@@ -1850,7 +1850,7 @@ offset_t hnew_calcff(char *fname, char *commsyntax,set_def *ha_set,dim_t nset, s
    midpoint!=0 the modified-midpoint correction is used: the value is
    advanced from the sub-step base (csolpupd) by twice the computed
    change, and csolpupd retains the pre-update value. */
-offset_t hnew_update(char *fname,set_def *ha_set,dim_t nset, set_element *ha_setele, array_def *ha_cof,offset_t ncof,array_def *ha_var,offset_t nvar, elem_value *ha_cofvar,offset_t ncofvar,offset_t ncofele,int midpoint) {
+offset_t updates_apply(char *fname,set_def *ha_set,dim_t nset, set_element *ha_setele, array_def *ha_cof,offset_t ncof,array_def *ha_var,offset_t nvar, elem_value *ha_cofvar,offset_t ncofvar,offset_t ncofele,int midpoint) {
   FILE * filehandle;
   char commsyntax[NAMESIZE],line[TABREADLINE],line1[TABREADLINE],line2[TABREADLINE],linecopy[TABREADLINE];
   char vname[NAMESIZE],sumsyntax[NAMESIZE],argu[NAMESIZE];
@@ -1865,26 +1865,26 @@ offset_t hnew_update(char *fname,set_def *ha_set,dim_t nset, set_element *ha_set
   formula_op *ha_calvar1= NULL;
   strcpy(commsyntax,"update");
   filehandle = fopen(fname,"r");
-  while (ha_cgertabl1(commsyntax,filehandle,line,ha_cofvar,ha_cof,ncof,&zerodivide,TABREADLINE)) {
+  while (tab_next_statement_resolved(commsyntax,filehandle,line,ha_cofvar,ha_cof,ncof,&zerodivide,TABREADLINE)) {
     IsChange=false;
     IsExplicit=false;
     if(strstr(line, "(change)")!=NULL) {
       IsChange=true;
-      ha_cgefrstr1(line, "(change)", "");
+      str_replace_first(line, "(change)", "");
     }
     if(strstr(line, "(explicit)")!=NULL) {
       IsExplicit=true;
-      ha_cgefrstr1(line, "(explicit)", "");
+      str_replace_first(line, "(explicit)", "");
     }
-    ha_cgefrstr1(line, commsyntax, "");
-    while (ha_cgefrstr(line," ", ""));
-    while (ha_cgefrchr(line, '[', '('));
-    while (ha_cgefrchr(line, ']', ')'));
-    while (ha_cgefrchr(line, '{', '('));
-    while (ha_cgefrchr(line, '}', ')'));
+    str_replace_first(line, commsyntax, "");
+    while (str_replace_all(line," ", ""));
+    while (str_replace_char(line, '[', '('));
+    while (str_replace_char(line, ']', ')'));
+    while (str_replace_char(line, '{', '('));
+    while (str_replace_char(line, '}', ')'));
     strcpy(linecopy,line);
     readitem = strtok(line,"=");
-    fdim=ha_cgenchf(readitem, '(');
+    fdim=str_count_char(readitem, '(');
     if (fdim==1) {
       fdim=fdim+1;
     }
@@ -1920,7 +1920,7 @@ offset_t hnew_update(char *fname,set_def *ha_set,dim_t nset, set_element *ha_set
     readitem = strtok(line,"=");
     readitem = strtok(NULL,";");
     if(IsChange==false&&IsExplicit==false) {
-      while (ha_cgefrstr(readitem,"*", "+"));
+      while (str_replace_all(readitem,"*", "+"));
       strcpy(line1,vname);
       strcat(line1,"*(1+(");
       strcat(line1,readitem);
@@ -1933,25 +1933,25 @@ offset_t hnew_update(char *fname,set_def *ha_set,dim_t nset, set_element *ha_set
       strcat(line1,readitem);
       readitem=line1;
     }
-    npow=ha_cgenchf(readitem, '^');
-    nmul=ha_cgenchf(readitem, '*');
-    ndiv=ha_cgenchf(readitem, '/');
+    npow=str_count_char(readitem, '^');
+    nmul=str_count_char(readitem, '*');
+    ndiv=str_count_char(readitem, '/');
     nmul=nmul+ndiv;
-    nplu=ha_cgenchf(readitem, '+');
-    nmin=ha_cgenchf(readitem, '-');
+    nplu=str_count_char(readitem, '+');
+    nmin=str_count_char(readitem, '-');
     nplu=nplu+nmin;
 
-    while (ha_cgerecovar(readitem)==1);
-    hnew_intrpl(readitem);
-    npar=ha_cgenchf(readitem, '(');
+    while (formula_normalize(readitem)==1);
+    leadlag_encode(readitem);
+    npar=str_count_char(readitem, '(');
     strcpy(sumsyntax,"sum(");
-    totalsum=hcge_nsum(readitem,sumsyntax);
+    totalsum=sum_count(readitem,sumsyntax);
     sum_def *sum_cof= (sum_def *) calloc (totalsum,sizeof(sum_def));
     sumcount=0;
     strcpy(line1,readitem);
     strcpy(line2,line1);
     readitem=line2;
-    while (hcge_dsum(readitem,sumsyntax,sum_cof,arSet,ha_set,nset,fdim,sumcount)==1) {
+    while (sum_parse(readitem,sumsyntax,sum_cof,arSet,ha_set,nset,fdim,sumcount)==1) {
       sumcount++;
     }
     totalsum=sumcount;
@@ -1978,7 +1978,7 @@ offset_t hnew_update(char *fname,set_def *ha_set,dim_t nset, set_element *ha_set
     strcpy(line2,line1);
     readitem=line2;
     sumindx=0;
-    while (hnew_calsum(readitem,sumsyntax,ha_set,nset,ha_setele,ha_cofvar,ncofvar,ncofele,ha_cof,ncof,ha_var,nvar,sum_cof,totalsum,ha_sumele,nsumele,ha_calvar,arSet,fdim,&sumindx,sumcount,zerodivide)==1) {
+    while (sum_eval(readitem,sumsyntax,ha_set,nset,ha_setele,ha_cofvar,ncofvar,ncofele,ha_cof,ncof,ha_var,nvar,sum_cof,totalsum,ha_sumele,nsumele,ha_calvar,arSet,fdim,&sumindx,sumcount,zerodivide)==1) {
       sumcount++;
     }
     strcpy(line1,readitem);
@@ -2036,7 +2036,7 @@ offset_t hnew_update(char *fname,set_def *ha_set,dim_t nset, set_element *ha_set
                 }
             }
         }
-    ha_newfparse(line1,ha_set,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,&ha_calvarsize,arSet,fdim-1);
+    formula_compile(line1,ha_set,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,&ha_calvarsize,arSet,fdim-1);
         #pragma omp parallel private(l,l2,i4,dcount,i3,i1,temp1,temp2,arSet1,ha_calvar1) shared(ha_cofvar,arSet)
         {
         if(omp_get_thread_num()!=0){
@@ -2081,12 +2081,12 @@ offset_t hnew_update(char *fname,set_def *ha_set,dim_t nset, set_element *ha_set
             }
       if(midpoint){
         temp2=ha_cofvar[offset+l2].value;
-        temp1=ha_newfpcal(ha_cofvar,ha_set,ha_setele,ha_sumele,ha_calvar1,ha_calvarsize,arSet1,fdim-1,zerodivide);
+        temp1=formula_eval(ha_cofvar,ha_set,ha_setele,ha_sumele,ha_calvar1,ha_calvarsize,arSet1,fdim-1,zerodivide);
         if(temp1-ha_cofvar[offset+l2].value>0.000000001||temp1-ha_cofvar[offset+l2].value<-0.000000001)ha_cofvar[offset+l2].value=ha_cofvar[offset+l2].substep_base+2*(temp1-ha_cofvar[offset+l2].value);
         ha_cofvar[offset+l2].substep_base=temp2;
       }else{
         ha_cofvar[offset+l2].substep_base=ha_cofvar[offset+l2].value;
-        temp1=ha_newfpcal(ha_cofvar,ha_set,ha_setele,ha_sumele,ha_calvar1,ha_calvarsize,arSet1,fdim-1,zerodivide);
+        temp1=formula_eval(ha_cofvar,ha_set,ha_setele,ha_sumele,ha_calvar1,ha_calvarsize,arSet1,fdim-1,zerodivide);
         if(temp1-ha_cofvar[offset+l2].value>0.000000001||temp1-ha_cofvar[offset+l2].value<-0.000000001)ha_cofvar[offset+l2].value=temp1;
       }
     }
@@ -2154,7 +2154,7 @@ offset_t hnew_update(char *fname,set_def *ha_set,dim_t nset, set_element *ha_set
 
 
 
-offset_t hnew_gupd(char *fname,set_def *ha_set,dim_t nset, set_element *ha_setele, array_def *ha_cof,offset_t ncof,array_def *ha_var,offset_t nvar, elem_value *ha_cofvar,offset_t ncofvar,offset_t ncofele) {
+offset_t updates_apply_product(char *fname,set_def *ha_set,dim_t nset, set_element *ha_setele, array_def *ha_cof,offset_t ncof,array_def *ha_var,offset_t nvar, elem_value *ha_cofvar,offset_t ncofvar,offset_t ncofele) {
   FILE * filehandle;
   char commsyntax[NAMESIZE],line[TABREADLINE],line1[TABREADLINE],line2[TABREADLINE],linecopy[TABREADLINE];
   char vname[NAMESIZE],sumsyntax[NAMESIZE],argu[NAMESIZE];
@@ -2169,26 +2169,26 @@ offset_t hnew_gupd(char *fname,set_def *ha_set,dim_t nset, set_element *ha_setel
   formula_op *ha_calvar1= NULL;
   strcpy(commsyntax,"update");
   filehandle = fopen(fname,"r");
-  while (ha_cgertabl1(commsyntax,filehandle,line,ha_cofvar,ha_cof,ncof,&zerodivide,TABREADLINE)) {
+  while (tab_next_statement_resolved(commsyntax,filehandle,line,ha_cofvar,ha_cof,ncof,&zerodivide,TABREADLINE)) {
     IsChange=false;
     IsExplicit=false;
     if(strstr(line, "(change)")!=NULL) {
       IsChange=true;
-      ha_cgefrstr1(line, "(change)", "");
+      str_replace_first(line, "(change)", "");
     }
     if(strstr(line, "(explicit)")!=NULL) {
       IsExplicit=true;
-      ha_cgefrstr1(line, "(explicit)", "");
+      str_replace_first(line, "(explicit)", "");
     }
-    ha_cgefrstr1(line, commsyntax, "");
-    while (ha_cgefrstr(line," ", ""));
-    while (ha_cgefrchr(line, '[', '('));
-    while (ha_cgefrchr(line, ']', ')'));
-    while (ha_cgefrchr(line, '{', '('));
-    while (ha_cgefrchr(line, '}', ')'));
+    str_replace_first(line, commsyntax, "");
+    while (str_replace_all(line," ", ""));
+    while (str_replace_char(line, '[', '('));
+    while (str_replace_char(line, ']', ')'));
+    while (str_replace_char(line, '{', '('));
+    while (str_replace_char(line, '}', ')'));
     strcpy(linecopy,line);
     readitem = strtok(line,"=");
-    fdim=ha_cgenchf(readitem, '(');
+    fdim=str_count_char(readitem, '(');
     if (fdim==1) {
       fdim=fdim+1;
     }
@@ -2224,8 +2224,8 @@ offset_t hnew_gupd(char *fname,set_def *ha_set,dim_t nset, set_element *ha_setel
     readitem = strtok(line,"=");
     readitem = strtok(NULL,";");
     if(IsChange==false&&IsExplicit==false) {
-      while (ha_cgefrstr(readitem,"*", "/100)!(1+"));
-      while (ha_cgefrstr(readitem,"!", "*"));
+      while (str_replace_all(readitem,"*", "/100)!(1+"));
+      while (str_replace_all(readitem,"!", "*"));
       strcpy(line1,vname);
       strcat(line1,"*(1+");
       strcat(line1,readitem);
@@ -2238,25 +2238,25 @@ offset_t hnew_gupd(char *fname,set_def *ha_set,dim_t nset, set_element *ha_setel
       strcat(line1,readitem);
       readitem=line1;
     }
-    npow=ha_cgenchf(readitem, '^');
-    nmul=ha_cgenchf(readitem, '*');
-    ndiv=ha_cgenchf(readitem, '/');
+    npow=str_count_char(readitem, '^');
+    nmul=str_count_char(readitem, '*');
+    ndiv=str_count_char(readitem, '/');
     nmul=nmul+ndiv;
-    nplu=ha_cgenchf(readitem, '+');
-    nmin=ha_cgenchf(readitem, '-');
+    nplu=str_count_char(readitem, '+');
+    nmin=str_count_char(readitem, '-');
     nplu=nplu+nmin;
 
-    while (ha_cgerecovar(readitem)==1);
-    hnew_intrpl(readitem);
-    npar=ha_cgenchf(readitem, '(');
+    while (formula_normalize(readitem)==1);
+    leadlag_encode(readitem);
+    npar=str_count_char(readitem, '(');
     strcpy(sumsyntax,"sum(");
-    totalsum=hcge_nsum(readitem,sumsyntax);
+    totalsum=sum_count(readitem,sumsyntax);
     sum_def *sum_cof= (sum_def *) calloc (totalsum,sizeof(sum_def));
     sumcount=0;
     strcpy(line1,readitem);
     strcpy(line2,line1);
     readitem=line2;
-    while (hcge_dsum(readitem,sumsyntax,sum_cof,arSet,ha_set,nset,fdim,sumcount)==1) {
+    while (sum_parse(readitem,sumsyntax,sum_cof,arSet,ha_set,nset,fdim,sumcount)==1) {
       sumcount++;
     }
     totalsum=sumcount;
@@ -2283,7 +2283,7 @@ offset_t hnew_gupd(char *fname,set_def *ha_set,dim_t nset, set_element *ha_setel
     strcpy(line2,line1);
     readitem=line2;
     sumindx=0;
-    while (hnew_calsum(readitem,sumsyntax,ha_set,nset,ha_setele,ha_cofvar,ncofvar,ncofele,ha_cof,ncof,ha_var,nvar,sum_cof,totalsum,ha_sumele,nsumele,ha_calvar,arSet,fdim,&sumindx,sumcount,zerodivide)==1) {
+    while (sum_eval(readitem,sumsyntax,ha_set,nset,ha_setele,ha_cofvar,ncofvar,ncofele,ha_cof,ncof,ha_var,nvar,sum_cof,totalsum,ha_sumele,nsumele,ha_calvar,arSet,fdim,&sumindx,sumcount,zerodivide)==1) {
       sumcount++;
     }
     strcpy(line1,readitem);
@@ -2341,7 +2341,7 @@ offset_t hnew_gupd(char *fname,set_def *ha_set,dim_t nset, set_element *ha_setel
                 }
             }
         }
-    ha_newfparse(line1,ha_set,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,&ha_calvarsize,arSet,fdim-1);
+    formula_compile(line1,ha_set,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,&ha_calvarsize,arSet,fdim-1);
         #pragma omp parallel private(l,l2,i4,dcount,i3,i1,temp1,arSet1,ha_calvar1) shared(ha_cofvar,arSet)
         {
         if(omp_get_thread_num()!=0){
@@ -2384,7 +2384,7 @@ offset_t hnew_gupd(char *fname,set_def *ha_set,dim_t nset, set_element *ha_setel
                 }
               }
             }
-      temp1=ha_newfpcal(ha_cofvar,ha_set,ha_setele,ha_sumele,ha_calvar1,ha_calvarsize,arSet1,fdim-1,zerodivide);
+      temp1=formula_eval(ha_cofvar,ha_set,ha_setele,ha_sumele,ha_calvar1,ha_calvarsize,arSet1,fdim-1,zerodivide);
       if(temp1-ha_cofvar[offset+l2].value>0.000000001||temp1-ha_cofvar[offset+l2].value<-0.000000001)ha_cofvar[offset+l2].value=temp1;
     }
         if(omp_get_thread_num()!=0){
@@ -2449,7 +2449,7 @@ offset_t hnew_gupd(char *fname,set_def *ha_set,dim_t nset, set_element *ha_setel
   return j;
 }
 
-int hnew_calsum(char *formulain, char *commsyntax,set_def *ha_set,dim_t nset, set_element *ha_setele,elem_value *ha_cofvar,offset_t ncofvar,offset_t ncofele, array_def *ha_cof,offset_t ncof, array_def *ha_var,offset_t nvar,sum_def *sum_cof,int totalsum,sum_value *ha_sumele,offset_t nsumele,formula_op *ha_calvar,quantifier *arSet1,dim_t fdim,int *sumindx,int j, solve_real zerodivide) {
+int sum_eval(char *formulain, char *commsyntax,set_def *ha_set,dim_t nset, set_element *ha_setele,elem_value *ha_cofvar,offset_t ncofvar,offset_t ncofele, array_def *ha_cof,offset_t ncof, array_def *ha_var,offset_t nvar,sum_def *sum_cof,int totalsum,sum_value *ha_sumele,offset_t nsumele,formula_op *ha_calvar,quantifier *arSet1,dim_t fdim,int *sumindx,int j, solve_real zerodivide) {
   char *readitem,*p;//,*p1,interchar2[NAMESIZE],line5[TABREADLINE];
   char interchar[NAMESIZE],line[TABREADLINE],line1[TABREADLINE],line2[TABREADLINE];//,line3[TABREADLINE],line4[TABREADLINE];//,interchar1[NAMESIZE]
   int ha_calvarsize,length,k=0,k1=0,i=0;
@@ -2462,15 +2462,15 @@ int hnew_calsum(char *formulain, char *commsyntax,set_def *ha_set,dim_t nset, se
   length=strlen(formulain);
   readitem=formulain;
   while (i<length) {
-    k=ha_cgefind(readitem,commsyntax);
+    k=str_find_ci(readitem,commsyntax);
     if (k==-1) {
       return 0;
     }
     if (k==0) {
       readitem=formulain+i+k;
       strcpy(line,readitem);
-      ha_cgecutsum(line);
-      k1=ha_cgefind(line+4,commsyntax);
+      sum_extract(line);
+      k1=str_find_ci(line+4,commsyntax);
       if (k1!=-1) {
         i=i+k+4;
         readitem=formulain+i;
@@ -2501,7 +2501,7 @@ int hnew_calsum(char *formulain, char *commsyntax,set_def *ha_set,dim_t nset, se
         strcpy(arSet[sum_cof[j].size].index_name,sum_cof[j].sumindx);
         fdimsumcof=sum_cof[j].size+1;
         ha_calvarsize=0;
-        ha_newfparse(p,ha_set,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,&ha_calvarsize,arSet,fdimsumcof);
+        formula_compile(p,ha_set,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,&ha_calvarsize,arSet,fdimsumcof);
         #pragma omp parallel private(l,l1,l2,dcount,superset_pos,vval,arSet2,ha_calvar1) shared(ha_cofvar,arSet,ha_sumele)
         {
         if(omp_get_thread_num()!=0){
@@ -2524,7 +2524,7 @@ int hnew_calsum(char *formulain, char *commsyntax,set_def *ha_set,dim_t nset, se
           vval=0;
           for (l1=0; l1<ha_set[sum_cof[j].sumsetid].size; l1++) {
             arSet2[sum_cof[j].size].indx=l1;
-            vval+=ha_newfpcal(ha_cofvar,ha_set,ha_setele,ha_sumele,ha_calvar1,ha_calvarsize,arSet2,fdimsumcof,zerodivide);
+            vval+=formula_eval(ha_cofvar,ha_set,ha_setele,ha_sumele,ha_calvar1,ha_calvarsize,arSet2,fdimsumcof,zerodivide);
           }
           ha_sumele[*sumindx+l].value=vval;
         }
@@ -2554,15 +2554,15 @@ int hnew_calsum(char *formulain, char *commsyntax,set_def *ha_set,dim_t nset, se
             strcat(interchar,"}");
           }
         }
-        while(ha_cgefrstr(formulain,line1,interchar)!=NULL);
+        while(str_replace_all(formulain,line1,interchar)!=NULL);
         free(arSet);
         return 1;
       }
     } else if (formulain[i+k-1]=='+'||formulain[i+k-1]=='-'||formulain[i+k-1]=='*'||formulain[i+k-1]=='/'||formulain[i+k-1]=='^'||formulain[i+k-1]=='('||formulain[i+k-1]==',') {
       readitem=formulain+i+k;
       strcpy(line,readitem);
-      ha_cgecutsum(line);
-      k1=ha_cgefind(line+4,commsyntax);
+      sum_extract(line);
+      k1=str_find_ci(line+4,commsyntax);
       if (k1!=-1) {
         i=i+k+4;
         readitem=formulain+i;
@@ -2592,7 +2592,7 @@ int hnew_calsum(char *formulain, char *commsyntax,set_def *ha_set,dim_t nset, se
         strcpy(arSet[sum_cof[j].size].index_name,sum_cof[j].sumindx);
         fdimsumcof=sum_cof[j].size+1;
         ha_calvarsize=0;
-        ha_newfparse(p,ha_set,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,&ha_calvarsize,arSet,fdimsumcof);
+        formula_compile(p,ha_set,ha_cof,ncof,ha_var,nvar,ncofele,sum_cof,totalsum,ha_calvar,&ha_calvarsize,arSet,fdimsumcof);
         #pragma omp parallel private(l,l1,l2,dcount,superset_pos,vval,arSet2,ha_calvar1) shared(ha_cofvar,arSet,ha_sumele)
         {
         if(omp_get_thread_num()!=0){
@@ -2615,7 +2615,7 @@ int hnew_calsum(char *formulain, char *commsyntax,set_def *ha_set,dim_t nset, se
           vval=0;
           for (l1=0; l1<ha_set[sum_cof[j].sumsetid].size; l1++) {
             arSet2[sum_cof[j].size].indx=l1;
-            vval+=ha_newfpcal(ha_cofvar,ha_set,ha_setele,ha_sumele,ha_calvar1,ha_calvarsize,arSet2,fdimsumcof,zerodivide);
+            vval+=formula_eval(ha_cofvar,ha_set,ha_setele,ha_sumele,ha_calvar1,ha_calvarsize,arSet2,fdimsumcof,zerodivide);
           }
           ha_sumele[*sumindx+l].value=vval;//ha_sumele[*sumindx+l2].varval=vval;
         }
@@ -2645,7 +2645,7 @@ int hnew_calsum(char *formulain, char *commsyntax,set_def *ha_set,dim_t nset, se
             strcat(interchar,"}");
           }
         }
-        while(ha_cgefrstr(formulain,line1,interchar));
+        while(str_replace_all(formulain,line1,interchar));
         free(arSet);
         return 1;
       }
@@ -2657,7 +2657,7 @@ int hnew_calsum(char *formulain, char *commsyntax,set_def *ha_set,dim_t nset, se
   return 0;
 }
 
-offset_t hnew_biupd(PetscInt rank,char *fname,set_def *ha_set,dim_t nset, set_element *ha_setele, array_def *ha_cof,offset_t ncof,array_def *ha_var,offset_t nvar, elem_value *ha_cofvar,offset_t ncofvar,offset_t ncofele,closure_entry *ha_cgeshock,offset_t nvarele,int laA,dim_t subints,bool IsIni,int IsSplint,int nsteps) {
+offset_t subinterval_update(PetscInt rank,char *fname,set_def *ha_set,dim_t nset, set_element *ha_setele, array_def *ha_cof,offset_t ncof,array_def *ha_var,offset_t nvar, elem_value *ha_cofvar,offset_t ncofvar,offset_t ncofele,closure_entry *ha_cgeshock,offset_t nvarele,int laA,dim_t subints,bool IsIni,int IsSplint,int nsteps) {
   FILE * filehandle,*fout;
   char commsyntax[NAMESIZE],line[TABREADLINE],line1[TABREADLINE],line2[TABREADLINE],linecopy[TABREADLINE];
   char vname[NAMESIZE],sumsyntax[NAMESIZE],argu[NAMESIZE];
@@ -2692,21 +2692,21 @@ offset_t hnew_biupd(PetscInt rank,char *fname,set_def *ha_set,dim_t nset, set_el
       strcat(filename,j1name);
       strcat(filename,".bin");
   filehandle = fopen(fname,"r");
-  while (ha_cgertabl1(commsyntax,filehandle,line,ha_cofvar,ha_cof,ncof,&zerodivide,TABREADLINE)) {
+  while (tab_next_statement_resolved(commsyntax,filehandle,line,ha_cofvar,ha_cof,ncof,&zerodivide,TABREADLINE)) {
     IsChange=false;
     if(strstr(line, "(change)")!=NULL) {
       IsChange=true;
-      ha_cgefrstr1(line, "(change)", "");
+      str_replace_first(line, "(change)", "");
     }
-    ha_cgefrstr1(line, commsyntax, "");
-    while (ha_cgefrstr(line," ", ""));
-    while (ha_cgefrchr(line, '[', '('));
-    while (ha_cgefrchr(line, ']', ')'));
-    while (ha_cgefrchr(line, '{', '('));
-    while (ha_cgefrchr(line, '}', ')'));
+    str_replace_first(line, commsyntax, "");
+    while (str_replace_all(line," ", ""));
+    while (str_replace_char(line, '[', '('));
+    while (str_replace_char(line, ']', ')'));
+    while (str_replace_char(line, '{', '('));
+    while (str_replace_char(line, '}', ')'));
     strcpy(linecopy,line);
     readitem = strtok(line,"=");//Syntax (linear or change)(other sets):(inter set):(spline set)var_plus()=var():x():x_jump():weight();//
-    fdim=ha_cgenchf(readitem, '(');
+    fdim=str_count_char(readitem, '(');
     if (fdim==1) {
       fdim=fdim+1;
     }
@@ -2769,7 +2769,7 @@ offset_t hnew_biupd(PetscInt rank,char *fname,set_def *ha_set,dim_t nset, set_el
     strcpy(line,linecopy);
     readitem = strtok(line,"=");
     readitem = strtok(NULL,";");
-    i=ha_cgenchf(readitem, ':');
+    i=str_count_char(readitem, ':');
     if(i!=7){printf("Syntax Error in %s!\n",readitem);return -1;}
     strcpy(line,readitem);
     strcat(line,":");
@@ -3165,7 +3165,7 @@ offset_t hnew_biupd(PetscInt rank,char *fname,set_def *ha_set,dim_t nset, set_el
               for(i4=0;i4<stosize;i4++){
                 l2=l*stosize*stosize+i4*stosize;
                 for(i1=0;i1<stosize;i1++)printf("k %lf v %lf\n",matuk[stosize+i1],matuv[l2+i1]);
-                spline(matuv+l2,matuk+stosize,0,0,stosize-1,matuw+l*stosize*stosize*bsize+i4*stosize*bsize,laA);
+                cubic_spline(matuv+l2,matuk+stosize,0,0,stosize-1,matuw+l*stosize*stosize*bsize+i4*stosize*bsize,laA);
               }
                 memcpy(matuwold,matuw,rsize*stosize*stosize*bsize*sizeof(solve_real));
             } else memcpy(matuw,matuwold,rsize*stosize*stosize*bsize*sizeof(solve_real));
@@ -3232,7 +3232,7 @@ offset_t hnew_biupd(PetscInt rank,char *fname,set_def *ha_set,dim_t nset, set_el
                 curx[j]=matuwold[l2]+matuwold[l2+stosize-1]*temp3+matuwold[l2+2*(stosize-1)]*temp3*temp3+matuwold[l2+3*(stosize-1)]*temp3*temp3*temp3;
               }
               for(j=0;j<stosize;j++)printf("l %ld curx %lf curk %lfcurpos %ld curk0 %lf\n",l,curx[j],matuk[j],curpos[0],curk[0]);
-              spline(curx,matuk,0,0,stosize-1,curw,laA);
+              cubic_spline(curx,matuk,0,0,stosize-1,curw,laA);
               temp1=curw[curpos[0]]+curw[curpos[0]+stosize-1]*curk[0]+curw[curpos[0]+2*(stosize-1)]*curk[0]*curk[0]+curw[curpos[0]+3*(stosize-1)]*curk[0]*curk[0]*curk[0];
 
               l2=0;

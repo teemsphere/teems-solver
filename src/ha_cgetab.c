@@ -1,13 +1,13 @@
 #include <ha_cgeglobal.h>
 
-int ha_cgerecovar(char *fomulain) {
+int formula_normalize(char *fomulain) {
   int index,i,i1,j;
   char fpart1[TABREADLINE],*p=NULL;//,*p1=NULL;
-  while (ha_cgefrstr(fomulain, " ", ""));
+  while (str_replace_all(fomulain, " ", ""));
   p=strchr(fomulain,')');
   if (p==NULL) {
-    while (ha_cgefrchr(fomulain, '[', '('));
-    while (ha_cgefrchr(fomulain, ']', ')'));
+    while (str_replace_char(fomulain, '[', '('));
+    while (str_replace_char(fomulain, ']', ')'));
     return 0;
   }
   strncpy(fpart1, fomulain, p-fomulain);
@@ -197,7 +197,7 @@ int ha_cgerecovar(char *fomulain) {
   return 1;
 }
 
-int ha_cgecutsum(char *formula) {
+int sum_extract(char *formula) {
   char *t1=")",*t2="(";
   int i,l,count=0;
   l=strchr(formula,'(')-formula;//ha_cgefind(formula,"(");
@@ -217,14 +217,14 @@ int ha_cgecutsum(char *formula) {
   return 1;
 }
 
-int hcge_repllin(char *formulain,int linindx) {
+int eq_replace_linvar(char *formulain,int linindx) {
   char *p,*p1,*p2,leftline[TABREADLINE];//,*p3
   int np,i,l,pcheck;//,pl,mn;//d,
-  np=ha_cgenfind(formulain,"p_");
+  np=str_count_ci(formulain,"p_");
   p=&formulain[0];
   p2=&formulain[0];
   for (i=0; i<np; i++) {
-    p=p+ha_cgefind(p,"p_");
+    p=p+str_find_ci(p,"p_");
     if(p==&formulain[0]) {
       pcheck=0;
       p1=p;
@@ -236,7 +236,7 @@ int hcge_repllin(char *formulain,int linindx) {
           strncpy(leftline,p2,p1-p2);
           leftline[p1-p2]='\0';
         }
-        if(ha_cgenfind(leftline,"(")==ha_cgenfind(leftline,")")) {
+        if(str_count_ci(leftline,"(")==str_count_ci(leftline,")")) {
           pcheck=1;
         }
         p1++;
@@ -250,12 +250,12 @@ int hcge_repllin(char *formulain,int linindx) {
         if (p1==NULL) {
           break;
         }
-        if (ha_cgenfind(leftline,"(")==0&&ha_cgenfind(leftline,")")==0) {
+        if (str_count_ci(leftline,"(")==0&&str_count_ci(leftline,")")==0) {
           p2=p1;
           p1++;
           l++;
         } else {
-          if (ha_cgenfind(p1,"(")!=ha_cgenfind(p1,")")) {
+          if (str_count_ci(p1,"(")!=str_count_ci(p1,")")) {
             l++;
             p1++;
           } else {
@@ -278,7 +278,7 @@ int hcge_repllin(char *formulain,int linindx) {
             strncpy(leftline,p2,p1-p2);
             leftline[p1-p2]='\0';
           }
-          if(ha_cgenfind(leftline,"(")==ha_cgenfind(leftline,")")) {
+          if(str_count_ci(leftline,"(")==str_count_ci(leftline,")")) {
             pcheck=1;
           }
           p1++;
@@ -292,12 +292,12 @@ int hcge_repllin(char *formulain,int linindx) {
           if (p1==NULL) {
             break;
           }
-          if (ha_cgenfind(leftline,"(")==0&&ha_cgenfind(leftline,")")==0) {
+          if (str_count_ci(leftline,"(")==0&&str_count_ci(leftline,")")==0) {
             p2=p1;
             p1++;
             l++;
           } else {
-            if (ha_cgenfind(p1,"(")!=ha_cgenfind(p1,")")) {
+            if (str_count_ci(p1,"(")!=str_count_ci(p1,")")) {
               l++;
               p1++;
             } else {
@@ -316,13 +316,13 @@ int hcge_repllin(char *formulain,int linindx) {
   return 1;
 }
 
-int hcge_rlinzero(char *formulain,int linindx) {
+int eq_zero_linvar(char *formulain,int linindx) {
   char *p,*p1=NULL;//,line1[TABREADLINE];
   int np,i,l=linindx;//,l,d;
-  np=ha_cgenfind(formulain,"p_");
+  np=str_count_ci(formulain,"p_");
   p=&formulain[0];
   for (i=0; i<np; i++) {
-    p=p+ha_cgefind(p,"p_");
+    p=p+str_find_ci(p,"p_");
 
     if(p==&formulain[0]) {
       p1=strpbrk(p,"}+*-/^)");
@@ -372,7 +372,7 @@ int hcge_rlinzero(char *formulain,int linindx) {
   return 1;
 }
 
-offset_t hcge_readff(char *fname, int niodata, cmf_file_entry *iodata, char *commsyntax,set_def *ha_set,dim_t nset, set_element *ha_setele,array_def *ha_cof,offset_t ncof, elem_store *ha_cofele,offset_t ncofele,array_def *ha_var,offset_t nvar, elem_store *ha_varele,offset_t nvarele) {
+offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char *commsyntax,set_def *ha_set,dim_t nset, set_element *ha_setele,array_def *ha_cof,offset_t ncof, elem_store *ha_cofele,offset_t ncofele,array_def *ha_var,offset_t nvar, elem_store *ha_varele,offset_t nvarele) {
   FILE * filehandle, * filehandle1;
   char line[DATREADLINE]="\0",linecopy[DATREADLINE],line1[TABREADLINE],*p,*p1;//,line1[DATREADLINE]
   char vname[NAMESIZE],setindx[NAMESIZE],header[NAMESIZE],*vname1=NULL,argu[TABREADLINE],varset[MAXVARDIM][NAMESIZE];//,varindx[MAXVARDIM][NAMESIZE],varindx1[MAXVARDIM][NAMESIZE];
@@ -388,11 +388,11 @@ offset_t hcge_readff(char *fname, int niodata, cmf_file_entry *iodata, char *com
     return -1;
   }
 
-  while (ha_cgertabl(commsyntax,filehandle,line,DATREADLINE)) {
+  while (tab_next_statement(commsyntax,filehandle,line,DATREADLINE)) {
     strcpy(linecopy,line);
-    k0=ha_cgefind(line,"from file ");
+    k0=str_find_ci(line,"from file ");
     if(k0>-1) {
-      k1=ha_cgefind(line+k0+10," ");
+      k1=str_find_ci(line+k0+10," ");
       strncpy(line1,line+k0+10,k1);
       line1[k1]='\0';
       for (k0=0; k0<niodata; k0++) if (strcmp(line1,iodata[k0].logname)==0) {
@@ -469,7 +469,7 @@ offset_t hcge_readff(char *fname, int niodata, cmf_file_entry *iodata, char *com
                     count1=1;
                   }
                   if (count1!=1) {
-                    n=ha_cgenchf(line,',');
+                    n=str_count_char(line,',');
                     if (n==0) {
                       readitem = strtok(line,"\n");
                       val=atof(readitem);//sscanf(readitem, "%lf", &val);
@@ -618,7 +618,7 @@ offset_t hcge_readff(char *fname, int niodata, cmf_file_entry *iodata, char *com
                     count1=1;
                   }
                   if (count1!=1) {
-                    n=ha_cgenchf(line,',');
+                    n=str_count_char(line,',');
                     if (n==0) {
                       readitem = strtok(line,"\n");
                       val=atof(readitem);//sscanf(readitem, "%lf", &val);
@@ -721,14 +721,14 @@ offset_t hcge_readff(char *fname, int niodata, cmf_file_entry *iodata, char *com
         return -1;
       }
     } else {
-      n=ha_cgenchf(line,'(');
+      n=str_count_char(line,'(');
       readitem = strtok(line,")");
       for (n1=2; n1<n; n1++) {
         readitem = strtok(NULL,")");
       }
       readitem = strtok(NULL,"(");
       strcpy(vname,readitem);
-      ha_cgefrstr(vname," ","");
+      str_replace_all(vname," ","");
       readitem = strtok(NULL,")");
       strcpy(argu,readitem);
       strcat(argu,",");
@@ -744,7 +744,7 @@ offset_t hcge_readff(char *fname, int niodata, cmf_file_entry *iodata, char *com
         n1++;
       }
       strcpy(line,linecopy);
-      n=ha_cgenchf(argu,',');
+      n=str_count_char(argu,',');
       for (n1=0; n1<n; n1++) {
         if (n1==0) {
           readitem = strtok(argu,",");
@@ -830,7 +830,7 @@ offset_t hcge_readff(char *fname, int niodata, cmf_file_entry *iodata, char *com
                     count1=1;
                   }
                   if (count1!=1) {
-                    n=ha_cgenchf(line,',');
+                    n=str_count_char(line,',');
                     if (n==0) {
                       readitem = strtok(line,"\n");
                       val=atof(readitem);//sscanf(readitem, "%lf", &val);
@@ -996,7 +996,7 @@ offset_t hcge_readff(char *fname, int niodata, cmf_file_entry *iodata, char *com
                     count1=1;
                   }
                   if (count1!=1) {
-                    n=ha_cgenchf(line,',');
+                    n=str_count_char(line,',');
                     if (n==0) {
                       readitem = strtok(line,"\n");
                       val=atof(readitem);//sscanf(readitem, "%lf", &val);
@@ -1104,14 +1104,14 @@ offset_t hcge_readff(char *fname, int niodata, cmf_file_entry *iodata, char *com
 }
 
 
-offset_t hcge_dsum(char *formulain, char *commsyntax, sum_def *sum_cof,quantifier *arSet,set_def *ha_set,dim_t nset,dim_t fdim,int j) {
+offset_t sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifier *arSet,set_def *ha_set,dim_t nset,dim_t fdim,int j) {
   char *readitem,*p,*p1,*p2,interchar2[TABREADLINE],argu[TABREADLINE];//,line5[TABREADLINE]
   char interchar[TABREADLINE],interchar1[TABREADLINE],line[TABREADLINE],line1[TABREADLINE],line2[TABREADLINE],line3[TABREADLINE],line4[TABREADLINE],tempname[NAMESIZE];
   offset_t i=0,k=0,k1=0,length,ncur=0,ncuri,l,l1,l2,l3,l4,l5,l6,l7,sup;
   length=strlen(formulain);
   readitem=formulain;
   while (i<length) {
-    k=ha_cgefind(readitem,commsyntax);
+    k=str_find_ci(readitem,commsyntax);
     if (k==-1) {
       return 0;
     }
@@ -1119,8 +1119,8 @@ offset_t hcge_dsum(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
       readitem=formulain+i+k;
       strcpy(line,readitem);
       strcpy(line1,readitem);
-      ha_cgecutsum(line);
-      k1=ha_cgefind(line+4,commsyntax);
+      sum_extract(line);
+      k1=str_find_ci(line+4,commsyntax);
       if (k1!=-1) {
         i=i+k+4;
         readitem=formulain+i;
@@ -1159,7 +1159,7 @@ offset_t hcge_dsum(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
             break;
           }
 
-        ncur=ha_cgenfind(line2, "{");
+        ncur=str_count_ci(line2, "{");
         l2=0;
         l3=0;
         for (ncuri=0; ncuri<ncur; ncuri++) {
@@ -1170,7 +1170,7 @@ offset_t hcge_dsum(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
           l2=p-line2;
           strcpy(argu,p);
           strcat(argu,",");
-          l=ha_cgenfind(argu, ",");
+          l=str_count_ci(argu, ",");
           if (l<2) {
             if(strcmp(p,sum_cof[j].sumindx)!=0) {
               strcat(interchar,sum_cof[j].sumindx);
@@ -1192,7 +1192,7 @@ offset_t hcge_dsum(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
                   strcat(interchar1,p);
                   strcpy(line3,formulain);
                   line3[readitem-formulain]='\0';
-                  l7=ha_cgerevfind(line3,interchar1);
+                  l7=str_rfind_ci(line3,interchar1);
                   p1=&line3[l7+2];
                   p1 = strtok(p1,",");
                   for (l7=0; l7<nset; l7++) if(strcmp(p1,ha_set[l7].setname)==0) {
@@ -1231,7 +1231,7 @@ offset_t hcge_dsum(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
                     strcat(interchar1,p);
                     strcpy(line3,formulain);
                     line3[readitem-formulain]='\0';
-                    l7=ha_cgerevfind(line3,interchar1);
+                    l7=str_rfind_ci(line3,interchar1);
                     p1=&line3[l7+2];
                     p2=strchr(p1,',');
                     strncpy(tempname,p1,p2-p1);
@@ -1256,7 +1256,7 @@ offset_t hcge_dsum(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
             strcat(interchar,"}");
           }
         }
-        while(ha_cgefrstr(formulain,line4,interchar));
+        while(str_replace_all(formulain,line4,interchar));
         sum_cof[j].size=l3;
         return 1;
       }
@@ -1264,8 +1264,8 @@ offset_t hcge_dsum(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
       readitem=formulain+i+k;
       strcpy(line,readitem);
       strcpy(line1,readitem);
-      ha_cgecutsum(line);
-      k1=ha_cgefind(line+4,commsyntax);
+      sum_extract(line);
+      k1=str_find_ci(line+4,commsyntax);
       if (k1!=-1) {
         i=i+k+4;
         readitem=formulain+i;
@@ -1304,7 +1304,7 @@ offset_t hcge_dsum(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
             break;
           }
 
-        ncur=ha_cgenfind(line2, "{");
+        ncur=str_count_ci(line2, "{");
         l2=0;
         l3=0;
         for (ncuri=0; ncuri<ncur; ncuri++) {
@@ -1315,7 +1315,7 @@ offset_t hcge_dsum(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
           l2=p-line2;
           strcpy(argu,p);
           strcat(argu,",");
-          l=ha_cgenfind(argu, ",");
+          l=str_count_ci(argu, ",");
           if (l<2) {
             if(strcmp(p,sum_cof[j].sumindx)!=0) {
               for (l4=0; l4<l3; l4++) {
@@ -1337,7 +1337,7 @@ offset_t hcge_dsum(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
                   strcat(interchar1,p);
                   strcpy(line3,formulain);
                   line3[readitem-formulain]='\0';
-                  l7=ha_cgerevfind(line3,interchar1);
+                  l7=str_rfind_ci(line3,interchar1);
                   p1=&line3[l7+2];
                   p1 = strtok(p1,",");
                   for (l7=0; l7<nset; l7++) if(strcmp(p1,ha_set[l7].setname)==0) {
@@ -1376,7 +1376,7 @@ offset_t hcge_dsum(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
                     strcat(interchar1,p);
                     strcpy(line3,formulain);
                     line3[readitem-formulain]='\0';
-                    l7=ha_cgerevfind(line3,interchar1);
+                    l7=str_rfind_ci(line3,interchar1);
                     p1=&line3[l7+2];
                     p2=strchr(p1,',');
                     strncpy(tempname,p1,p2-p1);
@@ -1401,7 +1401,7 @@ offset_t hcge_dsum(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
             strcat(interchar,"}");
           }
         }
-        while(ha_cgefrstr(formulain,line4,interchar));
+        while(str_replace_all(formulain,line4,interchar));
         sum_cof[j].size=l3;
         return 1;
       }
@@ -1413,13 +1413,13 @@ offset_t hcge_dsum(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
   return 0;
 }
 
-int hcge_nsum(char *formulain, char *commsyntax) {
+int sum_count(char *formulain, char *commsyntax) {
   char *readitem;
   int j=0,i=0,k=0,length;
   length=strlen(formulain);
   readitem=formulain;
   while (i<length) {
-    k=ha_cgefind(readitem,commsyntax);
+    k=str_find_ci(readitem,commsyntax);
     if (k==-1) {
       break;
     }
@@ -1439,12 +1439,12 @@ int hcge_nsum(char *formulain, char *commsyntax) {
   return j;
 }
 
-offset_t ha_cgencof(char *fname, char *commsyntax) {
+offset_t tab_count_statements(char *fname, char *commsyntax) {
   FILE * filehandle;
   char line[TABREADLINE]="\0";
   offset_t j=0;
   filehandle = fopen(fname,"r");
-  while (ha_cgertabl(commsyntax,filehandle,line,TABREADLINE)) {
+  while (tab_next_statement(commsyntax,filehandle,line,TABREADLINE)) {
     if (strstr(line,"(default")==NULL) {
       j++;
     }
@@ -1453,27 +1453,27 @@ offset_t ha_cgencof(char *fname, char *commsyntax) {
   return j;
 }
 
-offset_t hcge_rexo(char *fname, char *commsyntax,closure_entry *ha_cgeshock, array_def *ha_var,offset_t nvar,set_def *ha_set,dim_t nset, set_element *ha_setele) {
+offset_t closure_read(char *fname, char *commsyntax,closure_entry *ha_cgeshock, array_def *ha_var,offset_t nvar,set_def *ha_set,dim_t nset, set_element *ha_setele) {
   FILE * filehandle;
   char line[TABREADLINE]="\0",*readitem=NULL,*p=NULL,*p1=NULL,vname[TABREADLINE],argu[TABREADLINE];//,linecopy[TABREADLINE]
   offset_t i,j,n=0,l=0,l1,l2,n1,m,dims,dcount,exodims,supsetid[MAXSUPSET],sup,doublepr[MAXSUPSET];
   int k1,k2;
   bool check;
   filehandle = fopen(fname,"r");
-  while (ha_cgercls(commsyntax,filehandle,line)) {
-    while (ha_cgedrcmt(line,"!"));
-    ha_cgefrstr(line,";", " ;");
-    while (ha_cgefrstr(line,"\n", " "));
-    while (ha_cgefrstr(line,"\r", " "));
-    while (ha_cgefrstr1(line," p_", " "));
-    while (ha_cgefrstr1(line," c_", " "));
-    while (ha_cgefrstr(line,"  ", " "));
-    while (ha_cgefrstr(line," ,", ","));
-    while (ha_cgefrstr(line,", ", ","));
-    while (ha_cgefrstr(line," )", ")"));
-    while (ha_cgefrstr(line," (", "("));
-    while (ha_cgefrstr(line," \"", "\""));
-    while (ha_cgefrstr(line,"\" ", "\""));
+  while (closure_next_statement(commsyntax,filehandle,line)) {
+    while (str_strip_comment(line,"!"));
+    str_replace_all(line,";", " ;");
+    while (str_replace_all(line,"\n", " "));
+    while (str_replace_all(line,"\r", " "));
+    while (str_replace_first(line," p_", " "));
+    while (str_replace_first(line," c_", " "));
+    while (str_replace_all(line,"  ", " "));
+    while (str_replace_all(line," ,", ","));
+    while (str_replace_all(line,", ", ","));
+    while (str_replace_all(line," )", ")"));
+    while (str_replace_all(line," (", "("));
+    while (str_replace_all(line," \"", "\""));
+    while (str_replace_all(line,"\" ", "\""));
     k1=0;
     k2=0;
     while (line[k1]!= '\0') {
@@ -1490,7 +1490,7 @@ offset_t hcge_rexo(char *fname, char *commsyntax,closure_entry *ha_cgeshock, arr
       }
       k1++;
     }
-    n1=ha_cgenchf(line,' ');
+    n1=str_count_char(line,' ');
     readitem = strchr(line,' ');
     readitem++;
     for (i=0; i<n1-1; i++) {
@@ -1567,7 +1567,7 @@ offset_t hcge_rexo(char *fname, char *commsyntax,closure_entry *ha_cgeshock, arr
                 }
                 if (*p=='"') {
                   strcpy(argu,p+1);
-                  ha_cgefrchr(argu,'"','\0');
+                  str_replace_char(argu,'"','\0');
                   for(l1=0; l1<ha_set[ha_var[j].setid[l]].size; l1++) if (strcmp(argu,ha_setele[ha_set[ha_var[j].setid[l]].offset+l1].setele)==0) {
                       doublepr[l]=l1;
                       supsetid[l]=-2;
@@ -1624,7 +1624,7 @@ offset_t hcge_rexo(char *fname, char *commsyntax,closure_entry *ha_cgeshock, arr
   return n;
 }
 
-offset_t hcge_rshock(char *fname, char *commsyntax,closure_entry *ha_cgeshock,offset_t nvarele, array_def *ha_var,offset_t nvar,set_def *ha_set,dim_t nset, set_element *ha_setele,dim_t subints) {
+offset_t shocks_read(char *fname, char *commsyntax,closure_entry *ha_cgeshock,offset_t nvarele, array_def *ha_var,offset_t nvar,set_def *ha_set,dim_t nset, set_element *ha_setele,dim_t subints) {
   FILE * filehandle;
   char line[DATREADLINE],linecopy[DATREADLINE],argu[TABREADLINE];
   line[0]='\0';
@@ -1638,9 +1638,9 @@ offset_t hcge_rshock(char *fname, char *commsyntax,closure_entry *ha_cgeshock,of
       if ( (filehandle = fopen(fname,"r")) == NULL ) {
         printf("Error opening file %s\n",fname);
       }
-  while (ha_cgertabl(commsyntax,filehandle,line,DATREADLINE)) {
-    ha_chrfrall(line,'\r',' ');
-    ha_chrfrall(line,'\n',' ');
+  while (tab_next_statement(commsyntax,filehandle,line,DATREADLINE)) {
+    str_replace_char_all(line,'\r',' ');
+    str_replace_char_all(line,'\n',' ');
     k1=0;
     k2=0;
     while (line[k1]!= '\0') {
@@ -1651,19 +1651,19 @@ offset_t hcge_rshock(char *fname, char *commsyntax,closure_entry *ha_cgeshock,of
       printf("Error!!!! The shock file line (from Shock to ;) is too long!\n");
       return -1;
     }
-    ha_cgefrstrvbz(line,";", " ;",DATREADLINE);
-    while (ha_cgefrstr(line,"= ", "="));
-    while (ha_cgefrstrvbz(line,"  ", " ",DATREADLINE));
-    while (ha_cgefrstrvbz1(line," p_", " ",DATREADLINE));
-    while (ha_cgefrstrvbz1(line," c_", " ",DATREADLINE));
-    varnset=ha_cgenchf(line,',');
-    j=ha_cgenchf(line,'(');
+    str_replace_all_bounded(line,";", " ;",DATREADLINE);
+    while (str_replace_all(line,"= ", "="));
+    while (str_replace_all_bounded(line,"  ", " ",DATREADLINE));
+    while (str_replace_first_bounded(line," p_", " ",DATREADLINE));
+    while (str_replace_first_bounded(line," c_", " ",DATREADLINE));
+    varnset=str_count_char(line,',');
+    j=str_count_char(line,'(');
     for(sup=0; sup<MAXSUPSET; sup++)supsetid[sup]=-1;
     if (j>0) {
       varnset=varnset+1;
     }
     if(varnset==0){
-      while(ha_cgefrstr(line," =", "="));
+      while(str_replace_all(line," =", "="));
     }
 
     if (line[0]==' ') {
@@ -1675,7 +1675,7 @@ offset_t hcge_rshock(char *fname, char *commsyntax,closure_entry *ha_cgeshock,of
       readitem = strtok(NULL,"=");
       for (j=0; j<nvar; j++) if (strcmp(readitem,ha_var[j].cofname)==0) {
           readitem = strtok(NULL,";");
-          k1=ha_cgerevfind(readitem,"uniform");
+          k1=str_rfind_ci(readitem,"uniform");
           if(k1!=-1){
             ha_cgeshock[ha_var[j].offset].shock_value=atof(readitem+k1+1)/subints;
           }else{
@@ -1696,7 +1696,7 @@ offset_t hcge_rshock(char *fname, char *commsyntax,closure_entry *ha_cgeshock,of
           strcpy(linecopy,readitem);
           strcat(linecopy," ");
           strcat(argu,",");
-          while (ha_cgefrstr(argu," ", ""));
+          while (str_replace_all(argu," ", ""));
           for (n1=0; n1<MAXVARDIM; n1++) {
             dimindx[n1]=-1;
             dimbegadd[n1]=-1;
@@ -1761,7 +1761,7 @@ offset_t hcge_rshock(char *fname, char *commsyntax,closure_entry *ha_cgeshock,of
               antidim[n1]=antidim[n1-1]*dimssize[n1-1];
             }
           }
-          k1=ha_cgerevfind(linecopy,"uniform");
+          k1=str_rfind_ci(linecopy,"uniform");
           if(k1>-1) {
             val=atof(linecopy+k1+1);//sscanf(readitem, "%lf", &val);
             for (n1=0; n1<dims; n1++) {
@@ -1884,19 +1884,19 @@ offset_t hcge_rshock(char *fname, char *commsyntax,closure_entry *ha_cgeshock,of
   return l;
 }
 
-int hcge_defvar(char *fname, array_def *record, offset_t ncof) {
+int variables_read_defaults(char *fname, array_def *record, offset_t ncof) {
   char line[TABREADLINE];
   FILE * filehandle;
   char commsyntax[]="variable";
   filehandle = fopen(fname,"r");
   offset_t i;
-  while (ha_cgertabl(commsyntax,filehandle,line,TABREADLINE)) {
-    if(ha_cgefind(line,"default")>0) {
-      while (ha_cgefrstr(line," ", ""));
-      if(ha_cgefind(line,"default=levels")>0) for (i=0; i<ncof; i++) {
+  while (tab_next_statement(commsyntax,filehandle,line,TABREADLINE)) {
+    if(str_find_ci(line,"default")>0) {
+      while (str_replace_all(line," ", ""));
+      if(str_find_ci(line,"default=levels")>0) for (i=0; i<ncof; i++) {
           record[i].level_par=true;
         }
-      if(ha_cgefind(line,"default=change")>0) for (i=0; i<ncof; i++) {
+      if(str_find_ci(line,"default=change")>0) for (i=0; i<ncof; i++) {
           record[i].change_real=true;
         }
     }
@@ -1905,7 +1905,7 @@ int hcge_defvar(char *fname, array_def *record, offset_t ncof) {
   return 1;
 }
 
-offset_t hcge_rvar(char *fname, char *commsyntax, array_def *record, offset_t ncof, set_def *ha_set,dim_t nset) {
+offset_t variables_read(char *fname, char *commsyntax, array_def *record, offset_t ncof, set_def *ha_set,dim_t nset) {
   FILE * filehandle;
   char line[TABREADLINE]="\0",linecopy[TABREADLINE],setname1[NAMESIZE],setname[NAMESIZE],setname2[NAMESIZE],setname3[NAMESIZE],finditem[NAMESIZE],finditem1[NAMESIZE],finditem2[NAMESIZE],finditem3[NAMESIZE],vname[NAMESIZE];//,vnamecopy[NAMESIZE];
   char *tpnt=NULL;
@@ -1918,7 +1918,7 @@ offset_t hcge_rvar(char *fname, char *commsyntax, array_def *record, offset_t nc
   }
   filehandle = fopen(fname,"r");
 
-  while (ha_cgertabl(commsyntax,filehandle,line,TABREADLINE)) {
+  while (tab_next_statement(commsyntax,filehandle,line,TABREADLINE)) {
     if(strstr(line,"(default=levels)")!=NULL) {
       IsLevel=true;
     }
@@ -2026,36 +2026,36 @@ offset_t hcge_rvar(char *fname, char *commsyntax, array_def *record, offset_t nc
       readitem = strtok(readitem,")");
       record[j].glval=atof(readitem);
     }
-    while (ha_cgefrstr(line," ", ""));
-    if(ha_cgefind(line,"(change)")>0) {
+    while (str_replace_all(line," ", ""));
+    if(str_find_ci(line,"(change)")>0) {
       record[j].change_real=true;
-      ha_cgefrstr1(line,"(change)", "");
+      str_replace_first(line,"(change)", "");
     }
-    if(ha_cgefind(line,"(percent_change)")>0) {
+    if(str_find_ci(line,"(percent_change)")>0) {
       record[j].change_real=false;
-      ha_cgefrstr1(line,"(percent_change)", "");
+      str_replace_first(line,"(percent_change)", "");
     }
-    if(ha_cgefind(line,"(levels)")>0) {
+    if(str_find_ci(line,"(levels)")>0) {
       record[j].level_par=true;
-      ha_cgefrstr1(line,"(levels)", "");
+      str_replace_first(line,"(levels)", "");
     }
-    if(ha_cgefind(line,"(linear)")>0) {
+    if(str_find_ci(line,"(linear)")>0) {
       record[j].level_par=false;
-      ha_cgefrstr1(line,"(linear)", "");
+      str_replace_first(line,"(linear)", "");
     }
-    if(ha_cgefind(line,"(linear,change)")>0) {
+    if(str_find_ci(line,"(linear,change)")>0) {
       record[j].change_real=true;
       record[j].level_par=false;
-      ha_cgefrstr1(line,"(linear,change)", "");
+      str_replace_first(line,"(linear,change)", "");
     }
-    if(ha_cgefind(line,"(change,linear)")>0) {
+    if(str_find_ci(line,"(change,linear)")>0) {
       record[j].change_real=true;
       record[j].level_par=false;
-      ha_cgefrstr1(line,"(change,linear)", "");
+      str_replace_first(line,"(change,linear)", "");
     }
     strcpy(linecopy,line);
     if (strstr(line,"(default")==NULL) {
-      n=ha_cgenchf(line,')');
+      n=str_count_char(line,')');
       orig=0;
       if (strstr(line,"(orig_level")!=NULL) orig=1;
       if (n-orig>1) {
@@ -2095,10 +2095,10 @@ offset_t hcge_rvar(char *fname, char *commsyntax, array_def *record, offset_t nc
           strcat(setname1,",");
           strcat(setname2,")");
           strcat(setname3,")");
-          while (ha_cgefrstr(linecopy, finditem, setname));
-          while (ha_cgefrstr(linecopy, finditem1, setname1));
-          while (ha_cgefrstr(linecopy, finditem2, setname2));
-          while (ha_cgefrstr(linecopy, finditem3, setname3));
+          while (str_replace_all(linecopy, finditem, setname));
+          while (str_replace_all(linecopy, finditem1, setname1));
+          while (str_replace_all(linecopy, finditem2, setname2));
+          while (str_replace_all(linecopy, finditem3, setname3));
         }
         for (i=1; i<n; i++) {
           if (i==1) {
@@ -2113,7 +2113,7 @@ offset_t hcge_rvar(char *fname, char *commsyntax, array_def *record, offset_t nc
         readitem = strtok(NULL,")");
         strcpy(vname,readitem);
         strcat(vname,",");
-        dcount=ha_cgenchf(vname,',');
+        dcount=str_count_char(vname,',');
         add=1;
         for (m=0; m<dcount; m++) {
           if(m==0) {
@@ -2143,8 +2143,8 @@ offset_t hcge_rvar(char *fname, char *commsyntax, array_def *record, offset_t nc
         } else {
           if(orig==1) {
             strcpy(setname,line+ncommsyntax);
-            ha_cgefrstr(setname,";", "");
-            ha_cgefrstr(setname,"\n", "");
+            str_replace_all(setname,";", "");
+            str_replace_all(setname,"\n", "");
             readitem=strchr(setname,')');
             readitem++;
             strcpy(record[j].cofname,readitem);
@@ -2154,8 +2154,8 @@ offset_t hcge_rvar(char *fname, char *commsyntax, array_def *record, offset_t nc
             addi=addi+1;
           } else {
             strcpy(setname,line+ncommsyntax);
-            ha_cgefrstr(setname,";", "");
-            ha_cgefrstr(setname,"\n", "");
+            str_replace_all(setname,";", "");
+            str_replace_all(setname,"\n", "");
             strcpy(record[j].cofname,setname);
             record[j].offset=addi;
             record[j].size=0;
@@ -2171,7 +2171,7 @@ offset_t hcge_rvar(char *fname, char *commsyntax, array_def *record, offset_t nc
   return addi;
 }
 
-offset_t ha_cgeralltime(set_def *ha_set,dim_t nset) {
+offset_t set_find_alltime(set_def *ha_set,dim_t nset) {
   dim_t i;
   for(i=0; i<nset; i++) {
     if(ha_set[i].intertemp&&ha_set[i].subsetid[1]==-1) {
@@ -2186,7 +2186,7 @@ offset_t ha_cgeralltime(set_def *ha_set,dim_t nset) {
 }
 
 
-offset_t hcge_rcof(char *fname, char *commsyntax, array_def *record, offset_t ncof, set_def *ha_set,offset_t nset) {
+offset_t coefficients_read(char *fname, char *commsyntax, array_def *record, offset_t ncof, set_def *ha_set,offset_t nset) {
   FILE * filehandle;
   char line[TABREADLINE]="\0",linecopy[TABREADLINE],setname1[TABREADLINE],setname[TABREADLINE],setname2[TABREADLINE],setname3[TABREADLINE],finditem[TABREADLINE],finditem1[TABREADLINE],finditem2[TABREADLINE],finditem3[TABREADLINE],vname[TABREADLINE];//,vnamecopy[NAMESIZE];
   offset_t n,m,l,ncommsyntax=0,i=0,j=0,addi=0,add=0;
@@ -2197,7 +2197,7 @@ offset_t hcge_rcof(char *fname, char *commsyntax, array_def *record, offset_t nc
   }
   filehandle = fopen(fname,"r");
 
-  while (ha_cgertabl(commsyntax,filehandle,line,TABREADLINE)) {
+  while (tab_next_statement(commsyntax,filehandle,line,TABREADLINE)) {
     readitem=strstr(line, "(ge ");
     if(readitem!=NULL){
       record[j].gltype=1;
@@ -2292,15 +2292,15 @@ offset_t hcge_rcof(char *fname, char *commsyntax, array_def *record, offset_t nc
       record[j].glval=atof(readitem);
     }
     
-    while (ha_cgefrstr(line," ", ""));
-    ha_cgefrstr1(line,"parameter", "");
-    ha_cgefrstr1(line,"change", "");
-    ha_cgefrstr1(line,"integer", "");
-    ha_cgefrstr1(line,"()", "");
-    ha_cgefrstr1(line,"(,)", "");
+    while (str_replace_all(line," ", ""));
+    str_replace_first(line,"parameter", "");
+    str_replace_first(line,"change", "");
+    str_replace_first(line,"integer", "");
+    str_replace_first(line,"()", "");
+    str_replace_first(line,"(,)", "");
     strcpy(linecopy,line);
     if (strstr(line,"(default")==NULL) {
-      n=ha_cgenchf(line,')');
+      n=str_count_char(line,')');
       if (n>1) {
         for (i=1; i<n; i++) {
           if (i==1) {
@@ -2338,10 +2338,10 @@ offset_t hcge_rcof(char *fname, char *commsyntax, array_def *record, offset_t nc
           strcat(setname1,",");
           strcat(setname2,")");
           strcat(setname3,")");
-          while (ha_cgefrstr(linecopy, finditem, setname));
-          while (ha_cgefrstr(linecopy, finditem1, setname1));
-          while (ha_cgefrstr(linecopy, finditem2, setname2));
-          while (ha_cgefrstr(linecopy, finditem3, setname3));
+          while (str_replace_all(linecopy, finditem, setname));
+          while (str_replace_all(linecopy, finditem1, setname1));
+          while (str_replace_all(linecopy, finditem2, setname2));
+          while (str_replace_all(linecopy, finditem3, setname3));
         }
         for (i=1; i<n; i++) {
           if (i==1) {
@@ -2360,7 +2360,7 @@ offset_t hcge_rcof(char *fname, char *commsyntax, array_def *record, offset_t nc
         readitem = strtok(NULL,")");
         strcpy(vname,readitem);
         strcat(vname,",");
-        dcount=ha_cgenchf(vname,',');
+        dcount=str_count_char(vname,',');
         add=1;
         for (m=0; m<dcount; m++) {
           if(m==0) {
@@ -2390,8 +2390,8 @@ offset_t hcge_rcof(char *fname, char *commsyntax, array_def *record, offset_t nc
           printf("line %s\n",line);
         } else {
           strcpy(setname,line+ncommsyntax);
-          ha_cgefrstr(setname,";", "");
-          ha_cgefrstr(setname,"\n", "");
+          str_replace_all(setname,";", "");
+          str_replace_all(setname,"\n", "");
           strcpy(record[j].cofname,setname);
           record[j].offset=addi;
           record[j].size=0;
@@ -2408,7 +2408,7 @@ offset_t hcge_rcof(char *fname, char *commsyntax, array_def *record, offset_t nc
 }
 
 
-int hcge_rcofele(array_def *ha_cof,offset_t ncof, set_def *ha_set,dim_t nset, elem_store *ha_cofele) {
+int coef_resolve_sets(array_def *ha_cof,offset_t ncof, set_def *ha_set,dim_t nset, elem_store *ha_cofele) {
   dim_t l,m,dcount;//,dcount1;//,l3=0,l4=0,ld2=0,ld3=0,ld4=0
   offset_t l1=0,i;//,sizeele,dcountdim1[MAXVARDIM],l2=0,dcountdim[MAXVARDIM];//,ld1=0
   for (i=0; i<ncof; i++) {
@@ -2424,20 +2424,20 @@ int hcge_rcofele(array_def *ha_cof,offset_t ncof, set_def *ha_set,dim_t nset, el
   return 1;
 }
 
-dim_t ha_cgenset(char *fname) {
+dim_t sets_count(char *fname) {
   FILE * filehandle;
   char line[TABREADLINE]="\0";
   char *commsyntax="set";
   dim_t j=0;
   filehandle = fopen(fname,"r");
-  while (ha_cgertabl(commsyntax,filehandle,line,TABREADLINE)) {
+  while (tab_next_statement(commsyntax,filehandle,line,TABREADLINE)) {
     j++;
   }
   fclose(filehandle);
   return j;
 }
 
-int hcge_rinterset(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,dim_t nset) {
+int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,dim_t nset) {
   FILE * filehandle;//, *fileout;
   char line[TABREADLINE]="\0",linecopy[TABREADLINE];//,line1[TABREADLINE];longname[TABREADLINE],
   char header[HEADERSIZE],floginame[NAMESIZE];
@@ -2446,7 +2446,7 @@ int hcge_rinterset(char *fname, int niodata, cmf_file_entry *iodata, set_def *re
   int k0,k1=0;
   char *readitem=NULL;//,*p;
   for (j=0; j<nset; j++) {
-    if(ha_cgefind(record[j].readele,"intertemporal")>-1) {
+    if(str_find_ci(record[j].readele,"intertemporal")>-1) {
       intindx[0]=0;
       intindx[1]=0;
       intindx[2]=0;
@@ -2454,9 +2454,9 @@ int hcge_rinterset(char *fname, int niodata, cmf_file_entry *iodata, set_def *re
       sign[0]=0;
       sign[1]=0;
       strcpy(line,record[j].readele);
-      while (ha_cgefrstr(line," ", ""));
+      while (str_replace_all(line," ", ""));
       strcpy(linecopy,line);
-      k0=ha_cgenfind(line,",");
+      k0=str_count_ci(line,",");
       if(k0==1) {
         readitem = strtok(line,",");
         readitem = strtok(NULL,"\0");
@@ -2474,7 +2474,7 @@ int hcge_rinterset(char *fname, int niodata, cmf_file_entry *iodata, set_def *re
             strcpy(commsyntax,"read ");
             strcat(commsyntax,readitem);
             filehandle = fopen(fname,"r");
-            while (ha_cgertabl(commsyntax,filehandle,line,TABREADLINE)) {
+            while (tab_next_statement(commsyntax,filehandle,line,TABREADLINE)) {
               readitem = strtok(line," ");
               readitem = strtok(NULL," ");
               readitem = strtok(NULL," ");
@@ -2492,7 +2492,7 @@ int hcge_rinterset(char *fname, int niodata, cmf_file_entry *iodata, set_def *re
             fclose(filehandle);
             filehandle = fopen(iodata[k1].filname,"r");
             while (fgets(line,TABREADLINE,filehandle)) {
-              if (ha_cgenchf(line,'\"')>1) {
+              if (str_count_char(line,'\"')>1) {
                 readitem = strtok(line,"\"");
                 readitem = strtok(NULL,"\"");
                 if (strcmp(readitem,header) == 0) {
@@ -2518,7 +2518,7 @@ int hcge_rinterset(char *fname, int niodata, cmf_file_entry *iodata, set_def *re
             strcpy(commsyntax,"read ");
             strcat(commsyntax,readitem);
             filehandle = fopen(fname,"r");
-            while (ha_cgertabl(commsyntax,filehandle,line,TABREADLINE)) {
+            while (tab_next_statement(commsyntax,filehandle,line,TABREADLINE)) {
               readitem = strtok(line," ");
               readitem = strtok(NULL," ");
               readitem = strtok(NULL," ");
@@ -2536,7 +2536,7 @@ int hcge_rinterset(char *fname, int niodata, cmf_file_entry *iodata, set_def *re
             fclose(filehandle);
             filehandle = fopen(iodata[k1].filname,"r");
             while (fgets(line,TABREADLINE,filehandle)) {
-              if (ha_cgenchf(line,'\"')>1) {
+              if (str_count_char(line,'\"')>1) {
                 readitem = strtok(line,"\"");
                 readitem = strtok(NULL,"\"");
                 if (strcmp(readitem,header) == 0) {
@@ -2559,7 +2559,7 @@ int hcge_rinterset(char *fname, int niodata, cmf_file_entry *iodata, set_def *re
             strcpy(commsyntax,"read ");
             strcat(commsyntax,readitem);
             filehandle = fopen(fname,"r");
-            while (ha_cgertabl(commsyntax,filehandle,line,TABREADLINE)) {
+            while (tab_next_statement(commsyntax,filehandle,line,TABREADLINE)) {
               readitem = strtok(line," ");
               readitem = strtok(NULL," ");
               readitem = strtok(NULL," ");
@@ -2577,7 +2577,7 @@ int hcge_rinterset(char *fname, int niodata, cmf_file_entry *iodata, set_def *re
             fclose(filehandle);
             filehandle = fopen(iodata[k1].filname,"r");
             while (fgets(line,TABREADLINE,filehandle)) {
-              if (ha_cgenchf(line,'\"')>1) {
+              if (str_count_char(line,'\"')>1) {
                 readitem = strtok(line,"\"");
                 readitem = strtok(NULL,"\"");
                 if (strcmp(readitem,header) == 0) {
@@ -2623,7 +2623,7 @@ int hcge_rinterset(char *fname, int niodata, cmf_file_entry *iodata, set_def *re
             strcpy(commsyntax,"read ");
             strcat(commsyntax,readitem);
             filehandle = fopen(fname,"r");
-            while (ha_cgertabl(commsyntax,filehandle,line,TABREADLINE)) {
+            while (tab_next_statement(commsyntax,filehandle,line,TABREADLINE)) {
               readitem = strtok(line," ");
               readitem = strtok(NULL," ");
               readitem = strtok(NULL," ");
@@ -2641,7 +2641,7 @@ int hcge_rinterset(char *fname, int niodata, cmf_file_entry *iodata, set_def *re
             fclose(filehandle);
             filehandle = fopen(iodata[k1].filname,"r");
             while (fgets(line,TABREADLINE,filehandle)) {
-              if (ha_cgenchf(line,'\"')>1) {
+              if (str_count_char(line,'\"')>1) {
                 readitem = strtok(line,"\"");
                 readitem = strtok(NULL,"\"");
                 if (strcmp(readitem,header) == 0) {
@@ -2667,7 +2667,7 @@ int hcge_rinterset(char *fname, int niodata, cmf_file_entry *iodata, set_def *re
             strcpy(commsyntax,"read ");
             strcat(commsyntax,readitem);
             filehandle = fopen(fname,"r");
-            while (ha_cgertabl(commsyntax,filehandle,line,TABREADLINE)) {
+            while (tab_next_statement(commsyntax,filehandle,line,TABREADLINE)) {
               readitem = strtok(line," ");
               readitem = strtok(NULL," ");
               readitem = strtok(NULL," ");
@@ -2685,7 +2685,7 @@ int hcge_rinterset(char *fname, int niodata, cmf_file_entry *iodata, set_def *re
             fclose(filehandle);
             filehandle = fopen(iodata[k1].filname,"r");
             while (fgets(line,TABREADLINE,filehandle)) {
-              if (ha_cgenchf(line,'\"')>1) {
+              if (str_count_char(line,'\"')>1) {
                 readitem = strtok(line,"\"");
                 readitem = strtok(NULL,"\"");
                 if (strcmp(readitem,header) == 0) {
@@ -2708,7 +2708,7 @@ int hcge_rinterset(char *fname, int niodata, cmf_file_entry *iodata, set_def *re
             strcpy(commsyntax,"read ");
             strcat(commsyntax,readitem);
             filehandle = fopen(fname,"r");
-            while (ha_cgertabl(commsyntax,filehandle,line,TABREADLINE)) {
+            while (tab_next_statement(commsyntax,filehandle,line,TABREADLINE)) {
               readitem = strtok(line," ");
               readitem = strtok(NULL," ");
               readitem = strtok(NULL," ");
@@ -2726,7 +2726,7 @@ int hcge_rinterset(char *fname, int niodata, cmf_file_entry *iodata, set_def *re
             fclose(filehandle);
             filehandle = fopen(iodata[k1].filname,"r");
             while (fgets(line,TABREADLINE,filehandle)) {
-              if (ha_cgenchf(line,'\"')>1) {
+              if (str_count_char(line,'\"')>1) {
                 readitem = strtok(line,"\"");
                 readitem = strtok(NULL,"\"");
                 if (strcmp(readitem,header) == 0) {
@@ -2769,7 +2769,7 @@ int hcge_rinterset(char *fname, int niodata, cmf_file_entry *iodata, set_def *re
             strcpy(commsyntax,"read ");
             strcat(commsyntax,readitem);
             filehandle = fopen(fname,"r");
-            while (ha_cgertabl(commsyntax,filehandle,line,TABREADLINE)) {
+            while (tab_next_statement(commsyntax,filehandle,line,TABREADLINE)) {
               readitem = strtok(line," ");
               readitem = strtok(NULL," ");
               readitem = strtok(NULL," ");
@@ -2787,7 +2787,7 @@ int hcge_rinterset(char *fname, int niodata, cmf_file_entry *iodata, set_def *re
             fclose(filehandle);
             filehandle = fopen(iodata[k1].filname,"r");
             while (fgets(line,TABREADLINE,filehandle)) {
-              if (ha_cgenchf(line,'\"')>1) {
+              if (str_count_char(line,'\"')>1) {
                 readitem = strtok(line,"\"");
                 readitem = strtok(NULL,"\"");
                 if (strcmp(readitem,header) == 0) {
@@ -2814,7 +2814,7 @@ int hcge_rinterset(char *fname, int niodata, cmf_file_entry *iodata, set_def *re
             strcpy(commsyntax,"read ");
             strcat(commsyntax,readitem);
             filehandle = fopen(fname,"r");
-            while (ha_cgertabl(commsyntax,filehandle,line,TABREADLINE)) {
+            while (tab_next_statement(commsyntax,filehandle,line,TABREADLINE)) {
               readitem = strtok(line," ");
               readitem = strtok(NULL," ");
               readitem = strtok(NULL," ");
@@ -2832,7 +2832,7 @@ int hcge_rinterset(char *fname, int niodata, cmf_file_entry *iodata, set_def *re
             fclose(filehandle);
             filehandle = fopen(iodata[k1].filname,"r");
             while (fgets(line,TABREADLINE,filehandle)) {
-              if (ha_cgenchf(line,'\"')>1) {
+              if (str_count_char(line,'\"')>1) {
                 readitem = strtok(line,"\"");
                 readitem = strtok(NULL,"\"");
                 if (strcmp(readitem,header) == 0) {
@@ -2855,7 +2855,7 @@ int hcge_rinterset(char *fname, int niodata, cmf_file_entry *iodata, set_def *re
             strcpy(commsyntax,"read ");
             strcat(commsyntax,readitem);
             filehandle = fopen(fname,"r");
-            while (ha_cgertabl(commsyntax,filehandle,line,TABREADLINE)) {
+            while (tab_next_statement(commsyntax,filehandle,line,TABREADLINE)) {
               readitem = strtok(line," ");
               readitem = strtok(NULL," ");
               readitem = strtok(NULL," ");
@@ -2873,7 +2873,7 @@ int hcge_rinterset(char *fname, int niodata, cmf_file_entry *iodata, set_def *re
             fclose(filehandle);
             filehandle = fopen(iodata[k1].filname,"r");
             while (fgets(line,TABREADLINE,filehandle)) {
-              if (ha_cgenchf(line,'\"')>1) {
+              if (str_count_char(line,'\"')>1) {
                 readitem = strtok(line,"\"");
                 readitem = strtok(NULL,"\"");
                 if (strcmp(readitem,header) == 0) {
@@ -2911,7 +2911,7 @@ int hcge_rinterset(char *fname, int niodata, cmf_file_entry *iodata, set_def *re
   return 0;
 }
 
-int ha_cgerset(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,dim_t nset) {
+int sets_read(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,dim_t nset) {
   FILE * filehandle;//, *fileout;
   char line[TABREADLINE]="\0",linecopy[TABREADLINE],line1[TABREADLINE];
   char longname[TABREADLINE],tempvar[256];
@@ -2922,9 +2922,9 @@ int ha_cgerset(char *fname, int niodata, cmf_file_entry *iodata, set_def *record
 
   filehandle = fopen(fname,"r");
 
-  while (ha_cgertabl(commsyntax,filehandle,line,TABREADLINE)) {
+  while (tab_next_statement(commsyntax,filehandle,line,TABREADLINE)) {
     strcpy(linecopy,line);
-    k2=ha_cgefind(line,"intertemporal");
+    k2=str_find_ci(line,"intertemporal");
     if(k2>-1) {
       readitem = strtok(line+k2," ");
       readitem = strtok(NULL," ");
@@ -2944,10 +2944,10 @@ int ha_cgerset(char *fname, int niodata, cmf_file_entry *iodata, set_def *record
       record[j].intertemp=true;
     } else {
       if (strchr(line,'=')!=NULL) {
-        ha_cgefrstr(line,"union", "^");
+        str_replace_all(line,"union", "^");
         readitem = &line[4];
         strcpy(line1,readitem);
-        while (ha_cgefrstr(line1," ", ""));
+        while (str_replace_all(line1," ", ""));
         readitem = strtok(line1,"=");
         strcpy(record[j].setname,readitem);
         if (strchr(line,'-')!=NULL) {
@@ -3036,9 +3036,9 @@ int ha_cgerset(char *fname, int niodata, cmf_file_entry *iodata, set_def *record
           }
         }
       } else {
-        k0=ha_cgefind(line,"read elements from file");
+        k0=str_find_ci(line,"read elements from file");
         if(k0>-1) {
-          k1=ha_cgefind(line+k0+24," ");
+          k1=str_find_ci(line+k0+24," ");
           strncpy(line1,line+k0+24,k1);
           line1[k1]='\0';
           for (k0=0; k0<niodata; k0++) if (strcmp(line1,iodata[k0].logname)==0) {
@@ -3054,14 +3054,14 @@ int ha_cgerset(char *fname, int niodata, cmf_file_entry *iodata, set_def *record
         if (readitem!=NULL) {
           strcpy(record[j].header,readitem);
           record[j].readele[0]='\0';
-          ha_cgerdvar1(readitem,iodata[record[j].fileid].filname,&vsize,longname,&dim1);
+          datafile_read_header_info(readitem,iodata[record[j].fileid].filname,&vsize,longname,&dim1);
           record[j].size=dim1;
         } else {
           record[j].header[0]='\0';
           readitem = strtok(linecopy,"(");
           readitem = strtok(NULL,")");
           strcpy(record[j].readele,readitem);
-          dim1=ha_cgenchf(readitem, ',');
+          dim1=str_count_char(readitem, ',');
           record[j].size=dim1+1;
         }
       }
@@ -3072,7 +3072,7 @@ int ha_cgerset(char *fname, int niodata, cmf_file_entry *iodata, set_def *record
   return 0;
 }
 
-dim_t ha_setunion(set_element *ha_setele, set_def *ha_set,dim_t nset,dim_t i) {
+dim_t set_union_named(set_element *ha_setele, set_def *ha_set,dim_t nset,dim_t i) {
   dim_t j,l,n,m,dim1=0,dim2=0,j1,sup1,sup2;
   char line[TABREADLINE],*readitem;
   strcpy(line,ha_set[i].readele);
@@ -3120,7 +3120,7 @@ dim_t ha_setunion(set_element *ha_setele, set_def *ha_set,dim_t nset,dim_t i) {
   ha_set[i].size=m;
   return m;
 }
-dim_t ha_setplus(set_element *ha_setele, set_def *ha_set,dim_t nset,dim_t i) {
+dim_t set_union_op(set_element *ha_setele, set_def *ha_set,dim_t nset,dim_t i) {
   dim_t j,l,n,m,dim1=0,dim2=0,j1,sup1,sup2;
   char line[TABREADLINE],*readitem;
   strcpy(line,ha_set[i].readele);
@@ -3162,7 +3162,7 @@ dim_t ha_setplus(set_element *ha_setele, set_def *ha_set,dim_t nset,dim_t i) {
   }
   return m;
 }
-dim_t ha_setminus(set_element *ha_setele, set_def *ha_set,dim_t nset,dim_t i) {
+dim_t set_difference(set_element *ha_setele, set_def *ha_set,dim_t nset,dim_t i) {
   dim_t j,l,n,m,v,indi,dim1=0,dim2=0,sup1;
   char line[TABREADLINE],*readitem;
   strcpy(line,ha_set[i].readele);
@@ -3203,7 +3203,7 @@ dim_t ha_setminus(set_element *ha_setele, set_def *ha_set,dim_t nset,dim_t i) {
   }
   return m;
 }
-offset_t ha_cgersubset(char *fname, set_element *ha_setele, set_def *ha_set,dim_t nset) {
+offset_t subsets_read(char *fname, set_element *ha_setele, set_def *ha_set,dim_t nset) {
   FILE * filehandle;//, *fileout;
   char line[TABREADLINE]="\0";
   char set[NAMESIZE],subset[NAMESIZE];
@@ -3214,8 +3214,8 @@ offset_t ha_cgersubset(char *fname, set_element *ha_setele, set_def *ha_set,dim_
 
   filehandle = fopen(fname,"r");
 
-  while (ha_cgertabl(commsyntax,filehandle,line,TABREADLINE)) {
-    while (ha_cgefrstr(line," ;", ";"));
+  while (tab_next_statement(commsyntax,filehandle,line,TABREADLINE)) {
+    while (str_replace_all(line," ;", ";"));
     readitem = strtok(line," ");
     readitem = strtok(NULL," ");
     strcpy(subset,readitem);
@@ -3259,7 +3259,7 @@ offset_t ha_cgersubset(char *fname, set_element *ha_setele, set_def *ha_set,dim_
   return j;
 }
 
-dim_t ha_cgesubsetchck(set_element *ha_setele, set_def *ha_set,dim_t nset,offset_t* contin) {
+dim_t subset_map_build(set_element *ha_setele, set_def *ha_set,dim_t nset,offset_t* contin) {
   dim_t i,setd,subsetd,sup1,sup2,sup3,b;//,nlength;
   offset_t jj,jjj,j=0;
   *contin=0;
@@ -3364,7 +3364,7 @@ dim_t ha_cgesubsetchck(set_element *ha_setele, set_def *ha_set,dim_t nset,offset
   return 1;
 }
 
-char *ha_cgercls(char *commsyntax, FILE *filehandle, char *readline) {
+char *closure_next_statement(char *commsyntax, FILE *filehandle, char *readline) {
   int check1=0,i,count1=0;
   while (commsyntax[count1] != '\0') {
     count1++;
@@ -3377,7 +3377,7 @@ char *ha_cgercls(char *commsyntax, FILE *filehandle, char *readline) {
   strcpy(readline,"\0");
 
   while (fgets(line,TABLINESIZE,filehandle)) {
-    while (ha_cgefrstr(line,"  ", " "));
+    while (str_replace_all(line,"  ", " "));
     if (line[0]==' ') {
       memmove(line,&line[0]+1,strlen(line)-1);
     }
@@ -3419,7 +3419,7 @@ char *ha_cgercls(char *commsyntax, FILE *filehandle, char *readline) {
   return NULL;
 }
 
-char *ha_cgertabl(char *commsyntax, FILE *filehandle, char *readline,offset_t rlinesize) {
+char *tab_next_statement(char *commsyntax, FILE *filehandle, char *readline,offset_t rlinesize) {
   int check1=0,i,count1=0;
   while (commsyntax[count1] != '\0') {
     count1++;
@@ -3432,7 +3432,7 @@ char *ha_cgertabl(char *commsyntax, FILE *filehandle, char *readline,offset_t rl
   strcpy(readline,"\0");
 
   while (fgets(line,TABLINESIZE,filehandle)) {
-    while (ha_cgefrstr(line,"  ", " "));
+    while (str_replace_all(line,"  ", " "));
     if (line[0]==' ') {
       memmove(line,&line[0]+1,strlen(line)-1);
     }
@@ -3465,7 +3465,7 @@ char *ha_cgertabl(char *commsyntax, FILE *filehandle, char *readline,offset_t rl
   }
   return NULL;
 }
-char *ha_cgertabl1(char *commsyntax, FILE *filehandle, char *readline, elem_value *record, array_def *ha_cof,offset_t ncof,solve_real *zerodivide,offset_t rlinesize) {
+char *tab_next_statement_resolved(char *commsyntax, FILE *filehandle, char *readline, elem_value *record, array_def *ha_cof,offset_t ncof,solve_real *zerodivide,offset_t rlinesize) {
   int check1=0,count1=0;
   char *zerosyntax="zerodivide default",*p,*zerosyntax1="zerodivide (",*zerosyntax2="zerodivide(";
   while (commsyntax[count1] != '\0') {
@@ -3474,7 +3474,7 @@ char *ha_cgertabl1(char *commsyntax, FILE *filehandle, char *readline, elem_valu
   char *n,line[TABLINESIZE],*finditem=";";//,linecopy[TABLINESIZE+2]
   strcpy(readline,"\0");
   while (fgets(line,TABLINESIZE,filehandle)) {
-    while (ha_cgefrstr(line,"  ", " "));
+    while (str_replace_all(line,"  ", " "));
     if (line[0]==' ') {
       memmove(line,&line[0]+1,strlen(line)-1);
     }
@@ -3503,27 +3503,27 @@ char *ha_cgertabl1(char *commsyntax, FILE *filehandle, char *readline, elem_valu
     if (strncmp(line,commsyntax,count1) != 0) {
       if (strncmp(line,zerosyntax,18) == 0) {
         p=strtok(&line[18],";");
-        *zerodivide=hnew_simplrpl(p,record,ha_cof,ncof);//atof(p);
+        *zerodivide=formula_subst_scalar(p,record,ha_cof,ncof);//atof(p);
       }
       if (strncmp(line,zerosyntax1,12) == 0||strncmp(line,zerosyntax2,11) == 0) {
         p=strtok(line,")");
         p=strtok(NULL,"default");
         p=strtok(NULL," ");
         p=strtok(NULL,";");
-        *zerodivide=hnew_simplrpl(p,record,ha_cof,ncof);//atof(p);
+        *zerodivide=formula_subst_scalar(p,record,ha_cof,ncof);//atof(p);
       }
     }
   }
   return NULL;
 }
 
-char *ha_cgefrstr1(char *line, char *finditem, char *replitem) {
+char *str_replace_first(char *line, char *finditem, char *replitem) {
   char buffer[DATREADLINE];
   int count2 = 0,index=0;
   while (finditem[count2] != '\0') {
     count2++;
   }
-  index=ha_cgefind(line, finditem);
+  index=str_find_ci(line, finditem);
   if (index==-1) {
     return NULL;
   }
@@ -3535,13 +3535,13 @@ char *ha_cgefrstr1(char *line, char *finditem, char *replitem) {
   return line;
 }
 
-char *ha_cgefrstrvbz1(char *line, char *finditem, char *replitem,dim_t nbuffer) {
+char *str_replace_first_bounded(char *line, char *finditem, char *replitem,dim_t nbuffer) {
   char *buffer= (char *) calloc (nbuffer,sizeof(char));
   int count2 = 0,index=0;
   while (finditem[count2] != '\0') {
     count2++;
   }
-  index=ha_cgefind(line, finditem);
+  index=str_find_ci(line, finditem);
   if (index==-1) {
     free(buffer);
     return NULL;
@@ -3555,7 +3555,7 @@ char *ha_cgefrstrvbz1(char *line, char *finditem, char *replitem,dim_t nbuffer) 
   return line;
 }
 
-char *ha_cgefrstr(char *line, char *finditem, char *replitem) {
+char *str_replace_all(char *line, char *finditem, char *replitem) {
   char buffer[DATREADLINE];
   char *p;
   unsigned short int count2 = 0,index;
@@ -3575,7 +3575,7 @@ char *ha_cgefrstr(char *line, char *finditem, char *replitem) {
   return line;
 }
 
-char *ha_cgefrstrvbz(char *line, char *finditem, char *replitem,dim_t nbuffer) {
+char *str_replace_all_bounded(char *line, char *finditem, char *replitem,dim_t nbuffer) {
   char *buffer= (char *) calloc (nbuffer,sizeof(char));
   char *p;
   long int count2 = 0,index;
@@ -3597,7 +3597,7 @@ char *ha_cgefrstrvbz(char *line, char *finditem, char *replitem,dim_t nbuffer) {
   return line;
 }
 
-char *ha_cgefrchr(char *line, int finditem, int replitem) {
+char *str_replace_char(char *line, int finditem, int replitem) {
   char *p;
   if (!(p = strchr(line, finditem))) {
     return NULL;
@@ -3606,7 +3606,7 @@ char *ha_cgefrchr(char *line, int finditem, int replitem) {
   return line;
 }
 
-int ha_cgefind(char *line, char *finditem) {
+int str_find_ci(char *line, char *finditem) {
   int i;
   char *t1,*t2;
   for (i=0; line[i]; i++) {
@@ -3623,7 +3623,7 @@ int ha_cgefind(char *line, char *finditem) {
   return -1;
 }//ref: http://www.java2s.com/Code/C/String/Findsubstringourownfunction.htm
 
-char *ha_cgedrcmt(char *line, char *token) {
+char *str_strip_comment(char *line, char *token) {
   char buffer[TABREADLINE];
   char *p,*readitem=NULL;
   int count1 = 0;
