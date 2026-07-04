@@ -1,32 +1,19 @@
 #include <ha_cgeglobal.h>
 
-extern void spec51_rank_(int *INSIZE,ha_cgetype *cntl6,int *IRN, int *JCN, ha_cgetype *VA);
 extern void spec51m_rank_(int *INSIZE,ha_cgetype *cntl6,int *IRN, int *JCN, ha_cgetype *VA,int *IRNA, int *JCNA, int *KEEP,ha_cgetype *w51, int *iw51);
 extern void spec48_ssol2la_(int *INSIZE,int *IRN, int *JCN, ha_cgetype *VA, ha_cgetype *B, ha_cgetype *X);
 extern void spec48m_ssol2la_(int *INSIZE,int *IRN, int *JCN, ha_cgetype *VA, ha_cgetype *B, ha_cgetype *X);
-extern void spec48_msol_(int *INSIZE,int *IRN, int *JCN, ha_cgetype *VA, ha_cgetype *B, ha_cgetype *X, PetscInt *IRNC, PetscInt *JCNC, PetscScalar *VAC,int *IRNB,int *JCNB,PetscScalar *VALUESB,ha_cgetype *VECBIVI,int *bivinzrow0,int *bivinzcol0);//, forint *IRNV, forint *JCNV, ha_cgetype *VAV
 extern void spec48m_msol_(int *INSIZE,int *IRN, int *JCN, ha_cgetype *VA, ha_cgetype *B, ha_cgetype *X, PetscInt *IRNC, PetscInt *JCNC, PetscScalar *VAC,int *IRNB,int *JCNB,PetscScalar *VALUESB,ha_cgetype *VECBIVI,int *bivinzrow0,int *bivinzcol0);//, forint *IRNV, forint *JCNV, ha_cgetype *VAV
-extern void spec48_esol_(int *INSIZE,int *IRN, ha_cgetype *VA,int *KEEP, ha_cgetype *B, ha_cgetype *X);
 extern void spec48m_esol_(int *INSIZE,int *IRN, ha_cgetype *VA,int *KEEP, ha_cgetype *B, ha_cgetype *X);
-extern void spec48_rpesol_(int *INSIZE,int *IRN, ha_cgetype *VA,int *KEEP, ha_cgetype *B, ha_cgetype *X,ha_cgetype *cntl,ha_cgetype *rinfo,ha_cgetype *error1,int *icntl,int *info,ha_cgetype *w,int *iw);
 extern void spec48m_rpesol_(int *INSIZE,int *IRN, ha_cgetype *VA,int *KEEP, ha_cgetype *B, ha_cgetype *X,ha_cgetype *cntl,ha_cgetype *rinfo,ha_cgetype *error1,int *icntl,int *info,ha_cgetype *w,int *iw);
 extern void spec48_single_(forint *indata,int *irn, int *jcn,ha_cgetype *b1, ha_cgetype *values,ha_cgetype *x1, int *neleperrow,int *ai1, MPI_Fint *fcomm);
 extern void spec48_nomc66_(forint *indata, int *jcn,ha_cgetype *b1, ha_cgetype *values,ha_cgetype *x1, int *neleperrow, MPI_Fint *fcomm,forint *rowptrin, forint *colptrin);
-extern void my_spar_add_(ha_cgetype *vecbivi, int *biviindx,int *nz1,ha_cgetype *vecbivi0,int *biviindx0,int *nz0,int *nz2);
-extern void my_spar_addl_(ha_cgetype *vecbivi, long int *biviindx,int *nz1,ha_cgetype *vecbivi0,long int *biviindx0,int *nz0,int *nz2);
 extern void my_spar_add3l_(ha_cgetype *vecbivi, long int *biviindx,long int *nz1,ha_cgetype *vecbivi0,long int *biviindx0,long int *nz0,long int *nz2);
-extern void my_spar_add1_(ha_cgetype *vecbivi, int *biviindx,int *irn, int *jcn,int *nz1,ha_cgetype *vecbivi0,int *biviindx0,int *nz0,int *nz2,int *ncol);
-extern void my_spar_add1l_(ha_cgetype *vecbivi, long int *biviindx,int *irn, int *jcn,int *nz1,ha_cgetype *vecbivi0,long int *biviindx0,int *nz0,int *nz2,int *ncol);
 extern void my_spar_add4l_(ha_cgetype *vecbivi, long int *biviindx,int *irn, int *jcn,long int *nz1,ha_cgetype *vecbivi0,long int *biviindx0,long int *nz0,long int *nz2,int *ncol);
-extern void my_spar_add2_(ha_cgetype *vecbivi, int *biviindx,int *irn, int *jcn,int *nz1,ha_cgetype *vecbivi0,int *biviindx0,int *nz0,int *nz2,int *ncol,ha_cgetype *vecbivi2,int *irn2, int *jcn2,int *j2,ha_cgetype *cntl3);
-extern void my_spar_comp_(int *biviindx,int *nz1,int *biviindx0,int *nz0,int *nz2);
 extern void my_spar_compl_(long int *biviindx,long int *nz1,long int *biviindx0,long int *nz0,long int *nz2);
-extern void prep48_alu_(int *INSIZE,int *IRN,int* JCN,ha_cgetype *VA);
 extern void prep48_alu1_(int *INSIZE,int *IRN,int* JCN,ha_cgetype *VA,ha_cgetype *W,int *IW,int *KEEP);
-extern void prep48_msol_(int *INSIZE,int *IRN, int *JCN, ha_cgetype *VA, PetscInt *IRNC, PetscInt *JCNC, PetscScalar *VAC,int *IRNB,int *JCNB,PetscScalar *VALUESB,ha_cgetype *VECBIVI,long int *bivinzrow0,int *bivinzcol0);//, forint *IRNV, forint *JCNV, ha_cgetype *VAV
 extern void prep48m_msol_(int *INSIZE,int *IRN, int *JCN, ha_cgetype *VA, PetscInt *IRNC, PetscInt *JCNC, PetscScalar *VAC,int *IRNB,int *JCNB,PetscScalar *VALUESB,ha_cgetype *VECBIVI,long int *bivinzrow0,int *bivinzcol0,int* jcnb1,ha_cgetype *sol,ha_cgetype *b,ha_cgetype *w,int* iw,int* keep);
 extern void spar_mulmin_(ha_cgetype* sol,int* nrow,int* nz,int* irn,int* jcn,ha_cgetype* va,ha_cgetype* res);
-extern void spar_muladd_(ha_cgetype* sol,int* nrow,int* nz,int* irn,int* jcn,ha_cgetype* va,ha_cgetype* res);
 extern void spar_mulnoadd_(ha_cgetype* sol,int* nrow,int* nz,int* irn,int* jcn,ha_cgetype* va,ha_cgetype* res);
 extern void spar_vbiviadd_(ha_cgetype* sol,int* bvcol,long int* bvrow,long int* bvsize,int* nrow,int *ncol,int* nz,int* irn,int* jcn,ha_cgetype* va,ha_cgetype* res);
 extern void patio_mat_(int* insizeda,int* IRN,int* JCN,ha_cgetype* VBIVI,int* IRN1A,int* JCN1A);

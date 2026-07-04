@@ -1256,11 +1256,9 @@ int main(int argc,char **args) {
   ha_cgetype *xcf=NULL;
   ha_cgetype *x0=NULL;// (ha_cgetype *) calloc (1,sizeof(ha_cgetype));
   ha_cgetype *b1=NULL;//= (ha_cgetype *) calloc (VecSize,sizeof(ha_cgetype));
-  extern void spec48_ssol_(forint *INSIZE,forint *IRN, forint *JCN, ha_cgetype *VA, ha_cgetype *B, ha_cgetype *X);
   extern void spec48_ssol2la_(int *INSIZE,int *IRN, int *JCN, ha_cgetype *VA, ha_cgetype *B, ha_cgetype *X);
   extern void spec48_single_(forint *indata,int *irn, int *jcn,ha_cgetype *b1, ha_cgetype *values,ha_cgetype *x1, int *neleperrow,int *ai1, MPI_Fint *fcomm);
   extern void spec48_nomc66_(forint *indata, int *jcn,ha_cgetype *b1, ha_cgetype *values,ha_cgetype *x1, int *neleperrow, MPI_Fint *fcomm,forint *rowptrin, forint *colptrin);
-  extern void my_vec_comz_(ha_cgetype vecbivi,int *biviindx,int *col, int *row, int *colsize,int *nz0,int *nz1);
 
   forint k=0,m=1;
   ha_cgetype temp1,temp2;
