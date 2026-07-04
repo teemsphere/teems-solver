@@ -29,14 +29,15 @@
 #define SORD 1
 #define MAXSSIZE 187500000//1500000000/8
 //To switch between single and double precision: SORD 0 single; SORD 1 double; change ha_cgetype and ha_floattype to float or double; change hsl_mp48ss.f90 accordingly. Note should change GUI too!!!
-int isLinux;
-int smallthreads;
-int medthreads;
-int mymaxnumthrd;
-double kindx1,kindx2,kval1,kval2,kval3;
-int step1,step2,step3;
-MPI_Comm HA_COMM,HA1_COMM;
-static char temdir[]="/tmp/";
+/* Definitions live in globals.c */
+extern int isLinux;
+extern int smallthreads;
+extern int medthreads;
+extern int mymaxnumthrd;
+extern double kindx1,kindx2,kval1,kval2,kval3;
+extern int step1,step2,step3;
+extern MPI_Comm HA_COMM,HA1_COMM;
+extern char temdir[NAMESIZE];
 
 typedef double ha_cgetype;
 typedef int uvdim;
