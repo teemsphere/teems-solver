@@ -10,6 +10,9 @@ COPY ${PATH_HSL_MA48} ${BUILD_DIR}/hsl/ma48.tar.gz
 COPY ${PATH_HSL_MA51} ${BUILD_DIR}/hsl/ma51.tar.gz
 COPY ${PATH_HSL_MC66} ${BUILD_DIR}/hsl/mc66.tar.gz
 COPY ${PATH_HSL_MP48} ${BUILD_DIR}/hsl/mp48.tar.gz
+# Overwrite the src snapshot baked into teems_base with the current tree;
+# without this the image silently ships stale solver code.
+COPY ./src ${BUILD_DIR}/src
 
 RUN mkdir -p ${BUILD_DIR}/LICENSES/hsl \
     && mkdir -p ${BUILD_DIR}/lib/ma48 \
