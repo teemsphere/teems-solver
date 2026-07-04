@@ -109,7 +109,7 @@ int main(int argc,char **args) {
   strcat(newtabfile1,tempchar);
   strcat(newtabfile,".tab");
   strcat(newtabfile1,".tab");
-  PetscOptionsGetInt(NULL,NULL,"-matsol",&matsol,NULL);//0 MA48 (nproc must be 1) 1 SBBD 2 DBBD, if >=1 should enable reg or time. First reg set will be regorder in var. Note INCL(4) in hsl_mp48ss
+  PetscOptionsGetInt(NULL,NULL,"-matsol",&matsol,NULL);/* enum matrix_method; >=MM_SBBD needs a regional or time set (first reg set orders variables) */
   if(matsol==MM_DBBD)nohsl=true;
   if(matsol==MM_NDBBD)nohsl=true;
   isLinux=0;

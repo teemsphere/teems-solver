@@ -26,9 +26,9 @@
 #define NOPERTINSUM 5
 #define MAXVARDIM 10 //maximum variable dimension
 #define MAXSUPSET 12 //original
-#define SORD 1
+#define SORD 1 /* 1 = double solve precision; to switch to single change
+                  solve_real/store_real and FSORD in hsl_kernels.f90 */
 #define MAXSSIZE 187500000//1500000000/8
-//To switch between single and double precision: SORD 0 single; SORD 1 double; change ha_cgetype and ha_floattype to float or double; change hsl_mp48ss.f90 accordingly. Note should change GUI too!!!
 /* Definitions live in globals.c */
 extern int isLinux;
 extern int section_threads;
@@ -38,12 +38,12 @@ extern int steps1,steps2,steps3;
 extern MPI_Comm node_comm,node_tail_comm;
 extern char scratch_dir[NAMESIZE];
 
-typedef double solve_real;
-typedef int dim_t;
-typedef long int offset_t;
-typedef int exo_idx_t;//relax if nvarele greater than 2 billions
-typedef long int fortran_int;
-typedef float store_real;
+typedef double solve_real;   /* linear-solve precision */
+typedef int dim_t;           /* set sizes, dimension counts */
+typedef long int offset_t;   /* element offsets into value arrays */
+typedef int exo_idx_t;       /* exogenous-variable index; widen if nvarele > 2^31 */
+typedef long int fortran_int;/* INTEGER(8) interop with hsl_kernels.f90 */
+typedef float store_real;    /* coefficient storage precision (halves memory traffic) */
 
 /* -matsol matrix method (Ha & Kompas 2016; Kompas & Ha 2019).
    Values match teems-R's matrix_method argument. */
@@ -63,9 +63,9 @@ enum operand_type { OT_ARRAY=0, OT_LINVAR=1, OT_SUM=2, OT_LINVAR2=3,
                     OT_TEMP_ID01=41, OT_TEMP_ABS=42, OT_TEMP_LOG=43 };
 
 
-//thu
+/* ================= cmf_io.c — command (CMF) file and data I/O ========== */
 
-//ha_cgeiof.c
+/* one "file <logname> <path>;" statement from the CMF */
 typedef struct
 {
   char logname[NAMESIZE];
@@ -84,17 +84,19 @@ int cmf_read(char *filename, int niodata, cmf_file_entry *iodata, char *tabfile,
 int tab_preprocess(char *filename, char *newtabfile);
 int tab_read_set_name(char *filename, char *varname, int indx, char *setname);
 
-//ha_cgetab.c
+/* ================= value records ======================================= */
 
+/* one element of an evaluated SUM(...) */
 typedef struct
 {
   store_real value;
 } sum_value ;
+/* one element of a coefficient or variable array */
 typedef struct
 {
   store_real value;
-  store_real initial;
-  store_real substep_base;//cursol;//In stochastic case, with plus var, var0 holds x value.
+  store_real initial;      /* pre-simulation (levels) value */
+  store_real substep_base; /* base for midpoint update; x-value for stochastic plus-vars */
 } elem_value ;
 char* str_rfind_any(char *line, char *finditems);
 int str_rfind_ci(char *line, char *finditem);
@@ -103,8 +105,9 @@ int str_count_ci(char *line, char *finditem);
 char* str_rfind_toplevel(char *line, int finditem);
 bool csv_read_ints(char *fileName,int* vec, int vecCol);
 
-//ha_cgetab.c
+/* ================= tab_parse.c — TAB-language model description ======== */
 
+/* a SET statement */
 typedef struct
 {
   char header[HEADERSIZE];
@@ -113,31 +116,33 @@ typedef struct
   char readele[TABREADLINE];
   offset_t offset;
   dim_t size;
-  dim_t subsetid[MAXSUPSET];//Supersetid to be more precised
+  dim_t subsetid[MAXSUPSET]; /* ids of supersets this set maps into */
   bool intertemp;
   int intsup;
   bool regional;
   int regsup;
 } set_def ;
+/* one set element with its position in each superset */
 typedef struct
 {
   char setele[NAMESIZE];
   dim_t superset_pos[MAXSUPSET];
 } set_element ;
 
+/* a COEFFICIENT or VARIABLE declaration: name, dimensionality and layout */
 typedef struct
 {
   char cofname[NAMESIZE];
-  offset_t offset;
-  dim_t size;
-  offset_t setid[MAXVARDIM];
-  offset_t strides[MAXVARDIM];
+  offset_t offset;             /* start of this array in the value vector */
+  dim_t size;                  /* number of dimensions */
+  offset_t setid[MAXVARDIM];   /* set of each dimension */
+  offset_t strides[MAXVARDIM]; /* row-major strides */
   offset_t nelem;
-  bool level_par;
+  bool level_par;              /* levels (not percentage-change) quantity */
   bool change_real;
-  bool suplval;
-  int gltype;//1 GE 2 GT 3 LE 4 LT
-  store_real glval;
+  bool suplval;                /* values supplied by READ/FORMULA */
+  int gltype;                  /* enum bound_type */
+  store_real glval;            /* bound value */
 } array_def ;
 
 typedef struct
@@ -159,13 +164,15 @@ typedef struct
 } elem_store ;
 
 
+/* closure and shock for one variable element */
 typedef struct
 {
   exo_idx_t exo_index;
-  bool is_exogenous;//1 exo
+  bool is_exogenous;
   store_real shock_value;
 } closure_entry ;
 
+/* one (all,index,SET) quantifier with its current position */
 typedef struct
 {
   char index_name[NAMESIZE];
@@ -221,15 +228,16 @@ int sum_extract(char *formula);
 int formula_normalize(char *fomulain);
 offset_t subsets_read(char *fname, set_element *ha_setele, set_def *ha_set,dim_t nset);
 char *str_replace_char(char *line, int finditem, int replitem);
-//thu
-//Moi
 
+/* ================= formula.c — FORMULA compile/evaluate, UPDATE ======== */
+
+/* one operation of a compiled formula program (interpreted per element) */
 typedef struct
 {
-  dim_t Oper;//0 none; 1 *;2 /;3 +; 4 -;5 ^;71 if =;72 if >; 73 if <; 74 if <>; 75 if <=; 76 if >=;
+  dim_t Oper;                /* enum op_code */
   char TmpVarName[NAMESIZE];
   store_real TmpVarVal;
-  dim_t Var1Type;//0 var cof;1 lin; 2 sum;3 lin;4 calvars; 5 number; 6 varchange; 41 id01, 42 abs, 43 loge
+  dim_t Var1Type;            /* enum operand_type */
   offset_t Var1BegAdd;
   int Var1leadlag[MAXVARDIM];
   offset_t Var1SupSet[MAXVARDIM];
@@ -267,7 +275,9 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *ha_set,dim_t ns
 int sum_eval(char *formulain, char *commsyntax,set_def *ha_set,dim_t nset, set_element *ha_setele,elem_value *ha_cofvar,offset_t ncofvar,offset_t ncofele, array_def *ha_cof,offset_t ncof, array_def *ha_var,offset_t nvar,sum_def *sum_cof,int totalsum,sum_value *ha_sumele,offset_t nsumele,formula_op *ha_calvar,quantifier *arSet1,dim_t fdim,int *sumindx,int j, solve_real zerodivide);
 offset_t updates_apply(char *fname,set_def *ha_set,dim_t nset, set_element *ha_setele, array_def *ha_cof,offset_t ncof,array_def *ha_var,offset_t nvar, elem_value *ha_cofvar,offset_t ncofvar,offset_t ncofele,int midpoint);
 offset_t updates_apply_product(char *fname,set_def *ha_set,dim_t nset, set_element *ha_setele, array_def *ha_cof,offset_t ncof,array_def *ha_var,offset_t nvar, elem_value *ha_cofvar,offset_t ncofvar,offset_t ncofele);
-//lin
+
+/* ============ jacobian.c — first-order derivative matrix assembly ======
+   (Ha & Kompas 2016 §5; Kompas & Ha 2019) */
 
 int eq_sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifier *arSet,set_def *ha_set,dim_t nset,dim_t fdim,int j);
 int eq_sum_eval(char *formulain, char *commsyntax,set_def *ha_set,dim_t nset, set_element *ha_setele,elem_value *ha_cofvar,offset_t ncofvar,offset_t ncofele, array_def *ha_cof,offset_t ncof,array_def *ha_var,offset_t nvar,sum_def *sum_cof,int totalsum,sum_value *ha_sumele,offset_t nsumele,formula_op *ha_calvar,quantifier *arSet1,dim_t fdim,int *sumindx,int j, solve_real zerodivide);
@@ -277,6 +287,13 @@ int eq_linvar_read(char *formulain,eq_var_ref *LinVars,int linindx,array_def *ha
 int jacobian_preallocate(char *fname, char *commsyntax,set_def *ha_set,dim_t nset,set_element *ha_setele,array_def *ha_cof,offset_t ncof,array_def *ha_var,offset_t nvar,elem_value *ha_cofvar,offset_t ncofvar,offset_t ncofele, offset_t nexo,closure_entry *ha_cgeshock,offset_t ndblock,offset_t alltimeset,offset_t allregset,bool *ha_eqint,offset_t *ha_eqadd,dim_t *ha_eqtime,dim_t *ha_eqreg,offset_t *counteq,offset_t nintraeq,bool *sbbd_overrid,PetscInt Istart,PetscInt Iend,PetscInt *dnz,PetscInt *dnnz,PetscInt *onz,PetscInt *onnz,PetscInt *dnzB,PetscInt *dnnzB,PetscInt *onzB,PetscInt *onnzB,int nesteddbbd);
 int equation_order_read(char *fname, char *commsyntax,set_def *ha_set,dim_t nset,set_element *ha_setele,array_def *ha_cof,offset_t ncof,array_def *ha_var,offset_t nvar,elem_value *ha_cofvar,offset_t ncofvar,offset_t ncofele,closure_entry *ha_cgeshock,bool *var_inter,array_def *ha_eq,bool *ha_eqint,dim_t *eq_orderintra,dim_t *eq_orderreg,offset_t allregset,offset_t alltimeset,dim_t *orderintra,dim_t *orderreg);
 int equation_order_read_nested(char *fname, char *commsyntax,set_def *ha_set,dim_t nset,set_element *ha_setele,array_def *ha_cof,offset_t ncof,array_def *ha_var,offset_t nvar,elem_value *ha_cofvar,offset_t ncofvar,offset_t ncofele,closure_entry *ha_cgeshock,bool *var_inter,array_def *ha_eq,bool *ha_eqint,dim_t *eq_orderintra,dim_t *eq_orderreg,offset_t allregset,offset_t alltimeset,dim_t *orderintra,dim_t *orderreg);
+/* ======= block_order.c / block_solve.c — (N)DBBD ordering and solve ====
+   Doubly Bordered Block Diagonal decomposition per Ha & Kompas 2016 and
+   Kompas & Ha 2019: reorder the Jacobian into diagonal blocks plus
+   borders, LU-factor blocks in parallel (HSL MA48), form and solve the
+   interface problem, then back-solve.  laA/laDi/laD control workspace
+   sizing; cntl3/cntl6 are HSL control parameters. */
+
 bool ndbbd_block_solve(PetscInt rank, int begmat,int nreg,int * insize,int insizes, Mat **submatCij,Mat **submatBij,solve_real *b,solve_real *sol,bool ifremove,char** fn01,char** fn02, char** fn03);
 bool ndbbd_block_solve_mem(PetscInt rank, int begmat,int nreg,int * insize,int insizes, Mat **submatCij,Mat **submatBij,solve_real *b,solve_real *sol,int** irnereg,int** keepreg,solve_real** valereg,solve_real *cntl,solve_real *rinfo,solve_real *error1,int *icntl,int *info,solve_real *w,int *iw,solve_real *b02);
 
@@ -290,10 +307,16 @@ int reduce_to_rank(solve_real *vecbivi,fortran_int vecbivisize,PetscInt mpisize,
 int reduce_to_rank_nocompress(solve_real *vecbivi,fortran_int vecbivisize,PetscInt mpisize,PetscInt rank,PetscInt targetrank);
 int outputs_write_csv(char *filename, char *newdatlogname, char *newdatfile,set_def *ha_set,dim_t nset, set_element *ha_setele,array_def *ha_cof,offset_t ncof,offset_t ncofele,array_def *ha_var,offset_t nvar,offset_t nvarele, elem_value *ha_cofvar);
 
+/* ============ solve_drivers.c — solution methods ======================= */
+
+/* re-apply shocks at subinterval boundaries (optionally spline-interpolated) */
 offset_t subinterval_update(PetscInt rank,char *fname,set_def *ha_set,dim_t nset, set_element *ha_setele, array_def *ha_cof,offset_t ncof,array_def *ha_var,offset_t nvar, elem_value *ha_cofvar,offset_t ncofvar,offset_t ncofele,closure_entry *ha_cgeshock,offset_t nvarele,int laA,dim_t subints,bool IsIni,int IsSplint,int nsteps);
 bool cubic_spline(solve_real* y,solve_real* x,solve_real sx0,solve_real sxn,int size,solve_real* w,int laA);
 
+/* one-step (Johansen 1960) solution of the linearized system */
 bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt* dnnz,PetscInt onz,PetscInt* onnz,Mat B,PetscInt dnzB,PetscInt* dnnzB,PetscInt onzB,PetscInt* onnzB,Vec vecb,Vec vece,PetscInt rank,PetscInt rank_hsl,PetscInt mpisize,char* tabfile, char *commsyntax,set_def *ha_set,dim_t nset, set_element *ha_setele, array_def *ha_cof,offset_t ncof,array_def *ha_var,offset_t nvar, elem_value **ha_cofvar2,offset_t ncofvar,offset_t ncofele,offset_t nvarele,closure_entry **ha_cgeshock2,offset_t alltimeset,offset_t allregset,offset_t nintraeq,dim_t matsol,PetscInt Istart,PetscInt Iend,  offset_t nreg, offset_t ntime, offset_t *ha_eqadd, offset_t ndblock, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laDi,dim_t laD,PetscReal cntl3,PetscReal cntl6,PetscBool presol,dim_t nesteddbbd,int localsize,PetscInt *ndbbddrank1,fortran_int* indata,dim_t mc66,fortran_int *ptx,struct timeval begintime,solve_real **xcf2);
+/* multi-step Gragg modified-midpoint solution with Richardson
+   extrapolation over steps1/steps2/steps3 (Pearson 1991) */
 bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A,PetscInt dnz,PetscInt* dnnz,PetscInt onz,PetscInt* onnz,Mat* B,PetscInt dnzB,PetscInt* dnnzB,PetscInt onzB,PetscInt* onnzB,Vec* vecb,Vec *vece,PetscInt rank,PetscInt rank_hsl,PetscInt mpisize,char* tabfile, char *commsyntax,set_def *ha_set,dim_t nset, set_element *ha_setele, array_def *ha_cof,offset_t ncof,array_def *ha_var,offset_t nvar, elem_value **ha_cofvar2,offset_t ncofvar,offset_t ncofele,offset_t nvarele,closure_entry **ha_cgeshock2,offset_t alltimeset,offset_t allregset,offset_t nintraeq,dim_t matsol,PetscInt Istart,PetscInt Iend,  offset_t nreg, offset_t ntime, offset_t *ha_eqadd, offset_t ndblock, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laDi,dim_t laD,PetscReal cntl3,PetscReal cntl6,PetscBool presol,dim_t nesteddbbd,int localsize,PetscInt *ndbbddrank1,fortran_int* indata,dim_t mc66,fortran_int *ptx,struct timeval begintime,dim_t subints,MPI_Fint fcomm,solve_real **xcf2,int Isbiupd);
 #endif // TEEMS_SOLVER_H_INCLUDED
 
