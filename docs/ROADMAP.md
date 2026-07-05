@@ -52,6 +52,18 @@ that spilling frees). Speed since refactor: SBBD ~5–8%; LU/DBBD neutral
 
 ## Standing investigations
 
+- `-ndbbd_bl_rank`/`-nestfile` (expert overrides: hand-assign MPI ranks
+  per NDBBD block from a CSV; default self-derives `ndbbdrank=ntime`):
+  look into how they work and where they earn their keep — plausibly
+  load-balancing heterogeneous block sizes (unbalanced regional blocks,
+  the per-time remainder blocks visible in stats.json `block_nvar`) or
+  pinning blocks on heterogeneous/cluster nodes. If a real use case
+  exists, document it and consider folding into the auto-calibration
+  (compute the assignment from measured block sizes instead of a
+  hand-written CSV); if not, candidate for removal. NB the fallback
+  `strcpy(filename,"./ndbbd_drank.csv")` in main.c is dead code — the
+  CSV is only read when `-nestfile` is explicitly passed.
+
 - NDBBD-vs-SBBD crossover at scale (medium ACTS, 8–16 ranks, cluster
   hardware) — dev-box sweep found no NDBBD win region.
 - Stiffness monitoring once adaptive RK exists (see 6.3e).
