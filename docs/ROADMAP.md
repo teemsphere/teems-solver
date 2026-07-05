@@ -47,6 +47,7 @@ that spilling frees). Speed since refactor: SBBD ~5–8%; LU/DBBD neutral
 | 6.4 | Statement completion per 6.1 ranking: full IF semantics (opcode skeleton exists: `OP_IF_*`), POSTSIM, others | each zero-cost when unused |
 | 6.5 | **Netcut enforcement** (border size = interface-problem size, governs bordered-method viability): E1 validate in `ems_model()` (error/warn on TIME×large-set variables in inter-period links); E2 auto-rewrite minimal intertemporal proxies during TAB assembly; E3 solver-side element-level border classification — E3 after 6.2, since condensation changes what reaches the border | E1 cheap, E2 sweet spot |
 | 6.6 | Cross-repo hygiene: `hsl` → `teems-solver` binary rename (touch points documented in project notes); golden refresh | coordinate with teems-R + images |
+| 6.7 | **HSL catalogue exploration** — assess additional HSL routines for speed/robustness across all solution × matrix methods; ranked shortlist with rationale in `teems-docs/hsl-catalogue-candidates.md` (top: MC64 pre-scaling, MA41/MA38 multifrontal alternative, MC33 bordered-block-triangular ordering vs netcut, HSL_MC79 Dulmage-Mendelsohn closure diagnosis). Retrieve specs/code for survivors; golden + A/B benchmark gates apply | user-requested 2026-07-05 |
 
 ## Standing investigations
 
