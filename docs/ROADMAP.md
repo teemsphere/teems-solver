@@ -6,8 +6,8 @@ and renaming — see `docs/solver-reference.md` §11–§13 and git history)
 and phase 5's measured performance work.
 
 **Standing rules**
-- Every change passes the golden suite (`.audit/verify.sh`, currently 8
-  bit-identical gates: 5 method goldens + 3 real-shock goldens) and,
+- Every change passes the golden suite (`.audit/verify.sh`, currently 9
+  bit-identical gates: 5 method + 3 real-shock + 1 GEMPACK-orientation) and,
   where performance-relevant, interleaved A/B benchmarks on the
   calibrated rigs. Benchmark only on an idle machine; use paired runs.
 - **Goal: full GEMPACK feature parity. Performance is the only veto.**
@@ -22,7 +22,7 @@ and phase 5's measured performance work.
 | id | item | status / notes |
 |---|---|---|
 | 5.5 | Golden-suite widening (real asymmetric shocks: 2D probe, 4D, swap) | **done** — 8 goldens |
-| 5.6 | 2D-shock orientation: align `shocks_read()` with GEMPACK standard; drop the compensating transpose in teems-R; land as a pair | in progress |
+| 5.6 | Shock-value ordering aligned to GEMPACK standard (all statement forms); teems-R writer paired (cee6210); golden 9 `gmshk` pins orientation; teems-R custom-shock suite 18/18 | **done** |
 | 5.7 | Netcut instrumentation: machine-readable netcut + block-size logging per run | pending (trivial; feeds 5.8 and netcut enforcement) |
 | 5.8 | `matrix_method = "auto"`: calibration sweeps (size × T/R × ranks), decision rule implemented in teems-R from deploy metadata. Current data: static → LU below ~2M eq; intertemporal → SBBD everywhere at ≤4 ranks (no NDBBD win region up to T/R=13.7; escalate NDBBD-vs-SBBD to larger models/ranks/cluster before concluding) | pending |
 | 5.9 | In-memory block-factor handoff: redesign Fortran kernel interface so factors return via memory, not `_vav/_irnv/_keep` files. Removes the page-cache competition that forces NDBBD's spill default. Constraint: factor sizes unknown pre-factorization (`laA` growth loop) → allocate-on-demand or grow-and-retry | pending (largest phase-5 effort) |

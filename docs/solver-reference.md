@@ -90,10 +90,10 @@ The solver reads a GEMPACK-style TAB subset (statement syntax per [GM]):
 - `swap` (closure) and shock statements — parsed by `closure_read()` /
   `shocks_read()` into per-element `closure_entry` records.
 
-Known deviations from GEMPACK are printed at startup, most notably:
-shocks to 2-dimensional variables use transposed orientation relative to
-GEMPACK, and intertemporal variables should be declared with minimal
-dimensionality to keep the border (netcut) small.
+Shock statement values follow GEMPACK-standard ordering (first
+subscript varies fastest; fixed dimensions collapsed to size 1).
+Startup notes remind that intertemporal variables should be declared
+with minimal dimensionality to keep the border (netcut) small.
 
 Formulas are compiled once per statement into a `formula_op` program
 (operator enum `op_code`, operand types `operand_type`) and evaluated
