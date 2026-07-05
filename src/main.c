@@ -79,7 +79,7 @@ int main(int argc,char **args) {
   PetscBool sbbd_overuser=false,nohsl=false;
   char ch='y';
   if(rank==0) {
-    printf("***********\nWarnings:\n***********\nA. This software was written by Pham Van Ha and Tom Kompas for their own research. Use it at your own risk!\nB. The shocks to only 2 dimensions variable are different from GEMPACK. In fact the matrix needs to be transposed.\nIntertemporal variables (equation) must be declared with minimum dimension to minimise\nnet cut (e.g. qo(COM,REG,TIME) must be capital(REG,TIME)=qo(\"capital\",REG,TIME)\nFor NDBBD, LA in Di is not impotant! The procedure automatically determine rank!\nTake care with text file created in windows, dos environment when using gedit. Gedit will use cr for new line! Bug!\nLaA, LaDi are very important. They control the size of temporary files. Enter smallest posible!!!\nDo you agree with the term (y/n)?\n");
+    printf("***********\nNotes:\n***********\nShock statement values follow GEMPACK ordering (first subscript varies fastest).\nIntertemporal variables (equations) should be declared with minimum dimension to minimise\nthe net cut, e.g. capital(REG,TIME)=qo(\"capital\",REG,TIME) rather than shocking qo(COM,REG,TIME).\nlaA/laDi control solver workspace and temp sizes; use the smallest that solves.\nBeware CRLF line endings in model text files.\n");
   }
   MPI_Barrier(PETSC_COMM_WORLD);
   //**************************************************************************************

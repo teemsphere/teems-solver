@@ -1753,13 +1753,11 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
               }
             }
           }
-          if (vars[j].size>0)antidim[0]=dimssize[1];
-          if (vars[j].size>1)antidim[1]=1;
-          if (vars[j].size>2)antidim[2]=antidim[0]*dimssize[0];
-          if (vars[j].size>3) {
-            for (n1=3; n1<vars[j].size; n1++) {
-              antidim[n1]=antidim[n1-1]*dimssize[n1-1];
-            }
+          /* GEMPACK-standard value ordering: first subscript varies
+             fastest (column-major), fixed dims collapsed to size 1 */
+          if (vars[j].size>0)antidim[0]=1;
+          for (n1=1; n1<vars[j].size; n1++) {
+            antidim[n1]=antidim[n1-1]*dimssize[n1-1];
           }
           k1=str_rfind_ci(linecopy,"uniform");
           if(k1>-1) {
@@ -1767,30 +1765,15 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
             for (n1=0; n1<dims; n1++) {
               l2=n1;
               if(vars[j].size>1) {
-                for (dcount=vars[j].size-1; dcount>1; dcount--) {
+                for (dcount=vars[j].size-1; dcount>=0; dcount--) {
                   if(dimindx[dcount]>-1) {
-                    arSet[dcount]=dimindx[dcount];//ha_setele[dimbegadd[dcount]+l1].setsh;
+                    arSet[dcount]=dimindx[dcount];
                   } else {
                     l1=(offset_t) l2/antidim[dcount];
                     if(supsetid[dcount]>-2)arSet[dcount]=set_elems[dimbegadd[dcount]+l1].superset_pos[supsetid[dcount]];
-                    else arSet[dcount]=dimindx[dcount];
+                    else arSet[dcount]=set_elems[dimbegadd[dcount]+l1].superset_pos[0];
                     l2=l2-l1*antidim[dcount];
                   }
-                }
-                if(dimindx[0]>-1) {
-                  arSet[0]=dimindx[0];
-                } else {
-                  l1=(offset_t) l2/antidim[0];
-                  if(supsetid[0]>-2)arSet[0]=set_elems[dimbegadd[0]+l1].superset_pos[supsetid[0]];
-                  else arSet[0]=set_elems[dimbegadd[0]+l1].superset_pos[0];//dimindx[0];
-                  l2=l2-l1*antidim[0];
-                }
-                if(dimindx[1]>-1) {
-                  arSet[1]=dimindx[1];
-                } else {
-                  l1=(offset_t) l2/antidim[1];
-                  if(supsetid[1]>-2)arSet[1]=set_elems[dimbegadd[1]+l1].superset_pos[supsetid[1]];
-                  else arSet[1]=set_elems[dimbegadd[1]+l1].superset_pos[0];//l1;//dimindx[1];
                 }
               } else {
                 arSet[0]=l2;
@@ -1816,48 +1799,15 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
               val=atof(readitem);
               l2=n1;
               if(vars[j].size>1) {
-                for (dcount=vars[j].size-1; dcount>1; dcount--) {
+                for (dcount=vars[j].size-1; dcount>=0; dcount--) {
                   if(dimindx[dcount]>-1) {
-                    arSet[dcount]=dimindx[dcount];//ha_setele[dimbegadd[dcount]+l1].setsh;
+                    arSet[dcount]=dimindx[dcount];
                   } else {
                     l1=(offset_t) l2/antidim[dcount];
                     if(supsetid[dcount]>-2)arSet[dcount]=set_elems[dimbegadd[dcount]+l1].superset_pos[supsetid[dcount]];
-                    else arSet[dcount]=dimindx[dcount];
+                    else arSet[dcount]=set_elems[dimbegadd[dcount]+l1].superset_pos[0];
                     l2=l2-l1*antidim[dcount];
                   }
-                }
-                if(vars[j].size==2){//compliance
-                if(dimindx[1]>-1) {
-                  arSet[1]=dimindx[1];
-                } else {
-                  l1=(offset_t) l2/dimssize[0];
-                  if(supsetid[1]>-2)arSet[1]=set_elems[dimbegadd[1]+l1].superset_pos[supsetid[1]];
-                  else arSet[1]=set_elems[dimbegadd[1]+l1].superset_pos[0];//dimindx[1];
-                  l2=l2-l1*dimssize[0];
-                }
-                if(dimindx[0]>-1) {
-                  arSet[0]=dimindx[0];
-                } else {
-                  l1=(offset_t) l2;
-                  if(supsetid[0]>-2)arSet[0]=set_elems[dimbegadd[0]+l1].superset_pos[supsetid[0]];
-                  else arSet[0]=set_elems[dimbegadd[0]+l1].superset_pos[0];//l1;//dimindx[0];
-                }
-                }else{
-                if(dimindx[0]>-1) {
-                  arSet[0]=dimindx[0];//ha_setele[dimbegadd[dcount]+l1].setsh;
-                } else {
-                  l1=(offset_t) l2/antidim[0];
-                  if(supsetid[0]>-2)arSet[0]=set_elems[dimbegadd[0]+l1].superset_pos[supsetid[0]];
-                  else arSet[0]=set_elems[dimbegadd[0]+l1].superset_pos[0];//dimindx[0];
-                  l2=l2-l1*antidim[0];
-                }
-                if(dimindx[1]>-1) {
-                  arSet[1]=dimindx[1];//ha_setele[dimbegadd[dcount]+l1].setsh;
-                } else {
-                  l1=(offset_t) l2/antidim[1];
-                  if(supsetid[1]>-2)arSet[1]=set_elems[dimbegadd[1]+l1].superset_pos[supsetid[1]];
-                  else arSet[1]=set_elems[dimbegadd[1]+l1].superset_pos[0];//dimindx[0];
-                }
                 }
               } else {
                 if(supsetid[0]>-2)arSet[0]=set_elems[dimbegadd[0]+l2].superset_pos[supsetid[0]];
