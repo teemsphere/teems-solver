@@ -236,7 +236,6 @@ char *str_replace_char(char *line, int finditem, int replitem);
 typedef struct
 {
   dim_t Oper;                /* enum op_code */
-  char TmpVarName[NAMESIZE];
   store_real TmpVarVal;
   dim_t Var1Type;            /* enum operand_type */
   offset_t Var1BegAdd;
@@ -260,6 +259,9 @@ typedef struct
   offset_t Var3SSIndx[MAXVARDIM];
   offset_t Var3ADims[MAXVARDIM];
   store_real Var3Val;
+  /* compile-time only (generated temp name); kept last and short so the
+     eval-hot fields above stay cache-dense */
+  char TmpVarName[64];
 } formula_op ;
 
 solve_real formula_subst_scalar(char *var2, elem_value *record, array_def *coefs,offset_t ncof);
