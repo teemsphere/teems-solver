@@ -412,7 +412,25 @@ min-of-2, production inmemory defaults): **SBBD won every shape** up to
 T/R = 13.7; NDBBD-4 approaches SBBD-2 but never passes it, and LU trails
 SBBD ~2× at larger T. At dev-box scale (≤800k equations, ≤4 ranks) no
 NDBBD-over-SBBD region exists; the question escalates to larger models
-and rank counts (see §13).
+and rank counts (see §13). SBBD also wins **single-rank** intertemporal
+runs (202k eq: SBBD-1 6.3s vs LU-1 8.1s, min-of-3 interleaved).
+
+Static LU/DBBD crossover (Johansen, min-of-reps, interleaved; 2026-07):
+
+| rig | size | regions | LU-1 | DBBD-2 | DBBD-4 | DBBD-8 |
+|---|---|---|---|---|---|---|
+| R32×medium | 1.35M eq | 33 | **12.8s** | 20.4s | 14.8s | 19.1s |
+| full×macro | 1.62M eq | 163 | 18.3s | 17.6s | **11.2s** | 14.4s |
+| R32×full | 3.37M eq | 33 | 65.7s | — | **47.6s** | 59.1s |
+| full×food | 8.32M eq | 163 | 450s | 357s | **284s** | 311s |
+
+DBBD-4 is the sweet spot on this node (DBBD-8 always slower — border
+serialization + contention). Crossover: DBBD overtakes LU by ~2M
+equations at 33 regional blocks, and already by ~1.6M at 163 blocks.
+These calibrate teems-R's `matrix_method = "auto"` rule (SBBD if
+intertemporal; else DBBD when n_tasks ≥ 2 and the deployed system ≥ 2M
+equations, or ≥ 1.5M with ≥ 100 regions; else LU — the 1.5–2M × <100
+region band is uncalibrated and deliberately falls to LU).
 
 Determinism: repeated same-binary runs are bit-identical for every
 method (basis of the golden-run verification, below).
