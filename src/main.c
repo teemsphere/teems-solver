@@ -9,6 +9,66 @@ static char help[] = "Solves a CGE model in parallel with KSP.\n\
            Input parameters include:\n\
            -None at the moment\n\n";
 
+/* Per-run ordering statistics (<solfiles>.stats.json): netcut, border
+   sizes and per-block variable/equation counts. Written before the
+   solve so failed runs still record their ordering; consumed by
+   teems-R for matrix_method calibration. Fields are null when no
+   bordered ordering was built (no -enable_time/-regset). */
+static void ordering_stats_write(cmf_file_entry *iodata, int niodata, int noutdata, int nsoldata,
+                                 long VecSize, offset_t nvarele, offset_t nexo,
+                                 dim_t matsol, char *solmed, dim_t nesteddbbd, long mpisize, dim_t mc66,
+                                 offset_t alltimeset, offset_t allregset, set_def *sets,
+                                 offset_t ntime, offset_t nreg, offset_t ndblock,
+                                 offset_t netcut, offset_t nintraeq,
+                                 offset_t *countvarintra1, offset_t *counteqnoadd) {
+  static const char *matsol_names[] = {"LU","SBBD","DBBD","NDBBD"};
+  char statspath[TABREADLINE+16];
+  int i;
+  offset_t j;
+  for (i=niodata+noutdata; i<niodata+noutdata+nsoldata; i++) {
+    if (strcmp("solfiles",iodata[i].logname)==0)break;
+  }
+  if(i<niodata+noutdata+nsoldata)strcpy(statspath,iodata[i].filname);
+  else strcpy(statspath,"solution");
+  strcat(statspath,".stats.json");
+  FILE *fp=fopen(statspath,"w");
+  if (fp==NULL) {
+    printf("Warning: cannot write ordering stats %s\n",statspath);
+    return;
+  }
+  bool bordered=alltimeset>=0||allregset>=0;
+  fprintf(fp,"{\n");
+  fprintf(fp,"  \"version\": 1,\n");
+  fprintf(fp,"  \"vecsize\": %ld,\n",VecSize);
+  fprintf(fp,"  \"nvarele\": %ld,\n",nvarele);
+  fprintf(fp,"  \"nexo\": %ld,\n",nexo);
+  fprintf(fp,"  \"matrix_method\": \"%s\",\n",(matsol>=MM_LU&&matsol<=MM_NDBBD)?matsol_names[matsol]:"unknown");
+  fprintf(fp,"  \"solution_method\": \"%s\",\n",solmed);
+  fprintf(fp,"  \"nested_dbbd\": %d,\n",(int)nesteddbbd);
+  fprintf(fp,"  \"mc66\": %d,\n",(int)mc66);
+  fprintf(fp,"  \"mpi_size\": %ld,\n",mpisize);
+  fprintf(fp,"  \"bordered\": %s,\n",bordered?"true":"false");
+  if(alltimeset>=0)fprintf(fp,"  \"time_set\": \"%s\",\n  \"ntime\": %ld,\n",sets[alltimeset].setname,ntime);
+  else fprintf(fp,"  \"time_set\": null,\n  \"ntime\": null,\n");
+  if(allregset>=0)fprintf(fp,"  \"reg_set\": \"%s\",\n  \"nreg\": %ld,\n",sets[allregset].setname,nreg);
+  else fprintf(fp,"  \"reg_set\": null,\n  \"nreg\": null,\n");
+  fprintf(fp,"  \"ndblock\": %ld,\n",ndblock);
+  if(bordered) {
+    fprintf(fp,"  \"netcut\": %ld,\n",netcut);
+    fprintf(fp,"  \"nintraeq\": %ld,\n",nintraeq);
+    fprintf(fp,"  \"border_neq\": %ld,\n",VecSize-nintraeq);
+  }
+  else {
+    fprintf(fp,"  \"netcut\": null,\n  \"nintraeq\": null,\n  \"border_neq\": null,\n");
+  }
+  fprintf(fp,"  \"block_nvar\": [");
+  for (j=0; j<ndblock; j++)fprintf(fp,"%s%ld",j?",":"",countvarintra1[j+1]-countvarintra1[j]);
+  fprintf(fp,"],\n  \"block_neq\": [");
+  for (j=0; j<ndblock; j++)fprintf(fp,"%s%ld",j?",":"",counteqnoadd[j]);
+  fprintf(fp,"]\n}\n");
+  fclose(fp);
+}
+
 #undef __FUNCT__
 #define __FUNCT__ "main"
 int main(int argc,char **args) {
@@ -1154,6 +1214,9 @@ int main(int argc,char **args) {
   if(rank==rank_hsl) {
     printf("netcut %ld nintraeq %ld\n",netcut,nintraeq);
   }
+  /* rank 0 always holds valid ordering data: rank_hsl==0 under HSL, and
+     under nohsl every rank computes the full ordering */
+  if(rank==0)ordering_stats_write(iodata,niodata,noutdata,nsoldata,(long)VecSize,nvarele,nexo,matsol,solmed,nesteddbbd,(long)mpisize,mc66,alltimeset,allregset,sets,ntime,nreg,ndblock,netcut,nintraeq,countvarintra1,counteqnoadd);
   free(eq_defs);
   free(eq_time_offsets);
   free(eq_reg_offsets);

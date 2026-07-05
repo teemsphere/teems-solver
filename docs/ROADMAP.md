@@ -23,7 +23,7 @@ and phase 5's measured performance work.
 |---|---|---|
 | 5.5 | Golden-suite widening (real asymmetric shocks: 2D probe, 4D, swap) | **done** — 8 goldens |
 | 5.6 | Shock-value ordering aligned to GEMPACK standard (all statement forms); teems-R writer paired (cee6210); golden 9 `gmshk` pins orientation; teems-R custom-shock suite 18/18 | **done** |
-| 5.7 | Netcut instrumentation: machine-readable netcut + block-size logging per run | pending (trivial; feeds 5.8 and netcut enforcement) |
+| 5.7 | Netcut instrumentation: machine-readable netcut + block-size logging per run | **done** — `<solfiles>.stats.json` written by rank 0 at ordering time (pre-solve): size/method/netcut/border/per-block var+eq counts; excluded from golden manifests |
 | 5.8 | `matrix_method = "auto"`: calibration sweeps (size × T/R × ranks), decision rule implemented in teems-R from deploy metadata. Current data: static → LU below ~2M eq; intertemporal → SBBD everywhere at ≤4 ranks (no NDBBD win region up to T/R=13.7; escalate NDBBD-vs-SBBD to larger models/ranks/cluster before concluding) | pending |
 | 5.9 | In-memory block-factor handoff: redesign Fortran kernel interface so factors return via memory, not `_vav/_irnv/_keep` files. Removes the page-cache competition that forces NDBBD's spill default. Constraint: factor sizes unknown pre-factorization (`laA` growth loop) → allocate-on-demand or grow-and-retry | pending (largest phase-5 effort) |
 | 5.10 | Interpreter deep-compaction: interleaved per-dim operand records (`dim_addr`) in `formula_op`; follows the 1416→968B compaction (~1% win). `formula_eval` is 15.6% of wall at scale | pending (medium risk — hottest loop) |

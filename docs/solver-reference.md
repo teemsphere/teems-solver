@@ -63,6 +63,7 @@ Solver outputs, consumed by `ems_compose()`:
 | `.set` | `nset × set_def` — set definitions |
 | `.sel` | `nsetspace × set_element` — set elements with superset positions |
 | `.mds` | 4 × long: `nsetspace, nvar, nvarele, nset` |
+| `.stats.json` | per-run ordering statistics: system size, method, `netcut`, border sizes, per-block variable/equation counts (null/empty when no bordered ordering was built). Written before the solve, so failed runs still record their ordering; feeds `matrix_method` auto-calibration |
 
 The structs are written raw; teems-R's `parse_solution.cpp` mirrors their
 layout, so `array_def`/`set_def`/`set_element` are an ABI shared with
@@ -120,7 +121,8 @@ Generated temporaries use the reserved prefixes `gen_sum`, `gen_par`,
    square; shocks divided across subintervals when `-nsubints > 1`.
 7. **Equation ordering** (`equation_order_read[_nested]`) — assigns
    equations/variables to diagonal blocks by region/time per the matrix
-   method; computes `netcut` (border size) [HK16 §5].
+   method; computes `netcut` (border size) [HK16 §5]. Rank 0 records the
+   ordering to `<solfiles>.stats.json` (`ordering_stats_write`, §1).
 8. **Jacobian preallocation and fill** (`jacobian_preallocate`,
    `jacobian_fill`) — PETSc AIJ matrices A (endogenous) and B
    (exogenous columns → RHS).
