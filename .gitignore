@@ -4,4 +4,5 @@ singularity
 *.code-workspace
 *.log
 beta
-build_push.sh.audit/
+build_push.sh
+.audit/
