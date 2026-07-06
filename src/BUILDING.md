@@ -37,20 +37,22 @@ time; see `docker/expedited_build/Dockerfile` for the canonical flow:
 ## -inmemory guidance
 
 `-inmemory 1` keeps the value arrays resident (skipping the per-step
-scratch spills) and, unless `-tempdir`/`TMPDIR` is set, places scratch on
-tmpfs. Default is method-dependent: **on** for every method except NDBBD.
-LU and SBBD write nothing to scratch in this mode (MP48 holds SBBD
-factors in memory, sized by laA/laDi) and gain ~7%; DBBD measures
-neutral on both static (its production domain) and intertemporal
-benchmarks; NDBBD stays **off** because its block-factor file traffic
-wants the page cache that array spilling frees. The Johansen disk path
-also orphans its spill files (~76MB/run at 1.35M equations) — residency
-avoids that. Measured on a
-4.4M-equation intertemporal run (2 ranks, 30GB node): SBBD ~7% faster
-with no scratch debris; DBBD neutral; NDBBD ~6-11% slower with residency
-forced on. The sign for DBBD/NDBBD depends on factor-file traffic vs
-free RAM, so on large-memory nodes forcing `-inmemory 1` may win there
-too.
+scratch spills), keeps the DBBD/NDBBD block factors resident (since the
+5.9 handoff redesign; `-inmemory 0` writes the legacy `_vav/_irnv/_keep`
+scratch files instead), and, unless `-tempdir`/`TMPDIR` is set, places
+scratch on tmpfs. Default is method-dependent: **on** for every method
+except NDBBD. LU and SBBD write nothing to scratch in this mode (MP48
+holds SBBD factors in memory, sized by laA/laDi) and gain ~7%; DBBD
+measures neutral on both static (its production domain) and
+intertemporal benchmarks and no longer touches scratch for factors.
+NDBBD's **off** default predates the factor-handoff redesign (its
+rationale — factor-file traffic competing for page cache — no longer
+applies in resident mode, which eliminates that traffic entirely,
+~825MB/solve at 202k equations, for +22MB RSS/rank); the default awaits
+an idle-machine A/B at 4.4M-equation scale before flipping. NDBBD's
+`_bivi/_rbvi/_cbvi` and `_rank/_row/_col` interface spills (~65MB/solve
+at 202k eq) remain in both modes. The Johansen disk path also orphans
+its spill files (~76MB/run at 1.35M equations) — residency avoids that.
 Override with an explicit `-inmemory 0/1`; a memory-availability check
 falls back to spilling when the resident estimate exceeds half of
 MemAvailable.

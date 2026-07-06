@@ -377,20 +377,29 @@ Two spill classes exist:
    the value arrays (`elem_vals`, `closure_vals`) and Mmid step state
    (`clag1`, `varchange`, `xc*`) are written to `_temp*.bin` files and
    freed, then re-read after the solve.
-2. **Block factor handoff** (DBBD/NDBBD): the Fortran kernels write LU
-   factors per block (`_vav/_irnv/_keep`), and the C side writes
-   interface products (`_bivi/_rbvi/_cbvi`, `_rank/_row/_col`); re-read
-   during back-solve, removed afterwards.
+2. **Block factor handoff** (DBBD/NDBBD): per-block LU factors
+   (`VA/IRN/KEEP`). Since the 5.9 redesign the Fortran kernels
+   (`SPEC48M_MSOL`, `PREP48M_MSOL`, `PREP48_ALU1`) return factors purely
+   through caller-owned buffers (`KEEP` bound `M+9N+7`, live length in
+   `INSIZE[12]`); the **C side** then either holds them resident
+   (`-inmemory 1`: `fac_*` arrays in `dbbd_solve`, the `ndbbd_fac_*`
+   store spanning the `ndbbd_presolve`→`ndbbd_solve` pair) or writes the
+   legacy `_vav/_irnv/_keep` scratch files (`-inmemory 0`; same names
+   and bytes). The C-written NDBBD interface products
+   (`_bivi/_rbvi/_cbvi`, `_rank/_row/_col`) still spill in both modes —
+   measured ~65MB per 202k-eq solve vs the ~825MB of factor traffic
+   the resident mode eliminates; making them resident is a follow-up
+   (their `_rank` rewrite-under-one-name state machine needs care).
 
-`-inmemory 1` disables class 1 entirely (arrays stay resident) and
-relocates scratch to tmpfs (`/dev/shm`) unless `-tempdir`/`TMPDIR` is
-pinned. **Default: on for LU, SBBD, and DBBD; off for NDBBD** — NDBBD's
-factor traffic (measured 17× peak RSS) competes for the page cache that
-array spilling frees, and forcing residency measured 6–11% slower at
-4.4M equations on a 30GB node, while SBBD gained ~7% and DBBD was
-neutral on both domains. A startup check estimates residency cost and
-falls back to spilling (with a warning) if it exceeds half of
-`MemAvailable`. Explicit `-inmemory 0/1` always wins.
+`-inmemory 1` disables class 1 entirely (arrays stay resident), keeps
+class-2 factors resident, and relocates scratch to tmpfs (`/dev/shm`)
+unless `-tempdir`/`TMPDIR` is pinned. **Default: on for LU, SBBD, and
+DBBD; off for NDBBD** — the NDBBD default predates the 5.9 factor
+handoff (its rationale — factor-file traffic needing the page cache —
+no longer applies in resident mode) and awaits an idle-machine A/B at
+bench-inter-L scale before flipping. A startup check estimates
+residency cost and falls back to spilling (with a warning) if it
+exceeds half of `MemAvailable`. Explicit `-inmemory 0/1` always wins.
 
 ## 9. Measured characteristics
 

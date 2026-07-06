@@ -1,6 +1,74 @@
 #include <teems_solver.h>
 #include <hsl_kernels.h>
 
+/* ==== NDBBD in-memory factor store (5.9) ====
+   Per-block MA48 factor copies (VA/IRN/KEEP) held between the
+   factorizations (regional blocks in ndbbd_presolve, interface blocks
+   in ndbbd_solve's prep phase) and their consumers later in the same
+   linear solve. Active only under -inmemory; disk mode keeps the
+   legacy _vav/_irnv/_keep scratch files. Indexed by the rank-local
+   block id (j4); puts from OpenMP loops touch distinct slots. */
+static int ndbbd_fac_n=0;
+static int **ndbbd_fac_irn=NULL,**ndbbd_fac_keep=NULL;
+static solve_real **ndbbd_fac_va=NULL;
+
+static void ndbbd_fac_init(int n) {
+  int i;
+  if(ndbbd_fac_n<n) {
+    ndbbd_fac_irn=realloc(ndbbd_fac_irn,n*sizeof(int*));
+    ndbbd_fac_keep=realloc(ndbbd_fac_keep,n*sizeof(int*));
+    ndbbd_fac_va=realloc(ndbbd_fac_va,n*sizeof(solve_real*));
+    for(i=ndbbd_fac_n; i<n; i++) {
+      ndbbd_fac_irn[i]=NULL;
+      ndbbd_fac_keep[i]=NULL;
+      ndbbd_fac_va[i]=NULL;
+    }
+    ndbbd_fac_n=n;
+  }
+}
+
+static void ndbbd_fac_put(int idx,int *irn,int *keep,solve_real *va,long la,int t) {
+  ndbbd_fac_irn[idx]=realloc(ndbbd_fac_irn[idx],la*sizeof(int));
+  memcpy(ndbbd_fac_irn[idx],irn,la*sizeof(int));
+  ndbbd_fac_keep[idx]=realloc(ndbbd_fac_keep[idx],t*sizeof(int));
+  memcpy(ndbbd_fac_keep[idx],keep,t*sizeof(int));
+  ndbbd_fac_va[idx]=realloc(ndbbd_fac_va[idx],la*sizeof(solve_real));
+  memcpy(ndbbd_fac_va[idx],va,la*sizeof(solve_real));
+}
+
+static void ndbbd_fac_drop(int idx) {
+  free(ndbbd_fac_irn[idx]);
+  ndbbd_fac_irn[idx]=NULL;
+  free(ndbbd_fac_keep[idx]);
+  ndbbd_fac_keep[idx]=NULL;
+  free(ndbbd_fac_va[idx]);
+  ndbbd_fac_va[idx]=NULL;
+}
+
+/* hand one block's factors off: resident copy under -inmemory,
+   otherwise the legacy scratch files the Fortran writers used to
+   produce (same names, same bytes) */
+static void ndbbd_fac_emit(int rank,int idx,int *irn,int *keep,solve_real *va,long la,int t) {
+  if(inmemory) {
+    ndbbd_fac_put(idx,irn,keep,va,la,t);
+    return;
+  }
+  char fn[NAMESIZE+32];
+  FILE *fp;
+  sprintf(fn,"%s_vav%04d%04d.bin",scratch_dir,rank,idx);
+  fp=fopen(fn,"wb");
+  fwrite(va,sizeof(solve_real),la,fp);
+  fclose(fp);
+  sprintf(fn,"%s_irnv%04d%04d.bin",scratch_dir,rank,idx);
+  fp=fopen(fn,"wb");
+  fwrite(irn,sizeof(int),la,fp);
+  fclose(fp);
+  sprintf(fn,"%s_keep%04d%04d.bin",scratch_dir,rank,idx);
+  fp=fopen(fn,"wb");
+  fwrite(keep,sizeof(int),t,fp);
+  fclose(fp);
+}
+
 int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscInt Istart, PetscInt Iend,int *row_order,int *col_order, offset_t ndblock,int *block_sizes, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laD,PetscReal cntl3) {//,bool iter
   IS *rowindices,*colindices,*Cindices,*Bindices,*BBindices,*BBiindices;
   const PetscInt *nindices;
@@ -79,6 +147,16 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
   offblockrow[0]=0;
   for(j=0; j<ndblock; j++)offblockrow[j+1]=offblockrow[j]+counteqnoadd[j]-block_sizes[j];
 
+  /* factor handoff between the block-factorization and back-solve
+     phases: resident buffers under -inmemory, legacy _irnv/_keep/_vav
+     scratch files otherwise (same bytes the Fortran writers produced) */
+  int **fac_irn=NULL,**fac_keep=NULL;
+  solve_real **fac_va=NULL;
+  if(inmemory) {
+    fac_irn=(int**)calloc(nmatinplus,sizeof(int*));
+    fac_keep=(int**)calloc(nmatinplus,sizeof(int*));
+    fac_va=(solve_real**)calloc(nmatinplus,sizeof(solve_real*));
+  }
   char **fn01= (char**)calloc(nmatinplus,sizeof(char*));
   for (i=0; i<nmatinplus; i++) fn01[i] = (char*)calloc(1024,sizeof(char));
   char **fn02= (char**)calloc(nmatinplus,sizeof(char*));
@@ -400,12 +478,31 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
       windx++;
       if(windx==eindx)windx=bindx;
       xi1point=xi1+xi1indx;
-      spec48m_msol_(insize+j1*insizes,irn,jcn,values,yi1[j1],xi1point,aic,ajc,valsc,ai,aj,vals,vecbivi,bivinzrow,bivinzcol);
+      int *keep=(int *) calloc (nrow+9*ncol+7,sizeof(int));/* KEEP bound, ICNTL(6)=1; live length returned in insize[12] */
+      spec48m_msol_(insize+j1*insizes,irn,jcn,values,yi1[j1],xi1point,aic,ajc,valsc,ai,aj,vals,vecbivi,bivinzrow,bivinzcol,keep);
       MatDestroy(&submatCT);
       free(yi1[j1]);
-      free(irn);
       free(jcn);
-      free(values);
+      if(inmemory) {
+        fac_irn[j1]=irn;
+        fac_keep[j1]=keep;
+        fac_va[j1]=values;
+      }
+      else {
+        FILE *ffp;
+        ffp=fopen(fn03[j1],"wb");
+        fwrite(values,sizeof(solve_real),lasize,ffp);
+        fclose(ffp);
+        ffp=fopen(fn01[j1],"wb");
+        fwrite(irn,sizeof(int),lasize,ffp);
+        fclose(ffp);
+        ffp=fopen(fn02[j1],"wb");
+        fwrite(keep,sizeof(int),insize[j1*insizes+12],ffp);
+        fclose(ffp);
+        free(irn);
+        free(keep);
+        free(values);
+      }
       //Multiply Bi by ui:
       for(i=0; i<nrowb-1; i++) {
         for(j=ai[i]; j<ai[i+1]; j++) {
@@ -712,26 +809,34 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
   for(j1=0; j1<nmatinplus; j1++) {
     if(j1<nmatin) {
       solve_real *biui0= (solve_real *) calloc (block_sizes[j1+begblock[rank]],sizeof(solve_real));
-
-      fp1 = fopen(fn01[j1], "rb");
-      if (fp1==NULL)printf("File opening error\n");
-      fp2 = fopen(fn02[j1], "rb");
-      if (fp2==NULL)printf("File opening error\n");
-      fp3 = fopen(fn03[j1], "rb");
-      if (fp3==NULL)printf("File opening error\n");
+      int *irne,*keep;
+      solve_real *vale;
       la1=ceil((insize[j1*insizes+9]/100.0)*insize[j1*insizes+2]);
-      int *irne = (int*)calloc(la1,sizeof(int));
-      int *keep = (int*)calloc(insize[j1*insizes+12],sizeof(int));
-      solve_real *vale = (solve_real*)calloc(la1,sizeof(solve_real));
-      freadresult=fread(irne,sizeof(int),la1,fp1);
-      freadresult=fread(keep,sizeof(int),insize[j1*insizes+12],fp2);
-      freadresult=fread(vale,sizeof(solve_real),la1,fp3);
-      fclose(fp1);
-      fclose(fp2);
-      fclose(fp3);
-      remove(fn01[j1]);
-      remove(fn02[j1]);
-      remove(fn03[j1]);
+      if(inmemory) {
+        irne=fac_irn[j1];
+        keep=fac_keep[j1];
+        vale=fac_va[j1];
+      }
+      else {
+        fp1 = fopen(fn01[j1], "rb");
+        if (fp1==NULL)printf("File opening error\n");
+        fp2 = fopen(fn02[j1], "rb");
+        if (fp2==NULL)printf("File opening error\n");
+        fp3 = fopen(fn03[j1], "rb");
+        if (fp3==NULL)printf("File opening error\n");
+        irne = (int*)calloc(la1,sizeof(int));
+        keep = (int*)calloc(insize[j1*insizes+12],sizeof(int));
+        vale = (solve_real*)calloc(la1,sizeof(solve_real));
+        freadresult=fread(irne,sizeof(int),la1,fp1);
+        freadresult=fread(keep,sizeof(int),insize[j1*insizes+12],fp2);
+        freadresult=fread(vale,sizeof(solve_real),la1,fp3);
+        fclose(fp1);
+        fclose(fp2);
+        fclose(fp3);
+        remove(fn01[j1]);
+        remove(fn02[j1]);
+        remove(fn03[j1]);
+      }
       Mat_SeqAIJ         *ac=(Mat_SeqAIJ*)submatC[j1]->data;//*aa=subA->data;
       ai= ac->i;
       aj= ac->j;
@@ -754,6 +859,11 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
       free(irne);
       free(keep);
       free(vale);
+      if(inmemory) {
+        fac_irn[j1]=NULL;
+        fac_keep[j1]=NULL;
+        fac_va[j1]=NULL;
+      }
       free(be0);
       ISGetIndices(colindices[j1],&nindices);
       xi1point=xi1+xi1indx;
@@ -785,6 +895,11 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
   free(fn01);
   free(fn02);
   free(fn03);
+  if(inmemory) {
+    free(fac_irn);
+    free(fac_keep);
+    free(fac_va);
+  }
   for (i=0; i<nmatin; i++) {
     ierr = ISDestroy(&colindices[i]);
     CHKERRQ(ierr);
@@ -830,6 +945,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
   for(i=0; i<mpisize; i++)if(rank+1<=ntime-mpisize*nmatint)nmatint++;
   nmatin=(nreg+1)*nmatint;
   nmatinplus=(nreg+1)*nmatinplust;
+  if(inmemory)ndbbd_fac_init(nmatin);
   begblock[rank]=nmatin;
   printf("rank %d nmatin %d nmatint %d nmplus %d\n",rank,nmatin,nmatint,nmatinplus);
   for(i=0; i<mpisize; i++) {
@@ -1247,6 +1363,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
       insize[j4*insizes+7]=ncolb;//nrowb;
       insize[j4*insizes+8]=nz;
       prep48m_msol_(insize+j4*insizes,irn,jcn,values,aic,ajc,valsc,ai,aj,vals,vecbivi,bivinzrow,bivinzcol,jcnb1,sol48,b48,w51,iw51,keep);
+      ndbbd_fac_emit(rank,j4,irn,keep,values,insize[j4*insizes+16],insize[j4*insizes+12]);
       insize[j4*insizes+15]=0;
       MatDestroy(&submatCT);
       MatDestroy(&submatBij[j4][0]);//1
@@ -1652,6 +1769,7 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
   for(i=0; i<mpisize; i++)if(rank+1<=ntime-mpisize*nmatint)nmatint++;
   nmatin=(nreg+1)*nmatint;
   nmatinplus=(nreg+1)*nmatinplust;
+  if(inmemory)ndbbd_fac_init(nmatin);
   begblock[rank]=nmatin;
   printf("rank %d nmatin %d nmatint %d nmplus %d\n",rank,nmatin,nmatint,nmatinplus);
   for(i=0; i<mpisize; i++) {
@@ -2246,6 +2364,7 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
     windx++;
     if(windx==eindx)windx=bindx;
       prep48_alu1_(insize+j4*insizes,irn1,jcn1,vecbivi0,fw,fiw,fkeep);
+    ndbbd_fac_emit(rank,j4,irn1,fkeep,vecbivi0,insize[j4*insizes+16],insize[j4*insizes+12]);
     printf("rank %d ok0 nz %ld nzmax %ld ldsize %ld!!!!!!!!\n",rank,nz1,insizeda2,ldsize);
   }
   printf("rank %d ok1!!!!!!!!\n",rank);
@@ -2425,7 +2544,12 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
       insize[j2*insizes+15]=j2%90+7;
       if(i!=nreg&&(submatCij[j2][0]->rmap->n)>maxrowcij)maxrowcij=submatCij[j2][0]->rmap->n;
       la1=ceil((insize[j2*insizes+9]/100.0)*insize[j2*insizes+2]);
-      if(isLinux==0) {
+      if(inmemory) {/* alias the resident factors; per-element frees are skipped below */
+        irnereg[i]=ndbbd_fac_irn[j2];
+        keepreg[i]=ndbbd_fac_keep[j2];
+        valereg[i]=ndbbd_fac_va[j2];
+      }
+      else if(isLinux==0) {
         nfp1[i] = fopen(fn01[j2], "rb");
         if (nfp1[i]==NULL)printf("File opening error\n");
         irnereg[i] = realloc(irnereg[i],la1*sizeof(int));//(int*)calloc(la1,sizeof(int));
@@ -2498,6 +2622,7 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
   free(w);
   free(iw);
   for(i=0; i<nreg+1; i++) {
+    if(inmemory)break;/* elements alias the resident store */
     free(irnereg[i]);//= (int*)calloc(1,sizeof(int));
     free(keepreg[i]);//= (int*)calloc(1,sizeof(int));
     free(valereg[i]);// = (ha_cgetype*)calloc(1,sizeof(ha_cgetype));
@@ -2802,7 +2927,22 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
     spar_mulnoadd_(xd,&nrow,&nz,ai,aj,vals,be0);
     MatDestroy(&submatC[j1]);
     ifremove=true;
-    ndbbd_block_solve(rank,j2,nreg,insize,insizes,submatCij,submatBij,be0,biui0,ifremove,fn01,fn02,fn03);
+    if(inmemory) {
+      /* back-substitute from the resident store, then drop this
+         window's factors (the ifremove equivalent) */
+      int icntl2[20],info2[20],mrc=0;
+      solve_real cntl2[10],rinfo2[10],error12[3];
+      for(i=0; i<nreg; i++)if((submatCij[j2+i][0]->rmap->n)>mrc)mrc=submatCij[j2+i][0]->rmap->n;
+      solve_real *b02=(solve_real*)calloc(mrc,sizeof(solve_real));
+      solve_real *w2=(solve_real*)calloc(4*maxcolc,sizeof(solve_real));
+      int *iw2=(int*)calloc(maxcolc,sizeof(int));
+      ndbbd_block_solve_mem(rank,j2,nreg,insize,insizes,submatCij,submatBij,be0,biui0,ndbbd_fac_irn+j2,ndbbd_fac_keep+j2,ndbbd_fac_va+j2,cntl2,rinfo2,error12,icntl2,info2,w2,iw2,b02);
+      free(b02);
+      free(w2);
+      free(iw2);
+      for(i=0; i<nreg+1; i++)ndbbd_fac_drop(j2+i);
+    }
+    else ndbbd_block_solve(rank,j2,nreg,insize,insizes,submatCij,submatBij,be0,biui0,ifremove,fn01,fn02,fn03);
     for(i=0; i<nreg; i++) {
       MatDestroy(&submatCij[j2+i][0]);
       MatDestroy(&submatBij[j2+i][0]);

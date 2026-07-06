@@ -379,12 +379,12 @@ END SUBROUTINE SPEC51M_RANK
 !END SUBROUTINE SPEC48_MSOL2
 
 
-SUBROUTINE SPEC48M_MSOL(INSIZE,IRN,JCN,VA,B,X,IRNC,JCNC,VAC,IRNB,JCNB,VALUESB,VECBIVI,BIVINZROW0,BIVINZCOL0)!,IRNV,JCNV,VAV
+SUBROUTINE SPEC48M_MSOL(INSIZE,IRN,JCN,VA,B,X,IRNC,JCNC,VAC,IRNB,JCNB,VALUESB,VECBIVI,BIVINZROW0,BIVINZCOL0,KEEP)!,IRNV,JCNV,VAV
   use constants
   IMPLICIT NONE
 
   integer NEFAC,JOB
-  integer(4) JCN(*),IRN(*),INSIZE(*),BIVINZROW0(*),BIVINZCOL0(*)!,JCNV(*),IRNV(*)
+  integer(4) JCN(*),IRN(*),INSIZE(*),BIVINZROW0(*),BIVINZCOL0(*),KEEP(*)!,JCNV(*),IRNV(*)
   integer(4)IRNB(*),JCNB(*)
   integer(4) JCNC(*),IRNC(*)
   integer M,N,NE,T,NC,MC,NEC,RANK,J1!,NV,MV,NEV
@@ -392,12 +392,9 @@ SUBROUTINE SPEC48M_MSOL(INSIZE,IRN,JCN,VA,B,X,IRNC,JCNC,VAC,IRNB,JCNB,VALUESB,VE
   !DOUBLE PRECISION LOGDET,SGNDET!,VAV(*)real (8)
   integer LA, MAXN,NBIVI,MBIVI
   integer(4) I,J,L,L1,L2,L3,L4,L5,M0,M1,M2,M3,M4,M5,MB,NB,NEB,J2,J3
-  LOGICAL TRANS,checksol,isopen
+  LOGICAL TRANS,checksol
   real(kind=DPC), pointer :: CNTL(:),RINFO(:),W(:),ERROR1(:),SOL(:)!,VOUT(:)!,RHS(:)A(:),
-  integer, pointer :: ICNTL(:),INFO(:),IW(:),KEEP(:),JCNB1(:)!,IRNOUT(:),JCNOUT(:)!,JCN1(:),IRN1(:)
-  character(len=1024) :: filename
-  character(len=512) :: scrdir
-  integer :: slen
+  integer, pointer :: ICNTL(:),INFO(:),IW(:),JCNB1(:)!,IRNOUT(:),JCNOUT(:)!,JCN1(:),IRN1(:)
   M=INSIZE(1)
   N=INSIZE(2)
   NE=INSIZE(3)
@@ -442,7 +439,8 @@ SUBROUTINE SPEC48M_MSOL(INSIZE,IRN,JCN,VA,B,X,IRNC,JCNC,VAC,IRNB,JCNB,VALUESB,VE
   ENDIF
   T=M+5*N+4*N/ICNTL(6)+7
   INSIZE(13)=T
-  allocate(KEEP(T))
+  ! KEEP is caller-allocated (bound M+9*N+7, i.e. ICNTL(6)=1); factors
+  ! (VA/IRN/KEEP) return to C in place -- no scratch files
   JOB=1
   IF (FSORD.EQ.1) THEN
     CALL MA48AD(M,N,NE,1,LA,VA,IRN,JCN,KEEP,CNTL,ICNTL,IW,INFO,RINFO)
@@ -556,51 +554,8 @@ SUBROUTINE SPEC48M_MSOL(INSIZE,IRN,JCN,VA,B,X,IRNC,JCNC,VAC,IRNB,JCNB,VALUESB,VE
               end do
         end if
     end if
-  J=INSIZE(16)
-  inquire(unit=J, opened=isopen)
-  DO WHILE (isopen)
-    J=J+1
-    if(J.EQ.99) then 
-      J=7
-    end if
-    inquire(unit=J, opened=isopen)
-  END DO
-  write (filename, "(A4,I4.4,I4.4,A4)") "_vav",RANK,J1,".bin"
-  call get_environment_variable("TEEMS_SCRATCH", scrdir, slen)
-  if (slen>0) filename = scrdir(1:slen)//trim(filename)
-  OPEN(J, FILE=filename, STATUS='UNKNOWN', ACCESS='STREAM')
-  WRITE (J) VA(1:LA)
-  CLOSE(J)
-  inquire(unit=J, opened=isopen)
-  DO WHILE (isopen)
-    J=J+1
-    if(J.EQ.99) then 
-      J=7
-    end if
-    inquire(unit=J, opened=isopen)
-  END DO
-  write (filename, "(A5,I4.4,I4.4,A4)") "_irnv",RANK,J1,".bin"
-  call get_environment_variable("TEEMS_SCRATCH", scrdir, slen)
-  if (slen>0) filename = scrdir(1:slen)//trim(filename)
-  OPEN(J, FILE=filename, STATUS='UNKNOWN', ACCESS='STREAM')
-  WRITE (J) IRN(1:LA)
-  CLOSE(J)
-  inquire(unit=J, opened=isopen)
-  DO WHILE (isopen)
-    J=J+1
-    if(J.EQ.99) then 
-      J=7
-    end if
-    inquire(unit=J, opened=isopen)
-  END DO
-  write (filename, "(A5,I4.4,I4.4,A4)") "_keep",RANK,J1,".bin"
-  call get_environment_variable("TEEMS_SCRATCH", scrdir, slen)
-  if (slen>0) filename = scrdir(1:slen)//trim(filename)
-  OPEN(J, FILE=filename, STATUS='UNKNOWN', ACCESS='STREAM')
-  WRITE (J) KEEP(1:T)
-  CLOSE(J)
   deallocate(CNTL,RINFO,W,ERROR1,SOL,JCNB1)!,RHSA,
-  deallocate(ICNTL,INFO,IW,KEEP)!IRN1,,JCNOUT
+  deallocate(ICNTL,INFO,IW)!IRN1,,JCNOUT
 END SUBROUTINE SPEC48M_MSOL
 
 
@@ -1097,49 +1052,9 @@ SUBROUTINE PREP48_ALU1(INSIZE,IRN,JCN,VA,W,IW,KEEP)
     write(*,"(A,i5)") 'RANK',INFO(5)
     STOP
   END IF
-  J=INSIZE(16)
-  inquire(unit=J, opened=isopen)
-  DO WHILE (isopen)
-    J=J+1
-    if(J.EQ.99) then 
-      J=7
-    end if
-    inquire(unit=J, opened=isopen)
-  END DO
-  write (filename, "(A4,I4.4,I4.4,A4)") "_vav",RANK,J1,".bin"
-  call get_environment_variable("TEEMS_SCRATCH", scrdir, slen)
-  if (slen>0) filename = scrdir(1:slen)//trim(filename)
-  OPEN(J, FILE=filename, STATUS='UNKNOWN', ACCESS='STREAM')
-  WRITE (J) VA(1:LA)
-  CLOSE(J)
-  inquire(unit=J, opened=isopen)
-  DO WHILE (isopen)
-    J=J+1
-    if(J.EQ.99) then 
-      J=7
-    end if
-    inquire(unit=J, opened=isopen)
-  END DO
-  write (filename, "(A5,I4.4,I4.4,A4)") "_irnv",RANK,J1,".bin"
-  call get_environment_variable("TEEMS_SCRATCH", scrdir, slen)
-  if (slen>0) filename = scrdir(1:slen)//trim(filename)
-  OPEN(J, FILE=filename, STATUS='UNKNOWN', ACCESS='STREAM')
-  WRITE (J) IRN(1:LA)
-  CLOSE(J)
-  inquire(unit=J, opened=isopen)
-  DO WHILE (isopen)
-    J=J+1
-    if(J.EQ.99) then 
-      J=7
-    end if
-    inquire(unit=J, opened=isopen)
-  END DO
-  write (filename, "(A5,I4.4,I4.4,A4)") "_keep",RANK,J1,".bin"
-  call get_environment_variable("TEEMS_SCRATCH", scrdir, slen)
-  if (slen>0) filename = scrdir(1:slen)//trim(filename)
-  OPEN(J, FILE=filename, STATUS='UNKNOWN', ACCESS='STREAM')
-  WRITE (J) KEEP(1:T)
-  CLOSE(J)
+  ! factors (VA/IRN/KEEP, extents LA and T=INSIZE(13)) return to the
+  ! caller in place -- C decides between resident handoff and the
+  ! legacy _vav/_irnv/_keep scratch files
   deallocate(CNTL,RINFO)!,W)
   deallocate(ICNTL,INFO)!,IW,KEEP)
 END SUBROUTINE PREP48_ALU1
@@ -1294,52 +1209,9 @@ SUBROUTINE PREP48M_MSOL(INSIZE,IRN,JCN,VA,IRNC,JCNC,VAC,IRNB,JCNB,VALUESB,VECBIV
               end do
         end if
     end if
-  J=INSIZE(16)
-    if(J.GT.98) then 
-      J=7
-    end if
-  inquire(unit=J, opened=isopen)
-  DO WHILE (isopen)
-    J=J+1
-    if(J.EQ.99) then 
-      J=7
-    end if
-    inquire(unit=J, opened=isopen)
-  END DO
-  write (filename, "(A4,I4.4,I4.4,A4)") "_vav",RANK,J1,".bin"
-  call get_environment_variable("TEEMS_SCRATCH", scrdir, slen)
-  if (slen>0) filename = scrdir(1:slen)//trim(filename)
-  OPEN(J, FILE=filename, STATUS='UNKNOWN', ACCESS='STREAM')
-  WRITE (J) VA(1:LA)
-  CLOSE(J)
-  inquire(unit=J, opened=isopen)
-  DO WHILE (isopen)
-    J=J+1
-    if(J.EQ.99) then 
-      J=7
-    end if
-    inquire(unit=J, opened=isopen)
-  END DO
-  write (filename, "(A5,I4.4,I4.4,A4)") "_irnv",RANK,J1,".bin"
-  call get_environment_variable("TEEMS_SCRATCH", scrdir, slen)
-  if (slen>0) filename = scrdir(1:slen)//trim(filename)
-  OPEN(J, FILE=filename, STATUS='UNKNOWN', ACCESS='STREAM')
-  WRITE (J) IRN(1:LA)
-  CLOSE(J)
-  inquire(unit=J, opened=isopen)
-  DO WHILE (isopen)
-    J=J+1
-    if(J.EQ.99) then 
-      J=7
-    end if
-    inquire(unit=J, opened=isopen)
-  END DO
-  write (filename, "(A5,I4.4,I4.4,A4)") "_keep",RANK,J1,".bin"
-  call get_environment_variable("TEEMS_SCRATCH", scrdir, slen)
-  if (slen>0) filename = scrdir(1:slen)//trim(filename)
-  OPEN(J, FILE=filename, STATUS='UNKNOWN', ACCESS='STREAM')
-  WRITE (J) KEEP(1:T)
-  CLOSE(J)
+  ! factors (VA/IRN/KEEP, extents LA and T=INSIZE(13)) return to the
+  ! caller in place -- C decides between resident handoff and the
+  ! legacy _vav/_irnv/_keep scratch files
   deallocate(CNTL,RINFO,ERROR1)!,RHSA,,SOL,JCNB1,B,W
   deallocate(ICNTL,INFO)!IRN1,,JCNOUT,IW,KEEP
 END SUBROUTINE PREP48M_MSOL
