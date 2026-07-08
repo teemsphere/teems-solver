@@ -1344,7 +1344,7 @@ int formula_compile_if(char *fomulain, set_def *sets,int nif,int ipar,array_def 
   ops[*nops].Var3BegAdd=ops[*nops].Var2BegAdd;
   for(i=0;i<fdim;i++){
   ops[*nops].Var3Dims[i].leadlag=ops[*nops].Var2Dims[i].leadlag;
-  ops[*nops].Var3Dims[i].SupSet=ops[*nops].Var3Dims[i].SupSet;
+  ops[*nops].Var3Dims[i].SupSet=ops[*nops].Var2Dims[i].SupSet;
   ops[*nops].Var3Dims[i].SSIndx=ops[*nops].Var2Dims[i].SSIndx;
   ops[*nops].Var3Dims[i].ADims=ops[*nops].Var2Dims[i].ADims;
   }
