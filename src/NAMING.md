@@ -61,7 +61,6 @@ Binary `hsl` → `teems-solver` is deferred: path is hardcoded in teems-R
 | kindx1,kindx2 | step_ratio2,step_ratio3 | steps2/steps1, steps3/steps1 |
 | kval1,kval2,kval3 | extrap_w1,extrap_w2,extrap_w3 | Richardson extrapolation weights [GM "extrapolation", D20] |
 | HA_COMM,HA1_COMM | node_comm,node_tail_comm | per-node split; ranks-last-on-node group |
-| isLinux | (delete with dead branches, phase 5) | |
 
 ## Enums replacing magic codes
 

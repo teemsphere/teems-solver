@@ -172,7 +172,6 @@ int main(int argc,char **args) {
   PetscOptionsGetInt(NULL,NULL,"-matsol",&matsol,NULL);/* enum matrix_method; >=MM_SBBD needs a regional or time set (first reg set orders variables) */
   if(matsol==MM_DBBD)nohsl=true;
   if(matsol==MM_NDBBD)nohsl=true;
-  isLinux=0;
   PetscOptionsGetInt(NULL,NULL,"-laA",&laA,NULL);
   if(laA==0)laA=2;
   PetscOptionsGetInt(NULL,NULL,"-laD",&laD,NULL);

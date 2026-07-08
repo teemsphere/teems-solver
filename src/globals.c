@@ -2,7 +2,6 @@
  * teems_solver.h. */
 #include <teems_solver.h>
 
-int isLinux;
 int inmemory;
 int section_threads;
 int max_threads;

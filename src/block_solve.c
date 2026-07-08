@@ -1432,61 +1432,36 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
     if(j3>=1000)j1name[0]='\0';
     sprintf(filename, "%d",j3);
     strcat(j1name,filename);
-    if(isLinux==0) {
-      strcpy(filename,scratch_dir);strcat(filename,"_bivi");
-      strcat(filename,rankname);
-      strcat(filename,j1name);
-      strcat(filename,".bin");
-      if((presolfile=fopen(filename, "wb"))==NULL) {
-        printf("Cannot open file.\n");
-      }
-      fwrt=fwrite(vecbivi, sizeof(solve_real),nz1, presolfile);
-      if(fwrt==0)printf("File write error.");
-      fclose(presolfile);
-      strcpy(filename,scratch_dir);strcat(filename,"_rbvi");
-      strcat(filename,rankname);
-      strcat(filename,j1name);
-      strcat(filename,".bin");
-      if((presolfile=fopen(filename, "wb"))==NULL) {
-        printf("Cannot open file.\n");
-      }
-      fwrt=fwrite(irn1, sizeof(int), nz1, presolfile);
-      if(fwrt== 0) printf("File write error.");
-      fclose(presolfile);
-      strcpy(filename,scratch_dir);strcat(filename,"_cbvi");
-      strcat(filename,rankname);
-      strcat(filename,j1name);
-      strcat(filename,".bin");
-      if((presolfile=fopen(filename, "wb"))==NULL) {
-        printf("Cannot open file.\n");
-      }
-      fwrt=fwrite(jcn1, sizeof(int), nz1, presolfile);
-      if(fwrt== 0) printf("File write error.");
-      fclose(presolfile);
+    strcpy(filename,scratch_dir);strcat(filename,"_bivi");
+    strcat(filename,rankname);
+    strcat(filename,j1name);
+    strcat(filename,".bin");
+    if((presolfile=fopen(filename, "wb"))==NULL) {
+      printf("Cannot open file.\n");
     }
-    else {
-      strcpy(filename,scratch_dir);strcat(filename,"_bivi");
-      strcat(filename,rankname);
-      strcat(filename,j1name);
-      strcat(filename,".bin");
-      fd1 = open(filename,O_WRONLY|O_CREAT|O_TRUNC, 0644);
-      fwrt = write(fd1,vecbivi, sizeof(solve_real)*nz1);
-      close(fd1);
-      strcpy(filename,scratch_dir);strcat(filename,"_rbvi");
-      strcat(filename,rankname);
-      strcat(filename,j1name);
-      strcat(filename,".bin");
-      fd1 = open(filename,O_WRONLY|O_CREAT|O_TRUNC, 0644);
-      fwrt = write(fd1,irn1, sizeof(int)*nz1);
-      close(fd1);
-      strcpy(filename,scratch_dir);strcat(filename,"_cbvi");
-      strcat(filename,rankname);
-      strcat(filename,j1name);
-      strcat(filename,".bin");
-      fd1 = open(filename,O_WRONLY|O_CREAT|O_TRUNC, 0644);
-      fwrt = write(fd1,jcn1, sizeof(int)*nz1);
-      close(fd1);
+    fwrt=fwrite(vecbivi, sizeof(solve_real),nz1, presolfile);
+    if(fwrt==0)printf("File write error.");
+    fclose(presolfile);
+    strcpy(filename,scratch_dir);strcat(filename,"_rbvi");
+    strcat(filename,rankname);
+    strcat(filename,j1name);
+    strcat(filename,".bin");
+    if((presolfile=fopen(filename, "wb"))==NULL) {
+      printf("Cannot open file.\n");
     }
+    fwrt=fwrite(irn1, sizeof(int), nz1, presolfile);
+    if(fwrt== 0) printf("File write error.");
+    fclose(presolfile);
+    strcpy(filename,scratch_dir);strcat(filename,"_cbvi");
+    strcat(filename,rankname);
+    strcat(filename,j1name);
+    strcat(filename,".bin");
+    if((presolfile=fopen(filename, "wb"))==NULL) {
+      printf("Cannot open file.\n");
+    }
+    fwrt=fwrite(jcn1, sizeof(int), nz1, presolfile);
+    if(fwrt== 0) printf("File write error.");
+    fclose(presolfile);
     free(irn1);//1
     irn1=NULL;
     free(jcn1);//1
@@ -2280,67 +2255,39 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
     if(frd== 0) printf("File read error.");
     fclose(presolfile);
     remove(filename);
-    if(isLinux==0) {
-      strcpy(filename,scratch_dir);strcat(filename,"_bivi");
-      strcat(filename,rankname);
-      strcat(filename,j1name);
-      strcat(filename,".bin");
-      if((presolfile=fopen(filename, "r"))==NULL) {
-        printf("Cannot open file.\n");
-      }
-      frd=fread(vecbivi0, sizeof(solve_real), insizeda[2], presolfile);
-      if(frd== 0) printf("File read error %ld %d.\n",frd,insizeda[2]);
-      fclose(presolfile);
-      remove(filename);
-      strcpy(filename,scratch_dir);strcat(filename,"_rbvi");
-      strcat(filename,rankname);
-      strcat(filename,j1name);
-      strcat(filename,".bin");
-      if((presolfile=fopen(filename, "r"))==NULL) {
-        printf("Cannot open file.\n");
-      }
-      frd=fread(irn1, sizeof(int), insizeda[2], presolfile);
-      if(frd== 0) printf("File read error.\n");
-      fclose(presolfile);
-      remove(filename);
-      strcpy(filename,scratch_dir);strcat(filename,"_cbvi");
-      strcat(filename,rankname);
-      strcat(filename,j1name);
-      strcat(filename,".bin");
-      if((presolfile=fopen(filename, "r"))==NULL) {
-        printf("Cannot open file.\n");
-      }
-      frd=fread(jcn1, sizeof(int), insizeda[2], presolfile);
-      if(frd== 0) printf("File read error.");
-      fclose(presolfile);
-      remove(filename);
+    strcpy(filename,scratch_dir);strcat(filename,"_bivi");
+    strcat(filename,rankname);
+    strcat(filename,j1name);
+    strcat(filename,".bin");
+    if((presolfile=fopen(filename, "r"))==NULL) {
+      printf("Cannot open file.\n");
     }
-    else {
-      strcpy(filename,scratch_dir);strcat(filename,"_bivi");
-      strcat(filename,rankname);
-      strcat(filename,j1name);
-      strcat(filename,".bin");
-      fd1 = open(filename, O_RDONLY);
-      frd = read(fd1,vecbivi0, sizeof(solve_real)*insizeda[2]);
-      close(fd1);
-      remove(filename);
-      strcpy(filename,scratch_dir);strcat(filename,"_rbvi");
-      strcat(filename,rankname);
-      strcat(filename,j1name);
-      strcat(filename,".bin");
-      fd1 = open(filename, O_RDONLY);
-      frd = read(fd1,irn1, sizeof(int)*insizeda[2]);
-      close(fd1);
-      remove(filename);
-      strcpy(filename,scratch_dir);strcat(filename,"_cbvi");
-      strcat(filename,rankname);
-      strcat(filename,j1name);
-      strcat(filename,".bin");
-      fd1 = open(filename, O_RDONLY);
-      frd = read(fd1,jcn1, sizeof(int)*insizeda[2]);
-      close(fd1);
-      remove(filename);
+    frd=fread(vecbivi0, sizeof(solve_real), insizeda[2], presolfile);
+    if(frd== 0) printf("File read error %ld %d.\n",frd,insizeda[2]);
+    fclose(presolfile);
+    remove(filename);
+    strcpy(filename,scratch_dir);strcat(filename,"_rbvi");
+    strcat(filename,rankname);
+    strcat(filename,j1name);
+    strcat(filename,".bin");
+    if((presolfile=fopen(filename, "r"))==NULL) {
+      printf("Cannot open file.\n");
     }
+    frd=fread(irn1, sizeof(int), insizeda[2], presolfile);
+    if(frd== 0) printf("File read error.\n");
+    fclose(presolfile);
+    remove(filename);
+    strcpy(filename,scratch_dir);strcat(filename,"_cbvi");
+    strcat(filename,rankname);
+    strcat(filename,j1name);
+    strcat(filename,".bin");
+    if((presolfile=fopen(filename, "r"))==NULL) {
+      printf("Cannot open file.\n");
+    }
+    frd=fread(jcn1, sizeof(int), insizeda[2], presolfile);
+    if(frd== 0) printf("File read error.");
+    fclose(presolfile);
+    remove(filename);
     }
    
     if(insizeda[0]>insizeda[3]||insizeda[1]>insizeda[3]) {
@@ -2549,7 +2496,7 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
         keepreg[i]=ndbbd_fac_keep[j2];
         valereg[i]=ndbbd_fac_va[j2];
       }
-      else if(isLinux==0) {
+      else {
         nfp1[i] = fopen(fn01[j2], "rb");
         if (nfp1[i]==NULL)printf("File opening error\n");
         irnereg[i] = realloc(irnereg[i],la1*sizeof(int));//(int*)calloc(la1,sizeof(int));
@@ -2565,21 +2512,6 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
         valereg[i] = realloc(valereg[i],la1*sizeof(solve_real));//(ha_cgetype*)calloc(la1,sizeof(ha_cgetype));
         freadresult=fread(valereg[i],sizeof(solve_real),la1,nfp3[i]);
         fclose(nfp3[i]);
-      }
-      else {
-        nfd1[i] = open(fn01[j2],O_RDONLY);
-        nfd2[i] = open(fn02[j2],O_RDONLY);
-        nfd3[i] = open(fn03[j2],O_RDONLY);
-        la1=ceil((insize[j2*insizes+9]/100.0)*insize[j2*insizes+2]);
-        irnereg[i] = realloc(irnereg[i],la1*sizeof(int));//(int*)calloc(la1,sizeof(int));
-        keepreg[i] = realloc(keepreg[i],insize[j2*insizes+12]*sizeof(int));//(int*)calloc(insize[j1*insizes+12],sizeof(int));
-        valereg[i] = realloc(valereg[i],la1*sizeof(solve_real));//(ha_cgetype*)calloc(la1,sizeof(ha_cgetype));
-        frrsl1=read(nfd1[i],irnereg[i],sizeof(int)*la1);
-        frrsl2=read(nfd2[i],keepreg[i],insize[j2*insizes+12]*sizeof(int));
-        frrsl3=read(nfd3[i],valereg[i],la1*sizeof(solve_real));
-        close(nfd1[i]);
-        close(nfd2[i]);
-        close(nfd3[i]);
       }
     }
     }
@@ -3024,39 +2956,22 @@ bool ndbbd_block_solve(PetscInt rank, int begmat,int nreg,int * insize,int insiz
     if((submatCij[j1][0]->rmap->n)>maxrowcij)maxrowcij=submatCij[j1][0]->rmap->n;
     #pragma omp critical(nsol)
     {
-    if(isLinux==1) {
-      la1=ceil((insize[j2+9]/100.0)*insize[j2+2]);
-      irne = realloc(irne,la1*sizeof(int));//(int*)calloc(la1,sizeof(int));
-      keep = realloc(keep,insize[j2+12]*sizeof(int));//(int*)calloc(insize[j1*insizes+12],sizeof(int));
-      vale = realloc(vale,la1*sizeof(solve_real));//(ha_cgetype*)calloc(la1,sizeof(ha_cgetype));
-      fd1 = open(fn01[j1],O_RDONLY);
-      frrsl1=read(fd1,irne,sizeof(int)*la1);
-      close(fd1);
-      fd2 = open(fn02[j1],O_RDONLY);
-      frrsl2=read(fd2,keep,insize[j2+12]*sizeof(int));
-      close(fd2);
-      fd3 = open(fn03[j1],O_RDONLY);
-      frrsl3=read(fd3,vale,la1*sizeof(solve_real));
-      close(fd3);
-    }
-    else {
-      la1=ceil((insize[j2+9]/100.0)*insize[j2+2]);
-      irne = realloc(irne,la1*sizeof(int));//(int*)calloc(la1,sizeof(int));
-      keep = realloc(keep,insize[j2+12]*sizeof(int));//(int*)calloc(insize[j1*insizes+12],sizeof(int));
-      vale = realloc(vale,la1*sizeof(solve_real));//(ha_cgetype*)calloc(la1,sizeof(ha_cgetype));
-      fp1 = fopen(fn01[j1], "rb");
-      if (fp1==NULL)printf("File opening error\n");
-      freadresult=fread(irne,sizeof(int),la1,fp1);
-      fclose(fp1);
-      fp2 = fopen(fn02[j1], "rb");
-      if (fp2==NULL)printf("File opening error\n");
-      freadresult=fread(keep,sizeof(int),insize[j2+12],fp2);
-      fclose(fp2);
-      fp3 = fopen(fn03[j1], "rb");
-      if (fp3==NULL)printf("File opening error\n");
-      freadresult=fread(vale,sizeof(solve_real),la1,fp3);
-      fclose(fp3);
-    }
+    la1=ceil((insize[j2+9]/100.0)*insize[j2+2]);
+    irne = realloc(irne,la1*sizeof(int));//(int*)calloc(la1,sizeof(int));
+    keep = realloc(keep,insize[j2+12]*sizeof(int));//(int*)calloc(insize[j1*insizes+12],sizeof(int));
+    vale = realloc(vale,la1*sizeof(solve_real));//(ha_cgetype*)calloc(la1,sizeof(ha_cgetype));
+    fp1 = fopen(fn01[j1], "rb");
+    if (fp1==NULL)printf("File opening error\n");
+    freadresult=fread(irne,sizeof(int),la1,fp1);
+    fclose(fp1);
+    fp2 = fopen(fn02[j1], "rb");
+    if (fp2==NULL)printf("File opening error\n");
+    freadresult=fread(keep,sizeof(int),insize[j2+12],fp2);
+    fclose(fp2);
+    fp3 = fopen(fn03[j1], "rb");
+    if (fp3==NULL)printf("File opening error\n");
+    freadresult=fread(vale,sizeof(solve_real),la1,fp3);
+    fclose(fp3);
     }
     if(insize[j2+16]!=la1)insize[j2+16]=la1;
     spec48m_esol_(insize+j2,irne,vale,keep,b01,sol1);
@@ -3077,22 +2992,35 @@ bool ndbbd_block_solve(PetscInt rank, int begmat,int nreg,int * insize,int insiz
   j2=j1;//-begmat;
     #pragma omp critical(nsol)
     {
-  if(isLinux==1) {
-    la1=ceil((insize[j1*insizes+9]/100.0)*insize[j1*insizes+2]);
-    irne = realloc(irne,la1*sizeof(int));//(int*)calloc(la1,sizeof(int));
-    keep = realloc(keep,insize[j1*insizes+12]*sizeof(int));//(int*)calloc(insize[j1*insizes+12],sizeof(int));
-    vale = realloc(vale,la1*sizeof(solve_real));//(ha_cgetype*)calloc(la1,sizeof(ha_cgetype));
-    fd1 = open(fn01[j2],O_RDONLY);
-    frrsl1=read(fd1,irne,sizeof(int)*la1);
-    close(fd1);
-    fd2 = open(fn02[j2],O_RDONLY);
-    frrsl2=read(fd2,keep,insize[j1*insizes+12]*sizeof(int));
-    close(fd2);
-    fd3 = open(fn03[j2],O_RDONLY);
-    frrsl3=read(fd3,vale,la1*sizeof(solve_real));
-    close(fd3);
-  }
-  else {
+  la1=ceil((insize[j1*insizes+9]/100.0)*insize[j1*insizes+2]);
+  irne = realloc(irne,la1*sizeof(int));//(int*)calloc(la1,sizeof(int));
+  keep = realloc(keep,insize[j1*insizes+12]*sizeof(int));//(int*)calloc(insize[j1*insizes+12],sizeof(int));
+  vale = realloc(vale,la1*sizeof(solve_real));//(ha_cgetype*)calloc(la1,sizeof(ha_cgetype));
+  fp1 = fopen(fn01[j2], "rb");
+  if (fp1==NULL)printf("File opening error\n");
+  freadresult=fread(irne,sizeof(int),la1,fp1);
+  fclose(fp1);
+  fp2 = fopen(fn02[j2], "rb");
+  if (fp2==NULL)printf("File opening error\n");
+  freadresult=fread(keep,sizeof(int),insize[j1*insizes+12],fp2);
+  fclose(fp2);
+  fp3 = fopen(fn03[j2], "rb");
+  if (fp3==NULL)printf("File opening error\n");
+  freadresult=fread(vale,sizeof(solve_real),la1,fp3);
+  fclose(fp3);
+    }
+  if(ifremove)remove(fn01[j2]);
+  if(ifremove)remove(fn02[j2]);
+  if(ifremove)remove(fn03[j2]);
+  if(insize[j1*insizes+16]!=la1)insize[j1*insizes+16]=la1;
+  spec48m_esol_(insize+j1*insizes,irne,vale,keep,b01,sol1);
+  sol2=sol;
+  b03=b;
+  solve_real *b02 = (solve_real*)calloc(maxrowcij,sizeof(solve_real));
+  for (j1=begmat; j1<nreg+begmat; j1++) {
+    j2=j1;//-begmat;
+    #pragma omp critical(nsol)
+    {
     la1=ceil((insize[j1*insizes+9]/100.0)*insize[j1*insizes+2]);
     irne = realloc(irne,la1*sizeof(int));//(int*)calloc(la1,sizeof(int));
     keep = realloc(keep,insize[j1*insizes+12]*sizeof(int));//(int*)calloc(insize[j1*insizes+12],sizeof(int));
@@ -3109,53 +3037,6 @@ bool ndbbd_block_solve(PetscInt rank, int begmat,int nreg,int * insize,int insiz
     if (fp3==NULL)printf("File opening error\n");
     freadresult=fread(vale,sizeof(solve_real),la1,fp3);
     fclose(fp3);
-  }
-    }
-  if(ifremove)remove(fn01[j2]);
-  if(ifremove)remove(fn02[j2]);
-  if(ifremove)remove(fn03[j2]);
-  if(insize[j1*insizes+16]!=la1)insize[j1*insizes+16]=la1;
-  spec48m_esol_(insize+j1*insizes,irne,vale,keep,b01,sol1);
-  sol2=sol;
-  b03=b;
-  solve_real *b02 = (solve_real*)calloc(maxrowcij,sizeof(solve_real));
-  for (j1=begmat; j1<nreg+begmat; j1++) {
-    j2=j1;//-begmat;
-    #pragma omp critical(nsol)
-    {
-    if(isLinux==1) {
-      la1=ceil((insize[j1*insizes+9]/100.0)*insize[j1*insizes+2]);
-      irne = realloc(irne,la1*sizeof(int));//(int*)calloc(la1,sizeof(int));
-      keep = realloc(keep,insize[j1*insizes+12]*sizeof(int));//(int*)calloc(insize[j1*insizes+12],sizeof(int));
-      vale = realloc(vale,la1*sizeof(solve_real));//(ha_cgetype*)calloc(la1,sizeof(ha_cgetype));
-      fd1 = open(fn01[j2],O_RDONLY);
-      frrsl1=read(fd1,irne,sizeof(int)*la1);
-      close(fd1);
-      fd2 = open(fn02[j2],O_RDONLY);
-      frrsl2=read(fd2,keep,insize[j1*insizes+12]*sizeof(int));
-      close(fd2);
-      fd3 = open(fn03[j2],O_RDONLY);
-      frrsl3=read(fd3,vale,la1*sizeof(solve_real));
-      close(fd3);
-    }
-    else {
-      la1=ceil((insize[j1*insizes+9]/100.0)*insize[j1*insizes+2]);
-      irne = realloc(irne,la1*sizeof(int));//(int*)calloc(la1,sizeof(int));
-      keep = realloc(keep,insize[j1*insizes+12]*sizeof(int));//(int*)calloc(insize[j1*insizes+12],sizeof(int));
-      vale = realloc(vale,la1*sizeof(solve_real));//(ha_cgetype*)calloc(la1,sizeof(ha_cgetype));
-      fp1 = fopen(fn01[j2], "rb");
-      if (fp1==NULL)printf("File opening error\n");
-      freadresult=fread(irne,sizeof(int),la1,fp1);
-      fclose(fp1);
-      fp2 = fopen(fn02[j2], "rb");
-      if (fp2==NULL)printf("File opening error\n");
-      freadresult=fread(keep,sizeof(int),insize[j1*insizes+12],fp2);
-      fclose(fp2);
-      fp3 = fopen(fn03[j2], "rb");
-      if (fp3==NULL)printf("File opening error\n");
-      freadresult=fread(vale,sizeof(solve_real),la1,fp3);
-      fclose(fp3);
-    }
     }
     if(ifremove)remove(fn01[j2]);
     if(ifremove)remove(fn02[j2]);
