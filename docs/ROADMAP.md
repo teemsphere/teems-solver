@@ -1,9 +1,10 @@
 # TEEMS Solver — Development Roadmap
 
-Working plan following the 2026 refactor (phases 0–4: verification
-harness, dead-code removal, build hygiene, de-duplication, restructuring
-and renaming — see `docs/solver-reference.md` §11–§13 and git history)
-and phase 5's measured performance work.
+Working plan following the 2026 refactor (phases 0–4, logged below)
+and phase 5's measured performance work. Completed items are never
+deleted: phase-5 rows flip to **done** with findings attached, and
+phases 0–4 are recorded in the completed-phases log at the end of this
+file. `docs/solver-reference.md` describes the *resulting* system.
 
 **Standing rules**
 - Every change passes the golden suite (`.audit/verify.sh`, currently 9
@@ -26,8 +27,8 @@ and phase 5's measured performance work.
 | 5.7 | Netcut instrumentation: machine-readable netcut + block-size logging per run | **done** — `<solfiles>.stats.json` written by rank 0 at ordering time (pre-solve): size/method/netcut/border/per-block var+eq counts; excluded from golden manifests |
 | 5.8 | `matrix_method = "auto"`: calibration sweeps (size × T/R × ranks), decision rule implemented in teems-R from deploy metadata | **done** — teems-R 3d561a2: deploy writes system_size/n_reg into metadata.rds; auto (now the default) = SBBD if intertemporal (single-rank SBBD also beats LU), else DBBD when n_tasks ≥ 2 and size ≥ 2M eq (or ≥ 1.5M with ≥ 100 regions), else LU. Static crossover data in solver-reference §9 (LU/DBBD ladders at 1.35M–8.3M eq × 33/163 blocks). Residual: NDBBD-vs-SBBD escalation (standing investigation); refine 1.5–2M × <100-region band if real models land there |
 | 5.9 | In-memory block-factor handoff: redesign Fortran kernel interface so factors return via memory, not `_vav/_irnv/_keep` files | **done** (code + correctness) — kernels return factors via caller buffers (`KEEP` surfaced with the `M+9N+7` bound; `LA` was always known pre-call, so no grow-loop issue); C holds them resident under `-inmemory` or writes byte-identical legacy files otherwise. All 9 goldens pass in both modes for DBBD and NDBBD. NDBBD resident mode: zero factor traffic (was ~825MB/solve at 202k eq), +22MB RSS/rank, no scratch debris. **Open**: idle-machine A/B at bench-inter-L scale to decide flipping NDBBD's `-inmemory` default (its page-cache rationale is gone); residual `_bivi/_rbvi/_cbvi`+`_rank/_row/_col` interface spills (~65MB/solve, C-side both ends) as follow-up |
-| 5.10 | Interpreter deep-compaction: interleaved per-dim operand records (`dim_addr`) in `formula_op`; follows the 1416→968B compaction (~1% win). `formula_eval` is 15.6% of wall at scale | pending (medium risk — hottest loop) |
-| 5.11 | Small batch: verbosity-gated logging **including a full printf overhaul — professional wording (no `!!!!`/`OK012345`/`Hello world`/`RRRRR` debris), each message as informative as possible (say which file/block/rank/phase and what to do about it) without impeding speed (hot-loop prints gated or removed; keep stdout parse contracts teems-R relies on, e.g. `Accurate`/netcut lines, or update both sides together)**; `-march` image variants; `ems_solve(inmemory=)` exposure; op-list caching (small-model benefit only); remove dead `isLinux` read path; NDBBD-without-`-regset` diagnostic (currently bare MPI abort) | pending (user emphasis 2026-07-06 on message quality) |
+| 5.10 | Interpreter deep-compaction: interleaved per-dim operand records (`dim_addr`) in `formula_op`; follows the 1416→968B compaction (~1% win). `formula_eval` is 15.6% of wall at scale | **done** (code + correctness) — `dim_addr {ADims, SupSet, SSIndx, leadlag}` replaces the 4 parallel per-dim arrays per operand; the eval loop now reads one 24B record per dim instead of touching 4 arrays 96B apart. `formula_op` 968→848B; `SupSet`/`SSIndx` narrowed offset_t→int. All 9 goldens bit-identical; build warnings 110→102. **Open**: idle-machine A/B at scale to measure the `formula_eval` win. NB pre-existing latent bug preserved as-is (goldens are bit-identical gates): the Var2→Var3 dim-field copy self-assigns `SupSet` (`Var3Dims[i].SupSet=Var3Dims[i].SupSet`); ops arrays are calloc'd and slots written once, so operand 3's SupSet is always 0 there — superset indexing silently dropped if a superset-indexed operand lands in that slot (unexercised by the golden corpus). Fix as its own gated change |
+| 5.11 | Small batch: verbosity-gated logging **including a full printf overhaul — professional wording (no `!!!!`/`OK012345`/`Hello world`/`RRRRR` debris), each message including errors as informative as possible (say which file/block/rank/phase and what to do about it) without impeding speed (hot-loop prints gated or removed; keep stdout parse contracts teems-R relies on, e.g. `Accurate`/netcut lines, or update both sides together)**; `-march` image variants; `ems_solve(inmemory=)` exposure; op-list caching (small-model benefit only); remove dead `isLinux` read path; NDBBD-without-`-regset` diagnostic (currently bare MPI abort) | pending (user emphasis 2026-07-06 on message quality) |
 
 **Phase-5 findings that shape the above** (details in
 `docs/solver-reference.md` §9): factorization ≈63% of wall at scale;
@@ -49,6 +50,22 @@ that spilling frees). Speed since refactor: SBBD ~5–8%; LU/DBBD neutral
 | 6.6 | Cross-repo hygiene: `hsl` → `teems-solver` binary rename (touch points documented in project notes); golden refresh | coordinate with teems-R + images |
 | 6.7 | **HSL catalogue exploration** — assess additional HSL routines for speed/robustness across all solution × matrix methods; ranked shortlist with rationale in `teems-docs/hsl-catalogue-candidates.md` (top: MC64 pre-scaling, MA41/MA38 multifrontal alternative, MC33 bordered-block-triangular ordering vs netcut, HSL_MC79 Dulmage-Mendelsohn closure diagnosis). Retrieve specs/code for survivors; golden + A/B benchmark gates apply | user-requested 2026-07-05 |
 | 6.8 | **Block-set auto-detection** (assessed 2026-07-06): drop the need for explicit `-regset`/`-enable_time`. Time side is already derivable — `(intertemporal)` TAB qualifier + `set_find_alltime`; the missing-flag case is even detected post-hoc (`sbbd_overrid` warning); NDBBD's timestep count self-derives from the alltime set (`ndbbdrank=ntime`). Regional side has no TAB qualifier and is name-convention only (teems-R hardcodes `REG`; unmatched names silently degrade to `allregset=-1`). All ordering code downstream is set-agnostic ("partition by set S"), so implement `-regset auto`: enumerate top-level non-intertemporal candidate sets, run the cheap pre-Jacobian ordering probe per candidate, score by netcut/border fraction, block count ≥ n_tasks, and block balance (the 5.7 stats fields), pick argmax or none (LU). Explicit flags stay as overrides (golden runs keep bit-identical behavior); log the choice in stats.json. Also fixes the silent-degradation footgun (warn when a named set is not found) | feeds `matrix_method` auto; pairs with 6.5/E3 |
+
+## Completed phases 0–4 (2026 refactor log)
+
+Reconstructed from git history; hashes are the anchor commits.
+
+| phase | what was done | commits |
+|---|---|---|
+| 0 — verification harness | `.audit/verify.sh`: container rebuild (`teems-audit`) + golden solves checked bit-identical against manifests anchored to the pre-refactor binary; grew from 5 gates to 9 during phase 5. Benchmark rigs (`bench_run.sh` wall/RSS, `strace_run.sh` write-byte accounting, `bench-*` deployments). **Dev-machine only — not tracked in git**; described in solver-reference §12 | — |
+| 1 — dead-code removal | 13 uncalled C functions + prototypes; unreachable solver-dispatch branches in `main()`; commented-out code stripped from C and Fortran; dead backup subroutine in `ha_mp48.f90`; dangling prototype; 15 uncalled Fortran kernels + externs; dead `-isLinux`/`-medthreads` options | `fdd2e76`, `08c1be8`, `4a05297`, `bab50d5`, `fa0b51b`, `b5669fe`, `7a403a5` |
+| 2 — build hygiene | makefile repair (clean target, F77FLAGS typo, overridable `BUILD_DIR`/`OPT`); globals defined once, `-fcommon` dropped; PETSc private `aij.h` via include path; scratch dir configurable (`-tempdir`/`TMPDIR`); `mp48_mod.sh` sed edits replaced with committed patches; expedited build compiles current src (was stale snapshot); `BUILDING.md` added | `866fb85`, `6a958bc`, `1bfde3a`, `17f9b3a`, `74feb38`, `f775a4f`, `7a403a5` |
+| 3 — de-duplication | inline Johansen and modified-midpoint blocks factored into `Johansen()`/`ModMidPoint()`; `hnew_mupdate` merged into `hnew_update` behind a midpoint flag | `15b9d5a`, `ffd7eb6`, `7a13606` |
+| 4 — restructuring & renaming | `NAMING.md` conventions; types/fields/globals, functions, and source files renamed; `ha_newmfparse.c` split into `jacobian.c`/`block_order.c`/`block_solve.c`/`solve_drivers.c`; magic codes replaced with enums (`matrix_method`, `solution_method`, `bound_type`, `op_code`, `operand_type`); header documented by module section; residual `ha_*` parameters/locals/generated-name prefixes renamed | `f3ccb8e`, `fb441fd`, `92ec64c`, `b081034`, `e5a5158`, `ea9624f`, `e0f0e4c`, `4aff8be` |
+
+Speed outcome across phases 0–4: neutral by design (golden-gated);
+cleanliness and navigability were the deliverables. Performance work
+began in phase 5.
 
 ## Standing investigations
 

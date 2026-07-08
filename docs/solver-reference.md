@@ -489,10 +489,12 @@ teems-R populates these from `ems_solve()` arguments
 ## 12. Verification and development infrastructure
 
 - **Golden runs** (`.audit/verify.sh`, dev-machine): rebuilds from the
-  working tree in the `teems-audit` container and checks five solves
+  working tree in the `teems-audit` container and checks nine solves
   bit-identically against manifests anchored to the pre-refactor binary:
-  GTAPv7 static LU/Johansen; GTAP-RE intertemporal LU/Mmid; and GTAP-RE
-  SBBD, DBBD, NDBBD at 2 ranks. Any behavior change fails the gate.
+  GTAPv7 static LU/Johansen; GTAP-RE intertemporal LU/Mmid; GTAP-RE
+  SBBD, DBBD, NDBBD at 2 ranks; three real-shock runs (2D probe, 4D,
+  swap); and a GEMPACK-orientation matrix shock (2D, both dims free).
+  Any behavior change fails the gate.
 - **Benchmark rigs**: `.audit/bench_run.sh` (wall/RSS via `time -v`),
   `.audit/strace_run.sh` (per-file write-byte accounting), deployments
   under `.audit/bench-*` produced by teems-R scripts.
@@ -510,8 +512,9 @@ teems-R populates these from `ems_solve()` arguments
 - The binary is named `hsl` for historical reasons; renaming to
   `teems-solver` requires coordinated changes in teems-R and the images.
 - Planned (measured motivation on file): formula op-list caching across
-  steps (removes per-step TAB re-parsing); `formula_op` compaction
-  (~1.4KB/op today — cache-hostile in the evaluator); factor handoff
-  through memory instead of files (would let DBBD/NDBBD run resident
-  without page-cache competition); verbosity-gated logging (3,000+
-  unconditional printfs); NDBBD-vs-SBBD crossover mapping at scale.
+  steps (removes per-step TAB re-parsing); verbosity-gated logging
+  (3,000+ unconditional printfs); NDBBD-vs-SBBD crossover mapping at
+  scale. Done since this list was written (see ROADMAP 5.9/5.10):
+  factor handoff through memory (`-inmemory` holds block factors
+  resident); `formula_op` compaction (1416→968→848B, per-dim operand
+  fields interleaved as `dim_addr` records).
