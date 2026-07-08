@@ -49,9 +49,9 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
       case 0:
         for (l=0; l<fdim; l++) {
           if(varindex==2) {
-            ops[nops].Var2ADims[l]=0;
+            ops[nops].Var2Dims[l].ADims=0;
           } else {
-            ops[nops].Var1ADims[l]=0;
+            ops[nops].Var1Dims[l].ADims=0;
           }
         }
         break;
@@ -61,29 +61,29 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
         parse_index_leadlag(p,&leadlag);
        for (l=0; l<fdim; l++) {
              if(varindex==2) {
-              ops[nops].Var2ADims[l]=0;
-              ops[nops].Var2leadlag[l]=0;
-              ops[nops].Var2SupSet[l]=0;
+              ops[nops].Var2Dims[l].ADims=0;
+              ops[nops].Var2Dims[l].leadlag=0;
+              ops[nops].Var2Dims[l].SupSet=0;
             } else {
-              ops[nops].Var1ADims[l]=0;
-              ops[nops].Var1leadlag[l]=0;
-              ops[nops].Var1SupSet[l]=0;
+              ops[nops].Var1Dims[l].ADims=0;
+              ops[nops].Var1Dims[l].leadlag=0;
+              ops[nops].Var1Dims[l].SupSet=0;
             }
           if (strcmp(p,arSet[l].index_name)==0) {
             if(varindex==2) {
               if (sets[coefs[index].setid[0]].size>sets[arSet[l].setid].size) {
-                ops[nops].Var2SupSet[l]=1;
-                for(sup=1;sup<MAXSUPSET;sup++)if(sets[arSet[l].setid].subsetid[sup]==coefs[index].setid[0]){ops[nops].Var2SSIndx[l]=sup;break;}
+                ops[nops].Var2Dims[l].SupSet=1;
+                for(sup=1;sup<MAXSUPSET;sup++)if(sets[arSet[l].setid].subsetid[sup]==coefs[index].setid[0]){ops[nops].Var2Dims[l].SSIndx=sup;break;}
               }
-              ops[nops].Var2ADims[l]=coefs[index].strides[0];
-              ops[nops].Var2leadlag[l]=leadlag;
+              ops[nops].Var2Dims[l].ADims=coefs[index].strides[0];
+              ops[nops].Var2Dims[l].leadlag=leadlag;
             } else {
               if (sets[coefs[index].setid[0]].size>sets[arSet[l].setid].size) {
-                ops[nops].Var1SupSet[l]=1;
-                for(sup=1;sup<MAXSUPSET;sup++)if(sets[arSet[l].setid].subsetid[sup]==coefs[index].setid[0]){ops[nops].Var1SSIndx[l]=sup;break;}
+                ops[nops].Var1Dims[l].SupSet=1;
+                for(sup=1;sup<MAXSUPSET;sup++)if(sets[arSet[l].setid].subsetid[sup]==coefs[index].setid[0]){ops[nops].Var1Dims[l].SSIndx=sup;break;}
               }
-              ops[nops].Var1ADims[l]=coefs[index].strides[0];
-              ops[nops].Var1leadlag[l]=leadlag;
+              ops[nops].Var1Dims[l].ADims=coefs[index].strides[0];
+              ops[nops].Var1Dims[l].leadlag=leadlag;
             }
           }
         }
@@ -91,13 +91,13 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
       default:
         for (l1=0; l1<fdim; l1++) {
           if(varindex==2) {
-            ops[nops].Var2ADims[l1]=0;
-            ops[nops].Var2leadlag[l1]=0;
-            ops[nops].Var2SupSet[l1]=0;
+            ops[nops].Var2Dims[l1].ADims=0;
+            ops[nops].Var2Dims[l1].leadlag=0;
+            ops[nops].Var2Dims[l1].SupSet=0;
           } else {
-            ops[nops].Var1ADims[l1]=0;
-            ops[nops].Var1leadlag[l1]=0;
-            ops[nops].Var1SupSet[l1]=0;
+            ops[nops].Var1Dims[l1].ADims=0;
+            ops[nops].Var1Dims[l1].leadlag=0;
+            ops[nops].Var1Dims[l1].SupSet=0;
           }
         }
         for (l=0; l<coefs[index].size-1; l++) {
@@ -108,18 +108,18 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
             if (strcmp(p,arSet[l1].index_name)==0) {
               if(varindex==2) {
                 if (sets[coefs[index].setid[l]].size>sets[arSet[l1].setid].size) {
-                  ops[nops].Var2SupSet[l1]=1;
-                  for(sup=1;sup<MAXSUPSET;sup++)if(sets[arSet[l1].setid].subsetid[sup]==coefs[index].setid[l]){ops[nops].Var2SSIndx[l1]=sup;break;}
+                  ops[nops].Var2Dims[l1].SupSet=1;
+                  for(sup=1;sup<MAXSUPSET;sup++)if(sets[arSet[l1].setid].subsetid[sup]==coefs[index].setid[l]){ops[nops].Var2Dims[l1].SSIndx=sup;break;}
                 }
-                ops[nops].Var2ADims[l1]=coefs[index].strides[l];
-                ops[nops].Var2leadlag[l1]=leadlag;
+                ops[nops].Var2Dims[l1].ADims=coefs[index].strides[l];
+                ops[nops].Var2Dims[l1].leadlag=leadlag;
               } else {
                 if (sets[coefs[index].setid[l]].size>sets[arSet[l1].setid].size) {
-                  ops[nops].Var1SupSet[l1]=1;
-                  for(sup=1;sup<MAXSUPSET;sup++)if(sets[arSet[l1].setid].subsetid[sup]==coefs[index].setid[l]){ops[nops].Var1SSIndx[l1]=sup;break;}
+                  ops[nops].Var1Dims[l1].SupSet=1;
+                  for(sup=1;sup<MAXSUPSET;sup++)if(sets[arSet[l1].setid].subsetid[sup]==coefs[index].setid[l]){ops[nops].Var1Dims[l1].SSIndx=sup;break;}
                 }
-                ops[nops].Var1ADims[l1]=coefs[index].strides[l];
-                ops[nops].Var1leadlag[l1]=leadlag;
+                ops[nops].Var1Dims[l1].ADims=coefs[index].strides[l];
+                ops[nops].Var1Dims[l1].leadlag=leadlag;
               }
               break;
             }
@@ -132,18 +132,18 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
           if (strcmp(p,arSet[l1].index_name)==0) {
             if(varindex==2) {
               if (sets[coefs[index].setid[l]].size>sets[arSet[l1].setid].size) {
-                ops[nops].Var2SupSet[l1]=1;
-                for(sup=1;sup<MAXSUPSET;sup++)if(sets[arSet[l1].setid].subsetid[sup]==coefs[index].setid[l]){ops[nops].Var2SSIndx[l1]=sup;break;}
+                ops[nops].Var2Dims[l1].SupSet=1;
+                for(sup=1;sup<MAXSUPSET;sup++)if(sets[arSet[l1].setid].subsetid[sup]==coefs[index].setid[l]){ops[nops].Var2Dims[l1].SSIndx=sup;break;}
               }
-              ops[nops].Var2ADims[l1]=coefs[index].strides[l];
-              ops[nops].Var2leadlag[l1]=leadlag;
+              ops[nops].Var2Dims[l1].ADims=coefs[index].strides[l];
+              ops[nops].Var2Dims[l1].leadlag=leadlag;
             } else {
               if (sets[coefs[index].setid[l]].size>sets[arSet[l1].setid].size) {
-                ops[nops].Var1SupSet[l1]=1;
-                for(sup=1;sup<MAXSUPSET;sup++)if(sets[arSet[l1].setid].subsetid[sup]==coefs[index].setid[l]){ops[nops].Var1SSIndx[l1]=sup;break;}
+                ops[nops].Var1Dims[l1].SupSet=1;
+                for(sup=1;sup<MAXSUPSET;sup++)if(sets[arSet[l1].setid].subsetid[sup]==coefs[index].setid[l]){ops[nops].Var1Dims[l1].SSIndx=sup;break;}
               }
-              ops[nops].Var1ADims[l1]=coefs[index].strides[l];
-              ops[nops].Var1leadlag[l1]=leadlag;
+              ops[nops].Var1Dims[l1].ADims=coefs[index].strides[l];
+              ops[nops].Var1Dims[l1].leadlag=leadlag;
             }
             break;
           }
@@ -170,11 +170,11 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
       case 0:
         for (l=0; l<fdim; l++) {
           if(varindex==2) {
-            ops[nops].Var2ADims[l]=0;
-            ops[nops].Var2leadlag[l]=0;
+            ops[nops].Var2Dims[l].ADims=0;
+            ops[nops].Var2Dims[l].leadlag=0;
           } else {
-            ops[nops].Var1ADims[l]=0;
-            ops[nops].Var1leadlag[l]=0;
+            ops[nops].Var1Dims[l].ADims=0;
+            ops[nops].Var1Dims[l].leadlag=0;
           }
         }
         break;
@@ -184,29 +184,29 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
         parse_index_leadlag(p,&leadlag);
         for (l=0; l<fdim; l++) {
              if(varindex==2) {
-              ops[nops].Var2ADims[l]=0;
-              ops[nops].Var2leadlag[l]=0;
-              ops[nops].Var2SupSet[l]=0;
+              ops[nops].Var2Dims[l].ADims=0;
+              ops[nops].Var2Dims[l].leadlag=0;
+              ops[nops].Var2Dims[l].SupSet=0;
             } else {
-              ops[nops].Var1ADims[l]=0;
-              ops[nops].Var1leadlag[l]=0;
-              ops[nops].Var1SupSet[l]=0;
+              ops[nops].Var1Dims[l].ADims=0;
+              ops[nops].Var1Dims[l].leadlag=0;
+              ops[nops].Var1Dims[l].SupSet=0;
             }
           if (strcmp(p,arSet[l].index_name)==0) {
             if(varindex==2) {
               if (sets[vars[index].setid[0]].size>sets[arSet[l].setid].size) {
-                ops[nops].Var2SupSet[l]=1;
-                for(sup=1;sup<MAXSUPSET;sup++)if(sets[arSet[l].setid].subsetid[sup]==vars[index].setid[0]){ops[nops].Var2SSIndx[l]=sup;break;}
+                ops[nops].Var2Dims[l].SupSet=1;
+                for(sup=1;sup<MAXSUPSET;sup++)if(sets[arSet[l].setid].subsetid[sup]==vars[index].setid[0]){ops[nops].Var2Dims[l].SSIndx=sup;break;}
               }
-              ops[nops].Var2ADims[l]=vars[index].strides[0];
-              ops[nops].Var2leadlag[l]=leadlag;
+              ops[nops].Var2Dims[l].ADims=vars[index].strides[0];
+              ops[nops].Var2Dims[l].leadlag=leadlag;
             } else {
               if (sets[vars[index].setid[0]].size>sets[arSet[l].setid].size) {
-                ops[nops].Var1SupSet[l]=1;
-                for(sup=1;sup<MAXSUPSET;sup++)if(sets[arSet[l].setid].subsetid[sup]==vars[index].setid[0]){ops[nops].Var1SSIndx[l]=sup;break;}
+                ops[nops].Var1Dims[l].SupSet=1;
+                for(sup=1;sup<MAXSUPSET;sup++)if(sets[arSet[l].setid].subsetid[sup]==vars[index].setid[0]){ops[nops].Var1Dims[l].SSIndx=sup;break;}
               }
-              ops[nops].Var1ADims[l]=vars[index].strides[0];
-              ops[nops].Var1leadlag[l]=leadlag;
+              ops[nops].Var1Dims[l].ADims=vars[index].strides[0];
+              ops[nops].Var1Dims[l].leadlag=leadlag;
             }
           }
         }
@@ -214,13 +214,13 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
       default:
         for (l1=0; l1<fdim; l1++) {
           if(varindex==2) {
-            ops[nops].Var2ADims[l1]=0;
-            ops[nops].Var2leadlag[l1]=0;
-            ops[nops].Var2SupSet[l1]=0;
+            ops[nops].Var2Dims[l1].ADims=0;
+            ops[nops].Var2Dims[l1].leadlag=0;
+            ops[nops].Var2Dims[l1].SupSet=0;
           } else {
-            ops[nops].Var1ADims[l1]=0;
-            ops[nops].Var1leadlag[l1]=0;
-            ops[nops].Var1SupSet[l1]=0;
+            ops[nops].Var1Dims[l1].ADims=0;
+            ops[nops].Var1Dims[l1].leadlag=0;
+            ops[nops].Var1Dims[l1].SupSet=0;
           }
         }
         for (l=0; l<vars[index].size-1; l++) {
@@ -231,18 +231,18 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
             if (strcmp(p,arSet[l1].index_name)==0) {
               if(varindex==2) {
                 if (sets[vars[index].setid[l]].size>sets[arSet[l1].setid].size) {
-                  ops[nops].Var2SupSet[l1]=1;
-                  for(sup=1;sup<MAXSUPSET;sup++)if(sets[arSet[l1].setid].subsetid[sup]==vars[index].setid[l]){ops[nops].Var2SSIndx[l1]=sup;break;}
+                  ops[nops].Var2Dims[l1].SupSet=1;
+                  for(sup=1;sup<MAXSUPSET;sup++)if(sets[arSet[l1].setid].subsetid[sup]==vars[index].setid[l]){ops[nops].Var2Dims[l1].SSIndx=sup;break;}
                 }
-                ops[nops].Var2ADims[l1]=vars[index].strides[l];
-                ops[nops].Var2leadlag[l1]=leadlag;
+                ops[nops].Var2Dims[l1].ADims=vars[index].strides[l];
+                ops[nops].Var2Dims[l1].leadlag=leadlag;
               } else {
                 if (sets[vars[index].setid[l]].size>sets[arSet[l1].setid].size) {
-                  ops[nops].Var1SupSet[l1]=1;
-                  for(sup=1;sup<MAXSUPSET;sup++)if(sets[arSet[l1].setid].subsetid[sup]==vars[index].setid[l]){ops[nops].Var1SSIndx[l1]=sup;break;}
+                  ops[nops].Var1Dims[l1].SupSet=1;
+                  for(sup=1;sup<MAXSUPSET;sup++)if(sets[arSet[l1].setid].subsetid[sup]==vars[index].setid[l]){ops[nops].Var1Dims[l1].SSIndx=sup;break;}
                 }
-                ops[nops].Var1ADims[l1]=vars[index].strides[l];
-                ops[nops].Var1leadlag[l1]=leadlag;
+                ops[nops].Var1Dims[l1].ADims=vars[index].strides[l];
+                ops[nops].Var1Dims[l1].leadlag=leadlag;
               }
               break;
             }
@@ -255,18 +255,18 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
           if (strcmp(p,arSet[l1].index_name)==0) {
             if(varindex==2) {
               if (sets[vars[index].setid[l]].size>sets[arSet[l1].setid].size) {
-                ops[nops].Var2SupSet[l1]=1;
-                for(sup=1;sup<MAXSUPSET;sup++)if(sets[arSet[l1].setid].subsetid[sup]==vars[index].setid[l]){ops[nops].Var2SSIndx[l1]=sup;break;}
+                ops[nops].Var2Dims[l1].SupSet=1;
+                for(sup=1;sup<MAXSUPSET;sup++)if(sets[arSet[l1].setid].subsetid[sup]==vars[index].setid[l]){ops[nops].Var2Dims[l1].SSIndx=sup;break;}
               }
-              ops[nops].Var2ADims[l1]=vars[index].strides[l];
-              ops[nops].Var2leadlag[l1]=leadlag;
+              ops[nops].Var2Dims[l1].ADims=vars[index].strides[l];
+              ops[nops].Var2Dims[l1].leadlag=leadlag;
             } else {
               if (sets[vars[index].setid[l]].size>sets[arSet[l1].setid].size) {
-                ops[nops].Var1SupSet[l1]=1;
-                for(sup=1;sup<MAXSUPSET;sup++)if(sets[arSet[l1].setid].subsetid[sup]==vars[index].setid[l]){ops[nops].Var1SSIndx[l1]=sup;break;}
+                ops[nops].Var1Dims[l1].SupSet=1;
+                for(sup=1;sup<MAXSUPSET;sup++)if(sets[arSet[l1].setid].subsetid[sup]==vars[index].setid[l]){ops[nops].Var1Dims[l1].SSIndx=sup;break;}
               }
-              ops[nops].Var1ADims[l1]=vars[index].strides[l];
-              ops[nops].Var1leadlag[l1]=leadlag;
+              ops[nops].Var1Dims[l1].ADims=vars[index].strides[l];
+              ops[nops].Var1Dims[l1].leadlag=leadlag;
             }
             break;
           }
@@ -282,17 +282,17 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
       if(varindex==2) {
         ops[nops].Var2BegAdd=sum_cof[index].offset;
         ops[nops].Var2Type=OT_SUM;
-        for (l1=0; l1<sum_cof[index].size; l1++)ops[nops].Var2SSIndx[l1]=0;
+        for (l1=0; l1<sum_cof[index].size; l1++)ops[nops].Var2Dims[l1].SSIndx=0;
       } else {
         ops[nops].Var1BegAdd=sum_cof[index].offset;
         ops[nops].Var1Type=OT_SUM;
-        for (l1=0; l1<sum_cof[index].size; l1++)ops[nops].Var1SSIndx[l1]=0;
+        for (l1=0; l1<sum_cof[index].size; l1++)ops[nops].Var1Dims[l1].SSIndx=0;
       }
       switch(sum_cof[index].size) {
       case 0:
         for (l1=0; l1<fdim; l1++) {
-          if(varindex==2) ops[nops].Var2ADims[l1]=0;
-          else ops[nops].Var1ADims[l1]=0;
+          if(varindex==2) ops[nops].Var2Dims[l1].ADims=0;
+          else ops[nops].Var1Dims[l1].ADims=0;
         }
         break;
       case 1:
@@ -300,32 +300,32 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
         for (l=0; l<fdim; l++) {
           if (strcmp(p,arSet[l].index_name)==0) {
             if(varindex==2) {
-              ops[nops].Var2ADims[l]=sum_cof[index].strides[0];
+              ops[nops].Var2Dims[l].ADims=sum_cof[index].strides[0];
             } else {
-              ops[nops].Var1ADims[l]=sum_cof[index].strides[0];
+              ops[nops].Var1Dims[l].ADims=sum_cof[index].strides[0];
             }
           } else {
             if(varindex==2) {
-              ops[nops].Var2ADims[l]=0;
+              ops[nops].Var2Dims[l].ADims=0;
             } else {
-              ops[nops].Var1ADims[l]=0;
+              ops[nops].Var1Dims[l].ADims=0;
             }
           }
         }
         break;
       default:
         for (l1=0; l1<fdim; l1++) {
-          if(varindex==2) ops[nops].Var2ADims[l1]=0;
-          else ops[nops].Var1ADims[l1]=0;
+          if(varindex==2) ops[nops].Var2Dims[l1].ADims=0;
+          else ops[nops].Var1Dims[l1].ADims=0;
         }
         for (l=0; l<sum_cof[index].size-1; l++) {
           p=strtok(NULL,",");
           for (l1=0; l1<fdim; l1++) {
             if (strcmp(p,arSet[l1].index_name)==0) {
               if(varindex==2) {
-                ops[nops].Var2ADims[l1]=sum_cof[index].strides[l];
+                ops[nops].Var2Dims[l1].ADims=sum_cof[index].strides[l];
               } else {
-                ops[nops].Var1ADims[l1]=sum_cof[index].strides[l];
+                ops[nops].Var1Dims[l1].ADims=sum_cof[index].strides[l];
               }
               break;
             }
@@ -335,9 +335,9 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
         for (l1=0; l1<fdim; l1++) {
           if (strcmp(p,arSet[l1].index_name)==0) {
             if(varindex==2) {
-              ops[nops].Var2ADims[l1]=sum_cof[index].strides[l];
+              ops[nops].Var2Dims[l1].ADims=sum_cof[index].strides[l];
             } else {
-              ops[nops].Var1ADims[l1]=sum_cof[index].strides[l];
+              ops[nops].Var1Dims[l1].ADims=sum_cof[index].strides[l];
             }
             break;
           }
@@ -555,10 +555,10 @@ solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,
       if (ops[i].Var1Type==OT_ARRAY) {
         l=0;
         for (j=0; j<fdim; j++) {
-          if(ops[i].Var1SupSet[j]==1) {
-            l+=ops[i].Var1ADims[j]*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var1SSIndx[j]]+ops[i].Var1leadlag[j]);
+          if(ops[i].Var1Dims[j].SupSet==1) {
+            l+=ops[i].Var1Dims[j].ADims*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var1Dims[j].SSIndx]+ops[i].Var1Dims[j].leadlag);
           } else {
-            l+=ops[i].Var1ADims[j]*(arSet[j].indx+ops[i].Var1leadlag[j]);
+            l+=ops[i].Var1Dims[j].ADims*(arSet[j].indx+ops[i].Var1Dims[j].leadlag);
           }
         }
         ops[i].TmpVarVal=record[ops[i].Var1BegAdd+l].value;
@@ -567,7 +567,7 @@ solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,
       if (ops[i].Var1Type==OT_SUM) {
         l=0;
         for (j=0; j<fdim; j++) {
-          l+=ops[i].Var1ADims[j]*arSet[j].indx;
+          l+=ops[i].Var1Dims[j].ADims*arSet[j].indx;
         }
         ops[i].TmpVarVal=sum_vals[ops[i].Var1BegAdd+l].value;
         break;
@@ -597,10 +597,10 @@ solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,
       if (ops[i].Var1Type==OT_CHANGE) {
         l=0;
         for (j=0; j<fdim; j++) {
-          if(ops[i].Var1SupSet[j]==1) {
-            l+=ops[i].Var1ADims[j]*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var1SSIndx[j]]+ops[i].Var1leadlag[j]);
+          if(ops[i].Var1Dims[j].SupSet==1) {
+            l+=ops[i].Var1Dims[j].ADims*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var1Dims[j].SSIndx]+ops[i].Var1Dims[j].leadlag);
           } else {
-            l+=ops[i].Var1ADims[j]*(arSet[j].indx+ops[i].Var1leadlag[j]);
+            l+=ops[i].Var1Dims[j].ADims*(arSet[j].indx+ops[i].Var1Dims[j].leadlag);
           }
         }
         ops[i].TmpVarVal=record[ops[i].Var1BegAdd+l].substep_base;
@@ -611,20 +611,20 @@ solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,
       if(ops[i].Var1Type<3||ops[i].Var1Type==OT_CHANGE) {
         l=0;
         for (j=0; j<fdim; j++) {
-          if(ops[i].Var1SupSet[j]==1) {
-            l+=ops[i].Var1ADims[j]*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var1SSIndx[j]]+ops[i].Var1leadlag[j]);
+          if(ops[i].Var1Dims[j].SupSet==1) {
+            l+=ops[i].Var1Dims[j].ADims*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var1Dims[j].SSIndx]+ops[i].Var1Dims[j].leadlag);
           } else {
-            l+=ops[i].Var1ADims[j]*(arSet[j].indx+ops[i].Var1leadlag[j]);
+            l+=ops[i].Var1Dims[j].ADims*(arSet[j].indx+ops[i].Var1Dims[j].leadlag);
           }
         }
       }
       if(ops[i].Var2Type<3||ops[i].Var2Type==OT_CHANGE) {
         l1=0;
         for (j=0; j<fdim; j++) {
-          if(ops[i].Var2SupSet[j]==1) {
-            l1+=ops[i].Var2ADims[j]*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var2SSIndx[j]]+ops[i].Var2leadlag[j]);
+          if(ops[i].Var2Dims[j].SupSet==1) {
+            l1+=ops[i].Var2Dims[j].ADims*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var2Dims[j].SSIndx]+ops[i].Var2Dims[j].leadlag);
           } else {
-            l1+=ops[i].Var2ADims[j]*(arSet[j].indx+ops[i].Var2leadlag[j]);
+            l1+=ops[i].Var2Dims[j].ADims*(arSet[j].indx+ops[i].Var2Dims[j].leadlag);
           }
         }
       }
@@ -644,20 +644,20 @@ solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,
       if(ops[i].Var1Type<3||ops[i].Var1Type==OT_CHANGE) {
         l=0;
         for (j=0; j<fdim; j++) {
-          if(ops[i].Var1SupSet[j]==1) {
-            l+=ops[i].Var1ADims[j]*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var1SSIndx[j]]+ops[i].Var1leadlag[j]);
+          if(ops[i].Var1Dims[j].SupSet==1) {
+            l+=ops[i].Var1Dims[j].ADims*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var1Dims[j].SSIndx]+ops[i].Var1Dims[j].leadlag);
           } else {
-            l+=ops[i].Var1ADims[j]*(arSet[j].indx+ops[i].Var1leadlag[j]);
+            l+=ops[i].Var1Dims[j].ADims*(arSet[j].indx+ops[i].Var1Dims[j].leadlag);
           }
         }
       }
       if(ops[i].Var2Type<3||ops[i].Var2Type==OT_CHANGE) {
         l1=0;
         for (j=0; j<fdim; j++) {
-          if(ops[i].Var2SupSet[j]==1) {
-            l1+=ops[i].Var2ADims[j]*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var2SSIndx[j]]+ops[i].Var2leadlag[j]);
+          if(ops[i].Var2Dims[j].SupSet==1) {
+            l1+=ops[i].Var2Dims[j].ADims*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var2Dims[j].SSIndx]+ops[i].Var2Dims[j].leadlag);
           } else {
-            l1+=ops[i].Var2ADims[j]*(arSet[j].indx+ops[i].Var2leadlag[j]);
+            l1+=ops[i].Var2Dims[j].ADims*(arSet[j].indx+ops[i].Var2Dims[j].leadlag);
           }
         }
       }
@@ -681,10 +681,10 @@ solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,
       if(ops[i].Var1Type==OT_ARRAY) {
         l=0;
         for (j=0; j<fdim; j++) {
-          if(ops[i].Var1SupSet[j]==1) {
-            l+=ops[i].Var1ADims[j]*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var1SSIndx[j]]+ops[i].Var1leadlag[j]);
+          if(ops[i].Var1Dims[j].SupSet==1) {
+            l+=ops[i].Var1Dims[j].ADims*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var1Dims[j].SSIndx]+ops[i].Var1Dims[j].leadlag);
           } else {
-            l+=ops[i].Var1ADims[j]*(arSet[j].indx+ops[i].Var1leadlag[j]);
+            l+=ops[i].Var1Dims[j].ADims*(arSet[j].indx+ops[i].Var1Dims[j].leadlag);
           }
         }
         eval1=record[ops[i].Var1BegAdd+l].value;
@@ -692,10 +692,10 @@ solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,
       if(ops[i].Var1Type==OT_SUM) {
         l=0;
         for (j=0; j<fdim; j++) {
-          if(ops[i].Var1SupSet[j]==1) {
-            l+=ops[i].Var1ADims[j]*set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var1SSIndx[j]];
+          if(ops[i].Var1Dims[j].SupSet==1) {
+            l+=ops[i].Var1Dims[j].ADims*set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var1Dims[j].SSIndx];
           } else {
-            l+=ops[i].Var1ADims[j]*arSet[j].indx;
+            l+=ops[i].Var1Dims[j].ADims*arSet[j].indx;
           }
         }
         eval1=sum_vals[ops[i].Var1BegAdd+l].value;
@@ -709,10 +709,10 @@ solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,
       if(ops[i].Var1Type==OT_CHANGE) {
         l=0;
         for (j=0; j<fdim; j++) {
-          if(ops[i].Var1SupSet[j]==1) {
-            l+=ops[i].Var1ADims[j]*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var1SSIndx[j]]+ops[i].Var1leadlag[j]);
+          if(ops[i].Var1Dims[j].SupSet==1) {
+            l+=ops[i].Var1Dims[j].ADims*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var1Dims[j].SSIndx]+ops[i].Var1Dims[j].leadlag);
           } else {
-            l+=ops[i].Var1ADims[j]*(arSet[j].indx+ops[i].Var1leadlag[j]);
+            l+=ops[i].Var1Dims[j].ADims*(arSet[j].indx+ops[i].Var1Dims[j].leadlag);
           }
         }
         eval1=record[ops[i].Var1BegAdd+l].substep_base;
@@ -720,10 +720,10 @@ solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,
       if(ops[i].Var2Type==OT_ARRAY) {
         l=0;
         for (j=0; j<fdim; j++) {
-          if(ops[i].Var2SupSet[j]==1) {
-            l+=ops[i].Var2ADims[j]*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var2SSIndx[j]]+ops[i].Var2leadlag[j]);
+          if(ops[i].Var2Dims[j].SupSet==1) {
+            l+=ops[i].Var2Dims[j].ADims*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var2Dims[j].SSIndx]+ops[i].Var2Dims[j].leadlag);
           } else {
-            l+=ops[i].Var2ADims[j]*(arSet[j].indx+ops[i].Var2leadlag[j]);
+            l+=ops[i].Var2Dims[j].ADims*(arSet[j].indx+ops[i].Var2Dims[j].leadlag);
           }
         }
         eval2=record[ops[i].Var2BegAdd+l].value;
@@ -732,10 +732,10 @@ solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,
         l=0;
         for (j=0; j<fdim; j++) {
             l1=l;
-          if(ops[i].Var2SupSet[j]==1) {
-            l+=ops[i].Var2ADims[j]*set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var2SSIndx[j]];
+          if(ops[i].Var2Dims[j].SupSet==1) {
+            l+=ops[i].Var2Dims[j].ADims*set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var2Dims[j].SSIndx];
           } else {
-            l+=ops[i].Var2ADims[j]*arSet[j].indx;
+            l+=ops[i].Var2Dims[j].ADims*arSet[j].indx;
           }
         }
         eval2=sum_vals[ops[i].Var2BegAdd+l].value;
@@ -749,10 +749,10 @@ solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,
       if(ops[i].Var2Type==OT_CHANGE) {
         l=0;
         for (j=0; j<fdim; j++) {
-          if(ops[i].Var2SupSet[j]==1) {
-            l+=ops[i].Var2ADims[j]*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var2SSIndx[j]]+ops[i].Var2leadlag[j]);
+          if(ops[i].Var2Dims[j].SupSet==1) {
+            l+=ops[i].Var2Dims[j].ADims*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var2Dims[j].SSIndx]+ops[i].Var2Dims[j].leadlag);
           } else {
-            l+=ops[i].Var2ADims[j]*(arSet[j].indx+ops[i].Var2leadlag[j]);
+            l+=ops[i].Var2Dims[j].ADims*(arSet[j].indx+ops[i].Var2Dims[j].leadlag);
           }
         }
         eval2=record[ops[i].Var2BegAdd+l].substep_base;
@@ -763,10 +763,10 @@ solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,
       if(ops[i].Var1Type==OT_ARRAY) {
         l=0;
         for (j=0; j<fdim; j++) {
-          if(ops[i].Var1SupSet[j]==1) {
-            l+=ops[i].Var1ADims[j]*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var1SSIndx[j]]+ops[i].Var1leadlag[j]);
+          if(ops[i].Var1Dims[j].SupSet==1) {
+            l+=ops[i].Var1Dims[j].ADims*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var1Dims[j].SSIndx]+ops[i].Var1Dims[j].leadlag);
           } else {
-            l+=ops[i].Var1ADims[j]*(arSet[j].indx+ops[i].Var1leadlag[j]);
+            l+=ops[i].Var1Dims[j].ADims*(arSet[j].indx+ops[i].Var1Dims[j].leadlag);
           }
         }
         eval1=record[ops[i].Var1BegAdd+l].value;
@@ -774,10 +774,10 @@ solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,
       if(ops[i].Var1Type==OT_SUM) {
         l=0;
         for (j=0; j<fdim; j++) {
-          if(ops[i].Var1SupSet[j]==1) {
-            l+=ops[i].Var1ADims[j]*set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var1SSIndx[j]];
+          if(ops[i].Var1Dims[j].SupSet==1) {
+            l+=ops[i].Var1Dims[j].ADims*set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var1Dims[j].SSIndx];
           } else {
-            l+=ops[i].Var1ADims[j]*arSet[j].indx;
+            l+=ops[i].Var1Dims[j].ADims*arSet[j].indx;
           }
         }
         eval1=sum_vals[ops[i].Var1BegAdd+l].value;
@@ -791,10 +791,10 @@ solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,
       if(ops[i].Var1Type==OT_CHANGE) {
         l=0;
         for (j=0; j<fdim; j++) {
-          if(ops[i].Var1SupSet[j]==1) {
-            l+=ops[i].Var1ADims[j]*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var1SSIndx[j]]+ops[i].Var1leadlag[j]);
+          if(ops[i].Var1Dims[j].SupSet==1) {
+            l+=ops[i].Var1Dims[j].ADims*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var1Dims[j].SSIndx]+ops[i].Var1Dims[j].leadlag);
           } else {
-            l+=ops[i].Var1ADims[j]*(arSet[j].indx+ops[i].Var1leadlag[j]);
+            l+=ops[i].Var1Dims[j].ADims*(arSet[j].indx+ops[i].Var1Dims[j].leadlag);
           }
         }
         eval1=record[ops[i].Var1BegAdd+l].substep_base;
@@ -802,10 +802,10 @@ solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,
       if(ops[i].Var2Type==OT_ARRAY) {
         l=0;
         for (j=0; j<fdim; j++) {
-          if(ops[i].Var2SupSet[j]==1) {
-            l+=ops[i].Var2ADims[j]*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var2SSIndx[j]]+ops[i].Var2leadlag[j]);
+          if(ops[i].Var2Dims[j].SupSet==1) {
+            l+=ops[i].Var2Dims[j].ADims*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var2Dims[j].SSIndx]+ops[i].Var2Dims[j].leadlag);
           } else {
-            l+=ops[i].Var2ADims[j]*(arSet[j].indx+ops[i].Var2leadlag[j]);
+            l+=ops[i].Var2Dims[j].ADims*(arSet[j].indx+ops[i].Var2Dims[j].leadlag);
           }
         }
         eval2=record[ops[i].Var2BegAdd+l].value;
@@ -813,10 +813,10 @@ solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,
       if(ops[i].Var2Type==OT_SUM) {
         l=0;
         for (j=0; j<fdim; j++) {
-          if(ops[i].Var2SupSet[j]==1) {
-            l+=ops[i].Var2ADims[j]*set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var2SSIndx[j]];
+          if(ops[i].Var2Dims[j].SupSet==1) {
+            l+=ops[i].Var2Dims[j].ADims*set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var2Dims[j].SSIndx];
           } else {
-            l+=ops[i].Var2ADims[j]*arSet[j].indx;
+            l+=ops[i].Var2Dims[j].ADims*arSet[j].indx;
           }
         }
         eval2=sum_vals[ops[i].Var2BegAdd+l].value;
@@ -830,10 +830,10 @@ solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,
       if(ops[i].Var2Type==OT_CHANGE) {
         l=0;
         for (j=0; j<fdim; j++) {
-          if(ops[i].Var2SupSet[j]==1) {
-            l+=ops[i].Var2ADims[j]*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var2SSIndx[j]]+ops[i].Var2leadlag[j]);
+          if(ops[i].Var2Dims[j].SupSet==1) {
+            l+=ops[i].Var2Dims[j].ADims*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var2Dims[j].SSIndx]+ops[i].Var2Dims[j].leadlag);
           } else {
-            l+=ops[i].Var2ADims[j]*(arSet[j].indx+ops[i].Var2leadlag[j]);
+            l+=ops[i].Var2Dims[j].ADims*(arSet[j].indx+ops[i].Var2Dims[j].leadlag);
           }
         }
         eval2=record[ops[i].Var2BegAdd+l].substep_base;
@@ -844,20 +844,20 @@ solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,
       if(ops[i].Var1Type<3||ops[i].Var1Type==OT_CHANGE) {
         l=0;
         for (j=0; j<fdim; j++) {
-          if(ops[i].Var1SupSet[j]==1) {
-            l+=ops[i].Var1ADims[j]*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var1SSIndx[j]]+ops[i].Var1leadlag[j]);
+          if(ops[i].Var1Dims[j].SupSet==1) {
+            l+=ops[i].Var1Dims[j].ADims*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var1Dims[j].SSIndx]+ops[i].Var1Dims[j].leadlag);
           } else {
-            l+=ops[i].Var1ADims[j]*(arSet[j].indx+ops[i].Var1leadlag[j]);
+            l+=ops[i].Var1Dims[j].ADims*(arSet[j].indx+ops[i].Var1Dims[j].leadlag);
           }
         }
       }
       if(ops[i].Var2Type<3||ops[i].Var2Type==OT_CHANGE) {
         l1=0;
         for (j=0; j<fdim; j++) {
-          if(ops[i].Var2SupSet[j]==1) {
-            l1+=ops[i].Var2ADims[j]*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var2SSIndx[j]]+ops[i].Var2leadlag[j]);
+          if(ops[i].Var2Dims[j].SupSet==1) {
+            l1+=ops[i].Var2Dims[j].ADims*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var2Dims[j].SSIndx]+ops[i].Var2Dims[j].leadlag);
           } else {
-            l1+=ops[i].Var2ADims[j]*(arSet[j].indx+ops[i].Var2leadlag[j]);
+            l1+=ops[i].Var2Dims[j].ADims*(arSet[j].indx+ops[i].Var2Dims[j].leadlag);
           }
         }
       }
@@ -882,10 +882,10 @@ solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,
       if(ops[i].Var1Type==OT_ARRAY) {
         l=0;
         for (j=0; j<fdim; j++) {
-          if(ops[i].Var1SupSet[j]==1) {
-            l+=ops[i].Var1ADims[j]*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var1SSIndx[j]]+ops[i].Var1leadlag[j]);
+          if(ops[i].Var1Dims[j].SupSet==1) {
+            l+=ops[i].Var1Dims[j].ADims*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var1Dims[j].SSIndx]+ops[i].Var1Dims[j].leadlag);
           } else {
-            l+=ops[i].Var1ADims[j]*(arSet[j].indx+ops[i].Var1leadlag[j]);
+            l+=ops[i].Var1Dims[j].ADims*(arSet[j].indx+ops[i].Var1Dims[j].leadlag);
           }
         }
         eval1=record[ops[i].Var1BegAdd+l].value;
@@ -893,10 +893,10 @@ solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,
       if(ops[i].Var1Type==OT_SUM) {
         l=0;
         for (j=0; j<fdim; j++) {
-          if(ops[i].Var1SupSet[j]==1) {
-            l+=ops[i].Var1ADims[j]*set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var1SSIndx[j]];
+          if(ops[i].Var1Dims[j].SupSet==1) {
+            l+=ops[i].Var1Dims[j].ADims*set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var1Dims[j].SSIndx];
           } else {
-            l+=ops[i].Var1ADims[j]*arSet[j].indx;
+            l+=ops[i].Var1Dims[j].ADims*arSet[j].indx;
           }
         }
         eval1=sum_vals[ops[i].Var1BegAdd+l].value;
@@ -910,10 +910,10 @@ solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,
       if(ops[i].Var1Type==OT_CHANGE) {
         l=0;
         for (j=0; j<fdim; j++) {
-          if(ops[i].Var1SupSet[j]==1) {
-            l+=ops[i].Var1ADims[j]*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var1SSIndx[j]]+ops[i].Var1leadlag[j]);
+          if(ops[i].Var1Dims[j].SupSet==1) {
+            l+=ops[i].Var1Dims[j].ADims*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var1Dims[j].SSIndx]+ops[i].Var1Dims[j].leadlag);
           } else {
-            l+=ops[i].Var1ADims[j]*(arSet[j].indx+ops[i].Var1leadlag[j]);
+            l+=ops[i].Var1Dims[j].ADims*(arSet[j].indx+ops[i].Var1Dims[j].leadlag);
           }
         }
         eval1=record[ops[i].Var1BegAdd+l].substep_base;
@@ -921,10 +921,10 @@ solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,
       if(ops[i].Var2Type==OT_ARRAY) {
         l=0;
         for (j=0; j<fdim; j++) {
-          if(ops[i].Var2SupSet[j]==1) {
-            l+=ops[i].Var2ADims[j]*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var2SSIndx[j]]+ops[i].Var2leadlag[j]);
+          if(ops[i].Var2Dims[j].SupSet==1) {
+            l+=ops[i].Var2Dims[j].ADims*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var2Dims[j].SSIndx]+ops[i].Var2Dims[j].leadlag);
           } else {
-            l+=ops[i].Var2ADims[j]*(arSet[j].indx+ops[i].Var2leadlag[j]);
+            l+=ops[i].Var2Dims[j].ADims*(arSet[j].indx+ops[i].Var2Dims[j].leadlag);
           }
         }
         eval2=record[ops[i].Var2BegAdd+l].value;
@@ -932,10 +932,10 @@ solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,
       if(ops[i].Var2Type==OT_SUM) {
         l=0;
         for (j=0; j<fdim; j++) {
-          if(ops[i].Var2SupSet[j]==1) {
-            l+=ops[i].Var2ADims[j]*set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var2SSIndx[j]];
+          if(ops[i].Var2Dims[j].SupSet==1) {
+            l+=ops[i].Var2Dims[j].ADims*set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var2Dims[j].SSIndx];
           } else {
-            l+=ops[i].Var2ADims[j]*arSet[j].indx;
+            l+=ops[i].Var2Dims[j].ADims*arSet[j].indx;
           }
         }
         eval2=sum_vals[ops[i].Var2BegAdd+l].value;
@@ -949,10 +949,10 @@ solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,
       if(ops[i].Var2Type==OT_CHANGE) {
         l=0;
         for (j=0; j<fdim; j++) {
-          if(ops[i].Var2SupSet[j]==1) {
-            l+=ops[i].Var2ADims[j]*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var2SSIndx[j]]+ops[i].Var2leadlag[j]);
+          if(ops[i].Var2Dims[j].SupSet==1) {
+            l+=ops[i].Var2Dims[j].ADims*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var2Dims[j].SSIndx]+ops[i].Var2Dims[j].leadlag);
           } else {
-            l+=ops[i].Var2ADims[j]*(arSet[j].indx+ops[i].Var2leadlag[j]);
+            l+=ops[i].Var2Dims[j].ADims*(arSet[j].indx+ops[i].Var2Dims[j].leadlag);
           }
         }
         eval2=record[ops[i].Var2BegAdd+l].substep_base;
@@ -961,10 +961,10 @@ solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,
       if(ops[i].Var3Type==OT_ARRAY) {
         l=0;
         for (j=0; j<fdim; j++) {
-          if(ops[i].Var3SupSet[j]==1) {
-            l+=ops[i].Var3ADims[j]*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var3SSIndx[j]]+ops[i].Var3leadlag[j]);
+          if(ops[i].Var3Dims[j].SupSet==1) {
+            l+=ops[i].Var3Dims[j].ADims*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var3Dims[j].SSIndx]+ops[i].Var3Dims[j].leadlag);
           } else {
-            l+=ops[i].Var3ADims[j]*(arSet[j].indx+ops[i].Var3leadlag[j]);
+            l+=ops[i].Var3Dims[j].ADims*(arSet[j].indx+ops[i].Var3Dims[j].leadlag);
           }
         }
         eval3=record[ops[i].Var3BegAdd+l].value;
@@ -972,10 +972,10 @@ solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,
       if(ops[i].Var3Type==OT_SUM) {
         l=0;
         for (j=0; j<fdim; j++) {
-          if(ops[i].Var3SupSet[j]==1) {
-            l+=ops[i].Var3ADims[j]*set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var3SSIndx[j]];
+          if(ops[i].Var3Dims[j].SupSet==1) {
+            l+=ops[i].Var3Dims[j].ADims*set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var3Dims[j].SSIndx];
           } else {
-            l+=ops[i].Var3ADims[j]*arSet[j].indx;
+            l+=ops[i].Var3Dims[j].ADims*arSet[j].indx;
           }
         }
         eval3=sum_vals[ops[i].Var3BegAdd+l].value;
@@ -989,10 +989,10 @@ solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,
       if(ops[i].Var3Type==OT_CHANGE) {
         l=0;
         for (j=0; j<fdim; j++) {
-          if(ops[i].Var3SupSet[j]==1) {
-            l+=ops[i].Var3ADims[j]*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var3SSIndx[j]]+ops[i].Var3leadlag[j]);
+          if(ops[i].Var3Dims[j].SupSet==1) {
+            l+=ops[i].Var3Dims[j].ADims*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var3Dims[j].SSIndx]+ops[i].Var3Dims[j].leadlag);
           } else {
-            l+=ops[i].Var3ADims[j]*(arSet[j].indx+ops[i].Var3leadlag[j]);
+            l+=ops[i].Var3Dims[j].ADims*(arSet[j].indx+ops[i].Var3Dims[j].leadlag);
           }
         }
         eval3=record[ops[i].Var3BegAdd+l].substep_base;
@@ -1343,10 +1343,10 @@ int formula_compile_if(char *fomulain, set_def *sets,int nif,int ipar,array_def 
   ops[*nops].Var3Type=ops[*nops].Var2Type;
   ops[*nops].Var3BegAdd=ops[*nops].Var2BegAdd;
   for(i=0;i<fdim;i++){
-  ops[*nops].Var3leadlag[i]=ops[*nops].Var2leadlag[i];
-  ops[*nops].Var3SupSet[i]=ops[*nops].Var3SupSet[i];
-  ops[*nops].Var3SSIndx[i]=ops[*nops].Var2SSIndx[i];
-  ops[*nops].Var3ADims[i]=ops[*nops].Var2ADims[i];
+  ops[*nops].Var3Dims[i].leadlag=ops[*nops].Var2Dims[i].leadlag;
+  ops[*nops].Var3Dims[i].SupSet=ops[*nops].Var3Dims[i].SupSet;
+  ops[*nops].Var3Dims[i].SSIndx=ops[*nops].Var2Dims[i].SSIndx;
+  ops[*nops].Var3Dims[i].ADims=ops[*nops].Var2Dims[i].ADims;
   }
   ops[*nops].Var3Val=ops[*nops].Var2Val;
   formula_bind_operand(var2,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,*nops,arSet,fdim,2);

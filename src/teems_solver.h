@@ -232,6 +232,17 @@ char *str_replace_char(char *line, int finditem, int replitem);
 
 /* ================= formula.c — FORMULA compile/evaluate, UPDATE ======== */
 
+/* per-dimension addressing record of one operand: the eval loop reads
+   all four fields together per dim, so they are interleaved (one record
+   per dim) rather than held in four parallel arrays */
+typedef struct
+{
+  offset_t ADims;            /* stride of this dim in the value array */
+  int SupSet;                /* 1 = index via superset_pos, 0 = direct */
+  int SSIndx;                /* column into superset_pos (< MAXSUPSET) */
+  int leadlag;               /* intertemporal lead/lag shift */
+} dim_addr ;
+
 /* one operation of a compiled formula program (interpreted per element) */
 typedef struct
 {
@@ -239,25 +250,16 @@ typedef struct
   store_real TmpVarVal;
   dim_t Var1Type;            /* enum operand_type */
   offset_t Var1BegAdd;
-  int Var1leadlag[MAXVARDIM];
-  offset_t Var1SupSet[MAXVARDIM];
-  offset_t Var1SSIndx[MAXVARDIM];
-  offset_t Var1ADims[MAXVARDIM];
+  dim_addr Var1Dims[MAXVARDIM];
   store_real Var1Val;
   dim_t Var2Type;
   offset_t Var2BegAdd;
-  int Var2leadlag[MAXVARDIM];
-  offset_t Var2SupSet[MAXVARDIM];
-  offset_t Var2SSIndx[MAXVARDIM];
-  offset_t Var2ADims[MAXVARDIM];
+  dim_addr Var2Dims[MAXVARDIM];
   store_real Var2Val;
 
   dim_t Var3Type;
   offset_t Var3BegAdd;
-  int Var3leadlag[MAXVARDIM];
-  offset_t Var3SupSet[MAXVARDIM];
-  offset_t Var3SSIndx[MAXVARDIM];
-  offset_t Var3ADims[MAXVARDIM];
+  dim_addr Var3Dims[MAXVARDIM];
   store_real Var3Val;
   /* compile-time only (generated temp name); kept last and short so the
      eval-hot fields above stay cache-dense */
