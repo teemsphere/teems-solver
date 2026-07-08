@@ -190,9 +190,7 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
       strcpy(fn03[j1],filename);
     }
   }
-  printf("OK012345 rank %d mpis %d\n",rank,mpisize);
   for(j=0; j<mpisize; j++) {
-    printf("j %d\n",j);
     for(j3=0; j3<nmatinplus; j3++) {
       if(j3==nmatin)i=j3-1;
       else i=j3;
@@ -217,7 +215,6 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
       free(yi0);
     }
   }
-  printf("OK12345 rank %d\n",rank);
   j1=0;
   for(i=0; i<nmatin; i++) {
     bfirst=counteq[i+begblock[rank]];
@@ -245,19 +242,16 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
     ISCreateGeneral(PETSC_COMM_SELF,block_sizes[i+begblock[rank]],indices,PETSC_COPY_VALUES,colindices+i);
     free(indices);
   }
-  printf("0okkkk\n");
   j1=offblock[ndblock];
   for(i=countvarintra1[ndblock]; i<VecSize; i++) {
     indicesC[j1]=i;
     j1++;
   }
-  printf("1okkkk\n");
   j1=offblockrow[ndblock];
   for(i=counteq[ndblock-1]+counteqnoadd[ndblock-1]; i<VecSize; i++) {
     indicesB[j1]=i;
     j1++;
   }
-  printf("2okkkk\n");
   for(i=0; i<mpisize; i++) {
     j=offblockrow[begblock[rank]];
     j1=offblockrow[nmatin+begblock[rank]]-offblockrow[begblock[rank]];
@@ -265,8 +259,6 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
     MPI_Bcast(&j1,1, MPI_INT,i, PETSC_COMM_WORLD);
     MPI_Bcast(&indicesB[j],j1, MPI_INT,i, PETSC_COMM_WORLD);
   }
-  printf("rank1 %d\n",rank);
-
   for(i=0; i<VecSize-sumrowcolin; i++)if(indicesB[i]>=Istart) {
       j=i;
       break;
@@ -276,11 +268,10 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
       break;
     }
   if(j2==VecSize-sumrowcolin)j1=VecSize-sumrowcolin;
-  printf("rank %d j %d j1 %d istart %d iend %d\n",rank,j,j1,Istart,Iend);
+  logmsg(2,"rank %d j %d j1 %d istart %d iend %d\n",rank,j,j1,Istart,Iend);
   VecGetValues(b,j1-j,&indicesB[j],&vecbiui[j]);//implicite yd save mem
   ierr = VecDestroy(&b);
   CHKERRQ(ierr);
-  printf("rank2 %d\n",rank);
   for(i=0; i<mpisize; i++) {
     j=offblock[begblock[rank]];
     j1=offblock[nmatin+begblock[rank]]-offblock[begblock[rank]];
@@ -288,7 +279,6 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
     MPI_Bcast(&j1,1, MPI_INT,i, PETSC_COMM_WORLD);
     MPI_Bcast(&indicesC[j],j1, MPI_INT,i, PETSC_COMM_WORLD);
   }
-  printf("OK132\n");
   for(i=0; i<nmatin; i++) {
     ISCreateGeneral(PETSC_COMM_SELF,VecSize-sumrowcolin,indicesC,PETSC_COPY_VALUES,Cindices+i);
     ISCreateGeneral(PETSC_COMM_SELF,VecSize-sumrowcolin,indicesB,PETSC_COPY_VALUES,Bindices+i);
@@ -299,31 +289,27 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
   PetscInt *indexBB= (PetscInt *) calloc (VecSize,sizeof(PetscInt));
   for(i=0; i<VecSize; i++)indexBB[i]=i;
   ISCreateGeneral(PETSC_COMM_SELF,VecSize,indexBB,PETSC_COPY_VALUES,BBindices);
-  printf("Begin partitioning rank %d\n",rank);
+  logmsg(2,"Begin partitioning rank %d\n",rank);
   ierr = MatCreateSubMatrices(A,nmatin,rowindices,colindices,MAT_INITIAL_MATRIX,&submatA);
-  printf("A\n");
   ierr = MatCreateSubMatrices(A,nmatin,rowindices,Cindices,MAT_INITIAL_MATRIX,&submatC);
-  printf("C\n");
   ierr = MatCreateSubMatrices(A,nmatinBB,Bindices,BBindices,MAT_INITIAL_MATRIX,&submatBB);
   ierr = MatDestroy(&A);
   CHKERRQ(ierr);
   PetscInt BBrow,BBcol,CCrow,CCcol;
   MatGetSize(submatBB[0],&BBrow,&BBcol);
   MatGetSize(submatC[0],&CCrow,&CCcol);
-  printf("bbrow %d bbcol %d ccrow %d cccol %d\n",BBrow,BBcol,BBcol,CCcol);
+  logmsg(2,"bbrow %d bbcol %d ccrow %d cccol %d\n",BBrow,BBcol,BBcol,CCcol);
   PetscInt *indexBBi= (PetscInt *) calloc (BBrow,sizeof(PetscInt));
   for(i=0; i<BBrow; i++)indexBBi[i]=i;
   for(i=0; i<nmatin; i++) {
     ISCreateGeneral(PETSC_COMM_SELF,BBrow,indexBBi,PETSC_COPY_VALUES,Bindices+i);
   }
   ierr = MatCreateSubMatrices(submatBB[0],nmatin,Bindices,colindices,MAT_INITIAL_MATRIX,&submatB);
-  printf("B\n");
   if(rank==mpisize-1)proc1=1;
   ierr = PetscMalloc(proc1*sizeof(Mat *),&submatD);
   CHKERRQ(ierr);
-  printf("D\n");
   MatCreateSubMatrices(submatBB[0],proc1,Bindices,Cindices,MAT_INITIAL_MATRIX,&submatD);
-  printf("End partitionning rank %d time %f\n",rank,((double)clock()-timestr)/CLOCKS_PER_SEC);
+  logmsg(2,"End partitioning rank %d time %f\n",rank,((double)clock()-timestr)/CLOCKS_PER_SEC);
   for (i=0; i<nmatin; i++) {
     ierr = ISDestroy(&rowindices[i]);
     CHKERRQ(ierr);
@@ -342,7 +328,6 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
   ierr = MatDestroy(&submatBB[0]);
   PetscFree(submatBB);
   CHKERRQ(ierr);
-  printf("OK1 rank %d sumrowcolin %d\n",rank,sumrowcolin);
   solve_real *xi1 = (solve_real*)calloc(sumrowcolin,sizeof(solve_real));
   int insizes=17;
   int *insize=(int *) calloc (insizes*nmatin,sizeof(int));
@@ -392,9 +377,9 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
     bivinzrow[li]=(bivinzrow[li]-1)*bivicolsize;//faster MSOL
   }
   vecbivisize=((long int)bivirowsize)*((long int)bivicolsize);
-  if(vecbivisize<0)printf("Overflow detected, the interface problem is too big!!!!!!\n");
+  if(vecbivisize<0)printf("Error: interface problem size overflow (negative vecbivisize); the border is too large\n");
   solve_real *vecbivi= (solve_real *) calloc (vecbivisize,sizeof(solve_real));
-  printf("vecbivisize %ld rank %d\n",vecbivisize,rank);
+  logmsg(2,"vecbivisize %ld rank %d\n",vecbivisize,rank);
 
   solve_real *xi1point;
   offset_t xi1indx=0;
@@ -517,7 +502,7 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
       MatDestroy(&submatB[j1]);//submatBT);
       xi1indx+=block_sizes[j1+begblock[rank]];
       time(&timeend);
-      printf("Submatrix %d rank %d thrd %d calculation time %f\n",j1,rank,jthrd,difftime(timeend,timestr));
+      logmsg(2,"Submatrix %d rank %d thrd %d calculation time %f\n",j1,rank,jthrd,difftime(timeend,timestr));
     }
   }
   }
@@ -529,7 +514,7 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
   ierr = PetscFree(submatB);
   CHKERRQ(ierr);
   free(yi1);
-  printf("Completed calculation of partitioned matrices! Rank %d\n",rank);
+  logmsg(2,"Completed calculation of partitioned matrices, rank %d\n",rank);
   timestr=clock();
 
   #pragma omp parallel private(li) reduction(+:lj)
@@ -558,7 +543,7 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
   free(bivinzcol1);
   vecbivi=realloc(vecbivi,lj2*sizeof(solve_real));
   nz0=lj2;
-  printf("jjjj1 %ld j2 %ld rank %d nz0 %ld nz3 %ld\n",lj,lj2,rank,nz0,nz3);
+  logmsg(2,"lj %ld lj2 %ld rank %d nz0 %ld nz3 %ld\n",lj,lj2,rank,nz0,nz3);
   char processor_name[MPI_MAX_PROCESSOR_NAME];
   int name_len,name_len_max,name_beg,class_size,color,group_size,node_rank,group_size1,group_size11,node_tail_rank;
   MPI_Comm_rank( node_comm, &node_rank);
@@ -629,7 +614,7 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
       obiviindx0=NULL;
       free(vecbivi0);
       vecbivi0=NULL;
-      printf("!!!!!!!!!!!! rank11 %d nz0 %ld j2 %ld nz1 %ld\n",rank,nz0,lj2,nz1);
+      logmsg(2,"rank %d nz0 %ld j2 %ld nz1 %ld\n",rank,nz0,lj2,nz1);
       nz0=nz1;
     }
   }
@@ -693,7 +678,7 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
         free(obiviindx0);
         obiviindx0=NULL;
         free(vecbivi0);
-        printf("!!!!!!!!!!!! rank22 %d nz0 %ld j2 %ld nz1 %ld\n",rank,nz0,lj2,nz1);
+        logmsg(2,"rank %d nz0 %ld j2 %ld nz1 %ld\n",rank,nz0,lj2,nz1);
         nz0=nz1;
       }
     }
@@ -701,9 +686,8 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
 
   fortran_int vecbiuisize=0;
   vecbiuisize=VecSize-sumrowcolin;
-  printf("after bivi rank %d\n",rank);
   reduce_to_rank_nocompress(vecbiui,vecbiuisize,mpisize,rank,mpisize-1);
-  printf("Completed MPI_Reduce Operation! Rank %d time %f\n",rank,((double)clock()-timestr)/CLOCKS_PER_SEC);
+  logmsg(2,"Completed interface reduce, rank %d time %f\n",rank,((double)clock()-timestr)/CLOCKS_PER_SEC);
   if(rank!=mpisize-1){
     free(vecbiui);
     vecbiui=NULL;
@@ -720,7 +704,7 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
     lnz=aa->nz;
     nrow=submatD[0]->rmap->n;
     ncol=submatD[0]->cmap->n;
-    printf("D ncol %d nrow %d nz %ld\n",ncol,nrow,lnz);
+    logmsg(2,"D ncol %d nrow %d nz %ld\n",ncol,nrow,lnz);
     obiviindx0=realloc(obiviindx0,(lnz+1)*sizeof(long int));
     obiviindx0[0]=-1;
     biviindx0=obiviindx0;
@@ -739,16 +723,16 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
       lj2++;
     }
     my_spar_compl_(biviindx1,&nz0,biviindx0,&lnz,&nz1);
-    printf("nz0 %ld nz %ld nz1 %ld\n",nz0,lnz,nz1);
+    logmsg(2,"nz0 %ld nz %ld nz1 %ld\n",nz0,lnz,nz1);
 
 
 
-    printf("nz1 %ld\n",nz1);
+    logmsg(2,"nz1 %ld\n",nz1);
     ldsize=ceil((laD/100.0)*nz1);
     vecbivi=realloc(vecbivi,ldsize*sizeof(solve_real));
     int *irn1=(int *) calloc (nz1,sizeof(int));
     int *jcn=(int *) calloc (ldsize,sizeof(int));
-    printf("indx0 %ld indx1 %ld\n",obiviindx1[0],obiviindx0[0]);
+    logmsg(2,"indx0 %ld indx1 %ld\n",obiviindx1[0],obiviindx0[0]);
     my_spar_add4l_(vecbivi,obiviindx1,irn1,jcn,&nz0,vals,obiviindx0,&lnz,&nz1,&ncol);//my_spar_add1l_
 
 
@@ -766,14 +750,8 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
     insizeD[2]=lnz;
     insizeD[3]=laD;
     insizeD[5]=ldsize;
-    printf("ok\n");
     xd=(solve_real *) calloc (vecbiuisize,sizeof(solve_real));//realloc (xd,vecbiuisize*sizeof(ha_cgetype));
-    printf("ok!!!!!!!! vecbiuisize %ld nrow %d\n",vecbiuisize,nrow);
     spec48_ssol2la_(insizeD,irn1,jcn,vecbivi,vecbiui,xd);
-    printf("ok!!!!!!!!\n");
-
-
-
     free(vecbivi);
     vecbivi=NULL;
     free(vecbiui);
@@ -803,7 +781,7 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
   MPI_Barrier(PETSC_COMM_WORLD);
   if(SORD==1)MPI_Bcast(xd, vecbiuisize, MPI_DOUBLE,mpisize-1, PETSC_COMM_WORLD);
   else MPI_Bcast(xd, vecbiuisize, MPI_FLOAT,mpisize-1, PETSC_COMM_WORLD);
-  printf("Interface problem solution Rank %d time %f\n",rank,((double)clock()-timestr)/CLOCKS_PER_SEC);
+  logmsg(2,"Interface problem solution rank %d time %f\n",rank,((double)clock()-timestr)/CLOCKS_PER_SEC);
   timestr=clock();
   xi1indx=0;
   for(j1=0; j1<nmatinplus; j1++) {
@@ -819,11 +797,11 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
       }
       else {
         fp1 = fopen(fn01[j1], "rb");
-        if (fp1==NULL)printf("File opening error\n");
+        if (fp1==NULL)printf("Error: cannot open factor file %s\n",fn01[j1]);
         fp2 = fopen(fn02[j1], "rb");
-        if (fp2==NULL)printf("File opening error\n");
+        if (fp2==NULL)printf("Error: cannot open factor file %s\n",fn02[j1]);
         fp3 = fopen(fn03[j1], "rb");
-        if (fp3==NULL)printf("File opening error\n");
+        if (fp3==NULL)printf("Error: cannot open factor file %s\n",fn03[j1]);
         irne = (int*)calloc(la1,sizeof(int));
         keep = (int*)calloc(insize[j1*insizes+12],sizeof(int));
         vale = (solve_real*)calloc(la1,sizeof(solve_real));
@@ -879,13 +857,13 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
   free(insize);
   ierr = PetscFree(submatC);
   free(begblock);
-  printf("Solution calculation Rank %d time %f\n",rank,((double)clock()-timestr)/CLOCKS_PER_SEC);
+  logmsg(2,"Solution calculation rank %d time %f\n",rank,((double)clock()-timestr)/CLOCKS_PER_SEC);
   MPI_Barrier(PETSC_COMM_WORLD);
   free(xd);
   timestr=clock();
   if(SORD==1)MPI_Allreduce(x0,x1,VecSize, MPI_DOUBLE, MPI_SUM,PETSC_COMM_WORLD);
   else MPI_Allreduce(x0,x1,VecSize, MPI_FLOAT, MPI_SUM,PETSC_COMM_WORLD);
-  printf("Reduce solution Rank %d time %f\n",rank,((double)clock()-timestr)/CLOCKS_PER_SEC);
+  logmsg(2,"Reduce solution rank %d time %f\n",rank,((double)clock()-timestr)/CLOCKS_PER_SEC);
   free(x0);
   for (i=0; i<nmatinplus; i++){
     free(fn01[i]);
@@ -905,7 +883,6 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
     CHKERRQ(ierr);
   }
   PetscFree(colindices);
-  printf("OK rui rank %d\n",rank);
   return 0;
 }
 
@@ -947,7 +924,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
   nmatinplus=(nreg+1)*nmatinplust;
   if(inmemory)ndbbd_fac_init(nmatin);
   begblock[rank]=nmatin;
-  printf("rank %d nmatin %d nmatint %d nmplus %d\n",rank,nmatin,nmatint,nmatinplus);
+  logmsg(2,"rank %d nmatin %d nmatint %d nmplus %d\n",rank,nmatin,nmatint,nmatinplus);
   for(i=0; i<mpisize; i++) {
     j=rank;
     j2=j;
@@ -1063,11 +1040,10 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
     ISCreateGeneral(PETSC_COMM_SELF,j2,indices,PETSC_COPY_VALUES,colindicesbc1+i);
     free(indices);
   }
-  printf("Begin preparation rank %d\n",rank);
+  logmsg(2,"Begin preparation rank %d\n",rank);
   ierr = MatCreateSubMatrices(A,nmatin,rowindices,colindices,MAT_INITIAL_MATRIX,&submatAij);
   int insizes=17;
   int *insize=(int *) calloc (insizes*nmatin,sizeof(int));
-  printf("rank %d A\n",rank);
   PetscInt *indicesbbij=NULL;//(int *) calloc (1,sizeof(PetscInt));
   ierr = PetscMalloc(1*sizeof(IS **),&rowBBij);
   CHKERRQ(ierr);
@@ -1240,38 +1216,38 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
 
       int *insized=(int *) calloc (5+nreg*insizes,sizeof(int));
     bivinzrow1=realloc (bivinzrow1,bivirowsizemax*sizeof(long int));
-    if(bivinzrow1==NULL)printf("Error!!!! No memory left for bivinzrow1!\n");
+    if(bivinzrow1==NULL)printf("Error: memory allocation failed for bivinzrow1\n");
     bivinzcol1=realloc (bivinzcol1,bivicolsizemax*sizeof(long int));
-    if(bivinzcol1==NULL)printf("Error!!!! No memory left for bivinzcol1!\n");
+    if(bivinzcol1==NULL)printf("Error: memory allocation failed for bivinzcol1\n");
       vecbivi= (solve_real *) malloc (vecbivisizemax*sizeof(solve_real));
-    if(vecbivi==NULL)printf("Error!!!! No memory left for vecbivi!\n");
+    if(vecbivi==NULL)printf("Error: memory allocation failed for vecbivi\n");
       irn=(int *) malloc (lasizemax*sizeof(int));
-    if(irn==NULL)printf("Error!!!! No memory left for irn!\n");
+    if(irn==NULL)printf("Error: memory allocation failed for irn\n");
       jcn=(int *) malloc (lasizemax*sizeof(int));
-    if(jcn==NULL)printf("Error!!!! No memory left for jcn!\n");
+    if(jcn==NULL)printf("Error: memory allocation failed for jcn\n");
       solve_real *values= (solve_real *) calloc (lasizemax,sizeof(solve_real));
-    if(values==NULL)printf("Error!!!! No memory left for values!\n");
+    if(values==NULL)printf("Error: memory allocation failed for values\n");
       int* jcnb1=(int *) malloc (nebmax*sizeof(int));
-    if(jcnb1==NULL)printf("Error!!!! No memory left for jcnb1!\n");
+    if(jcnb1==NULL)printf("Error: memory allocation failed for jcnb1\n");
       solve_real *sol48= (solve_real *) malloc (nrowamax*sizeof(solve_real));
-    if(sol48==NULL)printf("Error!!!! No memory left for sol48!\n");
+    if(sol48==NULL)printf("Error: memory allocation failed for sol48\n");
       solve_real *b48= (solve_real *) malloc (nrowamax*sizeof(solve_real));
-    if(b48==NULL)printf("Error!!!! No memory left for b48!\n");
+    if(b48==NULL)printf("Error: memory allocation failed for b48\n");
       int* keep=NULL,*iw51=NULL;
   keep=(int *) malloc ((nrowamax+5*ncolamax+4*ncolamax+7)*sizeof(int));//ICNTL(6)=1
-    if(keep==NULL)printf("Error!!!! No memory left for keep!\n");
+    if(keep==NULL)printf("Error: memory allocation failed for keep\n");
   solve_real *w51=NULL;
   if(nrowamax>ncolamax) w51=(solve_real *) malloc ((5*nrowamax)*sizeof(solve_real));
   else w51=(solve_real *) malloc ((5*ncolamax)*sizeof(solve_real));
-    if(w51==NULL)printf("Error!!!! No memory left for w51!\n");
+    if(w51==NULL)printf("Error: memory allocation failed for w51\n");
   iw51=(int *) malloc ((6*nrowamax+3*ncolamax)*sizeof(int));
-    if(iw51==NULL)printf("Error!!!! No memory left for iw51!\n");
+    if(iw51==NULL)printf("Error: memory allocation failed for iw51\n");
   #pragma omp for schedule (static)
   for(j3=0; j3<nmatint; j3++) {
     bivirowsize=1;
     bivicolsize=1;
     bbrowij=submatBij[j3*(nreg+1)][0]->rmap->n;
-    printf("j3 %d bbrowij %djth %d windx %d\n",j3,bbrowij,jthrd,windx);
+    logmsg(2,"j3 %d bbrowij %djth %d windx %d\n",j3,bbrowij,jthrd,windx);
     memset(bivinzrow,0,bbrowij*sizeof(long int));
     memset(bivinzcol,0,bbrowij*sizeof(PetscInt));
     for(j1=0; j1<nreg; j1++) {
@@ -1311,8 +1287,8 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
       bivinzrow[li]=(bivinzrow[li]-1)*bivicolsize;//faster MSOL
     }
     vecbivisize=((long int)bivirowsize)*((long int)bivicolsize);
-    printf("rank %d vecbivisize %ld bivirowsize %d bivicolsize %d\n",rank,vecbivisize,bivirowsize,bivicolsize);
-    if(vecbivisize<0)printf("Overflow detected, the interface problem is too big!!!!!!\n");
+    logmsg(2,"rank %d vecbivisize %ld bivirowsize %d bivicolsize %d\n",rank,vecbivisize,bivirowsize,bivicolsize);
+    if(vecbivisize<0)printf("Error: interface problem size overflow (negative vecbivisize); the border is too large\n");
     memset(vecbivi,0,vecbivisize*sizeof(solve_real));
     for(j1=0; j1<nreg; j1++) {
       j4=j1+j3*(nreg+1);
@@ -1382,9 +1358,9 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
     #pragma omp critical
     {
     irn1=realloc(irn1,irnmems*sizeof(int));
-    if(irn1==NULL)printf("Error!!!! No memory left for irn1!\n");
+    if(irn1==NULL)printf("Error: memory allocation failed for irn1\n");
     jcn1=realloc(jcn1,irnmems*sizeof(int));
-    if(jcn1==NULL)printf("Error!!!! No memory left for jcn1!\n");
+    if(jcn1==NULL)printf("Error: memory allocation failed for jcn1\n");
 
     lj2=0;
     for(i=0; i<bivirowsize; i++) {
@@ -1407,7 +1383,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
     if(nrow>nrowmax)nrowmax=nrow;
     ncol=submatAij[j4]->cmap->n;
     if(ncol>ncolmax)ncolmax=ncol;
-    printf("D ncol %d nrow %d nz %d\n",ncol,nrow,nz);
+    logmsg(2,"D ncol %d nrow %d nz %d\n",ncol,nrow,nz);
     for(i=1; i<nrow; i++) {
       for(j=ai[i-1]; j<ai[i]; j++) {
         vecbivi[lj2]=vals[j];
@@ -1437,30 +1413,30 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
     strcat(filename,j1name);
     strcat(filename,".bin");
     if((presolfile=fopen(filename, "wb"))==NULL) {
-      printf("Cannot open file.\n");
+      printf("Error: cannot open scratch file %s\n",filename);
     }
     fwrt=fwrite(vecbivi, sizeof(solve_real),nz1, presolfile);
-    if(fwrt==0)printf("File write error.");
+    if(fwrt==0)printf("Error: short write on scratch file %s\n",filename);
     fclose(presolfile);
     strcpy(filename,scratch_dir);strcat(filename,"_rbvi");
     strcat(filename,rankname);
     strcat(filename,j1name);
     strcat(filename,".bin");
     if((presolfile=fopen(filename, "wb"))==NULL) {
-      printf("Cannot open file.\n");
+      printf("Error: cannot open scratch file %s\n",filename);
     }
     fwrt=fwrite(irn1, sizeof(int), nz1, presolfile);
-    if(fwrt== 0) printf("File write error.");
+    if(fwrt== 0) printf("Error: short write on scratch file %s\n",filename);
     fclose(presolfile);
     strcpy(filename,scratch_dir);strcat(filename,"_cbvi");
     strcat(filename,rankname);
     strcat(filename,j1name);
     strcat(filename,".bin");
     if((presolfile=fopen(filename, "wb"))==NULL) {
-      printf("Cannot open file.\n");
+      printf("Error: cannot open scratch file %s\n",filename);
     }
     fwrt=fwrite(jcn1, sizeof(int), nz1, presolfile);
-    if(fwrt== 0) printf("File write error.");
+    if(fwrt== 0) printf("Error: short write on scratch file %s\n",filename);
     fclose(presolfile);
     free(irn1);//1
     irn1=NULL;
@@ -1497,11 +1473,11 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
       strcat(filename,j1name);
       strcat(filename,".bin");
       if((presolfile=fopen(filename, "wb"))==NULL) {
-        printf("Cannot open file.\n");
+        printf("Error: cannot open scratch file %s\n",filename);
       }
-      printf("Rank %d RRRRR! ncol %d nrow %d rank %d nz %d cntl6 %lf\n",rank,nrow,ncol,insized[3],nz,cntl6);
+      logmsg(2,"rank %d nrow %d ncol %d block rank %d nz %d cntl6 %lf\n",rank,nrow,ncol,insized[3],nz,cntl6);
       fwrt=fwrite(insized, sizeof(int), 5+nreg*insizes, presolfile);
-      if(fwrt==0)printf("File write error.");
+      if(fwrt==0)printf("Error: short write on scratch file %s\n",filename);
       fclose(presolfile);
     insize[j4*insizes+15]=0;
   }
@@ -1538,22 +1514,22 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
   ldsize=ceil((laDi/100.0)*nz1max);
   ldsize+=10;
   irn1=realloc(irn1,ldsize*sizeof(int));
-  if(irn1==NULL)printf("Error!!!! No memory left for irn1!\n");
+  if(irn1==NULL)printf("Error: memory allocation failed for irn1\n");
   jcn1=realloc(jcn1,ldsize*sizeof(int));
-  if(jcn1==NULL)printf("Error!!!! No memory left for jcn1!\n");
+  if(jcn1==NULL)printf("Error: memory allocation failed for jcn1\n");
   irn=realloc(irn,nrowmax*sizeof(int));
-  if(irn==NULL)printf("Error!!!! No memory left for irn!\n");
+  if(irn==NULL)printf("Error: memory allocation failed for irn\n");
   jcn=realloc(jcn,ncolmax*sizeof(int));
-  if(jcn==NULL)printf("Error!!!! No memory left for jcn!\n");
+  if(jcn==NULL)printf("Error: memory allocation failed for jcn\n");
   keep=(int *) malloc ((nrowmax+5*ncolmax+4*ncolmax+7)*sizeof(int));//ICNTL(6)=1
-  if(keep==NULL)printf("Error!!!! No memory left for keep!\n");
+  if(keep==NULL)printf("Error: memory allocation failed for keep\n");
   if(nrowmax>ncolmax) w51=(solve_real *) malloc ((5*nrowmax)*sizeof(solve_real));
   else w51=(solve_real *) malloc ((5*ncolmax)*sizeof(solve_real));
-  if(w51==NULL)printf("Error!!!! No memory left for w51!\n");
+  if(w51==NULL)printf("Error: memory allocation failed for w51\n");
   iw51=(int *) malloc ((6*nrowmax+3*ncolmax)*sizeof(int));
-  if(iw51==NULL)printf("Error!!!! No memory left for iw51!\n");
+  if(iw51==NULL)printf("Error: memory allocation failed for iw51\n");
   vecbivi=realloc(vecbivi,ldsize*sizeof(solve_real));
-  if(vecbivi==NULL)printf("Error!!!! No memory left for vecbivi!\n");
+  if(vecbivi==NULL)printf("Error: memory allocation failed for vecbivi\n");
   int *insizeda=(int *) calloc (5+nreg*insizes,sizeof(int));
   #pragma omp for schedule (static)
   for(j3=0; j3<nmatint; j3++) {
@@ -1569,12 +1545,12 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
     strcat(filename,j1name);
     strcat(filename,".bin");
     if((presolfile=fopen(filename, "r"))==NULL) {
-      printf("Cannot open file. Please run presol by setting -presol 1!\n");
+      printf("Error: cannot open interface file %s; run the preparation solve first (-presol 1)\n",filename);
     }
     fwrt=fread(insizeda, sizeof(int), 5+nreg*insizes, presolfile);
     fclose(presolfile);
     remove(filename);
-    if( fwrt== 0)printf("File read error. No presol!\n");
+    if( fwrt== 0)printf("Error: short read on interface file %s; run the preparation solve first (-presol 1)\n",filename);
     nrow=insizeda[0];
     ncol=insizeda[1];
     nz1=insizeda[2];
@@ -1584,30 +1560,30 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
       strcat(filename,j1name);
       strcat(filename,".bin");
       if((presolfile=fopen(filename, "r"))==NULL) {
-        printf("Cannot open file.\n");
+        printf("Error: cannot open scratch file %s\n",filename);
       }
       fwrt=fread(vecbivi, sizeof(solve_real), insizeda[2], presolfile);
-      if(fwrt== 0) printf("File read error %ld %d.\n",fwrt,insizeda[2]);
+      if(fwrt== 0) printf("Error: short read on scratch file %s (%ld of %d records)\n",filename,fwrt,insizeda[2]);
       fclose(presolfile);
       strcpy(filename,scratch_dir);strcat(filename,"_rbvi");
       strcat(filename,rankname);
       strcat(filename,j1name);
       strcat(filename,".bin");
       if((presolfile=fopen(filename, "r"))==NULL) {
-        printf("Cannot open file.\n");
+        printf("Error: cannot open scratch file %s\n",filename);
       }
       fwrt=fread(irn1, sizeof(int), insizeda[2], presolfile);
-      if(fwrt== 0) printf("File read error.\n");
+      if(fwrt== 0) printf("Error: short read on scratch file %s\n",filename);
       fclose(presolfile);
       strcpy(filename,scratch_dir);strcat(filename,"_cbvi");
       strcat(filename,rankname);
       strcat(filename,j1name);
       strcat(filename,".bin");
       if((presolfile=fopen(filename, "r"))==NULL) {
-        printf("Cannot open file.\n");
+        printf("Error: cannot open scratch file %s\n",filename);
       }
       fwrt=fread(jcn1, sizeof(int), insizeda[2], presolfile);
-      if(fwrt== 0) printf("File read error.");
+      if(fwrt== 0) printf("Error: short read on scratch file %s\n",filename);
       fclose(presolfile);
 
     insize[j4*insizes]=nrow;
@@ -1646,31 +1622,31 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
       strcat(filename,j1name);
       strcat(filename,".bin");
       if((presolfile=fopen(filename, "wb"))==NULL) {
-        printf("Cannot open file.\n");
+        printf("Error: cannot open scratch file %s\n",filename);
       }
-      printf("Rank %d RRRRR! ncol %d nrow %d rank %d nz %d cntl6in %lf\n",rank,nrow,ncol,insized[3],nz,cntl6in);
+      logmsg(2,"rank %d nrow %d ncol %d block rank %d nz %d cntl6 %lf\n",rank,nrow,ncol,insized[3],nz,cntl6in);
       fwrt=fwrite(insized, sizeof(int), 5+nreg*insizes, presolfile);
-      if(fwrt==0)printf("File write error.");
+      if(fwrt==0)printf("Error: short write on scratch file %s\n",filename);
       fclose(presolfile);
       strcpy(filename,scratch_dir);strcat(filename,"_row");
       strcat(filename,rankname);
       strcat(filename,j1name);
       strcat(filename,".bin");
       if((presolfile=fopen(filename, "wb"))==NULL) {
-        printf("Cannot open file.\n");
+        printf("Error: cannot open scratch file %s\n",filename);
       }
       fwrt=fwrite(irn, sizeof(int), nrow, presolfile);
-      if(fwrt== 0) printf("File write error.");
+      if(fwrt== 0) printf("Error: short write on scratch file %s\n",filename);
       fclose(presolfile);
       strcpy(filename,scratch_dir);strcat(filename,"_col");
       strcat(filename,rankname);
       strcat(filename,j1name);
       strcat(filename,".bin");
       if((presolfile=fopen(filename, "wb"))==NULL) {
-        printf("Cannot open file.\n");
+        printf("Error: cannot open scratch file %s\n",filename);
       }
       fwrt=fwrite(jcn, sizeof(int), ncol, presolfile);
-      if(fwrt== 0) printf("File write error.");
+      if(fwrt== 0) printf("Error: short write on scratch file %s\n",filename);
       fclose(presolfile);
       free(insized);//1
     insize[j4*insizes+15]=0;
@@ -1686,7 +1662,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
   free(insizeda);
   }
   ierr = PetscFree(submatAij);//1
-  printf("Rank %d End of preparation!\n",rank);
+  logmsg(2,"End of preparation rank %d\n",rank);
   MPI_Barrier(PETSC_COMM_WORLD);
 
   for(i=0; i<nmatin; i++) {
@@ -1746,7 +1722,7 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
   nmatinplus=(nreg+1)*nmatinplust;
   if(inmemory)ndbbd_fac_init(nmatin);
   begblock[rank]=nmatin;
-  printf("rank %d nmatin %d nmatint %d nmplus %d\n",rank,nmatin,nmatint,nmatinplus);
+  logmsg(2,"rank %d nmatin %d nmatint %d nmplus %d\n",rank,nmatin,nmatint,nmatinplus);
   for(i=0; i<mpisize; i++) {
     j=rank;
     j2=j;
@@ -1761,7 +1737,7 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
     begblock[i]=begblock[i-1]+j2;
     j2=j1;
   }
-  for(i=0; i<mpisize; i++)printf("rank %d beg block %d\n",rank,begblock[i]);
+  for(i=0; i<mpisize; i++)logmsg(2,"rank %d beg block %d\n",rank,begblock[i]);
   j2=nmatin;
   MPI_Bcast(&j2,1, MPI_INT,0, PETSC_COMM_WORLD);
   ndblockinrank[0]=j2;
@@ -1817,7 +1793,7 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
   for(j=0; j<ndblock; j++) {
     sumrowcolin+=block_sizes[j];
   }
-  printf("Vecs %ld sumrow %d!!!\n",VecSize,sumrowcolin);
+  logmsg(2,"VecSize %ld sumrowcolin %d\n",VecSize,sumrowcolin);
   PetscInt *offblock= (PetscInt *) calloc (ndblock+1,sizeof(PetscInt));
   PetscInt *offblockrow= (PetscInt *) calloc (ndblock+1,sizeof(PetscInt));
   offblock[0]=0;
@@ -1858,7 +1834,6 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
       strcpy(fn03[j1],filename);
     }
   }
-  printf("rank1w2 %d\n",rank);
   for(j=0; j<mpisize; j++) {
     for(j3=0; j3<nmatinplus; j3++) {
       if(j3>=nmatin)i=nmatin-1;
@@ -1883,7 +1858,6 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
       free(yi0);
     }
   }
-  printf("rank1w2 %d\n",rank);
   solve_real **yi1= (solve_real**)calloc(nmatint,sizeof(solve_real*));
   for (i=0; i<nmatint; i++) {
     j1=0;
@@ -1985,7 +1959,7 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
       break;
     }
   if(j2==VecSize-sumrowcolin)j1=VecSize-sumrowcolin;
-  printf("rank %d j %d j1 %d istart %d iend %d\n",rank,j,j1,Istart,Iend);
+  logmsg(2,"rank %d j %d j1 %d istart %d iend %d\n",rank,j,j1,Istart,Iend);
   solve_real *vecbiui= (solve_real *) calloc (VecSize-sumrowcolin,sizeof(solve_real));
   VecGetValues(b,j1-j,&indicesB[j],&vecbiui[j]);//implicite yd save mem
   ierr = VecDestroy(&b);
@@ -2002,10 +1976,9 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
   PetscInt *indexBB= (PetscInt *) calloc (VecSize,sizeof(PetscInt));
   for(i=0; i<VecSize; i++)indexBB[i]=i;
   ISCreateGeneral(PETSC_COMM_SELF,VecSize,indexBB,PETSC_COPY_VALUES,BBindices);
-  printf("Begin preparation rank %d\n",rank);
+  logmsg(2,"Begin preparation rank %d\n",rank);
   int insizes=17;
   int *insize=(int *) calloc (insizes*nmatin,sizeof(int));
-  printf("rank %d A\n",rank);
   PetscInt *indicesbbij=(int *) calloc (1,sizeof(PetscInt));
   ierr = PetscMalloc(1*sizeof(IS **),&rowBBij);
   CHKERRQ(ierr);
@@ -2078,16 +2051,13 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
   free(indicesbbij);
   PetscFree(rowBBij);
   PetscFree(colBBij);
-
-  printf("rank %d A\n",rank);
   ierr = MatCreateSubMatrices(A,nmatint,rowindicesbc,Cindices,MAT_INITIAL_MATRIX,&submatC);
-  printf("C\n");
   ierr = MatCreateSubMatrices(A,nmatinBB,Bindices,BBindices,MAT_INITIAL_MATRIX,&submatBB);
   ierr = MatDestroy(&A);
   CHKERRQ(ierr);
   PetscInt BBrow,BBcol;//,CCrow,CCcol;
   MatGetSize(submatBB[0],&BBrow,&BBcol);
-  printf("rank %d bbrow %d bbcol %d\n",rank,BBrow,BBcol);//,CCrow,CCcol);
+  logmsg(2,"rank %d bbrow %d bbcol %d\n",rank,BBrow,BBcol);//,CCrow,CCcol);
   PetscInt *indexBBi= (PetscInt *) calloc (BBrow,sizeof(PetscInt));
   for(i=0; i<BBrow; i++)indexBBi[i]=i;
   ierr = ISDestroy(&Bindicesc);
@@ -2099,11 +2069,9 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
     ierr = MatCreateSubMatrix(submatBB[0],Bindices[i],colindicesbc1[i],MAT_INITIAL_MATRIX,&submatB1[i][0]);
     ierr = MatCreateSubMatrix(submatBB[0],Bindices[i],colindicesbc2[i],MAT_INITIAL_MATRIX,&submatB2[i][0]);
   }
-  printf("B\n");
   if(rank==mpisize-1)proc1=1;
-  printf("D\n");
   MatCreateSubMatrices(submatBB[0],proc1,Bindices,Cindices,MAT_INITIAL_MATRIX,&submatD);
-  printf("End partitionning rank %d time %f\n",rank,((double)(clock()-timestr))/CLOCKS_PER_SEC);
+  logmsg(2,"End partitioning rank %d time %f\n",rank,((double)(clock()-timestr))/CLOCKS_PER_SEC);
   for (i=0; i<nmatin; i++) {
     ierr = ISDestroy(&rowindices[i]);
     CHKERRQ(ierr);
@@ -2132,7 +2100,6 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
   ierr = MatDestroy(&submatBB[0]);
   PetscFree(submatBB);
   CHKERRQ(ierr);
-  printf("OK1 rank %d sumrowcolin %d\n",rank,sumrowcolin);
   long int *bivinzrow=NULL;//(long int *) calloc (1,sizeof(long int));
   PetscInt *bivinzcol=NULL;//(PetscInt *) calloc (1,sizeof(PetscInt));
   PetscReal *ccolnorms=NULL;//(PetscReal *) calloc (1,sizeof(PetscReal));
@@ -2171,11 +2138,11 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
     #pragma omp critical
     {
     if((presolfile=fopen(filename, "r"))==NULL) {
-      printf("Cannot open file. Please run presol by setting -presol 1!\n");
+      printf("Error: cannot open interface file %s; run the preparation solve first (-presol 1)\n",filename);
     }
     frd=fread(insizeda, sizeof(int), 5+nreg*insizes, presolfile);
     fclose(presolfile);
-    if( frd== 0)printf("File read error. No presol!\n");
+    if( frd== 0)printf("Error: short read on interface file %s; run the preparation solve first (-presol 1)\n",filename);
     }
     if(insizeda0<insizeda[0])insizeda0=insizeda[0];
     if(insizeda1<insizeda[1])insizeda1=insizeda[1];
@@ -2185,21 +2152,21 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
   ldsize+=10;
   insizeda2=ldsize;
   int *irn1=(int *) malloc(ldsize*sizeof(int));
-  if(irn1==NULL)printf("Error!!!! No memory left for irn1!\n");
+  if(irn1==NULL)printf("Error: memory allocation failed for irn1\n");
   int *jcn1=(int *) malloc(ldsize*sizeof(int));
-  if(jcn1==NULL)printf("Error!!!! No memory left for jcn1!\n");
+  if(jcn1==NULL)printf("Error: memory allocation failed for jcn1\n");
   solve_real *vecbivi0= (solve_real *) malloc (ldsize*sizeof(solve_real));
-  if(vecbivi0==NULL)printf("Error!!!! No memory left for vecbivi0!\n");
+  if(vecbivi0==NULL)printf("Error: memory allocation failed for vecbivi0\n");
   int *irn1a=(int *) malloc (insizeda0*sizeof(int));
-  if(irn1a==NULL)printf("Error!!!! No memory left for irn1a!\n");
+  if(irn1a==NULL)printf("Error: memory allocation failed for irn1a\n");
   int *jcn1a=(int *) malloc (insizeda1*sizeof(int));
-  if(jcn1a==NULL)printf("Error!!!! No memory left for jcn1a!\n");
+  if(jcn1a==NULL)printf("Error: memory allocation failed for jcn1a\n");
   solve_real *fw=(solve_real *) malloc (insizeda0*sizeof(solve_real));
-  if(fw==NULL)printf("Error!!!! No memory left for fw!\n");
+  if(fw==NULL)printf("Error: memory allocation failed for fw\n");
   int *fiw=(int *) malloc ((6*insizeda0+3*insizeda1)*sizeof(int));
-  if(fiw==NULL)printf("Error!!!! No memory left for fiw!\n");
+  if(fiw==NULL)printf("Error: memory allocation failed for fiw\n");
   int *fkeep=(int *) malloc ((insizeda0+5*insizeda1+4*insizeda1/1+7)*sizeof(int));//ICNTL(6)=1
-  if(fkeep==NULL)printf("Error!!!! No memory left for fkeep!\n");
+  if(fkeep==NULL)printf("Error: memory allocation failed for fkeep\n");
   #pragma omp for  schedule (static)
   for(j3=0; j3<nmatint; j3++) {
     j4=nreg+j3*(nreg+1);
@@ -2217,12 +2184,12 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
     strcat(filename,j1name);
     strcat(filename,".bin");
     if((presolfile=fopen(filename, "r"))==NULL) {
-      printf("Cannot open file. Please run presol by setting -presol 1!\n");
+      printf("Error: cannot open interface file %s; run the preparation solve first (-presol 1)\n",filename);
     }
     frd=fread(insizeda, sizeof(int), 5+nreg*insizes, presolfile);
     fclose(presolfile);
     remove(filename);
-    if( frd== 0)printf("File read error. No presol!\n");
+    if( frd== 0)printf("Error: short read on interface file %s; run the preparation solve first (-presol 1)\n",filename);
     }
     nrow=insizeda[3];
     ncol=insizeda[3];
@@ -2238,10 +2205,10 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
     strcat(filename,j1name);
     strcat(filename,".bin");
     if((presolfile=fopen(filename, "r"))==NULL) {
-      printf("Cannot open file.\n");
+      printf("Error: cannot open scratch file %s\n",filename);
     }
     frd=fread(irn1a, sizeof(int), insizeda[0], presolfile);
-    if(frd == 0)printf("File read error.");
+    if(frd == 0)printf("Error: short read on scratch file %s\n",filename);
     fclose(presolfile);
     remove(filename);
     strcpy(filename,scratch_dir);strcat(filename,"_col");
@@ -2249,10 +2216,10 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
     strcat(filename,j1name);
     strcat(filename,".bin");
     if((presolfile=fopen(filename, "r"))==NULL) {
-      printf("Cannot open file.\n");
+      printf("Error: cannot open scratch file %s\n",filename);
     }
     frd=fread(jcn1a, sizeof(int), insizeda[1], presolfile);
-    if(frd== 0) printf("File read error.");
+    if(frd== 0) printf("Error: short read on scratch file %s\n",filename);
     fclose(presolfile);
     remove(filename);
     strcpy(filename,scratch_dir);strcat(filename,"_bivi");
@@ -2260,10 +2227,10 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
     strcat(filename,j1name);
     strcat(filename,".bin");
     if((presolfile=fopen(filename, "r"))==NULL) {
-      printf("Cannot open file.\n");
+      printf("Error: cannot open scratch file %s\n",filename);
     }
     frd=fread(vecbivi0, sizeof(solve_real), insizeda[2], presolfile);
-    if(frd== 0) printf("File read error %ld %d.\n",frd,insizeda[2]);
+    if(frd== 0) printf("Error: short read on scratch file %s (%ld of %d records)\n",filename,frd,insizeda[2]);
     fclose(presolfile);
     remove(filename);
     strcpy(filename,scratch_dir);strcat(filename,"_rbvi");
@@ -2271,10 +2238,10 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
     strcat(filename,j1name);
     strcat(filename,".bin");
     if((presolfile=fopen(filename, "r"))==NULL) {
-      printf("Cannot open file.\n");
+      printf("Error: cannot open scratch file %s\n",filename);
     }
     frd=fread(irn1, sizeof(int), insizeda[2], presolfile);
-    if(frd== 0) printf("File read error.\n");
+    if(frd== 0) printf("Error: short read on scratch file %s\n",filename);
     fclose(presolfile);
     remove(filename);
     strcpy(filename,scratch_dir);strcat(filename,"_cbvi");
@@ -2282,10 +2249,10 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
     strcat(filename,j1name);
     strcat(filename,".bin");
     if((presolfile=fopen(filename, "r"))==NULL) {
-      printf("Cannot open file.\n");
+      printf("Error: cannot open scratch file %s\n",filename);
     }
     frd=fread(jcn1, sizeof(int), insizeda[2], presolfile);
-    if(frd== 0) printf("File read error.");
+    if(frd== 0) printf("Error: short read on scratch file %s\n",filename);
     fclose(presolfile);
     remove(filename);
     }
@@ -2312,32 +2279,22 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
     if(windx==eindx)windx=bindx;
       prep48_alu1_(insize+j4*insizes,irn1,jcn1,vecbivi0,fw,fiw,fkeep);
     ndbbd_fac_emit(rank,j4,irn1,fkeep,vecbivi0,insize[j4*insizes+16],insize[j4*insizes+12]);
-    printf("rank %d ok0 nz %ld nzmax %ld ldsize %ld!!!!!!!!\n",rank,nz1,insizeda2,ldsize);
+    logmsg(2,"rank %d nz %ld nzmax %ld ldsize %ld\n",rank,nz1,insizeda2,ldsize);
   }
-  printf("rank %d ok1!!!!!!!!\n",rank);
   free(vecbivi0);
-  printf("rank %d ok2!!!!!!!!\n",rank);
   free(irn1);
-  printf("rank %d ok3!!!!!!!!\n",rank);
   free(jcn1);
-  printf("rank %d ok4!!!!!!!!\n",rank);
   free(irn1a);
-  printf("rank %d ok5!!!!!!!!\n",rank);
   free(jcn1a);
-  printf("rank %d ok6!!!!!!!!\n",rank);
   free(fw);
-  printf("rank %d ok7!!!!!!!!\n",rank);
   free(fiw);
-  printf("rank %d ok8!!!!!!!!\n",rank);
   free(fkeep);
-  printf("rank %d ok9!!!!!!!!\n",rank);
   free(insizeda);
-  printf("rank %d ok10!!!!!!!!\n",rank);
   }
   omp_set_num_threads(max_threads);
   if(presol)
     return 0;
-  printf("Rank %d End of preparation!\n",rank);
+  logmsg(2,"End of preparation rank %d\n",rank);
   MPI_Barrier(PETSC_COMM_WORLD);
 
   ccolnorms=realloc(ccolnorms,BBrow*sizeof(PetscReal));
@@ -2345,7 +2302,6 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
   memset(bivinzrow,0,BBrow*sizeof(long int));
   bivinzcol=realloc(bivinzcol,BBrow*sizeof(PetscInt));
   memset(bivinzcol,0,BBrow*sizeof(PetscInt));
-  printf("rank %d OKKK BBrow %d\n",rank,BBrow);
   for(j1=0; j1<nmatint; j1++) {
     MatGetColumnNorms(submatC[j1],NORM_1,ccolnorms);
     for(i=0; i<BBrow; i++)if(ccolnorms[i]>0)bivinzcol[i]++;
@@ -2398,9 +2354,9 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
     }
   }
   vecbivisize=((long int)bivirowsize)*((long int)bivicolsize);
-  if(vecbivisize<0)printf("Overflow detected, the interface problem is too big!!!!!!\n");
+  if(vecbivisize<0)printf("Error: interface problem size overflow (negative vecbivisize); the border is too large\n");
   solve_real *vecbivi= (solve_real *) calloc (vecbivisize,sizeof(solve_real));
-  printf("vecbivisize %ld rank %d\n",vecbivisize,rank);
+  logmsg(2,"vecbivisize %ld rank %d\n",vecbivisize,rank);
   xi1indx=0;
   int maxcolc1=0,maxcolc=0,maxrowc=0,maxrowc1=0;
   long int longsize;
@@ -2482,7 +2438,6 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
     MatDestroy(&submatB2[j1][0]);//submatBT);
     free(submatB2[j1]);
     xi1point=xi1+xi1indx;
-    printf("OK here j1 %d yi1 %ld xi1indx %ld a2j %d!\n",j1,sizeof(yi1[j1])/sizeof(PetscInt),xi1indx,ncolb);
     maxrowcij=0;
     #pragma omp critical
     {
@@ -2498,24 +2453,23 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
       }
       else {
         nfp1[i] = fopen(fn01[j2], "rb");
-        if (nfp1[i]==NULL)printf("File opening error\n");
+        if (nfp1[i]==NULL)printf("Error: cannot open factor file %s\n",fn01[j2]);
         irnereg[i] = realloc(irnereg[i],la1*sizeof(int));//(int*)calloc(la1,sizeof(int));
         freadresult=fread(irnereg[i],sizeof(int),la1,nfp1[i]);
         fclose(nfp1[i]);
         nfp2[i] = fopen(fn02[j2], "rb");
-        if (nfp2[i]==NULL)printf("File opening error\n");
+        if (nfp2[i]==NULL)printf("Error: cannot open factor file %s\n",fn02[j2]);
         keepreg[i] = realloc(keepreg[i],insize[j2*insizes+12]*sizeof(int));//(int*)calloc(insize[j1*insizes+12],sizeof(int));
         freadresult=fread(keepreg[i],sizeof(int),insize[j2*insizes+12],nfp2[i]);
         fclose(nfp2[i]);
         nfp3[i] = fopen(fn03[j2], "rb");
-        if (nfp3[i]==NULL)printf("File opening error\n");
+        if (nfp3[i]==NULL)printf("Error: cannot open factor file %s\n",fn03[j2]);
         valereg[i] = realloc(valereg[i],la1*sizeof(solve_real));//(ha_cgetype*)calloc(la1,sizeof(ha_cgetype));
         freadresult=fread(valereg[i],sizeof(solve_real),la1,nfp3[i]);
         fclose(nfp3[i]);
       }
     }
     }
-    printf("OK here11a nrowc %d ncolc %d maxrow %d!\n",nrowc,ncolc,maxrowcij);
     solve_real *b02 = (solve_real*)calloc(maxrowcij,sizeof(solve_real));
 
     ndbbd_block_solve_mem(rank,j1*(nreg+1),nreg,insize,insizes,submatCij,submatBij,yi1[j1],xi1point,irnereg,keepreg,valereg,cntl,rinfo,error1,icntl,info,w,iw,b02);
@@ -2549,7 +2503,7 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
     free(aj12);
     free(vals12);
     timeend=clock();//(&timeend);
-    printf("Submatrix %d rank %d calculation time %f\n",j1,rank,difftime(timeend,timestr)/CLOCKS_PER_SEC);
+    logmsg(2,"Submatrix %d rank %d calculation time %f\n",j1,rank,difftime(timeend,timestr)/CLOCKS_PER_SEC);
   }
   free(w);
   free(iw);
@@ -2569,14 +2523,14 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
   free(nfd2);
   free(nfd3);
   }
-  printf("Completed calculation of partitioned matrices! Rank %d\n",rank);
+  logmsg(2,"Completed calculation of partitioned matrices, rank %d\n",rank);
   free(bivinzcol);
   free(bivinzrow);
   free(submatB1);
   free(submatB2);
   CHKERRQ(ierr);
   free(yi1);
-  printf("Completed calculation of partitioned matrices! Rank %d\n",rank);
+  logmsg(2,"Completed calculation of partitioned matrices, rank %d\n",rank);
   timestr=clock();
 
   #pragma omp parallel private(li) reduction(+:lj)
@@ -2592,7 +2546,7 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
   biviindx1=obiviindx1;
   biviindx1++;
   long int lj2=0;
-  printf("vbivi %ld colsize %d\n",vecbivisize,bivicolsize);
+  logmsg(2,"vbivi %ld colsize %d\n",vecbivisize,bivicolsize);
   for(li=0; li<vecbivisize; ++li) {
     if(vecbivi[li]!=0) {
       vecbivi[lj2]=vecbivi[li];
@@ -2602,9 +2556,7 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
   }
   free(bivinzrow1);
   free(bivinzcol1);
-  printf("OK here11! j %ld j2 %ld bivi %ld\n",lj,lj2,biviindx1[lj2-1]);
   vecbivi=realloc(vecbivi,lj2*sizeof(solve_real));
-  printf("OK here11!\n");
   nz0=lj2;
   int group_size,node_rank,group_size1,group_size11,node_tail_rank,color;
   MPI_Comm_rank( node_comm, &node_rank);
@@ -2674,7 +2626,7 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
       obiviindx0=NULL;
       free(vecbivi0);
       vecbivi0=NULL;
-      printf("!!!!!!!!!!!! rank11 %d nz0 %ld j2 %ld nz1 %ld\n",rank,nz0,lj2,nz1);
+      logmsg(2,"rank %d nz0 %ld j2 %ld nz1 %ld\n",rank,nz0,lj2,nz1);
       nz0=nz1;
     }
   }
@@ -2739,16 +2691,15 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
         obiviindx0=NULL;
         free(vecbivi0);
         vecbivi0=NULL;
-        printf("!!!!!!!!!!!! rank22 %d nz0 %ld j2 %ld nz1 %ld\n",rank,nz0,lj2,nz1);
+        logmsg(2,"rank %d nz0 %ld j2 %ld nz1 %ld\n",rank,nz0,lj2,nz1);
         nz0=nz1;
       }
     }
   }
   fortran_int vecbiuisize=0;
   vecbiuisize=VecSize-sumrowcolin;
-  printf("after bivi rank %d\n",rank);
   reduce_to_rank_nocompress(vecbiui,vecbiuisize,mpisize,rank,mpisize-1);
-  printf("Completed MPI_Reduce Operation! Rank %d time %f\n",rank,((double)(clock()-timestr))/CLOCKS_PER_SEC);
+  logmsg(2,"Completed interface reduce, rank %d time %f\n",rank,((double)(clock()-timestr))/CLOCKS_PER_SEC);
   if(rank!=mpisize-1){
     free(vecbiui);
     vecbiui=NULL;
@@ -2765,7 +2716,7 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
     lnz=aa->nz;
     nrow=submatD[0]->rmap->n;
     ncol=submatD[0]->cmap->n;
-    printf("D ncol %d nrow %d nz %ld\n",ncol,nrow,lnz);
+    logmsg(2,"D ncol %d nrow %d nz %ld\n",ncol,nrow,lnz);
     obiviindx0=realloc(obiviindx0,(lnz+1)*sizeof(long int));
     obiviindx0[0]=-1;
     biviindx0=obiviindx0;
@@ -2785,14 +2736,14 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
       lj2++;
     }
     my_spar_compl_(biviindx1,&nz0,biviindx0,&lnz,&nz1);
-    printf("nz0 %ld nz %ld nz1 %ld\n",nz0,lnz,nz1);
+    logmsg(2,"nz0 %ld nz %ld nz1 %ld\n",nz0,lnz,nz1);
     ldsize=ceil((laD/100.0)*nz1);
     vecbivi=realloc(vecbivi,ldsize*sizeof(solve_real));
     int *irn1=(int *) calloc (nz1,sizeof(int));
     int *jcn=(int *) calloc (ldsize,sizeof(int));
-    printf("nz1 %ld obin %ld ond1 %ld\n",nz1,obiviindx1[0],obiviindx0[0]);
+    logmsg(2,"nz1 %ld obin %ld ond1 %ld\n",nz1,obiviindx1[0],obiviindx0[0]);
     my_spar_add4l_(vecbivi,obiviindx1,irn1,jcn,&nz0,vals,obiviindx0,&lnz,&nz1,&ncol);
-    printf("nz1 %ld\n",nz1);
+    logmsg(2,"nz1 %ld\n",nz1);
     MatDestroy(&submatD[0]);
     lnz=nz1;
     free(obiviindx1);
@@ -2835,7 +2786,7 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
   MPI_Barrier(PETSC_COMM_WORLD);
   if(SORD==1)MPI_Bcast(xd, vecbiuisize, MPI_DOUBLE,mpisize-1, PETSC_COMM_WORLD);
   else MPI_Bcast(xd, vecbiuisize, MPI_FLOAT,mpisize-1, PETSC_COMM_WORLD);
-  printf("Interface problem solution Rank %d time %f\n",rank,((double)(clock()-timestr))/CLOCKS_PER_SEC);
+  logmsg(2,"Interface problem solution rank %d time %f\n",rank,((double)(clock()-timestr))/CLOCKS_PER_SEC);
   timestr=clock();
   xi1indx=0;
 
@@ -2895,7 +2846,7 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
     ierr = ISDestroy(&colindicesbc2[j1]);
 
     timeend=clock();//time(&timeend);
-    printf("Submatrix %d rank %d calculation time %f\n",j1,rank,difftime(timeend,timestr)/CLOCKS_PER_SEC);
+    logmsg(2,"Submatrix %d rank %d calculation time %f\n",j1,rank,difftime(timeend,timestr)/CLOCKS_PER_SEC);
   }
   free(be0);
   free(biui0);
@@ -2922,15 +2873,14 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
   free(xi1);
   free(insize);
   ierr = PetscFree(submatC);
-  printf("Solution calculation Rank %d time %f\n",rank,((double)(clock()-timestr))/CLOCKS_PER_SEC);
+  logmsg(2,"Solution calculation rank %d time %f\n",rank,((double)(clock()-timestr))/CLOCKS_PER_SEC);
   MPI_Barrier(PETSC_COMM_WORLD);
   free(xd);
   timestr=clock();
   if(SORD==1)MPI_Allreduce(x0,x1,VecSize, MPI_DOUBLE, MPI_SUM,PETSC_COMM_WORLD);
   else MPI_Allreduce(x0,x1,VecSize, MPI_FLOAT, MPI_SUM,PETSC_COMM_WORLD);
-  printf("Reduce solution Rank %d time %f\n",rank,((double)(clock()-timestr))/CLOCKS_PER_SEC);
+  logmsg(2,"Reduce solution rank %d time %f\n",rank,((double)(clock()-timestr))/CLOCKS_PER_SEC);
   free(x0);
-  printf("OK rui rank %d\n",rank);
   return 0;
 }
 
@@ -2961,15 +2911,15 @@ bool ndbbd_block_solve(PetscInt rank, int begmat,int nreg,int * insize,int insiz
     keep = realloc(keep,insize[j2+12]*sizeof(int));//(int*)calloc(insize[j1*insizes+12],sizeof(int));
     vale = realloc(vale,la1*sizeof(solve_real));//(ha_cgetype*)calloc(la1,sizeof(ha_cgetype));
     fp1 = fopen(fn01[j1], "rb");
-    if (fp1==NULL)printf("File opening error\n");
+    if (fp1==NULL)printf("Error: cannot open factor file %s\n",fn01[j1]);
     freadresult=fread(irne,sizeof(int),la1,fp1);
     fclose(fp1);
     fp2 = fopen(fn02[j1], "rb");
-    if (fp2==NULL)printf("File opening error\n");
+    if (fp2==NULL)printf("Error: cannot open factor file %s\n",fn02[j1]);
     freadresult=fread(keep,sizeof(int),insize[j2+12],fp2);
     fclose(fp2);
     fp3 = fopen(fn03[j1], "rb");
-    if (fp3==NULL)printf("File opening error\n");
+    if (fp3==NULL)printf("Error: cannot open factor file %s\n",fn03[j1]);
     freadresult=fread(vale,sizeof(solve_real),la1,fp3);
     fclose(fp3);
     }
@@ -2997,15 +2947,15 @@ bool ndbbd_block_solve(PetscInt rank, int begmat,int nreg,int * insize,int insiz
   keep = realloc(keep,insize[j1*insizes+12]*sizeof(int));//(int*)calloc(insize[j1*insizes+12],sizeof(int));
   vale = realloc(vale,la1*sizeof(solve_real));//(ha_cgetype*)calloc(la1,sizeof(ha_cgetype));
   fp1 = fopen(fn01[j2], "rb");
-  if (fp1==NULL)printf("File opening error\n");
+  if (fp1==NULL)printf("Error: cannot open factor file %s\n",fn01[j2]);
   freadresult=fread(irne,sizeof(int),la1,fp1);
   fclose(fp1);
   fp2 = fopen(fn02[j2], "rb");
-  if (fp2==NULL)printf("File opening error\n");
+  if (fp2==NULL)printf("Error: cannot open factor file %s\n",fn02[j2]);
   freadresult=fread(keep,sizeof(int),insize[j1*insizes+12],fp2);
   fclose(fp2);
   fp3 = fopen(fn03[j2], "rb");
-  if (fp3==NULL)printf("File opening error\n");
+  if (fp3==NULL)printf("Error: cannot open factor file %s\n",fn03[j2]);
   freadresult=fread(vale,sizeof(solve_real),la1,fp3);
   fclose(fp3);
     }
@@ -3026,15 +2976,15 @@ bool ndbbd_block_solve(PetscInt rank, int begmat,int nreg,int * insize,int insiz
     keep = realloc(keep,insize[j1*insizes+12]*sizeof(int));//(int*)calloc(insize[j1*insizes+12],sizeof(int));
     vale = realloc(vale,la1*sizeof(solve_real));//(ha_cgetype*)calloc(la1,sizeof(ha_cgetype));
     fp1 = fopen(fn01[j2], "rb");
-    if (fp1==NULL)printf("File opening error\n");
+    if (fp1==NULL)printf("Error: cannot open factor file %s\n",fn01[j2]);
     freadresult=fread(irne,sizeof(int),la1,fp1);
     fclose(fp1);
     fp2 = fopen(fn02[j2], "rb");
-    if (fp2==NULL)printf("File opening error\n");
+    if (fp2==NULL)printf("Error: cannot open factor file %s\n",fn02[j2]);
     freadresult=fread(keep,sizeof(int),insize[j1*insizes+12],fp2);
     fclose(fp2);
     fp3 = fopen(fn03[j2], "rb");
-    if (fp3==NULL)printf("File opening error\n");
+    if (fp3==NULL)printf("Error: cannot open factor file %s\n",fn03[j2]);
     freadresult=fread(vale,sizeof(solve_real),la1,fp3);
     fclose(fp3);
     }

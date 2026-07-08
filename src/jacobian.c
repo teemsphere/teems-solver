@@ -567,7 +567,7 @@ int eq_sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifier 
           }
           if (i>10000) {
             strcat(interchar,"gen_sum");
-            printf("Error: Too many sum\n");
+            printf("Error: too many sum() terms in one statement\n");
           }
           strcat(interchar,interchar1);
           strcpy(sum_cof[j].sumname,interchar);
@@ -725,7 +725,7 @@ int eq_sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifier 
           }
           if (i>10000) {
             strcat(interchar,"gen_sum");
-            printf("Error: Too many sum\n");
+            printf("Error: too many sum() terms in one statement\n");
           }
           strcat(interchar,interchar1);
           strcpy(sum_cof[j].sumname,interchar);
@@ -2466,7 +2466,7 @@ int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,
           if(nesteddbbd==1) {
             if(eq_reg[eqindx]>-1)for(lj=0; lj<sets[arSet[eq_time[eqindx]].setid].size; lj++)for(l2=0; l2<sets[arSet[eq_reg[eqindx]].setid].size; l2++) {
                   counteq1[set_elems[sets[arSet[eq_time[eqindx]].setid].offset+lj].superset_pos[sets[arSet[eq_time[eqindx]].setid].intsup]*(nreg+1)+set_elems[sets[arSet[eq_reg[eqindx]].setid].offset+l2].superset_pos[sets[arSet[eq_reg[eqindx]].setid].regsup]]+=nloops/sets[arSet[eq_time[eqindx]].setid].size/sets[arSet[eq_reg[eqindx]].setid].size;
-                  if(sets[arSet[eq_reg[eqindx]].setid].regsup!=0)printf("Sub reg not supported in NDBBD!!!\n");
+                  if(sets[arSet[eq_reg[eqindx]].setid].regsup!=0)printf("Error: subsets of the regional partition set are not supported in NDBBD ordering\n");
                 }
             else for(lj=0; lj<sets[arSet[eq_time[eqindx]].setid].size; lj++)
                 counteq1[set_elems[sets[arSet[eq_time[eqindx]].setid].offset+lj].superset_pos[sets[arSet[eq_time[eqindx]].setid].intsup]*(nreg+1)+nreg]+=nloops/sets[arSet[eq_time[eqindx]].setid].size;

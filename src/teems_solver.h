@@ -30,6 +30,14 @@
                   solve_real/store_real and FSORD in hsl_kernels.f90 */
 #define MAXSSIZE 187500000//1500000000/8
 /* Definitions live in globals.c */
+extern int verbosity; /* -verbosity: 0 = errors/warnings + results only,
+                         1 = phase progress (default), 2 = per-rank/per-block
+                         debug detail. Errors, warnings, and the accuracy
+                         summary teems-R parses are never gated. */
+/* logmsg(level, ...): print when verbosity >= level. Not for errors or
+   warnings (plain printf, "Error:"/"Warning:" prefix) and never inside
+   per-element loops — hot-loop prints are removed, not gated. */
+#define logmsg(lvl, ...) do{ if(verbosity>=(lvl)) printf(__VA_ARGS__); }while(0)
 extern int inmemory; /* -inmemory: keep value arrays resident instead of spilling to scratch */
 extern int section_threads;
 extern int max_threads;

@@ -3,6 +3,20 @@ module constants
   INTEGER, PARAMETER :: DPC = KIND(0.0D0)
   INTEGER, PARAMETER :: FSORD = 1
   !switch to single by setting FSORD = 0, DPC and hsl_mp48d.f90 accordingly
+contains
+  ! Verbosity from the C side (main.c exports TEEMS_VERBOSITY alongside
+  ! TEEMS_SCRATCH). Informational kernel output is gated at >= 2; error
+  ! output is never gated. Called once per kernel entry, never in loops.
+  integer function teems_verbosity()
+    character(len=8) :: s
+    integer :: st
+    teems_verbosity=1
+    call get_environment_variable("TEEMS_VERBOSITY",s,status=st)
+    if (st==0) then
+      read(s,*,iostat=st) teems_verbosity
+      if (st/=0) teems_verbosity=1
+    end if
+  end function teems_verbosity
 end module constants
 
 SUBROUTINE SPEC48_SINGLE(indata,irn1,jcn1,b1,values1,x,neleperrow,ai1,fcomm)
@@ -81,17 +95,16 @@ SUBROUTINE SPEC48_SINGLE(indata,irn1,jcn1,b1,values1,x,neleperrow,ai1,fcomm)
     allocate(row_order(m),rowptr(nblocks+1), &
       column_order(n), colptr(nblocks+1))
     control%COARSEN_SCHEME=2
-    write(*,"(i10,i10,i10,i10)") nz,m,n,nblocks
+    if (teems_verbosity()>=2) write(*,"(i10,i10,i10,i10)") nz,m,n,nblocks
     call mc66(m,n,nz,irn1,jcn1,nblocks,control,seed, &
       row_order,info,rowptr,column_order,colptr,&
       netcut,rowdiff,kblocks)
-    write(*,"(a)") "generating the ordering =====1 "
     if (info /= 0) then
       call mc66_print_message(info)
       if (info < 0) stop "mc66 failed"
     end if
-    write(*,"(a,I10)")       "netcut =                  ",netcut
-    write(*,"(a,f10.2,'%')") "row dimension imbalance = ", rowdiff
+    if (teems_verbosity()>=2) write(*,"(a,I10)") "netcut = ",netcut
+    if (teems_verbosity()>=2) write(*,"(a,f10.2,'%')") "row dimension imbalance = ", rowdiff
     ! dump block sizes
     ! reorder the original matrix
     allocate(column_position(n))!, row_position(m))
@@ -111,7 +124,7 @@ SUBROUTINE SPEC48_SINGLE(indata,irn1,jcn1,b1,values1,x,neleperrow,ai1,fcomm)
     ! Read matrix data on host.
     do i = 1, nblocks
       data%NEQSB(i)=rowptr(i+1)-rowptr(i)!neqsb(i)
-      write(*,"('block ',i4,' of dimension  ',i10,' X ',i10)") &
+      if (teems_verbosity()>=2) write(*,"('block ',i4,' of dimension  ',i10,' X ',i10)") &
       i,rowptr(i+1)-rowptr(i),colptr(i+1)-colptr(i)
     end do
     h=1
@@ -132,7 +145,7 @@ SUBROUTINE SPEC48_SINGLE(indata,irn1,jcn1,b1,values1,x,neleperrow,ai1,fcomm)
   CALL MPI_BARRIER(data%COMM,ERCODE)
   call MPI_COMM_RANK( fcomm1 , myid, ERCODE ) !MPI_COMM_WORLD
   call MPI_COMM_SIZE( fcomm1, numprocs, ERCODE ) !MPI_COMM_WORLD
-  print *, "Process ", myid, " of ", numprocs, " is alive1"
+  if (teems_verbosity()>=2) print *, "Process ", myid, " of ", numprocs, " is alive1"
   data%JOB = 25
   CALL MP48AD(data)
   IF (data%RANK.EQ.0) THEN
@@ -147,7 +160,7 @@ SUBROUTINE SPEC48_SINGLE(indata,irn1,jcn1,b1,values1,x,neleperrow,ai1,fcomm)
   END IF
   call MPI_COMM_RANK( fcomm1, myid, ERCODE ) !MPI_COMM_WORLD
   call MPI_COMM_SIZE( fcomm1, numprocs, ERCODE ) !MPI_COMM_WORLD
-  print *, "Process ", myid, " of ", numprocs, " is alive2"
+  if (teems_verbosity()>=2) print *, "Process ", myid, " of ", numprocs, " is alive2"
   data%JOB = 6
   CALL MP48AD(data)
 END SUBROUTINE SPEC48_SINGLE
@@ -201,13 +214,13 @@ SUBROUTINE SPEC48_NOMC66(indata,jcn1,b1,values1,x,neleperrow,fcomm,rowptrin,colp
     maxsbcols=0
     do i = 1, nblocks
       data%NEQSB(i)=rowptrin(i+1)-rowptrin(i)!neqsb(i)
-      write(*,"('nomc block ',i4,' of dimension  ',i10,' X ',i10)") &
+      if (teems_verbosity()>=2) write(*,"('nomc block ',i4,' of dimension  ',i10,' X ',i10)") &
       i,data%NEQSB(i),colptrin(i+1)-colptrin(i)
       ncols=colptrin(i+1)-colptrin(i)
       if(maxsbcols.LT.ncols)maxsbcols=ncols
     end do
     maxsbcols=maxsbcols+m-colptrin(nblocks+1)
-    print *, "row ", m,"nz ",nz,"maxcolsb ",maxsbcols
+    if (teems_verbosity()>=2) print *, "row ", m,"nz ",nz,"maxcolsb ",maxsbcols
     h=1
     data%MAXSBCOLS=maxsbcols
     do j = 1, m
@@ -227,10 +240,10 @@ SUBROUTINE SPEC48_NOMC66(indata,jcn1,b1,values1,x,neleperrow,fcomm,rowptrin,colp
   CALL MPI_BARRIER(data%COMM,ERCODE)
   call MPI_COMM_RANK( fcomm1 , myid, ERCODE ) !MPI_COMM_WORLD
   call MPI_COMM_SIZE( fcomm1, numprocs, ERCODE ) !MPI_COMM_WORLD
-  print *, "Process ", myid, " of ", numprocs, " is alive1"
+  if (teems_verbosity()>=2) print *, "Process ", myid, " of ", numprocs, " is alive1"
   data%JOB = 25
   CALL MP48AD(data)
-  print *, "Processa ", myid, " of ", numprocs, " is alive1"
+  if (teems_verbosity()>=2) print *, "Processa ", myid, " of ", numprocs, " is alive1"
   IF (data%RANK.EQ.0) THEN
     IF (data%ERROR.LT.0) THEN
       WRITE (6,*) ' Unexpected error return'
@@ -240,7 +253,7 @@ SUBROUTINE SPEC48_NOMC66(indata,jcn1,b1,values1,x,neleperrow,fcomm,rowptrin,colp
       end do
     END IF
   END IF
-  print *, "Process ", myid, " of ", numprocs, " is alive2"
+  if (teems_verbosity()>=2) print *, "Process ", myid, " of ", numprocs, " is alive2"
   data%JOB = 6
   CALL MP48AD(data)
 END SUBROUTINE SPEC48_NOMC66
@@ -285,6 +298,8 @@ SUBROUTINE SPEC51M_RANK(INSIZE,CNTL6,IRN,JCN,VA,IRNA,JCNA,KEEP,W,IW)
     ELSE
       CALL MA48I(CNTL,ICNTL)
     ENDIF
+    ! errors only below debug verbosity (silences duplicate-entry notes)
+    if (teems_verbosity()<2) ICNTL(3)=1
     IF(CNTL6(1).EQ.0)THEN
       IF (FSORD.EQ.1) THEN
         CNTL(4)=1e-4
@@ -308,15 +323,15 @@ SUBROUTINE SPEC51M_RANK(INSIZE,CNTL6,IRN,JCN,VA,IRNA,JCNA,KEEP,W,IW)
     ENDIF
 
     IF(SGNDET.GT.0)THEN
-      WRITE(6,'(/,A,F9.3)')&
+      if (teems_verbosity()>=2) WRITE(6,'(/,A,F9.3)')&
           ' Determinant is positive; log(determinant) =',LOGDET
           INSIZE(4)=M
     ELSE IF(SGNDET.LT.0)THEN
-        WRITE(6,'(/,A,F9.3)')&
+        if (teems_verbosity()>=2) WRITE(6,'(/,A,F9.3)')&
           ' Determinant is negative; log(-determinant) =',LOGDET
           INSIZE(4)=M
       ELSE
-        WRITE(6,'(/,A)')' Determinant is zero'
+        if (teems_verbosity()>=2) WRITE(6,'(/,A)')' Determinant is zero'
 !     Determine the nonsingular submatrix of the factorization
         IF (FSORD.EQ.1) THEN
           CALL MA51AD(M,N,LA,IRN,KEEP,RANK1,IRNA,JCNA,W)!ROWS,COLS
@@ -437,6 +452,8 @@ SUBROUTINE SPEC48M_MSOL(INSIZE,IRN,JCN,VA,B,X,IRNC,JCNC,VAC,IRNB,JCNB,VALUESB,VE
   ELSE
     CALL MA48I(CNTL,ICNTL)
   ENDIF
+  ! errors only below debug verbosity (silences duplicate-entry notes)
+  if (teems_verbosity()<2) ICNTL(3)=1
   T=M+5*N+4*N/ICNTL(6)+7
   INSIZE(13)=T
   ! KEEP is caller-allocated (bound M+9*N+7, i.e. ICNTL(6)=1); factors
@@ -595,6 +612,8 @@ SUBROUTINE SPEC48M_ESOL(INSIZE,IRN,VA,KEEP,B,SOL)
   else
     CALL MA48I(CNTL,ICNTL)
   ENDIF
+  ! errors only below debug verbosity (silences duplicate-entry notes)
+  if (teems_verbosity()<2) ICNTL(3)=1
   JOB=1
   IF (JOB.EQ.1) THEN
     allocate(W(2*MAXN))
@@ -639,6 +658,8 @@ SUBROUTINE SPEC48M_RPESOL(INSIZE,IRN,VA,KEEP,B,SOL,CNTL,RINFO,ERROR1,ICNTL,INFO,
   else
     CALL MA48I(CNTL,ICNTL)
   ENDIF
+  ! errors only below debug verbosity (silences duplicate-entry notes)
+  if (teems_verbosity()<2) ICNTL(3)=1
   JOB=1
   TRANS = .FALSE.
   IF (FSORD.EQ.1) THEN
@@ -686,6 +707,8 @@ SUBROUTINE SPEC48_SSOL2LA(INSIZE,IRN,JCN,VA,B,X)
   else
     CALL MA48I(CNTL,ICNTL)
   endif
+  ! errors only below debug verbosity (silences duplicate-entry notes)
+  if (teems_verbosity()<2) ICNTL(3)=1
   T=M+5*N+4*N/ICNTL(6)+7
   allocate(KEEP(T))
 
@@ -695,7 +718,7 @@ SUBROUTINE SPEC48_SSOL2LA(INSIZE,IRN,JCN,VA,B,X)
   else
     CALL MA48A(M,N,NE,JOB,LA,VA,IRN,JCN,KEEP,CNTL,ICNTL,IW,INFO,RINFO)
   endif
-  WRITE (6,FMT='(A,I3/A)') 'INFO(3) =',INFO(3)/NE
+  if (teems_verbosity()>=2) WRITE (6,FMT='(A,I3/A)') 'INFO(3) =',INFO(3)/NE
   deallocate(IW)
   allocate(W(M),IW(2*M+2*N))
   JOB=1
@@ -706,7 +729,7 @@ SUBROUTINE SPEC48_SSOL2LA(INSIZE,IRN,JCN,VA,B,X)
     CALL MA48B(M,N,NE,JOB,LA,VA,IRN,JCN,KEEP,CNTL,ICNTL,W,IW,INFO,&
                 RINFO)
   endif
-  WRITE (6,FMT='(A,I3/A)') 'INFO(4) =',INFO(4)/NE
+  if (teems_verbosity()>=2) WRITE (6,FMT='(A,I3/A)') 'INFO(4) =',INFO(4)/NE
   IF (INFO(1).NE.0) THEN
     WRITE (6,FMT='(A,I3/A)') 'STOP from MA48B/BD with INFO(1) =',&
     INFO(1),'Solution not possible'
@@ -730,7 +753,7 @@ SUBROUTINE SPEC48_SSOL2LA(INSIZE,IRN,JCN,VA,B,X)
     CALL MA48C(M,N,TRANS,JOB,LA,VA,IRN,KEEP,CNTL,ICNTL,&
               B,X,ERROR1,W,IW,INFO)
   endif
-  WRITE (6,FMT='(A,I3/A)') 'INFO(1) =',INFO(1)
+  if (teems_verbosity()>=2) WRITE (6,FMT='(A,I3/A)') 'INFO(1) =',INFO(1)
   deallocate(CNTL,RINFO,W,ERROR1)!A,,RHS,SOL
   deallocate(ICNTL,INFO,IW,KEEP)!IRN1,
 END SUBROUTINE SPEC48_SSOL2LA
@@ -772,6 +795,8 @@ SUBROUTINE SPEC48M_SSOL2LA(INSIZE,IRN,JCN,VA,B,X)
   else
     CALL MA48I(CNTL,ICNTL)
   endif
+  ! errors only below debug verbosity (silences duplicate-entry notes)
+  if (teems_verbosity()<2) ICNTL(3)=1
   T=M+5*N+4*N/ICNTL(6)+7
   allocate(KEEP(T))
 
@@ -781,7 +806,7 @@ SUBROUTINE SPEC48M_SSOL2LA(INSIZE,IRN,JCN,VA,B,X)
   else
     CALL MA48A(M,N,NE,JOB,LA,VA,IRN,JCN,KEEP,CNTL,ICNTL,IW,INFO,RINFO)
   endif
-  WRITE (6,FMT='(A,I3/A)') 'INFO(3) =',INFO(3)/NE
+  if (teems_verbosity()>=2) WRITE (6,FMT='(A,I3/A)') 'INFO(3) =',INFO(3)/NE
   deallocate(IW)
   allocate(W(M),IW(2*M+2*N))
   JOB=1
@@ -792,7 +817,7 @@ SUBROUTINE SPEC48M_SSOL2LA(INSIZE,IRN,JCN,VA,B,X)
     CALL MA48B(M,N,NE,JOB,LA,VA,IRN,JCN,KEEP,CNTL,ICNTL,W,IW,INFO,&
                 RINFO)
   endif
-  WRITE (6,FMT='(A,I3/A)') 'INFO(4) =',INFO(4)/NE
+  if (teems_verbosity()>=2) WRITE (6,FMT='(A,I3/A)') 'INFO(4) =',INFO(4)/NE
   IF (INFO(1).NE.0) THEN
     WRITE (6,FMT='(A,I3/A)') 'STOP from MA48B/BD with INFO(1) =',&
     INFO(1),'Solution not possible'
@@ -816,7 +841,7 @@ SUBROUTINE SPEC48M_SSOL2LA(INSIZE,IRN,JCN,VA,B,X)
     CALL MA48C(M,N,TRANS,JOB,LA,VA,IRN,KEEP,CNTL,ICNTL,&
               B,X,ERROR1,W,IW,INFO)
   endif
-  WRITE (6,FMT='(A,I3/A)') 'INFO(1) =',INFO(1)
+  if (teems_verbosity()>=2) WRITE (6,FMT='(A,I3/A)') 'INFO(1) =',INFO(1)
   deallocate(CNTL,RINFO,W,ERROR1)!A,,RHS,SOL
   deallocate(ICNTL,INFO,IW,KEEP)!IRN1,
 END SUBROUTINE SPEC48M_SSOL2LA
@@ -1027,6 +1052,8 @@ SUBROUTINE PREP48_ALU1(INSIZE,IRN,JCN,VA,W,IW,KEEP)
   else
     CALL MA48I(CNTL,ICNTL)
   endif
+  ! errors only below debug verbosity (silences duplicate-entry notes)
+  if (teems_verbosity()<2) ICNTL(3)=1
   T=M+5*N+4*N/ICNTL(6)+7
   INSIZE(13)=T
   JOB=1
@@ -1118,6 +1145,8 @@ SUBROUTINE PREP48M_MSOL(INSIZE,IRN,JCN,VA,IRNC,JCNC,VAC,IRNB,JCNB,VALUESB,VECBIV
   else
     CALL MA48I(CNTL,ICNTL)
   endif
+  ! errors only below debug verbosity (silences duplicate-entry notes)
+  if (teems_verbosity()<2) ICNTL(3)=1
   T=M+5*N+4*N/ICNTL(6)+7
   INSIZE(13)=T
   JOB=1

@@ -384,7 +384,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
 
   filehandle = fopen(fname,"r");
   if(filehandle==NULL){
-    printf("Error!!! No such %s file!\n",fname);
+    printf("Error: cannot open %s\n",fname);
     return -1;
   }
 
@@ -399,7 +399,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
           break;
         }
       if(k0==niodata){
-        printf("Error!!!! No such file %s in cmf file!\n",line1);
+        printf("Error: cannot open file %s named in the CMF file\n",line1);
         return -1;
       }
     }
@@ -446,7 +446,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
           }
           filehandle1 = fopen(iodata[k0].filname,"r");
           if(filehandle1==NULL){
-            printf("Error!!! No such %s file!\n",iodata[k0].filname);
+            printf("Error: cannot open data file %s\n",iodata[k0].filname);
             return -1;
           }
           while (fgets(line,DATREADLINE,filehandle1)) {
@@ -560,7 +560,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
             }
           }
           if(count2!=4){
-            printf("Error!!!! %s is not a header in data file!\n",header);
+            printf("Error: header \"%s\" not found in the data file\n",header);
             return -1;
           }
           fclose(filehandle1);
@@ -586,7 +586,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
           }
           filehandle1 = fopen(iodata[k0].filname,"r");
           if(filehandle1==NULL){
-            printf("Error!!! No such %s file!\n",iodata[k0].filname);
+            printf("Error: cannot open data file %s\n",iodata[k0].filname);
             return -1;
           }
           while (fgets(line,DATREADLINE,filehandle1)) {
@@ -709,7 +709,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
             }
           }
           if(count2!=2){
-            printf("Error1!!!! %s is not a header in data file!\n",header);
+            printf("Error: header \"%s\" not found in the data file\n",header);
             return -1;
           }
           fclose(filehandle1);
@@ -717,7 +717,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
         }
       }
       if(count2==0&&i==ncof){
-        printf("Error!!!! %s is not a variable coefficient or parameter!\n",vname);
+        printf("Error: %s is not a declared variable, coefficient, or parameter\n",vname);
         return -1;
       }
     } else {
@@ -797,7 +797,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
           }
           filehandle1 = fopen(iodata[k0].filname,"r");
           if(filehandle1==NULL){
-            printf("Error!!! No such %s file!\n",iodata[k0].filname);
+            printf("Error: cannot open data file %s\n",iodata[k0].filname);
             return -1;
           }
           while (fgets(line,DATREADLINE,filehandle1)) {
@@ -814,7 +814,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
                 n1++;
               }
               if (strncmp(vname1,header,strlen(header)) == 0&&strlen(header)==strlen(vname1)) {
-                printf("dim %s\n",readitem);
+                logmsg(2,"dim %s\n",readitem);
                 count2=2;
                 recount=0;
                 while (fgets(line,DATREADLINE,filehandle1)) {
@@ -920,7 +920,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
             }
           }
           if(count2!=2){
-            printf("Error!!!! %s is not a header in data file!\n",header);
+            printf("Error: header \"%s\" not found in the data file\n",header);
             return -1;
           }
           fclose(filehandle1);
@@ -964,7 +964,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
           }
           filehandle1 = fopen(iodata[k0].filname,"r");
           if(filehandle1==NULL){
-            printf("Error!!! No such %s file!\n",iodata[k0].filname);
+            printf("Error: cannot open data file %s\n",iodata[k0].filname);
             return -1;
           }
           while (fgets(line,DATREADLINE,filehandle1)) {
@@ -1086,7 +1086,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
             }
           }
           if(count2!=4){
-            printf("Error!!!! %s is not a header in data file!\n",header);
+            printf("Error: header \"%s\" not found in the data file\n",header);
             return -1;
           }
           fclose(filehandle1);
@@ -1094,7 +1094,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
         }
       }
       if(count2==0&&i==ncof){
-        printf("Error!!!! %s is not a variable coefficient or parameter!\n",vname);
+        printf("Error: %s is not a declared variable, coefficient, or parameter\n",vname);
         return -1;
       }
     }
@@ -1143,7 +1143,7 @@ offset_t sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
         }
         if (i>10000) {
           strcat(interchar,"gen_sum");
-          printf("Error: Too many sum\n");
+          printf("Error: too many sum() terms in one statement\n");
         }
         strcat(interchar,interchar1);
         strcpy(sum_cof[j].sumname,interchar);
@@ -1288,7 +1288,7 @@ offset_t sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
         }
         if (i>10000) {
           strcat(interchar,"gen_sum");
-          printf("Error: Too many sum\n");
+          printf("Error: too many sum() terms in one statement\n");
         }
         strcat(interchar,interchar1);
         strcpy(sum_cof[j].sumname,interchar);
@@ -1513,7 +1513,7 @@ offset_t closure_read(char *fname, char *commsyntax,closure_entry *closure_vals,
             check=false;
             break;
           }
-          if(j==nvar&&vname[0]!=';')printf("Error!!! There is no such var %s\n",vname);
+          if(j==nvar&&vname[0]!=';')printf("Error: variable %s is not declared\n",vname);
       } else {
         dims=1;
         p = strtok(vname,"(");
@@ -1537,7 +1537,7 @@ offset_t closure_read(char *fname, char *commsyntax,closure_entry *closure_vals,
                     check=false;
                     break;
                   }
-                  if(l1==sets[vars[j].setid[0]].size)printf("Error!!! There is no element %s in the set %s in cof/var %s\n",p,sets[vars[j].setid[0]].setname,vars[j].cofname);
+                  if(l1==sets[vars[j].setid[0]].size)printf("Error: element %s is not in set %s (in %s)\n",p,sets[vars[j].setid[0]].setname,vars[j].cofname);
               } else {
                 if(strcmp(p,sets[vars[j].setid[0]].setname)==0) {
                   arSet[0].setid=vars[j].setid[0];
@@ -1552,7 +1552,7 @@ offset_t closure_read(char *fname, char *commsyntax,closure_entry *closure_vals,
                       dims=sets[arSet[0].setid].size;
                       break;
                     }
-                    if(l1==nset)printf("Error!!! There is no set %s in cof/var %s\n",p,vars[j].cofname);
+                    if(l1==nset)printf("Error: set %s is not declared (in %s)\n",p,vars[j].cofname);
                 }
               }
               break;
@@ -1573,7 +1573,7 @@ offset_t closure_read(char *fname, char *commsyntax,closure_entry *closure_vals,
                       supsetid[l]=-2;
                       break;
                     }
-                    if(l1==sets[vars[j].setid[l]].size)printf("Error!!! There is no element %s in the set %s in cof/var %s\n",argu,sets[vars[j].setid[l]].setname,vars[j].cofname);
+                    if(l1==sets[vars[j].setid[l]].size)printf("Error: element %s is not in set %s (in %s)\n",argu,sets[vars[j].setid[l]].setname,vars[j].cofname);
                 } else {
                   if(strcmp(p,sets[vars[j].setid[l]].setname)==0) {
                     arSet[l].setid=vars[j].setid[l];
@@ -1585,7 +1585,7 @@ offset_t closure_read(char *fname, char *commsyntax,closure_entry *closure_vals,
                         dims=dims*sets[arSet[l].setid].size;
                         break;
                       }
-                      if(l1==nset)printf("Error!!! There is no set %s in cof/var %s\n",p,vars[j].cofname);
+                      if(l1==nset)printf("Error: set %s is not declared (in %s)\n",p,vars[j].cofname);
                   }
                 }
               }
@@ -1616,7 +1616,7 @@ offset_t closure_read(char *fname, char *commsyntax,closure_entry *closure_vals,
             free(exoantidim);
             break;
           }
-          if(j==nvar)printf("Error!!! There is no such var %s\n",p);
+          if(j==nvar)printf("Error: variable %s is not declared\n",p);
       }
     }
   }
@@ -1636,7 +1636,7 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
   offset_t j,l=0,dims,n1,l1,l2,dcount,supsetid[MAXSUPSET],sup;
   solve_real val;
       if ( (filehandle = fopen(fname,"r")) == NULL ) {
-        printf("Error opening file %s\n",fname);
+        printf("Error: cannot open %s\n",fname);
       }
   while (tab_next_statement(commsyntax,filehandle,line,DATREADLINE)) {
     str_replace_char_all(line,'\r',' ');
@@ -1648,7 +1648,7 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
       k1++;
     }
     if(k1>=DATREADLINE){
-      printf("Error!!!! The shock file line (from Shock to ;) is too long!\n");
+      printf("Error: shock statement exceeds the line buffer; increase TABREADLINE\n");
       return -1;
     }
     str_replace_all_bounded(line,";", " ;",DATREADLINE);
@@ -1726,13 +1726,13 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
                         break;
                       }
                     if(sup==MAXSUPSET){
-                      printf("Error!!!! %s in variable %s in shock file is not a correct set at that position!\n",p,vars[j].cofname);
+                      printf("Error: %s is not a valid set at that position of variable %s (shock file)\n",p,vars[j].cofname);
                       return -1;
                     }
                     break;
                   }
                   if(k1==nset){
-                    printf("Error!!!! %s in variable %s in shock file is not a set!\n",p,vars[j].cofname);
+                    printf("Error: %s in variable %s (shock file) is not a set\n",p,vars[j].cofname);
                     return -1;
                   }
               }
@@ -1748,7 +1748,7 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
                   break;
                 }
               if(k1==sets[vars[j].setid[n1]].size){
-                printf("Error!!!! %s in variable %s in shock file is not a set element!\n",p,vars[j].cofname);
+                printf("Error: %s in variable %s (shock file) is not a set element\n",p,vars[j].cofname);
                 return -1;
               }
             }
@@ -1825,7 +1825,7 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
         }
       }
       if(j==nvar){
-        printf("Error!!!! %s in shock file is not a variable!\n",readitem);
+        printf("Error: %s in the shock file is not a declared variable\n",readitem);
         return -1;
       }
     }
@@ -1940,8 +1940,8 @@ offset_t variables_read(char *fname, char *commsyntax, array_def *record, offset
       readitem+=3;
       readitem = strtok(readitem,")");
       record[j].glval=atof(readitem);
-      printf("line %s\n type %d val %lf read %s\n",linecopy,record[j].gltype,record[j].glval,readitem);
-      printf("line %s\n type %d val %lf\n",line,record[j].gltype,record[j].glval);
+      logmsg(2,"line %s\n type %d val %lf read %s\n",linecopy,record[j].gltype,record[j].glval,readitem);
+      logmsg(2,"line %s\n type %d val %lf\n",line,record[j].gltype,record[j].glval);
     }
     readitem=strstr(line, ",gt ");
     if(readitem!=NULL){
@@ -2089,7 +2089,7 @@ offset_t variables_read(char *fname, char *commsyntax, array_def *record, offset
         addi=addi+add;
       } else {
         if (n-orig==1) {
-          printf("%s\n","Syntax error! Not enough parences");
+          printf("Error: unbalanced parentheses in statement\n");
         } else {
           if(orig==1) {
             strcpy(setname,line+ncommsyntax);
@@ -2304,7 +2304,7 @@ offset_t coefficients_read(char *fname, char *commsyntax, array_def *record, off
         readitem = strtok(readitem,"(");
         strcpy(record[j].cofname,readitem);
         if(record[j].cofname[0]=='c'&&record[j].cofname[1]=='_'){
-          printf("Errors!!!! c_ and C_ are reserved for change variable!!!\nPlease change the name of coefficient %s\n",record[j].cofname);
+          printf("Error: the c_/C_ prefix is reserved for change variables; rename coefficient %s\n",record[j].cofname);
           return -1;
         }
         readitem = strtok(NULL,")");
@@ -2336,8 +2336,7 @@ offset_t coefficients_read(char *fname, char *commsyntax, array_def *record, off
         addi=addi+add;
       } else {
         if (n==1) {
-          printf("%s\n","Syntax error! Not enough parences");
-          printf("line %s\n",line);
+          printf("Error: unbalanced parentheses in statement: %s\n",line);
         } else {
           strcpy(setname,line+ncommsyntax);
           str_replace_all(setname,";", "");
@@ -3184,7 +3183,7 @@ offset_t subsets_read(char *fname, set_element *set_elems, set_def *sets,dim_t n
                 sets[i].subsetid[sup1]=j;
                 break;
               }
-            if(sup1==MAXSUPSET)printf("Error!!! Number of superset exceeded! Increase MAXSUPSET!\n");
+            if(sup1==MAXSUPSET)printf("Error: superset count exceeds MAXSUPSET; increase MAXSUPSET in teems_solver.h\n");
             for (jj=sets[j].offset; jj<sets[j].offset+sets[j].size; jj++) {
               for (jjj=sets[i].offset; jjj<sets[i].offset+sets[i].size; jjj++) {
                 if (strcmp(set_elems[jj].setele,set_elems[jjj].setele)==0) {
@@ -3197,13 +3196,13 @@ offset_t subsets_read(char *fname, set_element *set_elems, set_def *sets,dim_t n
             break;
           }
         }
-        if(j==nset)printf("Error!!! No such set %s\n",set);
+        if(j==nset)printf("Error: set %s is not declared\n",set);
         break;
       }
       j++;
     }
-    if(i==nset)printf("Error!!! No such set %s\n",subset);
-    if(succ-sets[i].size!=0)printf("Error!!! No set or some elements of set %s are not elements of set %s\n",subset,set);
+    if(i==nset)printf("Error: set %s is not declared\n",subset);
+    if(succ-sets[i].size!=0)printf("Error: some elements of set %s are not in set %s\n",subset,set);
   }
   fclose(filehandle);
   return j;
@@ -3245,7 +3244,7 @@ dim_t subset_map_build(set_element *set_elems, set_def *sets,dim_t nset,offset_t
           if(sets[i].subsetid[sup1]==-1)break;
         }
         if(sup1==MAXSUPSET){
-          printf("Error!!!! Superset size exceeded!!\n");
+          printf("Error: superset size exceeded; increase MAXSUPSET in teems_solver.h\n");
           *contin=0;
           return 0;
         }
@@ -3294,7 +3293,7 @@ dim_t subset_map_build(set_element *set_elems, set_def *sets,dim_t nset,offset_t
           if(sets[i].subsetid[sup1]==-1)break;
         }
         if(sup1==MAXSUPSET){
-          printf("Error!!!! Superset size exceeded!!\n");
+          printf("Error: superset size exceeded; increase MAXSUPSET in teems_solver.h\n");
           *contin=0;
           return 0;
         }
@@ -3397,7 +3396,7 @@ char *tab_next_statement(char *commsyntax, FILE *filehandle, char *readline,offs
         strcpy(readline,line);
       } else {
         strcpy(readline,line);
-          if(strlen(readline)>=((size_t)(9*rlinesize/10)))printf("Warning!!!! Overflow may happen in function tab_next_statement. Increase TABREADLINE or DATREADLINE may help!%ld %ld\n",strlen(readline),rlinesize);
+          if(strlen(readline)>=((size_t)(9*rlinesize/10)))printf("Warning: statement near the line-buffer limit (%ld of %ld bytes) in tab_next_statement; increase TABREADLINE/DATREADLINE\n",strlen(readline),rlinesize);
         return readline;
       }
       while (fgets(line,TABLINESIZE,filehandle)) {
@@ -3406,7 +3405,7 @@ char *tab_next_statement(char *commsyntax, FILE *filehandle, char *readline,offs
           strcat(readline, line);
         } else {
           strcat(readline, line);
-          if(strlen(readline)>=((size_t)(9*rlinesize/10)))printf("Warning!!!! Overflow may happen in function tab_next_statement. Increase TABREADLINE or DATREADLINE may help! %ld %ld\n",strlen(readline),rlinesize);
+          if(strlen(readline)>=((size_t)(9*rlinesize/10)))printf("Warning: statement near the line-buffer limit (%ld of %ld bytes) in tab_next_statement; increase TABREADLINE/DATREADLINE\n",strlen(readline),rlinesize);
           return readline;
         }
       }
@@ -3435,7 +3434,7 @@ char *tab_next_statement_resolved(char *commsyntax, FILE *filehandle, char *read
         strcpy(readline,line);
       } else {
         strcpy(readline,line);
-          if(strlen(readline)>=((size_t)(9*rlinesize/10)))printf("Warning!!!! Overflow may happen in function tab_next_statement_resolved. Increase TABREADLINE or DATREADLINE may help! %ld %ld\n",strlen(readline),rlinesize);
+          if(strlen(readline)>=((size_t)(9*rlinesize/10)))printf("Warning: statement near the line-buffer limit (%ld of %ld bytes) in tab_next_statement_resolved; increase TABREADLINE/DATREADLINE\n",strlen(readline),rlinesize);
         return readline;
       }
       while (fgets(line,TABLINESIZE,filehandle)) {
@@ -3444,7 +3443,7 @@ char *tab_next_statement_resolved(char *commsyntax, FILE *filehandle, char *read
           strcat(readline, line);
         } else {
           strcat(readline, line);
-          if(strlen(readline)>=((size_t)(9*rlinesize/10)))printf("Warning!!!! Overflow may happen in function tab_next_statement_resolved. Increase TABREADLINE or DATREADLINE may help! %ld %ld\n",strlen(readline),rlinesize);
+          if(strlen(readline)>=((size_t)(9*rlinesize/10)))printf("Warning: statement near the line-buffer limit (%ld of %ld bytes) in tab_next_statement_resolved; increase TABREADLINE/DATREADLINE\n",strlen(readline),rlinesize);
           return readline;
         }
       }

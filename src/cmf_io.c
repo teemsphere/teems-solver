@@ -7,11 +7,11 @@ int cmf_count_files(char *fname,char *comsyntax) {
   int j=0;
   filehandle = fopen(fname,"r");
   if(filehandle==NULL){
-    printf("Error!!! No such %s file!\n",fname);
+    printf("Error: cannot open %s\n",fname);
     return -1;
   }
   while (tab_next_statement(comsyntax,filehandle,line,TABREADLINE)) {
-    printf("Com %s file %s\n",comsyntax,line);
+    logmsg(2,"Com %s file %s\n",comsyntax,line);
     j++;
   }
   fclose(filehandle);
@@ -27,7 +27,7 @@ int datafile_read_header_info(char *varname, char *filename,dim_t *vsize, char *
   while (varname[nlength] != '\0') nlength++;
   filehandle = fopen(filename,"r");
   if(filehandle==NULL){
-    printf("Error!!! No such %s file!\n",filename);
+    printf("Error: cannot open %s\n",filename);
     return -1;
   }
 
@@ -57,7 +57,7 @@ int datafile_read_header_info(char *varname, char *filename,dim_t *vsize, char *
   fclose(filehandle);
   *d1=din1;
   *vsize=vsizein;
-  if(succ==0)printf("Error!!! No header \"%s\" in %s\n",varname,filename);
+  if(succ==0)printf("Error: header \"%s\" not found in %s\n",varname,filename);
   return succ;
 }
 
@@ -111,7 +111,7 @@ int cmf_read(char *filename, int niodata, cmf_file_entry *iodata, char *tabfile,
   strcpy(commsyntax,"iodata");
   filehandle = fopen(filename,"r");
   if(filehandle==NULL){
-    printf("Error!!! No such %s file!\n",filename);
+    printf("Error: cannot open %s\n",filename);
     return -1;
   }
   while (tab_next_statement(commsyntax,filehandle,line,TABREADLINE)) {
@@ -495,7 +495,7 @@ int tab_preprocess(char *filename, char *newtabfile) {
   char msetele[MAXVARDIM][NAMESIZE],msetsymb[MAXVARDIM][NAMESIZE],mset[MAXVARDIM][NAMESIZE];
   filehandle = fopen(filename,"r");
   if(filehandle==NULL){
-    printf("Error!!! No such %s file!",filename);
+    printf("Error: cannot open %s\n",filename);
     return -1;
   }
   int check,i1,i2,i,setindx,varindx,l1,l2,l3,l4,k1,k2,j,j1,j2;//,necheck,npcheck;//,j;,check1

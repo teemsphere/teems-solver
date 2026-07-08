@@ -2,6 +2,7 @@
  * teems_solver.h. */
 #include <teems_solver.h>
 
+int verbosity = 1;
 int inmemory;
 int section_threads;
 int max_threads;

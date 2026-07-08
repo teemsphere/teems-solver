@@ -1,5 +1,21 @@
 #include <teems_solver.h>
 
+/* Formulas are recompiled every step, so a per-bind warning would repeat
+   thousands of times over a solve; warn once per array. */
+static char *novalue_warned[2]={NULL,NULL};   /* [0] coefficients, [1] variables */
+static offset_t novalue_warned_n[2]={0,0};
+static void warn_no_values(const char *name, offset_t idx, int which) {
+  if(idx>=novalue_warned_n[which]) {
+    novalue_warned[which]=realloc(novalue_warned[which],idx+1);
+    memset(novalue_warned[which]+novalue_warned_n[which],0,idx+1-novalue_warned_n[which]);
+    novalue_warned_n[which]=idx+1;
+  }
+  if(!novalue_warned[which][idx]) {
+    novalue_warned[which][idx]=1;
+    printf("Warning: %s has no supplied values\n",name);
+  }
+}
+
 solve_real formula_subst_scalar(char *var2, elem_value *record, array_def *coefs,offset_t ncof) {
   offset_t index;
   while (str_replace_all(var2," ", ""));
@@ -37,7 +53,7 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
   index=ncof-1;
   do {
     if (strcmp(coefs[index].cofname,p)==0) {
-      if(!coefs[index].suplval)printf("Warning!!!! coefficient %s has not been supplied with values!\n",coefs[index].cofname);
+      if(!coefs[index].suplval)warn_no_values(coefs[index].cofname,index,0);
       if(varindex==2) {
         ops[nops].Var2BegAdd=coefs[index].offset;
         ops[nops].Var2Type=OT_ARRAY;
@@ -458,7 +474,7 @@ int formula_compile(char *fomulain, set_def *sets,array_def *coefs, offset_t nco
         strncpy(fpart1,fomulain,p-fpart1);
         fpart1[p-fpart1] = '\0';
       } else {
-        printf("Error in Formula!\n");
+        printf("Error: malformed formula (unbalanced parentheses)\n");
         return 0;
       }
     } else {
@@ -504,7 +520,7 @@ int formula_compile(char *fomulain, set_def *sets,array_def *coefs, offset_t nco
     }
     if (i>10000) {
       strcat(interchar,"gen_par");
-      printf("Warning: Too many parenthesises\n");
+      printf("Warning: too many nested parentheses in formula\n");
     }
     strcat(interchar,interchar1);
     strcpy(ops[*nops].TmpVarName,interchar);
@@ -874,7 +890,7 @@ solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,
       if(eval1==0&&eval2<0) {
         ops[i].TmpVarVal=zerodivide;
       } else {
-        if(eval1<0&&eval2-floor(eval2)!=0)printf("Serious errors: fraction power of negative number!!!!!!!");
+        if(eval1<0&&eval2-floor(eval2)!=0)printf("Error: fractional power of a negative number in formula evaluation\n");
         ops[i].TmpVarVal=pow(eval1,eval2);
       }
       break;
@@ -1615,7 +1631,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
             b=0;
             do {
               if (strcmp(coefs[index].cofname,condvar[i1])==0) {
-                if(!coefs[index].suplval)printf("Warning!!!! coefficient %s has not been supplied with values!\n",coefs[index].cofname);
+                if(!coefs[index].suplval)warn_no_values(coefs[index].cofname,index,0);
                 logivarindx[i1]=index;
                 logivartype[i1]=0;
                 b++;
@@ -1641,7 +1657,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
               p=strtok(condvar[i1],"(");
               do {
                 if (strcmp(vars[index].cofname,condvar[i1])==0) {
-                if(!vars[index].suplval)printf("Warning!!!! coefficient %s has not been supplied with values!\n",vars[index].cofname);
+                if(!vars[index].suplval)warn_no_values(vars[index].cofname,index,1);
                   logivarindx[i1]=index;
                   logivartype[i1]=1;
                   if(p!=NULL)p=strtok(NULL,")");
@@ -1798,7 +1814,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
           #pragma omp for
           for (l=0; l<varsize; l++) {
             if(elem_vals[offset+l].value<coefs[index].glval){
-              printf("Error!!! Condition not met var %s type 1!\n",coefs[index].cofname);
+              printf("Error: coefficient %s has a value below its declared lower bound %f\n",coefs[index].cofname,coefs[index].glval);
               l=varsize;
             }
           }
@@ -1807,7 +1823,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
           #pragma omp for
           for (l=0; l<varsize; l++) {
             if(elem_vals[offset+l].value<=coefs[index].glval){
-              printf("Error!!! Condition not met var %s type 2!\n",coefs[index].cofname);
+              printf("Error: coefficient %s has a value at or below its declared strict lower bound %f\n",coefs[index].cofname,coefs[index].glval);
               l=varsize;
             }
           }
@@ -1816,7 +1832,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
           #pragma omp for
           for (l=0; l<varsize; l++) {
             if(elem_vals[offset+l].value>coefs[index].glval){
-              printf("Error!!! Condition not met var %s type 3!\n",coefs[index].cofname);
+              printf("Error: coefficient %s has a value above its declared upper bound %f\n",coefs[index].cofname,coefs[index].glval);
               l=varsize;
             }
           }
@@ -1825,7 +1841,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
           #pragma omp for
           for (l=0; l<varsize; l++) {
             if(elem_vals[offset+l].value>=coefs[index].glval){
-              printf("Error!!! Condition not met var %s type 4!\n",coefs[index].cofname);
+              printf("Error: coefficient %s has a value at or above its declared strict upper bound %f\n",coefs[index].cofname,coefs[index].glval);
               l=varsize;
             }
           }
@@ -2112,7 +2128,7 @@ offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_el
           #pragma omp for
           for (l=0; l<varsize; l++) {
             if(elem_vals[offset+l].value<coefs[index].glval){
-              printf("Error!!! Condition not met var %s type 1!\n",coefs[index].cofname);
+              printf("Error: coefficient %s has a value below its declared lower bound %f\n",coefs[index].cofname,coefs[index].glval);
               l=varsize;
             }
           }
@@ -2121,7 +2137,7 @@ offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_el
           #pragma omp for
           for (l=0; l<varsize; l++) {
             if(elem_vals[offset+l].value<=coefs[index].glval){
-              printf("Error!!! Condition not met var %s type 2!\n",coefs[index].cofname);
+              printf("Error: coefficient %s has a value at or below its declared strict lower bound %f\n",coefs[index].cofname,coefs[index].glval);
               l=varsize;
             }
           }
@@ -2130,7 +2146,7 @@ offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_el
           #pragma omp for
           for (l=0; l<varsize; l++) {
             if(elem_vals[offset+l].value>coefs[index].glval){
-              printf("Error!!! Condition not met var %s type 3!\n",coefs[index].cofname);
+              printf("Error: coefficient %s has a value above its declared upper bound %f\n",coefs[index].cofname,coefs[index].glval);
               l=varsize;
             }
           }
@@ -2139,7 +2155,7 @@ offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_el
           #pragma omp for
           for (l=0; l<varsize; l++) {
             if(elem_vals[offset+l].value>=coefs[index].glval){
-              printf("Error!!! Condition not met var %s type 4!\n",coefs[index].cofname);
+              printf("Error: coefficient %s has a value at or above its declared strict upper bound %f\n",coefs[index].cofname,coefs[index].glval);
               l=varsize;
             }
           }
@@ -2409,7 +2425,7 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
           #pragma omp for
           for (l=0; l<varsize; l++) {
             if(elem_vals[offset+l].value<coefs[index].glval){
-              printf("Error!!! Condition not met var %s type 1!\n",coefs[index].cofname);
+              printf("Error: coefficient %s has a value below its declared lower bound %f\n",coefs[index].cofname,coefs[index].glval);
               l=varsize;
             }
           }
@@ -2418,7 +2434,7 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
           #pragma omp for
           for (l=0; l<varsize; l++) {
             if(elem_vals[offset+l].value<=coefs[index].glval){
-              printf("Error!!! Condition not met var %s type 2!\n",coefs[index].cofname);
+              printf("Error: coefficient %s has a value at or below its declared strict lower bound %f\n",coefs[index].cofname,coefs[index].glval);
               l=varsize;
             }
           }
@@ -2427,7 +2443,7 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
           #pragma omp for
           for (l=0; l<varsize; l++) {
             if(elem_vals[offset+l].value>coefs[index].glval){
-              printf("Error!!! Condition not met var %s type 3!\n",coefs[index].cofname);
+              printf("Error: coefficient %s has a value above its declared upper bound %f\n",coefs[index].cofname,coefs[index].glval);
               l=varsize;
             }
           }
@@ -2436,7 +2452,7 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
           #pragma omp for
           for (l=0; l<varsize; l++) {
             if(elem_vals[offset+l].value>=coefs[index].glval){
-              printf("Error!!! Condition not met var %s type 4!\n",coefs[index].cofname);
+              printf("Error: coefficient %s has a value at or above its declared strict upper bound %f\n",coefs[index].cofname,coefs[index].glval);
               l=varsize;
             }
           }
@@ -2712,7 +2728,7 @@ offset_t subinterval_update(PetscInt rank,char *fname,set_def *sets,dim_t nset, 
     }
     fdim1=fdim-1;
     quantifier *arSet= (quantifier *) calloc (fdim+1,sizeof(quantifier));
-    if(fdim<3){printf("We should at least have an intertemporal variable and a spline set!\n");return -1;}
+    if(fdim<3){printf("Error: spline statement needs at least an intertemporal variable and a spline set\n");return -1;}
     nloops=1;
     nloops1=1;
     if (fdim==3) {
@@ -2740,7 +2756,7 @@ offset_t subinterval_update(PetscInt rank,char *fname,set_def *sets,dim_t nset, 
         dcountdim1[i]=sets[arSet[i+1].setid].size*dcountdim1[i+1];
       }
     }
-    printf("nloop %ld nloop1 %ld\n",nloops,nloops1);
+    logmsg(2,"nloop %ld nloop1 %ld\n",nloops,nloops1);
     strcpy(vname,readitem);
         index=ncof-1;
         p=strtok(vname,"(");
@@ -2770,7 +2786,7 @@ offset_t subinterval_update(PetscInt rank,char *fname,set_def *sets,dim_t nset, 
     readitem = strtok(line,"=");
     readitem = strtok(NULL,";");
     i=str_count_char(readitem, ':');
-    if(i!=7){printf("Syntax Error in %s!\n",readitem);return -1;}
+    if(i!=7){printf("Error: syntax error in %s\n",readitem);return -1;}
     strcpy(line,readitem);
     strcat(line,":");
     strcpy(line1,line);
@@ -2859,12 +2875,12 @@ offset_t subinterval_update(PetscInt rank,char *fname,set_def *sets,dim_t nset, 
                 }
             }
     if(coefs[vvar].size!=coefs[jvar].size){
-      printf("Syntax Error!!! %s and %s must have the same size\n",coefs[vvar].cofname,coefs[jvar].cofname);
+      printf("Error: %s and %s must have the same size\n",coefs[vvar].cofname,coefs[jvar].cofname);
       return 0;
     }
     for(l=0;l<coefs[vvar].size;l++){
       if(vararset[l]!=jarset[l]){
-        printf("Syntax Error!!! %s and %s must have the same arguments\n",coefs[vvar].cofname,coefs[jvar].cofname);
+        printf("Error: %s and %s must have the same arguments\n",coefs[vvar].cofname,coefs[jvar].cofname);
         return 0;
       }
     }
@@ -2920,7 +2936,7 @@ offset_t subinterval_update(PetscInt rank,char *fname,set_def *sets,dim_t nset, 
           }
         } while (index--);
         sbegadd=ncofele+vars[svar].offset;
-    printf("read %s\n",argu);
+    logmsg(2,"read %s\n",argu);
         for (l=0; l<MAXVARDIM; l++){santidim[l]=0;ssubset[l]=0;ssupsetid[l]=0;}
             for (dcount=0; dcount<vars[index].size; dcount++) {
               if(dcount==0)p=strtok(argu,",");
@@ -2936,12 +2952,12 @@ offset_t subinterval_update(PetscInt rank,char *fname,set_def *sets,dim_t nset, 
                 }
             }
     if(coefs[vvar].size!=coefs[svar].size){
-      printf("Syntax Error!!! %s and %s must have the same size\n",coefs[vvar].cofname,coefs[svar].cofname);
+      printf("Error: %s and %s must have the same size\n",coefs[vvar].cofname,coefs[svar].cofname);
       return 0;
     }
     for(l=0;l<coefs[vvar].size;l++){
       if(vararset[l]!=sarset[l]){
-        printf("Syntax Error!!! %s and %s must have the same arguments\n",coefs[vvar].cofname,coefs[svar].cofname);
+        printf("Error: %s and %s must have the same arguments\n",coefs[vvar].cofname,coefs[svar].cofname);
         return 0;
       }
     }
@@ -2955,7 +2971,7 @@ offset_t subinterval_update(PetscInt rank,char *fname,set_def *sets,dim_t nset, 
     readitem=strtok(NULL,":");
     readitem=strtok(NULL,":");
     strcpy(vname,readitem);
-    printf("var1 %s\n",vname);
+    logmsg(2,"var1 %s\n",vname);
         index=ncof-1;
         p=strtok(vname,"(");
         do {
@@ -3013,8 +3029,8 @@ offset_t subinterval_update(PetscInt rank,char *fname,set_def *sets,dim_t nset, 
                   break;
                 }
             }
-        for(l=0;l<4;l++)printf("var2 %lf dmlu %ldbeg %ld\n",elem_vals[coefs[dlmu].offset+l].value,dlmu,coefs[dlmu].offset);
-        for(l=10;l<14;l++)printf("var2 %lf\n",elem_vals[coefs[dlmu].offset+l].value);
+        for(l=0;l<4;l++)logmsg(2,"var2 %lf dmlu %ldbeg %ld\n",elem_vals[coefs[dlmu].offset+l].value,dlmu,coefs[dlmu].offset);
+        for(l=10;l<14;l++)logmsg(2,"var2 %lf\n",elem_vals[coefs[dlmu].offset+l].value);
 
     ///wlmu
     strcpy(line,line1);
@@ -3055,8 +3071,8 @@ offset_t subinterval_update(PetscInt rank,char *fname,set_def *sets,dim_t nset, 
     tsize=sets[arSet[fdim1-4].setid].size;
     stosize=sets[arSet[fdim1-2].setid].size;
     bsize=sets[arSet[fdim1-1].setid].size;
-    printf("rsize %ld tsize %ld stosize %ld bsize %ld\n",rsize,tsize,stosize,bsize);
-    if(bsize!=4)printf("Errors!!! Splinter set with wrong size or in wrong position!!!\n");
+    logmsg(2,"rsize %ld tsize %ld stosize %ld bsize %ld\n",rsize,tsize,stosize,bsize);
+    if(bsize!=4)printf("Error: splinter set has the wrong size or position (expected size 4)\n");
     solve_real ***array = (solve_real ***) malloc(sizeof(solve_real **)*rsize);
     for (i = 0; i < rsize; i++)array[i] = (solve_real**) malloc(sizeof(solve_real *)*stosize);
     solve_real vecy2;
@@ -3079,7 +3095,7 @@ offset_t subinterval_update(PetscInt rank,char *fname,set_def *sets,dim_t nset, 
     if(IsChange==false){
           if((!IsIni)||(IsSplint==2)){
                 fout = fopen(filename, "rb");
-                if (fout==NULL)printf("Weight file opening error\n");
+                if (fout==NULL)printf("Error: cannot open weight file %s\n",filename);
                 freadresult=fread(matuwold,sizeof(solve_real),rsize*stosize*stosize,fout);
                 fclose(fout);
           }
@@ -3103,7 +3119,7 @@ offset_t subinterval_update(PetscInt rank,char *fname,set_def *sets,dim_t nset, 
                 }
               }
               matuk[l*stosize+i]=elem_vals[coefs[dlmu].offset+l2].value;
-              printf("k1 %lf v %lf l2 %ld\n",elem_vals[coefs[dlmu].offset+l2].value,elem_vals[coefs[vlmu].offset+l2].value,l2);
+              logmsg(2,"k1 %lf v %lf l2 %ld\n",elem_vals[coefs[dlmu].offset+l2].value,elem_vals[coefs[vlmu].offset+l2].value,l2);
               for (j=0; j<stosize; j++){
                 arSet[3].indx=j;
                 //vlmu
@@ -3155,7 +3171,7 @@ offset_t subinterval_update(PetscInt rank,char *fname,set_def *sets,dim_t nset, 
                 }
               }
               vecy[l*tsize+i4]=elem_vals[coefs[yvar].offset+l2].value;
-              printf("var %s l %ld l2 %ld vecy %lf vecx %lf\n",coefs[yvar].cofname,l,l2,vecy[l*tsize+i4],vecx[l*tsize+i4]);
+              logmsg(2,"var %s l %ld l2 %ld vecy %lf vecx %lf\n",coefs[yvar].cofname,l,l2,vecy[l*tsize+i4],vecx[l*tsize+i4]);
             }
           }
           for (l=0; l<fdim+1; l++)arSet[l].indx=0;
@@ -3164,7 +3180,7 @@ offset_t subinterval_update(PetscInt rank,char *fname,set_def *sets,dim_t nset, 
             if(IsSplint==1||IsSplint==2){
               for(i4=0;i4<stosize;i4++){
                 l2=l*stosize*stosize+i4*stosize;
-                for(i1=0;i1<stosize;i1++)printf("k %lf v %lf\n",matuk[stosize+i1],matuv[l2+i1]);
+                for(i1=0;i1<stosize;i1++)logmsg(2,"k %lf v %lf\n",matuk[stosize+i1],matuv[l2+i1]);
                 cubic_spline(matuv+l2,matuk+stosize,0,0,stosize-1,matuw+l*stosize*stosize*bsize+i4*stosize*bsize,laA);
               }
                 memcpy(matuwold,matuw,rsize*stosize*stosize*bsize*sizeof(solve_real));
@@ -3189,10 +3205,10 @@ offset_t subinterval_update(PetscInt rank,char *fname,set_def *sets,dim_t nset, 
                 }
               }
               temp3=(1+elem_vals[coefs[jvar].offset+l2].value/100)*vecy[l*tsize+i4];
-              printf("temp3 %lf\n",temp3);
+              logmsg(2,"temp3 %lf\n",temp3);
               for (i1=0; i1<rsize; i1++)curk[i1]=vecy[i1*tsize+i4];
               curk[l]=temp3;
-              for (i1=0; i1<rsize; i1++)printf("curk0 %lf curk1 %lf\n",curk[0],vecy[l*tsize+i4]);
+              for (i1=0; i1<rsize; i1++)logmsg(2,"curk0 %lf curk1 %lf\n",curk[0],vecy[l*tsize+i4]);
               //New x position
               for (i1=0; i1<rsize; i1++){
               if(matuk[i1*stosize]<matuk[i1*stosize+stosize-1]){
@@ -3224,14 +3240,14 @@ offset_t subinterval_update(PetscInt rank,char *fname,set_def *sets,dim_t nset, 
               }
               }
               }
-              printf("i1 %ld curk %lf cupos %ld\n",i1,curk[i1],curpos[i1]);
+              logmsg(2,"i1 %ld curk %lf cupos %ld\n",i1,curk[i1],curpos[i1]);
               }
               temp3=curk[rsize-1];
               for(j=0;j<stosize;j++){
                 l2=l*stosize*stosize*bsize+j*stosize*bsize+curpos[rsize-1];
                 curx[j]=matuwold[l2]+matuwold[l2+stosize-1]*temp3+matuwold[l2+2*(stosize-1)]*temp3*temp3+matuwold[l2+3*(stosize-1)]*temp3*temp3*temp3;
               }
-              for(j=0;j<stosize;j++)printf("l %ld curx %lf curk %lfcurpos %ld curk0 %lf\n",l,curx[j],matuk[j],curpos[0],curk[0]);
+              for(j=0;j<stosize;j++)logmsg(2,"l %ld curx %lf curk %lfcurpos %ld curk0 %lf\n",l,curx[j],matuk[j],curpos[0],curk[0]);
               cubic_spline(curx,matuk,0,0,stosize-1,curw,laA);
               temp1=curw[curpos[0]]+curw[curpos[0]+stosize-1]*curk[0]+curw[curpos[0]+2*(stosize-1)]*curk[0]*curk[0]+curw[curpos[0]+3*(stosize-1)]*curk[0]*curk[0]*curk[0];
 
@@ -3252,12 +3268,12 @@ offset_t subinterval_update(PetscInt rank,char *fname,set_def *sets,dim_t nset, 
                 temp2=temp1/elem_vals[address].value;
                 temp2=temp2*100-100;
                 closure_vals[vars[svar].offset+l2].shock_value=temp2/subints;//shock, linear only, mup must be exo
-                printf("l2 %ld shock %lf var %s temp1 %lf vval %lf shock %lf vvar %lf\n",l2,closure_vals[vars[svar].offset+l2].shock_value,vars[svar].cofname,temp1,elem_vals[address].value,closure_vals[vars[svar].offset+l2].shock_value,elem_vals[coefs[vvar].offset+l2].value);
+                logmsg(2,"l2 %ld shock %lf var %s temp1 %lf vval %lf shock %lf vvar %lf\n",l2,closure_vals[vars[svar].offset+l2].shock_value,vars[svar].cofname,temp1,elem_vals[address].value,closure_vals[vars[svar].offset+l2].shock_value,elem_vals[coefs[vvar].offset+l2].value);
               
             }
           }
     }
-    printf("size1 %ld max error in percent %lf\n",tsize,maxerr);
+    logmsg(1,"Spline fit: %ld points, max error %.4f%%\n",tsize,maxerr);
     
     for (i = 0; i < rsize; i++) free(array[i]);
     free(matuk);

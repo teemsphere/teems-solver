@@ -24,7 +24,7 @@ int dbbd_order(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscIn
   CHKERRQ(ierr);
   ierr = PetscMalloc(nmatin*sizeof(IS **),&colindices);
   CHKERRQ(ierr);
-  printf("rank %d nmatin %d\n",rank,nmatin);
+  logmsg(2,"rank %d nmatin %d\n",rank,nmatin);
   begblock[rank]=nmatin;
   for(i=0; i<mpisize; i++) {
     j=rank;
@@ -46,7 +46,6 @@ int dbbd_order(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscIn
     bend=countvarintra1[i+1+begblock[rank]];
     ISCreateStride(PETSC_COMM_SELF,bend-bfirst,bfirst,1,colindices+i);
   }
-  printf("OK???? rank %d\n",rank);
   ierr = MatCreateSubMatrices(A,nmatin,rowindices,colindices,MAT_INITIAL_MATRIX,&submatA);
   CHKERRQ(ierr);
   for (i=0; i<nmatin; i++) {
@@ -69,7 +68,7 @@ int dbbd_order(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscIn
     nz=aa->nz;
     nrow=submatA[j1]->rmap->n;
     ncol=submatA[j1]->cmap->n;
-    printf("rank %d nz %d\n",rank,nz);
+    logmsg(2,"rank %d nz %d\n",rank,nz);
     nz1=nz;
     if(nz1<nrow)nz1=nrow;
     if(nz1<ncol)nz1=ncol;
@@ -108,7 +107,7 @@ int dbbd_order(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscIn
     for(i=0; i<ncol; i++) {
       col_order1[i+countvarintra1[j1+begblock[rank]]]=jcn1[i]-1;
     }
-    printf("rank %d j1 %d proc %d\n",insize[3],j1,rank);
+    logmsg(2,"rank %d j1 %d proc %d\n",insize[3],j1,rank);
     block_sizes1[j1+begblock[rank]]=insize[3];
     free(insize);
     free(irn);
@@ -151,7 +150,7 @@ int ndbbd_order_presolve(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt ran
   PetscViewer viewer;
   MatInfo           matinfo;
   MatGetInfo(A,MAT_LOCAL,&matinfo);
-  printf("rank %d matinfo.nz_used %g\n",rank,matinfo.nz_used);
+  logmsg(2,"rank %d matinfo.nz_used %g\n",rank,matinfo.nz_used);
   int *block_sizes1= (int *) calloc (ndblock,sizeof(int));
   offset_t *counteq2= (offset_t *) calloc (ndblock+1,sizeof(offset_t));
   offset_t *counteqnoadd1= (offset_t *) calloc (ndblock,sizeof(offset_t));
@@ -171,7 +170,7 @@ int ndbbd_order_presolve(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt ran
   nmatin=(nreg+1)*nmatint;
   int *begblock= (int *) calloc (mpisize,sizeof(int));
   begblock[rank]=nmatin;
-  printf("rank %d nmatin %d nmatint %d ndblock %ld\n",rank,nmatin,nmatint,ndblock);
+  logmsg(2,"rank %d nmatin %d nmatint %d ndblock %ld\n",rank,nmatin,nmatint,ndblock);
   for(i=0; i<mpisize; i++) {
     j=rank;
     j2=j;
@@ -302,7 +301,7 @@ int ndbbd_order_presolve(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt ran
       for(i=0; i<ncol; i++) {
         col_order2[i+countvarintra1[j3+begblock[rank]]]=jcn1[i]-1+bfirst;
       }
-      printf("rank %d mat rank %d nrow %d ncol %d j3 %d proc %d\n",rank,insize[3],nrow,ncol,j3,rank);
+      logmsg(2,"rank %d mat rank %d nrow %d ncol %d j3 %d proc %d\n",rank,insize[3],nrow,ncol,j3,rank);
       block_sizes1[j3+begblock[rank]]=insize[3];
       counteqnoadd1[j3+begblock[rank]]=insize[3];
       countvarintra2[j3+begblock[rank]]=insize[3];
@@ -427,7 +426,7 @@ int ndbbd_order(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscI
   nmatin=(nreg+1)*nmatint;
   int *begblock= (int *) calloc (mpisize,sizeof(int));
   begblock[rank]=nmatin;
-  printf("rank %d nmatin %d nmatint %d ndblock %ld\n",rank,nmatin,nmatint,ndblock);
+  logmsg(2,"rank %d nmatin %d nmatint %d ndblock %ld\n",rank,nmatin,nmatint,ndblock);
   for(i=0; i<mpisize; i++) {
     j=rank;
     j2=j;
@@ -475,11 +474,11 @@ int ndbbd_order(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscI
       strcat(filename,j1name);
       strcat(filename,".bin");
       if((presolfile=fopen(filename, "r"))==NULL) {
-        printf("Cannot open file. Please run presol by setting -presol 1!\n");
+        printf("Error: cannot open interface file %s; run the preparation solve first (-presol 1)\n",filename);
       }
       frd=fread(insized, sizeof(int), 5, presolfile);
       fclose(presolfile);
-      if( frd== 0)printf("File read error. No presol, take min rank!\n");
+      if( frd== 0)printf("Error: short read on interface file %s; falling back to the minimum rank assignment\n",filename);
       if(ndbbdrank[j4]>insized[3]) {
         int *irn1=(int *) calloc (insized[0],sizeof(int));
         int *jcn1=(int *) calloc (insized[1],sizeof(int));
@@ -488,20 +487,20 @@ int ndbbd_order(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscI
         strcat(filename,j1name);
         strcat(filename,".bin");
         if((presolfile=fopen(filename, "r"))==NULL) {
-          printf("Cannot open file.\n");
+          printf("Error: cannot open interface file %s\n",filename);
         }
         frd=fread(irn1, sizeof(int), insized[0], presolfile);
-        if(frd == 0)printf("File read error.");
+        if(frd == 0)printf("Error: short read on interface file %s\n",filename);
         fclose(presolfile);
         strcpy(filename,scratch_dir);strcat(filename,"_col");
         strcat(filename,rankname);
         strcat(filename,j1name);
         strcat(filename,".bin");
         if((presolfile=fopen(filename, "r"))==NULL) {
-          printf("Cannot open file.\n");
+          printf("Error: cannot open interface file %s\n",filename);
         }
         frd=fread(jcn1, sizeof(int), insized[0], presolfile);
-        if( frd== 0) printf("File read error.");
+        if( frd== 0) printf("Error: short read on interface file %s\n",filename);
         fclose(presolfile);
         int *indices= (int *) calloc (insized[0],sizeof(int));
         for(i=0; i<insized[0]; i++) {
@@ -529,7 +528,6 @@ int ndbbd_order(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscI
   MPI_Allreduce(col_order3,col_order,VecSize, MPI_INT, MPI_SUM,PETSC_COMM_WORLD);
   MPI_Allreduce(row_order3,row_order,VecSize, MPI_INT, MPI_SUM,PETSC_COMM_WORLD);
   MPI_Allreduce(block_sizes2,block_sizes,ndblock, MPI_INT, MPI_SUM,PETSC_COMM_WORLD);
-  printf("OK\n");
   free(col_order3);
   free(row_order3);
   free(block_sizes2);

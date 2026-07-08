@@ -480,6 +480,7 @@ method (basis of the golden-run verification, below).
 | `-ndbbd_bl_rank n` / `-nestfile <csv>` | — | NDBBD interface-block rank override |
 | `-stoiter n` | 1 | stochastic repetitions |
 | `-nowrites n` | 0 | suppress output writes |
+| `-verbosity {0,1,2}` | 1 | 0 = errors/warnings + accuracy summary only; 1 = phase progress and timings; 2 = per-rank/per-block debug detail (also exported as `TEEMS_VERBOSITY` for the Fortran kernels; MA48 duplicate-entry notes appear only at 2) |
 | `-nox` | — | PETSc: no X output |
 
 teems-R populates these from `ems_solve()` arguments
@@ -503,18 +504,20 @@ teems-R populates these from `ems_solve()` arguments
 
 ## 13. Known limitations and planned work
 
-- **NDBBD without `-regset` aborts** with a bare MPI error (exit 59)
-  instead of a diagnostic.
 - **Error handling** is largely `printf` + `exit`/`return`; parse errors
-  on one rank can abort non-collectively.
+  on one rank can abort non-collectively. (Messages themselves were
+  overhauled in 5.11: `Error:`/`Warning:` prefixes, file/flag/remedy
+  named; NDBBD misconfiguration now exits with a diagnostic instead of
+  a bare MPI abort.)
 - Fixed-size line buffers (`TABREADLINE` = 20000) bound statement length;
   overflow warnings exist but are not hard guards everywhere.
 - The binary is named `hsl` for historical reasons; renaming to
   `teems-solver` requires coordinated changes in teems-R and the images.
 - Planned (measured motivation on file): formula op-list caching across
-  steps (removes per-step TAB re-parsing); verbosity-gated logging
-  (3,000+ unconditional printfs); NDBBD-vs-SBBD crossover mapping at
-  scale. Done since this list was written (see ROADMAP 5.9/5.10):
-  factor handoff through memory (`-inmemory` holds block factors
-  resident); `formula_op` compaction (1416→968→848B, per-dim operand
-  fields interleaved as `dim_addr` records).
+  steps (removes per-step TAB re-parsing); NDBBD-vs-SBBD crossover
+  mapping at scale. Done since this list was written (see ROADMAP
+  5.9–5.11): factor handoff through memory (`-inmemory` holds block
+  factors resident); `formula_op` compaction (1416→968→848B, per-dim
+  operand fields interleaved as `dim_addr` records); verbosity-gated
+  logging with a full message overhaul (`-verbosity`, 541 printf sites
+  triaged: debris deleted, debug gated, errors made informative).

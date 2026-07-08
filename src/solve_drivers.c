@@ -8,7 +8,7 @@ bool cubic_spline(solve_real* y,solve_real* x,solve_real sx0,solve_real sxn,int 
   int *irn= (int *) calloc (6*4*size,sizeof(int));
   int *jcn= (int *) calloc (6*4*size,sizeof(int));
   if(size<3){
-    printf("Too few points!!!\n");
+    printf("Error: too few points for spline extrapolation\n");
     return 0;
   }
   int i,j,mindx=0,bindx=0,i1,i2;
@@ -136,7 +136,7 @@ bool cubic_spline(solve_real* y,solve_real* x,solve_real sx0,solve_real sxn,int 
     jcn[mindx]=4*size;
     mindx++;
     bval[bindx]=(y[size]-y[size-1])/(x[size]-x[size-1]);//sxn;//
-    printf("slop %lf app slop %lf y1 %lf y0 %lf\n",sxn,bval[bindx],y[size],y[size-1]);
+    logmsg(2,"slop %lf app slop %lf y1 %lf y0 %lf\n",sxn,bval[bindx],y[size],y[size-1]);
     bindx++;
   insize[2]=mindx;
   lasize=ceil((laA*10/100.0)*mindx);
@@ -145,7 +145,7 @@ bool cubic_spline(solve_real* y,solve_real* x,solve_real sx0,solve_real sxn,int 
   jcn=realloc(jcn,lasize*sizeof(int));
   matval=realloc(matval,lasize*sizeof(solve_real));
   spec48_ssol2la_(insize,irn,jcn,matval,bval,w);
-    printf("bindx %d val %lf w1 %lf w2 %lf w3 %lf x %lf\n",bindx,w[size-1]+w[size-1+size]*x[size]+w[size-1+2*size]*x[size]*x[size]+w[size-1+3*size]*x[size]*x[size]*x[size],w[size-1],w[size-1+size],w[size-1+2*size],y[size]);
+    logmsg(2,"bindx %d val %lf w1 %lf w2 %lf w3 %lf x %lf\n",bindx,w[size-1]+w[size-1+size]*x[size]+w[size-1+2*size]*x[size]*x[size]+w[size-1+3*size]*x[size]*x[size]*x[size],w[size-1],w[size-1+size],w[size-1+2*size],y[size]);
   free(insize);
   free(matval);
   free(bval);
@@ -193,7 +193,6 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
     else {
       MatSetType(A,MATSEQAIJ);
     }
-    printf("OK1 nohsl %d!!!\n",nohsl);
     if(nohsl) {
       MatMPIAIJSetPreallocation(A,dnz,dnnz,onz,onnz);
     }
@@ -227,14 +226,14 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
     }
 
     gettimeofday(&endtime, NULL);
-    if(rank==0)printf("Matrix preparation time %f\n",(endtime.tv_sec - begintime.tv_sec)+((double)(endtime.tv_usec - begintime.tv_usec))/ 1000000);
+    if(rank==0)logmsg(1,"Matrix preparation time %.2f s\n",(endtime.tv_sec - begintime.tv_sec)+((double)(endtime.tv_usec - begintime.tv_usec))/ 1000000);
     
     if(rank==rank_hsl) {
       jacobian_fill(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,closure_vals,ndblock,alltimeset,allregset,eq_addr,counteq,nintraeq,A,B);
     }
 
     gettimeofday(&begintime, NULL);
-    if(rank==0)printf("Matrix calculation time %f\n",(begintime.tv_sec - endtime.tv_sec)+((double)(begintime.tv_usec - endtime.tv_usec))/ 1000000);
+    if(rank==0)logmsg(1,"Matrix calculation time %.2f s\n",(begintime.tv_sec - endtime.tv_sec)+((double)(begintime.tv_usec - endtime.tv_usec))/ 1000000);
 
     for (count=0; count<nvarele; count++) {
       if (closure_vals[count].is_exogenous) {
@@ -256,7 +255,7 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
       strcat(tempfilenam,tempchar);
       strcat(tempfilenam,".bin");
       if ( (tempvar = fopen(tempfilenam, "wb")) == NULL ) {
-        printf("Error opening file\n");
+        printf("Error: cannot open %s for writing\n",tempfilenam);
       }
       fwrite(closure_vals, sizeof(closure_entry),nvarele, tempvar);
       fclose(tempvar);
@@ -273,7 +272,7 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
       strcat(tempfilenam,tempchar);
       strcat(tempfilenam,".bin");
       if ( (tempvar = fopen(tempfilenam, "wb")) == NULL ) {
-        printf("Error opening file\n");
+        printf("Error: cannot open %s for writing\n",tempfilenam);
       }
       fwrite(elem_vals, sizeof(elem_value),ncofele+nvarele, tempvar);
       fclose(tempvar);
@@ -288,14 +287,13 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
     CHKERRQ(ierr);
     ierr = MatAssemblyEnd(A,MAT_FINAL_ASSEMBLY);
     CHKERRQ(ierr);
-    printf("OK11\n");
     ierr = MatAssemblyBegin(B,MAT_FINAL_ASSEMBLY);
     CHKERRQ(ierr);
     ierr = MatAssemblyEnd(B,MAT_FINAL_ASSEMBLY);
     CHKERRQ(ierr);
 
     gettimeofday(&endtime, NULL);
-    if(rank==0)printf("Matrix assembly time %f\n",(endtime.tv_sec - begintime.tv_sec)+((double)(endtime.tv_usec - begintime.tv_usec))/ 1000000);
+    if(rank==0)logmsg(1,"Matrix assembly time %.2f s\n",(endtime.tv_sec - begintime.tv_sec)+((double)(endtime.tv_usec - begintime.tv_usec))/ 1000000);
     CHKERRQ(ierr);
     PetscViewer viewer;
     ierr = VecDuplicate(vece,&vecb);
@@ -337,12 +335,11 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
       gettimeofday(&endtime, NULL);
       clock_gettime(CLOCK_REALTIME, &gettime_end);
       rep_time = ((double)(gettime_end.tv_nsec-gettime_beg.tv_nsec))/1000000000.0;
-      if(rank==0)printf("One step calculation time %f\n",(endtime.tv_sec - begintime.tv_sec)+((double)(endtime.tv_usec - begintime.tv_usec))/ 1000000);
-      if(rank==0)printf("One step calculation real time %lf\n",rep_time);
+      if(rank==0)logmsg(1,"Step time %.2f s\n",(endtime.tv_sec - begintime.tv_sec)+((double)(endtime.tv_usec - begintime.tv_usec))/ 1000000);
+      if(rank==0)logmsg(1,"Step wall time %.2f s\n",rep_time);
       free(row_order);
       free(col_order);
       free(block_sizes);
-      printf("rank %d\n",rank);
       MPI_Barrier(PETSC_COMM_WORLD);
     }
     else {
@@ -364,7 +361,7 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
         for(i=0; i<nz01; i++) if(vals[i]!=0) {
             count++;
           }
-        printf("count %d nz %d\n",count,nz01);
+        logmsg(2,"count %d nz %d\n",count,nz01);
       }
       indata[0]=count;//.nz
 
@@ -477,12 +474,12 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
         CHKERRQ(ierr);
       }
       gettimeofday(&endtime, NULL);
-      if(rank==0)printf("One step calculation time %f\n",(endtime.tv_sec - begintime.tv_sec)+((double)(endtime.tv_usec - begintime.tv_usec))/ 1000000);
+      if(rank==0)logmsg(1,"Step time %.2f s\n",(endtime.tv_sec - begintime.tv_sec)+((double)(endtime.tv_usec - begintime.tv_usec))/ 1000000);
     }
     if(rank==rank_hsl) {
       if(!inmemory){
       if ((tempvar = fopen(tempfilenam, "rb")) == NULL) {
-        printf("Error opening file\n");
+        printf("Error: cannot open %s for reading\n",tempfilenam);
       }
       *elem_vals2=(elem_value*)realloc (*elem_vals2,(ncofele+nvarele)*sizeof(elem_value));
       freadresult=fread(*elem_vals2, sizeof(elem_value),ncofele+nvarele, tempvar);
@@ -498,7 +495,7 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
       strcat(tempfilenam,tempchar);
       strcat(tempfilenam,".bin");
       if ((tempvar = fopen(tempfilenam, "rb")) == NULL) {
-        printf("Error opening file\n");
+        printf("Error: cannot open %s for reading\n",tempfilenam);
       }
       *closure_vals2=(closure_entry*)realloc (*closure_vals2,(nvarele)*sizeof(closure_entry));
       freadresult=fread(*closure_vals2, sizeof(closure_entry),nvarele, tempvar);
@@ -509,7 +506,6 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
     }
     *xcf2=(solve_real*)realloc (*xcf2,nvarele*sizeof(solve_real));
     xcf=*xcf2;
-    printf("Hello world1!\n");
     if(rank==rank_hsl) {
       elem_vals1=elem_vals+ncofele;
       for(i=0; i<nvar; i++) {
@@ -617,7 +613,7 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
         if(sol==2) nsteps=(int)steps1*step_ratio3;
         vpercents=(solve_real)100/nsteps;
         for(stepcount=0; stepcount<nsteps; stepcount++) {
-          printf("rank %d subint %d sol %d stepcount %d nsteps %d\n",rank,subindx,sol,stepcount,nsteps);
+          logmsg(2,"rank %d subint %d sol %d stepcount %d nsteps %d\n",rank,subindx,sol,stepcount,nsteps);
           MPI_Barrier(PETSC_COMM_WORLD);
           ierr = PetscGetCPUTime(&time0);
           CHKERRQ(ierr);
@@ -646,7 +642,6 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
             else for(i=0; i<ncofele; i++) {
                 elem_vals[i].value=elem_vals[i].initial;
               }
-            printf("rank %d OK!!!\n",rank);
             elem_vals1=elem_vals+ncofele;
             for(i=0; i<nvar; i++) {
               if(vars[i].change_real) {
@@ -702,7 +697,6 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
             ierr = VecAssemblyEnd(vece);
             CHKERRQ(ierr);
           }
-          printf("OK!!!\n");
           if(rank==rank_hsl) {
 
             if(!inmemory){
@@ -712,7 +706,7 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
             strcat(tempfilenam,tempchar);
             strcat(tempfilenam,".bin");
             if ( (tempvar = fopen(tempfilenam, "wb")) == NULL ) {
-              printf("Error opening file\n");
+              printf("Error: cannot open %s for writing\n",tempfilenam);
             }
             fwrite(clag1, sizeof(solve_real),nvarele, tempvar);
             fclose(tempvar);
@@ -727,7 +721,7 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
             strcat(tempfilenam,tempchar);
             strcat(tempfilenam,".bin");
             if ( (tempvar = fopen(tempfilenam, "wb")) == NULL ) {
-              printf("Error opening file\n");
+              printf("Error: cannot open %s for writing\n",tempfilenam);
             }
             fwrite(varchange, sizeof(solve_real),nvarele, tempvar);
             fclose(tempvar);
@@ -780,8 +774,6 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
           else {
             MatSeqAIJSetPreallocation(B,dnzB,dnnzB);
           }
-          printf("OKB!!!\n");
-
           if(rank==rank_hsl) {
             jacobian_fill(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,closure_vals,ndblock,alltimeset,allregset,eq_addr,counteq,nintraeq,A,B);
           }
@@ -793,7 +785,7 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
             strcat(tempfilenam,tempchar);
             strcat(tempfilenam,".bin");
             if ( (tempvar = fopen(tempfilenam, "wb")) == NULL ) {
-              printf("Error opening file\n");
+              printf("Error: cannot open %s for writing\n",tempfilenam);
             }
             fwrite(elem_vals, sizeof(elem_value),ncofele+nvarele, tempvar);
             fclose(tempvar);
@@ -809,7 +801,7 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
             strcat(tempfilenam,tempchar);
             strcat(tempfilenam,".bin");
             if ( (tempvar = fopen(tempfilenam, "wb")) == NULL ) {
-              printf("Error opening file\n");
+              printf("Error: cannot open %s for writing\n",tempfilenam);
             }
             fwrite(closure_vals, sizeof(closure_entry),nvarele, tempvar);
             fclose(tempvar);
@@ -870,12 +862,11 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
             time(&timeend);
             MPI_Barrier(PETSC_COMM_WORLD);
             ierr = PetscGetCPUTime(&time1);
-            ierr = PetscPrintf(PETSC_COMM_WORLD,"One step solution %f\n",time1-time0);
-            if(rank==0)printf("One step calculation time %f\n",difftime(timeend,timestr));
+            if(verbosity>=1){ierr = PetscPrintf(PETSC_COMM_WORLD,"One step solution %f\n",time1-time0);}
+            if(rank==0)logmsg(1,"Step time %.2f s\n",difftime(timeend,timestr));
             free(row_order);
             free(col_order);
             free(block_sizes);
-            printf("rank %d\n",rank);
             MPI_Barrier(PETSC_COMM_WORLD);
           }
           else {
@@ -948,7 +939,7 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
               x1=realloc (x1,VecSize*sizeof(solve_real));
               ierr = PetscGetCPUTime(&time1);
               CHKERRQ(ierr);
-              ierr = PetscPrintf(PETSC_COMM_WORLD,"Prepare time %f\n",time1-time0);
+              if(verbosity>=1){ierr = PetscPrintf(PETSC_COMM_WORLD,"Prepare time %f\n",time1-time0);}
               CHKERRQ(ierr);
               ierr = PetscGetCPUTime(&time0);
               CHKERRQ(ierr);
@@ -957,7 +948,7 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
               if(mc66==0)spec48_nomc66_(ptx,jcn,b1,values,x1,neleperrow,&fcomm,counteq,countvarintra1);
               ierr = PetscGetCPUTime(&time1);
               CHKERRQ(ierr);
-              ierr = PetscPrintf(PETSC_COMM_WORLD,"LU time %f\n",time1-time0);
+              if(verbosity>=1){ierr = PetscPrintf(PETSC_COMM_WORLD,"LU time %f\n",time1-time0);}
               CHKERRQ(ierr);
               ierr = PetscGetCPUTime(&time0);
               CHKERRQ(ierr);
@@ -1008,7 +999,7 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
               x1=realloc (x1,VecSize*sizeof(solve_real));
               ierr = PetscGetCPUTime(&time1);
               CHKERRQ(ierr);
-              ierr = PetscPrintf(PETSC_COMM_WORLD,"Prepare time %f\n",time1-time0);
+              if(verbosity>=1){ierr = PetscPrintf(PETSC_COMM_WORLD,"Prepare time %f\n",time1-time0);}
               CHKERRQ(ierr);
               ierr = PetscGetCPUTime(&time0);
               CHKERRQ(ierr);
@@ -1023,7 +1014,7 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
               free(insize);
               ierr = PetscGetCPUTime(&time1);
               CHKERRQ(ierr);
-              ierr = PetscPrintf(PETSC_COMM_WORLD,"LU time %f\n",time1-time0);
+              if(verbosity>=1){ierr = PetscPrintf(PETSC_COMM_WORLD,"LU time %f\n",time1-time0);}
               CHKERRQ(ierr);
               ierr = PetscGetCPUTime(&time0);
               CHKERRQ(ierr);
@@ -1035,7 +1026,7 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
           if(rank==rank_hsl) {
             if(!inmemory){
             if ((tempvar = fopen(tempfilenam, "rb")) == NULL) {
-              printf("Error opening file\n");
+              printf("Error: cannot open %s for reading\n",tempfilenam);
             }
             *closure_vals2=(closure_entry*)realloc (*closure_vals2,(nvarele)*sizeof(closure_entry));
             freadresult=fread(*closure_vals2, sizeof(closure_entry),nvarele, tempvar);
@@ -1051,7 +1042,7 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
             strcat(tempfilenam,tempchar);
             strcat(tempfilenam,".bin");
             if ((tempvar = fopen(tempfilenam, "rb")) == NULL) {
-              printf("Error opening file\n");
+              printf("Error: cannot open %s for reading\n",tempfilenam);
             }
             *elem_vals2=(elem_value*)realloc (*elem_vals2,(ncofele+nvarele)*sizeof(elem_value));
             freadresult=fread(*elem_vals2, sizeof(elem_value),ncofele+nvarele, tempvar);
@@ -1067,7 +1058,7 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
             strcat(tempfilenam,tempchar);
             strcat(tempfilenam,".bin");
             if ((tempvar = fopen(tempfilenam, "rb")) == NULL) {
-              printf("Error opening file\n");
+              printf("Error: cannot open %s for reading\n",tempfilenam);
             }
             clag1=realloc (clag1,(nvarele)*sizeof(solve_real));
             freadresult=fread(clag1, sizeof(solve_real),nvarele, tempvar);
@@ -1082,7 +1073,7 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
             strcat(tempfilenam,tempchar);
             strcat(tempfilenam,".bin");
             if ((tempvar = fopen(tempfilenam, "rb")) == NULL) {
-              printf("Error opening file\n");
+              printf("Error: cannot open %s for reading\n",tempfilenam);
             }
             varchange=realloc (varchange,(nvarele)*sizeof(solve_real));
             freadresult=fread(varchange, sizeof(solve_real),nvarele, tempvar);
@@ -1091,7 +1082,7 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
             }
 
           }
-          printf("sol %d stepcount %d\n\n",sol,stepcount);
+          logmsg(2,"sol %d stepcount %d\n\n",sol,stepcount);
           MPI_Barrier(PETSC_COMM_WORLD);
           if(nohsl) {
             VecCreate(PETSC_COMM_WORLD,&vece);
@@ -1207,11 +1198,10 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
           MPI_Barrier(PETSC_COMM_WORLD);
           ierr = PetscGetCPUTime(&time1);
           CHKERRQ(ierr);
-          ierr = PetscPrintf(PETSC_COMM_WORLD,"Update time %f\n",time1-time0);
+          if(verbosity>=1){ierr = PetscPrintf(PETSC_COMM_WORLD,"Update time %f\n",time1-time0);}
           CHKERRQ(ierr);
           ierr = PetscGetCPUTime(&time0);
           CHKERRQ(ierr);
-          printf("OKKL!\n");
         }
 
         strcpy(commsyntax,"equation");
@@ -1225,7 +1215,7 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
           strcat(tempfilenam,tempchar);
           strcat(tempfilenam,".bin");
           if ( (tempvar = fopen(tempfilenam, "wb")) == NULL ) {
-            printf("Error opening file\n");
+            printf("Error: cannot open %s for writing\n",tempfilenam);
           }
           fwrite(clag1, sizeof(solve_real),nvarele, tempvar);
           fclose(tempvar);
@@ -1240,7 +1230,7 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
           strcat(tempfilenam,tempchar);
           strcat(tempfilenam,".bin");
           if ( (tempvar = fopen(tempfilenam, "wb")) == NULL ) {
-            printf("Error opening file\n");
+            printf("Error: cannot open %s for writing\n",tempfilenam);
           }
           fwrite(varchange, sizeof(solve_real),nvarele, tempvar);
           fclose(tempvar);
@@ -1305,7 +1295,7 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
           strcat(tempfilenam,tempchar);
           strcat(tempfilenam,".bin");
           if ( (tempvar = fopen(tempfilenam, "wb")) == NULL ) {
-            printf("Error opening file\n");
+            printf("Error: cannot open %s for writing\n",tempfilenam);
           }
           fwrite(elem_vals, sizeof(elem_value),ncofele+nvarele, tempvar);
           fclose(tempvar);
@@ -1321,7 +1311,7 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
           strcat(tempfilenam,tempchar);
           strcat(tempfilenam,".bin");
           if ( (tempvar = fopen(tempfilenam, "wb")) == NULL ) {
-            printf("Error opening file\n");
+            printf("Error: cannot open %s for writing\n",tempfilenam);
           }
           fwrite(closure_vals, sizeof(closure_entry),nvarele, tempvar);
           fclose(tempvar);
@@ -1382,12 +1372,11 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
           time(&timeend);
           MPI_Barrier(PETSC_COMM_WORLD);
           ierr = PetscGetCPUTime(&time1);
-          ierr = PetscPrintf(PETSC_COMM_WORLD,"One step solution %f\n",time1-time0);
-          if(rank==0)printf("One step calculation time %f\n",difftime(timeend,timestr));
+          if(verbosity>=1){ierr = PetscPrintf(PETSC_COMM_WORLD,"One step solution %f\n",time1-time0);}
+          if(rank==0)logmsg(1,"Step time %.2f s\n",difftime(timeend,timestr));
           free(row_order);
           free(col_order);
           free(block_sizes);
-          printf("rank %d\n",rank);
           MPI_Barrier(PETSC_COMM_WORLD);
         }
         else {
@@ -1460,7 +1449,7 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
             x1=realloc (x1,VecSize*sizeof(solve_real));
             ierr = PetscGetCPUTime(&time1);
             CHKERRQ(ierr);
-            ierr = PetscPrintf(PETSC_COMM_WORLD,"Prepare time %f\n",time1-time0);
+            if(verbosity>=1){ierr = PetscPrintf(PETSC_COMM_WORLD,"Prepare time %f\n",time1-time0);}
             CHKERRQ(ierr);
             ierr = PetscGetCPUTime(&time0);
             CHKERRQ(ierr);
@@ -1469,7 +1458,7 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
             if(mc66==0)spec48_nomc66_(ptx,jcn,b1,values,x1,neleperrow,&fcomm,counteq,countvarintra1);
             ierr = PetscGetCPUTime(&time1);
             CHKERRQ(ierr);
-            ierr = PetscPrintf(PETSC_COMM_WORLD,"LU time %f\n",time1-time0);
+            if(verbosity>=1){ierr = PetscPrintf(PETSC_COMM_WORLD,"LU time %f\n",time1-time0);}
             CHKERRQ(ierr);
             ierr = PetscGetCPUTime(&time0);
             CHKERRQ(ierr);
@@ -1519,7 +1508,7 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
             x1=realloc (x1,VecSize*sizeof(solve_real));
             ierr = PetscGetCPUTime(&time1);
             CHKERRQ(ierr);
-            ierr = PetscPrintf(PETSC_COMM_WORLD,"Prepare time %f\n",time1-time0);
+            if(verbosity>=1){ierr = PetscPrintf(PETSC_COMM_WORLD,"Prepare time %f\n",time1-time0);}
             CHKERRQ(ierr);
             ierr = PetscGetCPUTime(&time0);
             CHKERRQ(ierr);
@@ -1532,7 +1521,7 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
             free(insize);
             ierr = PetscGetCPUTime(&time1);
             CHKERRQ(ierr);
-            ierr = PetscPrintf(PETSC_COMM_WORLD,"LU time %f\n",time1-time0);
+            if(verbosity>=1){ierr = PetscPrintf(PETSC_COMM_WORLD,"LU time %f\n",time1-time0);}
             CHKERRQ(ierr);
             ierr = PetscGetCPUTime(&time0);
             CHKERRQ(ierr);
@@ -1546,7 +1535,7 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
         if(rank==rank_hsl) {
           if(!inmemory){
           if ((tempvar = fopen(tempfilenam, "rb")) == NULL) {
-            printf("Error opening file\n");
+            printf("Error: cannot open %s for reading\n",tempfilenam);
           }
           *closure_vals2=(closure_entry*)realloc (*closure_vals2,(nvarele)*sizeof(closure_entry));
           freadresult=fread(*closure_vals2, sizeof(closure_entry),nvarele, tempvar);
@@ -1562,7 +1551,7 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
           strcat(tempfilenam,tempchar);
           strcat(tempfilenam,".bin");
           if ((tempvar = fopen(tempfilenam, "rb")) == NULL) {
-            printf("Error opening file\n");
+            printf("Error: cannot open %s for reading\n",tempfilenam);
           }
           *elem_vals2=(elem_value*)realloc (*elem_vals2,(ncofele+nvarele)*sizeof(elem_value));
           freadresult=fread(*elem_vals2, sizeof(elem_value),ncofele+nvarele, tempvar);
@@ -1578,7 +1567,7 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
           strcat(tempfilenam,tempchar);
           strcat(tempfilenam,".bin");
           if ((tempvar = fopen(tempfilenam, "rb")) == NULL) {
-            printf("Error opening file\n");
+            printf("Error: cannot open %s for reading\n",tempfilenam);
           }
           clag1=realloc (clag1,(nvarele)*sizeof(solve_real));
           freadresult=fread(clag1, sizeof(solve_real),nvarele, tempvar);
@@ -1593,7 +1582,7 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
           strcat(tempfilenam,tempchar);
           strcat(tempfilenam,".bin");
           if ((tempvar = fopen(tempfilenam, "rb")) == NULL) {
-            printf("Error opening file\n");
+            printf("Error: cannot open %s for reading\n",tempfilenam);
           }
           varchange=realloc (varchange,(nvarele)*sizeof(solve_real));
           freadresult=fread(varchange, sizeof(solve_real),nvarele, tempvar);
@@ -1638,7 +1627,7 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
             strcat(tempfilenam,tempchar);
             strcat(tempfilenam,".bin");
             if ((tempvar = fopen(tempfilenam, "rb")) == NULL) {
-              printf("Error opening file\n");
+              printf("Error: cannot open %s for reading\n",tempfilenam);
             }
             *xcf2=(solve_real*)realloc (*xcf2,(nvarele)*sizeof(solve_real));
             xcf=*xcf2;
@@ -1654,7 +1643,7 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
             strcat(tempfilenam,tempchar);
             strcat(tempfilenam,".bin");
             if ((tempvar = fopen(tempfilenam, "rb")) == NULL) {
-              printf("Error opening file\n");
+              printf("Error: cannot open %s for reading\n",tempfilenam);
             }
             xc12=realloc (xc12,(nvarele)*sizeof(solve_real));
             freadresult=fread(xc12, sizeof(solve_real),nvarele, tempvar);
@@ -1668,7 +1657,7 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
             strcat(tempfilenam,tempchar);
             strcat(tempfilenam,".bin");
             if ((tempvar = fopen(tempfilenam, "rb")) == NULL) {
-              printf("Error opening file\n");
+              printf("Error: cannot open %s for reading\n",tempfilenam);
             }
             xc24=realloc (xc24,(nvarele)*sizeof(solve_real));
             freadresult=fread(xc24, sizeof(solve_real),nvarele, tempvar);
@@ -1685,7 +1674,7 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
             strcat(tempfilenam,tempchar);
             strcat(tempfilenam,".bin");
             if ((tempvar = fopen(tempfilenam, "rb")) == NULL) {
-              printf("Error opening file\n");
+              printf("Error: cannot open %s for reading\n",tempfilenam);
             }
             freadresult=fread(xc0, sizeof(solve_real),nvarele, tempvar);
             fclose(tempvar);
@@ -1823,7 +1812,7 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
           if(nohsl)MPI_Barrier(PETSC_COMM_WORLD);
           ierr = PetscGetCPUTime(&time1);
           CHKERRQ(ierr);
-          ierr = PetscPrintf(PETSC_COMM_WORLD,"Last Update time %f\n",time1-time0);
+          if(verbosity>=1){ierr = PetscPrintf(PETSC_COMM_WORLD,"Last Update time %f\n",time1-time0);}
           CHKERRQ(ierr);
           }
 
@@ -1836,7 +1825,7 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
             strcat(tempfilenam,tempchar);
             strcat(tempfilenam,".bin");
             if ( (tempvar = fopen(tempfilenam, "wb")) == NULL ) {
-              printf("Error opening file\n");
+              printf("Error: cannot open %s for writing\n",tempfilenam);
             }
             fwrite(xcf, sizeof(solve_real),nvarele, tempvar);
             fclose(tempvar);
@@ -1852,7 +1841,7 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
             strcat(tempfilenam,tempchar);
             strcat(tempfilenam,".bin");
             if ( (tempvar = fopen(tempfilenam, "wb")) == NULL ) {
-              printf("Error opening file\n");
+              printf("Error: cannot open %s for writing\n",tempfilenam);
             }
             fwrite(xc0, sizeof(solve_real),nvarele, tempvar);
             fclose(tempvar);
@@ -1874,7 +1863,7 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
             strcat(tempfilenam,tempchar);
             strcat(tempfilenam,".bin");
             if ((tempvar = fopen(tempfilenam, "rb")) == NULL) {
-              printf("Error opening file\n");
+              printf("Error: cannot open %s for reading\n",tempfilenam);
             }
             xc124=realloc (xc124,nvarele*sizeof(int));
             freadresult=fread(xc124, sizeof(int),nvarele, tempvar);
@@ -1926,7 +1915,7 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
             strcat(tempfilenam,tempchar);
             strcat(tempfilenam,".bin");
             if ( (tempvar = fopen(tempfilenam, "wb")) == NULL ) {
-              printf("Error opening file\n");
+              printf("Error: cannot open %s for writing\n",tempfilenam);
             }
             fwrite(xc124, sizeof(int),nvarele, tempvar);
             fclose(tempvar);
@@ -1944,7 +1933,7 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
             strcat(tempfilenam,tempchar);
             strcat(tempfilenam,".bin");
             if ( (tempvar = fopen(tempfilenam, "wb")) == NULL ) {
-              printf("Error opening file\n");
+              printf("Error: cannot open %s for writing\n",tempfilenam);
             }
             fwrite(xc12, sizeof(solve_real),nvarele, tempvar);
             fclose(tempvar);
@@ -1958,7 +1947,7 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
             strcat(tempfilenam,tempchar);
             strcat(tempfilenam,".bin");
             if ( (tempvar = fopen(tempfilenam, "wb")) == NULL ) {
-              printf("Error opening file\n");
+              printf("Error: cannot open %s for writing\n",tempfilenam);
             }
             fwrite(xc24, sizeof(solve_real),nvarele, tempvar);
             fclose(tempvar);
@@ -1978,9 +1967,9 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
           sprintf(tempchar, "%d", sol);
           strcat(solchar,tempchar);
           strcat(solchar,".bin");
-          printf("solchar %s\n",solchar);
+          logmsg(2,"solchar %s\n",solchar);
           if ( (solution = fopen(solchar, "wb")) == NULL ) {
-            printf("Error opening file\n");
+            printf("Error: cannot open %s for writing\n",solchar);
             return 1;
           }
           fwrite(xcf, sizeof(solve_real),nvarele, solution);
@@ -2030,7 +2019,7 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
     free(clag1);
     free(varchange);
     gettimeofday(&endtime, NULL);
-    if(rank==0)printf("Mmid method calculation time %f\n",(endtime.tv_sec - begintime.tv_sec)+((double)(endtime.tv_usec - begintime.tv_usec))/ 1000000);
+    if(rank==0)logmsg(1,"Modified-midpoint solve time %.2f s\n",(endtime.tv_sec - begintime.tv_sec)+((double)(endtime.tv_usec - begintime.tv_usec))/ 1000000);
               free(counteqs);
               free(counteqnoadds);
               free(countvarintra1s);

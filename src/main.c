@@ -96,7 +96,7 @@ int main(int argc,char **args) {
   char processor_name[MPI_MAX_PROCESSOR_NAME+1];
   int name_len,name_len_max,name_beg,class_size,color,group_size,node_rank;
   MPI_Get_processor_name(processor_name, &name_len);
-  printf("rank %d name len %d proc name %s\n",rank,name_len,processor_name);
+  logmsg(2,"rank %d name len %d proc name %s\n",rank,name_len,processor_name);
   MPI_Allreduce(&name_len,&name_len_max,1,MPI_INT,MPI_MAX,PETSC_COMM_WORLD);
   name_len_max++;
   char *vec_pr_name=(char *) calloc (mpisize*name_len_max,sizeof(char));
@@ -139,7 +139,7 @@ int main(int argc,char **args) {
   PetscBool sbbd_overuser=false,nohsl=false;
   char ch='y';
   if(rank==0) {
-    printf("***********\nNotes:\n***********\nShock statement values follow GEMPACK ordering (first subscript varies fastest).\nIntertemporal variables (equations) should be declared with minimum dimension to minimise\nthe net cut, e.g. capital(REG,TIME)=qo(\"capital\",REG,TIME) rather than shocking qo(COM,REG,TIME).\nlaA/laDi control solver workspace and temp sizes; use the smallest that solves.\nBeware CRLF line endings in model text files.\n");
+    logmsg(2,"Notes:\n  Shock statement values follow GEMPACK ordering (first subscript varies fastest).\n  Declare intertemporal variables with minimum dimension to minimise the net cut,\n  e.g. capital(REG,TIME)=qo(\"capital\",REG,TIME) rather than shocking qo(COM,REG,TIME).\n  laA/laDi control solver workspace sizes; use the smallest that solves.\n  Beware CRLF line endings in model text files.\n");
   }
   MPI_Barrier(PETSC_COMM_WORLD);
   //**************************************************************************************
@@ -192,13 +192,13 @@ int main(int argc,char **args) {
     step_ratio2=steps2/(double)2;
     i=(offset_t)steps2/2;
     if(step_ratio2==i){
-      printf("Error!!! steps must be all odd or even\n");
+      printf("Error: -step1/-step2/-step3 must be all odd or all even (got %d %d %d)\n",steps1,steps2,steps3);
       return 0;
     }
     step_ratio2=steps3/(double)2;
     i=(offset_t)steps3/2;
     if(step_ratio2==i){
-      printf("Error!!! steps must be all odd or even\n");
+      printf("Error: -step1/-step2/-step3 must be all odd or all even (got %d %d %d)\n",steps1,steps2,steps3);
       return 0;
     }
   }else{
@@ -206,13 +206,13 @@ int main(int argc,char **args) {
     step_ratio2=steps2/(double)2;
     i=(offset_t)steps2/2;
     if(step_ratio2!=i){
-      printf("Error!!! steps must be all odd or even\n");
+      printf("Error: -step1/-step2/-step3 must be all odd or all even (got %d %d %d)\n",steps1,steps2,steps3);
       return 0;
     }
     step_ratio2=steps3/(double)2;
     i=(offset_t)steps3/2;
     if(step_ratio2!=i){
-      printf("Error!!! steps must be all odd or even\n");
+      printf("Error: -step1/-step2/-step3 must be all odd or all even (got %d %d %d)\n",steps1,steps2,steps3);
       return 0;
     }
   }
@@ -227,7 +227,7 @@ int main(int argc,char **args) {
   if(max_threads>1&&max_threads<=omp_get_max_threads( )){
     omp_set_num_threads(max_threads);
   }else{
-    printf("Max Threads Num = %d\nPlease set OMP_NUM_THREADS <=maxthreads!!! I am setting it to 1!\n",max_threads);
+    if(max_threads>1)printf("Warning: -maxthreads %d exceeds the OpenMP thread limit %d; using 1 thread\n",max_threads,omp_get_max_threads());
     max_threads=1;
     omp_set_num_threads(max_threads);
   }
@@ -242,6 +242,14 @@ int main(int argc,char **args) {
   PetscOptionsGetReal(NULL,NULL,"-cntl_3",&cntl3,NULL);/*Iterative threshold */
   PetscOptionsGetInt(NULL,NULL,"-ndbbd_bl_rank",&ndbbdrank,NULL);/*Override default rank for last block in NDBBD method. Read text file. >0 text column. Use with care*/
   PetscOptionsGetInt(NULL,NULL,"-stoiter",&StoIter,NULL);
+  {
+    PetscInt verb=verbosity;
+    PetscOptionsGetInt(NULL,NULL,"-verbosity",&verb,NULL);/* 0 errors/results, 1 progress (default), 2 debug */
+    verbosity=(int)verb;
+    char verbstr[8];
+    sprintf(verbstr,"%d",verbosity);
+    setenv("TEEMS_VERBOSITY",verbstr,1);/* for the Fortran kernels (hsl_kernels.f90) */
+  }
   inmemory=-1;
   PetscOptionsGetInt(NULL,NULL,"-inmemory",&inmemory,NULL);/* keep value arrays resident instead of spilling to scratch */
   if(inmemory<0)inmemory=(matsol==MM_NDBBD)?0:1;/* default: resident except NDBBD, whose factor-file I/O wants the page cache that spilling frees (measured; LU/SBBD gain, DBBD neutral on both domains) */
@@ -264,7 +272,7 @@ int main(int argc,char **args) {
     if(tmpflg) {
       size_t tlen=strlen(tmpopt);
       if(tlen==0||tlen>200) {
-        if(rank==0)printf("Error!!! tempdir must be 1-200 characters: %s\n",tmpopt);
+        if(rank==0)printf("Error: -tempdir must be 1-200 characters: %s\n",tmpopt);
         PetscFinalize();
         return 1;
       }
@@ -279,13 +287,13 @@ int main(int argc,char **args) {
        by the Fortran kernels never touch disk. */
     if(inmemory&&!tmpflg&&access("/dev/shm/",W_OK)==0) {
       strcpy(scratch_dir,"/dev/shm/");
-      if(rank==0)printf("inmemory: scratch on tmpfs (%s)\n",scratch_dir);
+      if(rank==0)logmsg(1,"inmemory: scratch on tmpfs (%s)\n",scratch_dir);
     }
     /* export for the Fortran kernels, which build their factor-file
        paths themselves (hsl_kernels.f90) */
     setenv("TEEMS_SCRATCH",scratch_dir,1);
     if(access(scratch_dir,W_OK)!=0) {
-      if(rank==0)printf("Error!!! tempdir is not a writable directory: %s\n",scratch_dir);
+      if(rank==0)printf("Error: -tempdir is not a writable directory: %s\n",scratch_dir);
       PetscFinalize();
       return 1;
     }
@@ -296,7 +304,7 @@ int main(int argc,char **args) {
     strcpy(filename,"./ndbbd_drank.csv");//orani03.cmf");
   }
   if (flg)csv_read_ints(filename,ndbbddrank1,ndbbdrank);//
-  printf("matsol %d\n",matsol);
+  logmsg(2,"matsol %d\n",matsol);
   PetscOptionsGetString(NULL,NULL,"-cmdfile",filename,TABREADLINE,&flg);
   if (!flg) {
     strcpy(filename,"./reg.cmf");//orani03.cmf");
@@ -317,7 +325,7 @@ int main(int argc,char **args) {
   if(strcmp(solmed,"Stochastic")==0)solmethod=SM_STOCHASTIC;
   if(strcmp(solmed,"StoSim")==0)solmethod=SM_STOSIM;
   if(strcmp(solmed,"NoSol")==0)solmethod=SM_NOSOLVE;
-  printf("Sol med %d regset %s\n",solmethod,regset);
+  logmsg(2,"Sol med %d regset %s\n",solmethod,regset);
 
   #pragma omp parallel private(i)
   {
@@ -335,10 +343,8 @@ int main(int argc,char **args) {
   }
   char *readitem=NULL;
   if(rank==0) {
-    printf("OK!!!\n");
     niodata=cmf_count_files(filename,"iodata");
     if(niodata==-1)return 0;
-    printf("OK!!!\n");
     noutdata=cmf_count_files(filename,"outdata");
     nsoldata=cmf_count_files(filename,"soldata");
   }
@@ -350,11 +356,9 @@ int main(int argc,char **args) {
   cmf_file_entry *iodata= (cmf_file_entry *) calloc (niodata+noutdata+nsoldata,sizeof(cmf_file_entry));
   if(rank==rank_hsl) {
     cmf_read(filename,niodata,iodata,tabfile,closure,shock);
-    for (nj=0; nj<niodata+noutdata+nsoldata; nj++) printf("rank %d logname %s fname %s\n",rank,iodata[nj].logname,iodata[nj].filname);
+    for (nj=0; nj<niodata+noutdata+nsoldata; nj++) logmsg(2,"rank %d logname %s fname %s\n",rank,iodata[nj].logname,iodata[nj].filname);
     if(tab_preprocess(tabfile,newtabfile)==-1)return 0;
-    printf("OK1!\n");
   }
-  printf("rank %d OKK1\n",rank);
 
   strcpy(tabfile,newtabfile);
   if(rank==0)nset=sets_count(tabfile);
@@ -388,9 +392,9 @@ int main(int argc,char **args) {
     MPI_Bcast(&allregset,sizeof(offset_t), MPI_BYTE,0, PETSC_COMM_WORLD);
     MPI_Bcast(&nsetspace,sizeof(offset_t), MPI_BYTE,0, PETSC_COMM_WORLD);
   }
-  printf("rank %d regset %s indx %ld\n",rank,regset,allregset);
+  logmsg(2,"rank %d regset %s indx %ld\n",rank,regset,allregset);
   set_element *set_elems= (set_element *) calloc (nsetspace,sizeof(set_element));
-  printf("nset %d nsetspace %ld\n",nset,nsetspace);
+  logmsg(2,"nset %d nsetspace %ld\n",nset,nsetspace);
   for (i=0; i<nsetspace; i++)for (j=0; j<MAXSUPSET; j++)set_elems[i].superset_pos[j]=-1;
   if(rank==0) {
     for (i=0; i<nset; i++) {
@@ -514,7 +518,7 @@ int main(int argc,char **args) {
       }
     }
     ndblock1=ndblock;
-    printf("rank %d alltime set %ld allreg %ld size %ld\n",rank,alltimeset,allregset,ndblock);
+    logmsg(2,"rank %d alltime set %ld allreg %ld size %ld\n",rank,alltimeset,allregset,ndblock);
   }
   MPI_Barrier(PETSC_COMM_WORLD);
   if(nohsl) {
@@ -546,7 +550,7 @@ int main(int argc,char **args) {
     ndbbddrank1=(PetscInt *) calloc(ndbbdrank,sizeof(PetscInt));
   }
   ndblock=ndblock1;
-  printf("rank %d ndblock %ld allreg %ld\n",rank,ndblock,allregset);
+  logmsg(2,"rank %d ndblock %ld allreg %ld\n",rank,ndblock,allregset);
 
   //**************************************************************************************
   //****************************** END READ SET ELEMENT***********************************
@@ -559,13 +563,13 @@ int main(int argc,char **args) {
   strcpy(commsyntax,"coefficient");
   offset_t ncof=0,ncofele=0,ncof1,ncofele1;
   if(rank==0) {
-    printf("tabfile %s\n",tabfile);
+    logmsg(2,"tabfile %s\n",tabfile);
     ncof=tab_count_statements(tabfile,commsyntax);
-    printf("tabfile %s ncof %ld\n",tabfile,ncof);
+    logmsg(2,"tabfile %s ncof %ld\n",tabfile,ncof);
     ncof1=ncof;
   }
   MPI_Barrier(PETSC_COMM_WORLD);
-  printf("rank %d ncof %ld\n",rank,ncof);
+  logmsg(2,"rank %d ncof %ld\n",rank,ncof);
   if(nohsl)MPI_Bcast(&ncof1,sizeof(offset_t), MPI_BYTE,0, PETSC_COMM_WORLD);
   ncof=ncof1;
   array_def *coefs= (array_def *) calloc (ncof,sizeof(array_def));//recycle ha_cgeset
@@ -579,7 +583,7 @@ int main(int argc,char **args) {
     MPI_Bcast(coefs,ncof*sizeof(array_def), MPI_BYTE,0, PETSC_COMM_WORLD);
   }
   ncofele=ncofele1;
-  printf("rank %d ncofele %ld\n",rank,ncofele);
+  logmsg(2,"rank %d ncofele %ld\n",rank,ncofele);
   //**************************************************************************************
   //****************************** END READ COEFFICIENT NAME******************************
   //**************************************************************************************
@@ -597,13 +601,13 @@ int main(int argc,char **args) {
   nvar=nvar1;
   array_def *vars= (array_def *) calloc (nvar,sizeof(array_def));//recycle ha_cgeset
   bool *var_inter= (bool *) calloc (nvar,sizeof(bool));//recycle ha_cgeset
-  printf("nvarele %ld\n",nvarele);
+  logmsg(2,"nvarele %ld\n",nvarele);
   if(rank==0) {
     variables_read_defaults(tabfile,vars,nvar);
     nvarele=variables_read(tabfile,commsyntax,vars,nvar,sets,nset);
     nvarele1=nvarele;
   }
-  printf("nvarele %ld\n",nvarele);
+  logmsg(2,"nvarele %ld\n",nvarele);
   if(nohsl) {
     MPI_Bcast(&nvarele1,sizeof(offset_t), MPI_BYTE,0, PETSC_COMM_WORLD);
     MPI_Bcast(vars,nvar*sizeof(array_def), MPI_BYTE,0, PETSC_COMM_WORLD);
@@ -613,17 +617,17 @@ int main(int argc,char **args) {
   for (i=0;i<nvar;i++){
     if(vars[i].cofname[1]=='_'){
     for (j=0;j<ncof;j++)if (strcmp(coefs[j].cofname,vars[i].cofname+2)==0){
-      printf("Error!!! Same variable and coefficient names are not supported in this version, even with p_ or c_\nPlease change the name of coefficient %s or variable %s\n",coefs[j].cofname,vars[i].cofname);
+      printf("Error: coefficient %s and variable %s share a name (p_/c_ prefixes do not disambiguate); rename one of them\n",coefs[j].cofname,vars[i].cofname);
       return 0;
     }
     }
   }
   }
-  printf("nvarele %ld\n",nvarele);
+  logmsg(2,"nvarele %ld\n",nvarele);
   elem_value *elem_vals= (elem_value *) calloc ((ncofele+nvarele),sizeof(elem_value));
   elem_store *coef_store= (elem_store *) calloc (ncofele,sizeof(elem_store));
   elem_store *var_store= (elem_store *) calloc (nvarele,sizeof(elem_store));
-  printf("rankasd %d nvar %ld\n",rank,nvar);
+  logmsg(2,"rankasd %d nvar %ld\n",rank,nvar);
   if(rank==0) {
     coef_resolve_sets(coefs,ncof,sets,nset,coef_store);
   }
@@ -641,10 +645,9 @@ int main(int argc,char **args) {
       MPI_Bcast(coef_store,ncofele*sizeof(elem_store), MPI_BYTE,0, PETSC_COMM_WORLD);
     }
   }
-  printf("rank %d ncofele %ld\n",rank,ncofele);
+  logmsg(2,"rank %d ncofele %ld\n",rank,ncofele);
 
   if(rank==0)coef_resolve_sets(vars,nvar,sets,nset,var_store);
-  printf("rank %d OK!!!\n",rank);
 
   if(rank==rank_hsl)tab_write_variables(tabfile,newtabfile1,vars,nvar);
   strcpy(tabfile,newtabfile1);
@@ -662,7 +665,6 @@ int main(int argc,char **args) {
     strcpy(commsyntax,"read");
     if(data_read_files(tabfile,niodata,iodata,commsyntax,sets,nset,set_elems,coefs,ncof,coef_store,ncofele,vars,nvar,var_store,nvarele)==-1)return 0;
   }
-  printf("rank %d OK???\n",rank);
   //**************************************************************************************
   //********************* END READ VARIABLE, COEFFICIENT VALUE FROM FILE******************
   //**************************************************************************************
@@ -681,7 +683,7 @@ int main(int argc,char **args) {
       elem_vals[i].value=var_store[i-ncofele].value;
     }
   }
-  printf("rank %d ncofvar %ld\n",rank,ncofele+nvarele);
+  logmsg(2,"rank %d ncofvar %ld\n",rank,ncofele+nvarele);
   free(coef_store);
   free(var_store);
   closure_entry *closure_vals= (closure_entry *) calloc (nvarele,sizeof(closure_entry));
@@ -692,7 +694,6 @@ int main(int argc,char **args) {
     strcpy(commsyntax,"shock");
     if(shocks_read(shock,commsyntax,closure_vals,nvarele,vars,nvar,sets,nset,set_elems,subints)==-1)return 0;
   }
-  printf("rank %d OK???\n",rank);
   if(nohsl) {
     if(nvarele*sizeof(closure_entry)>1500000000) {
       j1=1500000000/sizeof(closure_entry);
@@ -711,12 +712,11 @@ int main(int argc,char **args) {
   nexo=nexo1;
   strcpy(commsyntax,"formula");
   bool IsIni=true;
-  printf("OK???\n");
   if(rank==0) {
     formulas_execute(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,IsIni);
   }
   gettimeofday(&endtime, NULL);
-  if(rank==0)printf("Calculation of variables time %f\n",(endtime.tv_sec - begintime.tv_sec)+((double)(endtime.tv_usec - begintime.tv_usec))/ 1000000);
+  if(rank==0)logmsg(1,"Variable calculation time %.2f s\n",(endtime.tv_sec - begintime.tv_sec)+((double)(endtime.tv_usec - begintime.tv_usec))/ 1000000);
   if(nohsl) { //Overcome MPI_Bcast limit
     if((nvarele+ncofele)*sizeof(elem_value)>1500000000) {
       j1=1500000000/sizeof(elem_value);
@@ -735,12 +735,12 @@ int main(int argc,char **args) {
   //****************** END CALCULATE VARIABLE, COEFFICIENT VALUE FROM FORMULA*************
   //**************************************************************************************
   gettimeofday(&begintime, NULL);
-  if(rank==0)printf("Broadcast of variables time %f\n",(begintime.tv_sec - endtime.tv_sec)+((double)(begintime.tv_usec - endtime.tv_usec))/ 1000000);
+  if(rank==0)logmsg(1,"Variable broadcast time %.2f s\n",(begintime.tv_sec - endtime.tv_sec)+((double)(begintime.tv_usec - endtime.tv_usec))/ 1000000);
   //**************************************************************************************
   //****************************** MATRIX FROM FORMULA************************************
   //**************************************************************************************
   VecSize = (PetscInt) nvarele-nexo;
-  PetscPrintf(PETSC_COMM_SELF,"VecSize %d exo %ld\n",VecSize,nexo);
+  if(rank==0)logmsg(1,"System size %d equations (%ld exogenous)\n",VecSize,nexo);
   strcpy(commsyntax,"equation");
   offset_t neq=0,neq1;
   if(rank==0) {
@@ -752,7 +752,7 @@ int main(int argc,char **args) {
   }
   neq=neq1;
   if(rank==rank_hsl) {
-    printf("neq %ld\n",neq);
+    logmsg(2,"neq %ld\n",neq);
   }
   offset_t *countvarintra1= (offset_t *) calloc (ndblock+1,sizeof(offset_t));
   array_def *eq_defs= (array_def *) calloc (neq,sizeof(array_def));//recycle ha_cgeset
@@ -770,7 +770,6 @@ int main(int argc,char **args) {
     eq_reg[i]=-1;
   }
   offset_t nintraendovar,summat;
-  printf("rank %d\n",rank);
   if(rank==rank_hsl) {
     if(nesteddbbd==1)equation_order_read_nested(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,closure_vals,var_inter,eq_defs,eq_intertemp,eq_time,eq_reg,allregset,alltimeset,orderintra,orderreg);
     else equation_order_read(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,closure_vals,var_inter,eq_defs,eq_intertemp,eq_time,eq_reg,allregset,alltimeset,orderintra,orderreg);
@@ -778,7 +777,7 @@ int main(int argc,char **args) {
   }
   switch (nesteddbbd) {
   case 1 :
-    if(!(alltimeset>=0&&allregset>=0))printf("Not a intertemporal regional CGE model!\n");
+    if(!(alltimeset>=0&&allregset>=0))printf("Warning: -nesteddbbd 1 but the model lacks both time and regional partition sets\n");
     offset_t *countvarintra= (offset_t *) calloc (ndblock,sizeof(offset_t));
     j3=0;
     for (i=0; i<nvar; i++) {
@@ -1155,7 +1154,6 @@ int main(int argc,char **args) {
       netcut=VecSize-countvarintra1[ndblock];
     }
   }
-  printf("rank1 %d\n",rank);
 
   if(alltimeset>=0&&allregset>=0) {
     switch (nesteddbbd) {
@@ -1227,7 +1225,7 @@ int main(int argc,char **args) {
     }
   }
   if(rank==rank_hsl) {
-    printf("netcut %ld nintraeq %ld\n",netcut,nintraeq);
+    logmsg(1,"Border netcut %ld, intra-block equations %ld\n",netcut,nintraeq);
   }
   /* rank 0 always holds valid ordering data: rank_hsl==0 under HSL, and
      under nohsl every rank computes the full ordering */
@@ -1258,10 +1256,10 @@ int main(int argc,char **args) {
     localend=0;
     for(i=0; i<mpisize; i++)if(i<rank+1)localend+=locals[i]*(nreg+1);
     if(rank==mpisize-1)localend=ndblock;
-    printf("rank %d localbeg %d localend %d\n",rank,localbeg,localend);
+    logmsg(2,"rank %d localbeg %d localend %d\n",rank,localbeg,localend);
     localsize=0;
     for (i=1; i<ndblock+1; i++)if(i>localbeg&&i<=localend)localsize+=counteq[i]-counteq[i-1];
-    printf("rank %d localsize %d\n",rank,localsize);
+    logmsg(2,"rank %d localsize %d\n",rank,localsize);
     VecSetSizes(vece,localsize,VecSize);
   }
   else {
@@ -1287,13 +1285,12 @@ int main(int argc,char **args) {
       onnzB[i-Istart]=0;
     }
   }
-  printf("rank11 %d Istart %d I end %d\n",rank, Istart,Iend);
+  logmsg(2,"rank11 %d Istart %d I end %d\n",rank, Istart,Iend);
   if(rank==rank_hsl) {
     jacobian_preallocate(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,nexo,closure_vals,ndblock,alltimeset,allregset,eq_intertemp,eq_addr,eq_time,eq_reg,counteq,nintraeq,&sbbd_overrid,Istart,Iend,&dnz,dnnz,&onz,onnz,&dnzB,dnnzB,&onzB,onnzB,nesteddbbd);
   }
-  printf("OKla!!!\n");
   if(sbbd_overrid&&!sbbd_overuser) {
-    printf(" It looks like you have an intertemporal model, \n please do -enable_time for more accurate results if \n you know what you are doing!\n");
+    printf("Warning: the model appears intertemporal; pass -enable_time to use the bordered ordering\n");
   }
   if(sbbd_overuser) {
     sbbd_overrid=false;
@@ -1325,7 +1322,6 @@ int main(int argc,char **args) {
       onzB=onnzB[i-Istart];
     }
   }
-  printf("OK1!!! rank %d\n",rank);
   /* A is symmetric. Set symmetric flag to enable ICC/Cholesky preconditioner */
   FILE* tempvar;
   MPI_Fint fcomm;
@@ -1354,7 +1350,7 @@ int main(int argc,char **args) {
   fortran_int k=0,m=1;
   solve_real temp1,temp2;
   fortran_int tindx1;
-  printf("rank %d ncof %ld\n",rank,ncof);
+  logmsg(2,"rank %d ncof %ld\n",rank,ncof);
   
 
   if(inmemory) {
@@ -1372,9 +1368,9 @@ int main(int argc,char **args) {
       if(avail>0)avail*=1024;
     }
     if(avail>0&&2*need>avail) {
-      if(rank==0)printf("Warning!!! -inmemory needs ~%ld MB per rank but only ~%ld MB available; using scratch files instead\n",need/1048576,avail/1048576);
+      if(rank==0)printf("Warning: -inmemory needs ~%ld MB per rank but only ~%ld MB is available; using scratch files instead\n",need/1048576,avail/1048576);
       inmemory=0;
-    } else if(rank==0)printf("inmemory: keeping ~%ld MB of value arrays resident per rank\n",need/1048576);
+    } else if(rank==0)logmsg(1,"inmemory: keeping ~%ld MB of value arrays resident per rank\n",need/1048576);
   }
   if(solmethod==SM_JOHANSEN)solve_johansen(nohsl,VecSize,A,dnz,dnnz,onz,onnz,B,dnzB,dnnzB,onzB,onnzB,vecb,vece,rank,rank_hsl,mpisize,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,&elem_vals,ncofele+nvarele,ncofele,nvarele,&closure_vals,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,eq_addr,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,presol,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,&xcf);
   
@@ -1409,12 +1405,11 @@ int main(int argc,char **args) {
       if(rank==rank_hsl)subinterval_update(rank,tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,closure_vals,nvarele,10*laA,subints,1,1,0);
       
       solve_modified_midpoint(nohsl,VecSize,&A,dnz,dnnz,onz,onnz,&B,dnzB,dnnzB,onzB,onnzB,&vecb,&vece,rank,rank_hsl,mpisize,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,&elem_vals,ncofele+nvarele,ncofele,nvarele,&closure_vals,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,eq_addr,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,presol,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,subints,fcomm,&xcf,0);
-  printf("ncof %ld rank %d\n",ncof,rank);
+  logmsg(2,"ncof %ld rank %d\n",ncof,rank);
   }
   }
   if(solmethod==SM_STOSIM){
     MPI_Barrier(PETSC_COMM_WORLD);
-    printf("Heere rank %d\n",rank);
       solve_modified_midpoint(nohsl,VecSize,&A,dnz,dnnz,onz,onnz,&B,dnzB,dnnzB,onzB,onnzB,&vecb,&vece,rank,rank_hsl,mpisize,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,&elem_vals,ncofele+nvarele,ncofele,nvarele,&closure_vals,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,eq_addr,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,presol,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,subints,fcomm,&xcf,2);
   }
     
@@ -1430,18 +1425,18 @@ int main(int argc,char **args) {
     }
     strcpy(solchar,tempchar);
     strcat(solchar,".bin");
-    printf("solchar %s\n",solchar);
+    logmsg(2,"solchar %s\n",solchar);
     if ( (solution = fopen(solchar, "wb")) == NULL ) {
-      printf("Error opening file\n");
+      printf("Error: cannot open %s for writing\n",solchar);
       return 1;
     }
     fwrite(xcf, sizeof(solve_real),nvarele, solution);
     fclose(solution);
     strcpy(solchar,tempchar);
     strcat(solchar,".var");
-    printf("solchar %s\n",solchar);
+    logmsg(2,"solchar %s\n",solchar);
     if ( (solution = fopen(solchar, "wb")) == NULL ) {
-      printf("Error opening file\n");
+      printf("Error: cannot open %s for writing\n",solchar);
       return 1;
     }
     fwrite(vars, sizeof(array_def),nvar, solution);
@@ -1449,7 +1444,7 @@ int main(int argc,char **args) {
     strcpy(solchar,tempchar);
     strcat(solchar,".set");
     if ( (solution = fopen(solchar, "wb")) == NULL ) {
-      printf("Error opening file\n");
+      printf("Error: cannot open %s for writing\n",solchar);
       return 1;
     }
     fwrite(sets, sizeof(set_def),nset, solution);
@@ -1457,7 +1452,7 @@ int main(int argc,char **args) {
     strcpy(solchar,tempchar);
     strcat(solchar,".sel");
     if ( (solution = fopen(solchar, "wb")) == NULL ) {
-      printf("Error opening file\n");
+      printf("Error: cannot open %s for writing\n",solchar);
       return 1;
     }
     fwrite(set_elems, sizeof(set_element),nsetspace, solution);
@@ -1470,7 +1465,7 @@ int main(int argc,char **args) {
     strcpy(solchar,tempchar);
     strcat(solchar,".mds");
     if ( (solution = fopen(solchar, "wb")) == NULL ) {
-      printf("Error opening file\n");
+      printf("Error: cannot open %s for writing\n",solchar);
       return 1;
     }
     fwrite(modeldes, sizeof(offset_t),4, solution);
@@ -1479,7 +1474,7 @@ int main(int argc,char **args) {
   MPI_Barrier(PETSC_COMM_WORLD);
   if(nowrites==0&&rank==0)for(i=0; i<noutdata; i++){
     outputs_write_csv(tabfile,iodata[i+niodata].logname,iodata[i+niodata].filname,sets,nset,set_elems,coefs,ncof,ncofele,vars,nvar,nvarele,elem_vals);
-    printf("outfile %s\n",iodata[i+niodata].logname);
+    logmsg(1,"Wrote %s\n",iodata[i+niodata].logname);
   }
   free(iodata);
   free(countvarintra1);
@@ -1494,7 +1489,6 @@ int main(int argc,char **args) {
   free(closure_vals);
   free(elem_vals);
   free(xcf);
-  printf("Hello world2! sof int %ld sof PetscInt %ld rank %d rankhsl %d\n",sizeof(int),sizeof(PetscInt),rank,rank_hsl);
   if(x0!=NULL)free(x0);
 //**************************************************************************************
 //**************************************END HSL*****************************************
