@@ -380,6 +380,8 @@ int main(int argc,char **args) {
           allregset=i;
           break;
         }
+    if(regset[0]!='\0'&&allregset<0)
+      printf("Warning: -regset %s matches no set in the TAB file; continuing without a regional partition.\n",regset);
   }
   if(nohsl) {
     MPI_Bcast(sets,nset*sizeof(set_def), MPI_BYTE,0, PETSC_COMM_WORLD);
@@ -523,6 +525,20 @@ int main(int argc,char **args) {
     MPI_Bcast(&ndblock1,sizeof(offset_t), MPI_BYTE,0, PETSC_COMM_WORLD);
     MPI_Bcast(&ntime,sizeof(offset_t), MPI_BYTE,0, PETSC_COMM_WORLD);
     MPI_Bcast(&nreg,sizeof(offset_t), MPI_BYTE,0, PETSC_COMM_WORLD);
+  }
+  /* NDBBD partitions the system time-block x regional-block; without
+     both partition sets the ordering below indexes with ntime/nreg = 0
+     and dies in a bare MPI abort. Fail here with the remedy instead
+     (alltimeset/allregset were broadcast above, so every rank takes
+     this branch together). */
+  if(matsol==MM_NDBBD&&(alltimeset<0||allregset<0)) {
+    if(rank==0) {
+      if(allregset<0)printf("Error: NDBBD (-matsol 3) requires -regset <name> naming the TAB set that partitions the regional blocks%s.\n",
+                            regset[0]!='\0'?" (the -regset given matched no set in the TAB file)":"");
+      if(alltimeset<0)printf("Error: NDBBD (-matsol 3) requires -enable_time and an (intertemporal) set in the TAB file.\n");
+    }
+    PetscFinalize();
+    return 1;
   }
   if(nesteddbbd==1&&ntime!=ndbbdrank) {
     ndbbdrank=ntime;
