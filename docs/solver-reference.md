@@ -441,6 +441,23 @@ intertemporal; else DBBD when n_tasks ≥ 2 and the deployed system ≥ 2M
 equations, or ≥ 1.5M with ≥ 100 regions; else LU — the 1.5–2M × <100
 region band is uncalibrated and deliberately falls to LU).
 
+Phase-5 closing A/Bs (2026-07-09, bench-inter-L, 3 interleaved pairs
+each; raw walls in `.audit/ab_phase5_results.txt`):
+- **`formula_op` compaction (5.10)** — speed-neutral (median delta 0.4%
+  inside ~10% session drift; a 10% `formula_eval` win would be ~1.6% of
+  wall, unresolvable by wall-clock A/B). Value is the 968→848B/op
+  footprint and layout clarity.
+- **NDBBD `-inmemory`** — wall neutral (medians 385s off vs 381s on);
+  RSS 1.09→1.84GB/rank (+69%) for resident factors. Default stays off
+  on RAM-cost grounds; on slow/network scratch the resident mode
+  (`ems_solve(inmemory = TRUE)`) is expected to win — this box's fast
+  local scratch + page cache is the best case for the file path.
+- **Small-model cost structure** (GTAP-RE 10.5k eq, LU-1 Mmid, 1.16s
+  wall): `jacobian_fill` = 0.71s (61%, equation parse + mandatory
+  per-step refill); `formulas_execute` = 0.04s (3.4%). Formula op-list
+  caching was dropped on these numbers; the equation path belongs to
+  condensation (ROADMAP 6.2).
+
 Determinism: repeated same-binary runs are bit-identical for every
 method (basis of the golden-run verification, below).
 
