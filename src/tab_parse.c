@@ -2899,7 +2899,76 @@ int sets_read(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,
         while (str_replace_all(line1," ", ""));
         readitem = strtok(line1,"=");
         strcpy(record[j].setname,readitem);
-        if (strchr(line,'-')!=NULL) {
+        /* GEMPACK set expressions (manual 10.1.1.1): UNION, INTERSECT,
+           '+', '-' and '\' over already-declared sets and quoted
+           single elements, with '(' ')' grouping, evaluated left to
+           right. Normalized here (UNION -> '^', INTERSECT -> '&',
+           '\' -> '-', spaces stripped) and stored as "@<expr>" for
+           set_expr_build(). The single-operator unbracketed forms keep
+           the legacy pairwise encodings below byte-for-byte. NB the
+           keyword rewrite is substring-based (as the legacy path
+           already was), so set names must not contain "union" or
+           "intersect". */
+        int expr_route=0;
+        {
+          char exprbuf[TABREADLINE];
+          strcpy(exprbuf,linecopy);
+          while (str_replace_first(exprbuf,"intersect","&"));
+          while (str_replace_first(exprbuf,"union","^"));
+          while (str_replace_all(exprbuf," ", ""));
+          str_replace_char(exprbuf,'\\','-');
+          char *crhs=strchr(exprbuf,'=');
+          if (crhs!=NULL) {
+            crhs++;
+            char *p;
+            int nops=0,special=0;
+            for (p=crhs; *p!='\0'&&*p!=';'; p++) {
+              if (*p=='+'||*p=='-'||*p=='^') nops++;
+              if (*p=='&'||*p=='('||*p=='"') special=1;
+              if (*p=='&') nops++;
+            }
+            if (nops>=2||special) {
+              expr_route=1;
+              /* size upper bound: sum of named-operand sizes plus one
+                 per quoted element; corrected to the exact count when
+                 the elements build (set_expr_build) */
+              char nm[NAMESIZE];
+              dim_t sz=0;
+              int ni=0,inq=0;
+              record[j].readele[0]='@';
+              record[j].readele[1]='\0';
+              for (p=crhs;; p++) {
+                if (inq) {
+                  if (*p=='"'||*p=='\0') inq=0;
+                  if (*p=='\0') break;
+                  continue;
+                }
+                if (*p=='+'||*p=='-'||*p=='^'||*p=='&'||*p=='('||*p==')'||*p=='"'||*p==';'||*p=='\0') {
+                  if (ni>0) {
+                    nm[ni]='\0';
+                    ni=0;
+                    for (i=0; i<nset; i++) if (strcmp(nm,record[i].setname)==0) break;
+                    if (i==nset) printf("Error: set %s in the definition of %s is not declared before use\n",nm,record[j].setname);
+                    else sz+=record[i].size;
+                  }
+                  if (*p=='"') { sz++; inq=1; }
+                  if (*p==';'||*p=='\0') break;
+                } else if (ni<NAMESIZE-1) {
+                  nm[ni++]=*p;
+                }
+              }
+              record[j].size=sz;
+              {
+                size_t rl=strlen(record[j].readele);
+                for (p=crhs; *p!='\0'&&*p!=';'&&rl<TABREADLINE-1; p++) record[j].readele[rl++]=*p;
+                record[j].readele[rl]='\0';
+              }
+            }
+          }
+        }
+        if (expr_route) {
+          /* encoded above; element build happens in set_expr_build */
+        } else if (strchr(line,'-')!=NULL) {
           line1[0]='-';
           line1[1]=',';
           line1[2]='\0';
@@ -3109,6 +3178,7 @@ dim_t set_union_op(set_element *set_elems, set_def *sets,dim_t nset,dim_t i) {
     set_elems[sets[j].offset+n].superset_pos[sup2]=m;
     m++;
   }
+  sets[i].size=m; /* correct a parse-time upper bound (expression operands) */
   return m;
 }
 dim_t set_difference(set_element *set_elems, set_def *sets,dim_t nset,dim_t i) {
@@ -3150,8 +3220,220 @@ dim_t set_difference(set_element *set_elems, set_def *sets,dim_t nset,dim_t i) {
       m++;
     }
   }
+  sets[i].size=m; /* correct a parse-time upper bound (expression operands) */
   return m;
 }
+/* ---- GEMPACK set expressions (manual 10.1.1.1) -----------------------
+   readele "@<expr>" holds the normalized RHS of
+     SET <name> = <set-expression>;
+   with UNION as '^', INTERSECT as '&', '\' folded into '-', spaces
+   stripped. Terms are already-declared set names, quoted single
+   elements, or parenthesized subexpressions; operators apply left to
+   right. Validity (per the manual): '+' operands must be disjoint;
+   '-' may only remove elements that are present. */
+
+/* record sup as a superset of sub and fill element positions */
+static void set_register_subset(set_element *se, set_def *sets, dim_t sub, dim_t sup) {
+  dim_t s,n,j1;
+  for (s=1; s<MAXSUPSET; s++) {
+    if (sets[sub].subsetid[s]==sup) return; /* already registered */
+    if (sets[sub].subsetid[s]==-1) break;
+  }
+  if (s==MAXSUPSET) {
+    printf("Error: superset count exceeds MAXSUPSET; increase MAXSUPSET in teems_solver.h\n");
+    return;
+  }
+  sets[sub].subsetid[s]=sup;
+  for (n=0; n<sets[sub].size; n++) {
+    for (j1=0; j1<sets[sup].size; j1++)
+      if (strcmp(se[sets[sub].offset+n].setele,se[sets[sup].offset+j1].setele)==0) break;
+    if (j1<sets[sup].size) se[sets[sub].offset+n].superset_pos[s]=j1;
+  }
+}
+
+static dim_t set_expr_eval(char **pp, set_element *se, set_def *sets, dim_t nset,
+                           char (*out)[NAMESIZE], dim_t cap, const char *owner);
+
+/* one term into out; returns element count */
+static dim_t set_expr_term(char **pp, set_element *se, set_def *sets, dim_t nset,
+                           char (*out)[NAMESIZE], dim_t cap, const char *owner) {
+  char *p=*pp;
+  dim_t n=0,l,k;
+  if (*p=='(') {
+    p++;
+    *pp=p;
+    n=set_expr_eval(pp,se,sets,nset,out,cap,owner);
+    if (**pp==')') (*pp)++;
+    else printf("Error: unbalanced '(' in the definition of %s\n",owner);
+    return n;
+  }
+  if (*p=='"') {
+    /* quoted single element; stored lowercase like read elements */
+    p++;
+    k=0;
+    while (*p!='"'&&*p!='\0'&&k<NAMESIZE-1) out[0][k++]=tolower((int)*p++);
+    out[0][k]='\0';
+    if (*p=='"') p++;
+    else printf("Error: unterminated quote in the definition of %s\n",owner);
+    *pp=p;
+    return 1;
+  }
+  {
+    char nm[NAMESIZE];
+    k=0;
+    while (*p!='\0'&&*p!='+'&&*p!='-'&&*p!='^'&&*p!='&'&&*p!='('&&*p!=')'&&*p!='"'&&k<NAMESIZE-1) nm[k++]=*p++;
+    nm[k]='\0';
+    *pp=p;
+    for (l=0; l<nset; l++) if (strcmp(nm,sets[l].setname)==0) break;
+    if (l==nset) {
+      printf("Error: set %s in the definition of %s is not declared before use\n",nm,owner);
+      return 0;
+    }
+    for (k=0; (dim_t)k<sets[l].size&&(dim_t)k<cap; k++) strcpy(out[k],se[sets[l].offset+k].setele);
+    return sets[l].size;
+  }
+}
+
+static dim_t set_expr_eval(char **pp, set_element *se, set_def *sets, dim_t nset,
+                           char (*out)[NAMESIZE], dim_t cap, const char *owner) {
+  dim_t n,m,a,b,w;
+  char op;
+  char (*tmp)[NAMESIZE];
+  n=set_expr_term(pp,se,sets,nset,out,cap,owner);
+  while (**pp=='+'||**pp=='-'||**pp=='^'||**pp=='&') {
+    op=**pp;
+    (*pp)++;
+    tmp=malloc((size_t)cap*NAMESIZE);
+    m=set_expr_term(pp,se,sets,nset,tmp,cap,owner);
+    if (op=='+') {
+      for (b=0; b<m; b++) {
+        for (a=0; a<n; a++) if (strcmp(out[a],tmp[b])==0) break;
+        if (a<n) printf("Error: '+' operands in the definition of %s are not disjoint (element %s); use UNION for overlapping sets\n",owner,tmp[b]);
+        else if (n<cap) strcpy(out[n++],tmp[b]);
+      }
+    } else if (op=='^') {
+      for (b=0; b<m; b++) {
+        for (a=0; a<n; a++) if (strcmp(out[a],tmp[b])==0) break;
+        if (a==n&&n<cap) strcpy(out[n++],tmp[b]);
+      }
+    } else if (op=='-') {
+      for (b=0; b<m; b++) {
+        for (a=0; a<n; a++) if (strcmp(out[a],tmp[b])==0) break;
+        if (a==n) printf("Error: '-' in the definition of %s removes element %s, which is not present\n",owner,tmp[b]);
+        else {
+          for (w=a; w<n-1; w++) strcpy(out[w],out[w+1]);
+          n--;
+        }
+      }
+    } else { /* '&' INTERSECT */
+      w=0;
+      for (a=0; a<n; a++) {
+        for (b=0; b<m; b++) if (strcmp(out[a],tmp[b])==0) break;
+        if (b<m) {
+          if (w!=a) strcpy(out[w],out[a]);
+          w++;
+        }
+      }
+      n=w;
+    }
+    free(tmp);
+  }
+  return n;
+}
+
+/* Build elements for set i from its "@<expr>" encoding, then apply the
+   manual's implied-SUBSET rules:
+     - all operators UNION/'+' (at any depth): every RHS set is a
+       subset of the result;
+     - all operators INTERSECT: the result is a subset of every RHS set;
+     - expression ends "... UNION <set>" at top level: that set is a
+       subset of the result;
+     - expression ends "... INTERSECT <set>" at top level: the result
+       is a subset of that set.
+   (The simple two-set complement keeps its legacy path and rule.)
+   Anything beyond these must be declared with an explicit Subset
+   statement, exactly as in GEMPACK. */
+dim_t set_expr_build(set_element *se, set_def *sets, dim_t nset, dim_t i) {
+  char expr[TABREADLINE],*p,*cursor;
+  char (*out)[NAMESIZE];
+  dim_t cap=sets[i].size,m,n,l;
+  int depth=0,inq=0,allplusun=1,allint=1,anyop=0;
+  char lastop=0;
+  char lastterm[NAMESIZE];
+  lastterm[0]='\0';
+  strcpy(expr,sets[i].readele+1);
+  if (cap<1) cap=1;
+  out=malloc((size_t)cap*NAMESIZE);
+  cursor=expr;
+  m=set_expr_eval(&cursor,se,sets,nset,out,cap,i<nset?sets[i].setname:"?");
+  if (*cursor!='\0') printf("Error: trailing characters in the definition of %s: %s\n",sets[i].setname,cursor);
+  for (n=0; n<m; n++) {
+    strcpy(se[sets[i].offset+n].setele,out[n]);
+    se[sets[i].offset+n].superset_pos[0]=n;
+  }
+  free(out);
+  sets[i].size=m;
+  /* operator census + last top-level term for the implied rules */
+  {
+    int k=0;
+    for (p=expr; *p!='\0'; p++) {
+      if (inq) {
+        if (*p=='"') inq=0;
+        continue;
+      }
+      if (*p=='"') { inq=1; lastterm[0]='\0'; k=0; continue; }
+      if (*p=='(') { depth++; lastterm[0]='\0'; k=0; continue; }
+      if (*p==')') { depth--; k=0; continue; }
+      if (*p=='+'||*p=='-'||*p=='^'||*p=='&') {
+        anyop=1;
+        if (*p=='-') { allplusun=0; allint=0; }
+        else if (*p=='&') allplusun=0;
+        else allint=0;
+        if (depth==0) { lastop=*p; lastterm[0]='\0'; k=0; }
+        continue;
+      }
+      if (depth==0) {
+        if (k<NAMESIZE-1) { lastterm[k++]=*p; lastterm[k]='\0'; }
+      }
+    }
+  }
+  if (anyop&&(allplusun||allint)) {
+    /* register against every named RHS set */
+    char nm[NAMESIZE];
+    int k=0;
+    inq=0;
+    for (p=expr;; p++) {
+      if (inq) {
+        if (*p=='"'||*p=='\0') inq=0;
+        if (*p=='\0') break;
+        continue;
+      }
+      if (*p=='+'||*p=='-'||*p=='^'||*p=='&'||*p=='('||*p==')'||*p=='"'||*p=='\0') {
+        if (k>0) {
+          nm[k]='\0';
+          k=0;
+          for (l=0; l<nset; l++) if (strcmp(nm,sets[l].setname)==0) break;
+          if (l<nset) {
+            if (allplusun) set_register_subset(se,sets,l,i);
+            else set_register_subset(se,sets,i,l);
+          }
+        }
+        if (*p=='"') inq=1;
+        if (*p=='\0') break;
+      } else if (k<NAMESIZE-1) {
+        nm[k++]=*p;
+      }
+    }
+  } else if (lastterm[0]!='\0'&&(lastop=='^'||lastop=='&')) {
+    for (l=0; l<nset; l++) if (strcmp(lastterm,sets[l].setname)==0) break;
+    if (l<nset) {
+      if (lastop=='^') set_register_subset(se,sets,l,i);
+      else set_register_subset(se,sets,i,l);
+    }
+  }
+  return m;
+}
+
 offset_t subsets_read(char *fname, set_element *set_elems, set_def *sets,dim_t nset) {
   FILE * filehandle;//, *fileout;
   char line[TABREADLINE]="\0";
