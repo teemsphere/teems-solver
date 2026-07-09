@@ -3434,6 +3434,22 @@ dim_t set_expr_build(set_element *se, set_def *sets, dim_t nset, dim_t i) {
   return m;
 }
 
+/* SET <new> = <old>; (manual 10.1.2.1): readele "=<source idx>" from
+   sets_read. Elements are copied at the source's CURRENT size
+   (expression sources carry a parse-time upper bound) and the two
+   implied SUBSET statements are registered in both directions. */
+void set_equality_build(set_element *se, set_def *sets, dim_t i) {
+  dim_t j,j1;
+  j1=(dim_t)atoi(sets[i].readele+1);
+  sets[i].size=sets[j1].size;
+  for (j=0; j<sets[i].size; j++) {
+    strcpy(se[sets[i].offset+j].setele,se[sets[j1].offset+j].setele);
+    se[sets[i].offset+j].superset_pos[0]=j;
+  }
+  set_register_subset(se,sets,i,j1);
+  set_register_subset(se,sets,j1,i);
+}
+
 offset_t subsets_read(char *fname, set_element *set_elems, set_def *sets,dim_t nset) {
   FILE * filehandle;//, *fileout;
   char line[TABREADLINE]="\0";

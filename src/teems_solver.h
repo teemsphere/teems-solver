@@ -207,6 +207,7 @@ int sets_read(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,
 int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,dim_t nset);
 dim_t set_union_named(set_element *set_elems, set_def *sets,dim_t nset,dim_t i);
 dim_t set_expr_build(set_element *set_elems, set_def *sets,dim_t nset,dim_t i); /* "@<expr>" GEMPACK set expressions */
+void set_equality_build(set_element *set_elems, set_def *sets,dim_t i); /* "=<idx>" SET <new> = <old>; */
 dim_t set_union_op(set_element *set_elems, set_def *sets,dim_t nset,dim_t i);
 dim_t set_difference(set_element *set_elems, set_def *sets,dim_t nset,dim_t i);
 dim_t subset_map_build(set_element *set_elems, set_def *sets,dim_t nset,offset_t* contin);

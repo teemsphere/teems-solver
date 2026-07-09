@@ -435,17 +435,7 @@ int main(int argc,char **args) {
             }
             else {
               if(sets[i].readele[0]=='=') {
-                strcpy(copyline,sets[i].readele);
-                while (str_replace_all(copyline," ", ""));
-                readitem = strtok(copyline,"=");
-                readitem = strtok(readitem,"=");
-                j1=atoi(readitem);
-                dim1=sets[j1].size; /* current size (expression sources carry a parse-time upper bound) */
-                sets[i].size=dim1;
-                for (j=0; j<dim1; j++) {
-                  strcpy(set_elems[j+sets[i].offset].setele,set_elems[j+sets[j1].offset].setele);
-                  set_elems[j+sets[i].offset].superset_pos[0]=j;
-                }
+                set_equality_build(set_elems, sets, i);
               }
               else {
                 dim1=sets[i].size;
