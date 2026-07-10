@@ -169,7 +169,7 @@ ARG DEBIAN_FRONTEND=noninteractive
 ENV PATH="${BUILD_DIR}/lib/mpi/bin:$PATH"
 
 # solver binary and LICENSES
-COPY --from=builder ${BUILD_DIR}/solver/hsl          ${BUILD_DIR}/solver/hsl
+COPY --from=builder ${BUILD_DIR}/solver/teems-solver ${BUILD_DIR}/solver/teems-solver
 COPY --from=builder ${BUILD_DIR}/LICENSES            ${BUILD_DIR}/LICENSES
 
 # HSL shared libraries (MA48 and MA51 are linked dynamically)
@@ -195,6 +195,9 @@ RUN echo 'APT::Install-Suggests "0";' >> /etc/apt/apt.conf.d/00-docker \
     && rm -rf /var/lib/apt/lists/* \
     && echo "${BUILD_DIR}/lib/mpi/lib" > /etc/ld.so.conf.d/teems-mpi.conf \
     && ldconfig \
+    # transition symlink for scripts referencing the old binary name;
+    # remove one release after the rename ships
+    && ln -s teems-solver ${BUILD_DIR}/solver/hsl \
     && groupadd -g $USER_GID $USERNAME \
     && useradd -m -u $USER_UID -g $USER_GID -s /bin/bash $USERNAME
 

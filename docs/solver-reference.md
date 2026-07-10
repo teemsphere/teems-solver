@@ -29,7 +29,7 @@ a container:
 ```
 docker run --rm --mount type=bind,src=<run dir>,dst=/opt/teems teems:<tag> \
   /opt/teems-solver/lib/mpi/bin/mpiexec -n <n_tasks> \
-  /opt/teems-solver/solver/hsl -cmdfile /opt/teems/<model>.cmf <options>
+  /opt/teems-solver/solver/teems-solver -cmdfile /opt/teems/<model>.cmf <options>
 ```
 
 The run directory contains:

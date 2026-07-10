@@ -16,7 +16,7 @@ image, so only the **base** image is ever published).
 
 teems-R invokes `teems:<docker_tag>` (default `latest`; override with
 `ems_option_set(docker_tag = ...)`) and runs
-`/opt/teems-solver/solver/hsl` inside it.
+`/opt/teems-solver/solver/teems-solver` inside it.
 
 ## 2. ISA levels: how performance is selected
 

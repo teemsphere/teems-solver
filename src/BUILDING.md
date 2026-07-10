@@ -15,7 +15,7 @@ time; see `docker/expedited_build/Dockerfile` for the canonical flow:
    points renamed to `Z*` so the patched static copies cannot clash with
    the dynamically linked libma48/libma51). `patch --forward` fails loudly
    if the upstream HSL sources ever drift.
-4. `make` in `src/` produces the `hsl` binary.
+4. `make` in `src/` produces the `teems-solver` binary.
 
 ## Makefile knobs
 
