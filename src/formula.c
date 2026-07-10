@@ -1369,6 +1369,16 @@ int formula_compile_if(char *fomulain, set_def *sets,int nif,int ipar,array_def 
   return 1;
 }
 
+/* numeric constant of a quantifier condition: the text after the
+   comparison operator ("<=-1.5" -> -1.5). atof on the full token stops
+   at the operator and would yield 0 for any constant. */
+static solve_real cond_constant(const char *s) {
+  const char *p=strpbrk(s,"<>=");
+  if (p==NULL) return atof(s);
+  while (*p=='<'||*p=='>'||*p=='=') p++;
+  return atof(p);
+}
+
 offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset, set_element *set_elems, array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar, elem_value *elem_vals,offset_t ncofvar,offset_t ncofele,bool IsIni) {
   FILE * filehandle;
   char line[TABREADLINE],line1[TABREADLINE],line2[TABREADLINE],linecopy[TABREADLINE],condvar[MAXVARDIM][NAMESIZE];
@@ -1461,44 +1471,50 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
                   if(strstr(readitem,"<"))logioper[i]=3;
                   if(strstr(readitem,"<>"))logioper[i]=4;
                 }
-                cond[i]=atof(readitem);
+                cond[i]=cond_constant(readitem);
               } else {
                 p++;
                 p1=strstr(readitem,"=");
                 if(p1!=NULL) {
                   logioper[i]=1;
                   strncpy(condvar[i],p,p1-p);
-                  cond[i]=atof(readitem);
+                  condvar[i][p1-p]='\0';
+                  cond[i]=cond_constant(readitem);
                 p1=strstr(readitem,"<=");
                 if(p1!=NULL) {
                   logioper[i]=5;
                   strncpy(condvar[i],p,p1-p);
-                  cond[i]=atof(readitem);
+                  condvar[i][p1-p]='\0';
+                  cond[i]=cond_constant(readitem);
                 }
                 p1=strstr(readitem,">=");
                 if(p1!=NULL) {
                   logioper[i]=6;
                   strncpy(condvar[i],p,p1-p);
-                  cond[i]=atof(readitem);
+                  condvar[i][p1-p]='\0';
+                  cond[i]=cond_constant(readitem);
                 }
                 }else{
                 p1=strstr(readitem,">");
                 if(p1!=NULL) {
                   logioper[i]=2;
                   strncpy(condvar[i],p,p1-p);
-                  cond[i]=atof(readitem);
+                  condvar[i][p1-p]='\0';
+                  cond[i]=cond_constant(readitem);
                 }
                 p1=strstr(readitem,"<");
                 if(p1!=NULL) {
                   logioper[i]=3;
                   strncpy(condvar[i],p,p1-p);
-                  cond[i]=atof(readitem);
+                  condvar[i][p1-p]='\0';
+                  cond[i]=cond_constant(readitem);
                 }
                 p1=strstr(readitem,"<>");
                 if(p1!=NULL) {
                   logioper[i]=4;
                   strncpy(condvar[i],p,p1-p);
-                  cond[i]=atof(readitem);
+                  condvar[i][p1-p]='\0';
+                  cond[i]=cond_constant(readitem);
                 }
                 }
               }
