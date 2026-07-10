@@ -9,6 +9,10 @@ LABEL org.opencontainers.image.source="https://github.com/matthewcantele/teems-s
 LABEL org.opencontainers.image.licenses="AGPL-3.0"
 
 ARG TARGETARCH
+# psABI/ISA level for amd64/arm64/arm (e.g. x86-64-v3); empty = portable
+# default per arch. The resolved flags are recorded in
+# ${BUILD_DIR}/archflags so downstream layers compile with the same level.
+ARG MARCH=""
 ARG BUILD_DIR=/opt/teems-solver
 ARG MPICH_VERSION=5.0.1
 ARG PETSC_ARCH=native
@@ -48,13 +52,14 @@ RUN echo 'APT::Install-Suggests "0";' >> /etc/apt/apt.conf.d/00-docker \
          esac; \
        fi \
     && case "$ARCH" in \
-         amd64)   OPT_FLAGS="-Ofast -march=native -mtune=native" ;; \
-         arm64)   OPT_FLAGS="-Ofast -march=armv8-a"              ;; \
-         arm)     OPT_FLAGS="-Ofast -march=armv7-a -mfpu=neon"   ;; \
-         ppc64le) OPT_FLAGS="-Ofast -mcpu=powerpc64le"           ;; \
-         s390x)   OPT_FLAGS="-Ofast"                             ;; \
-         *)       OPT_FLAGS="-O2"                                ;; \
+         amd64)   ARCH_FLAGS="-march=${MARCH:-x86-64-v2}"          ;; \
+         arm64)   ARCH_FLAGS="-march=${MARCH:-armv8-a}"            ;; \
+         arm)     ARCH_FLAGS="-march=${MARCH:-armv7-a} -mfpu=neon" ;; \
+         ppc64le) ARCH_FLAGS="-mcpu=powerpc64le"                   ;; \
+         *)       ARCH_FLAGS=""                                    ;; \
        esac \
+    && if [ "$ARCH" = "unknown" ]; then OPT_FLAGS="-O2"; else OPT_FLAGS="-Ofast $ARCH_FLAGS"; fi \
+    && printf "%s" "$ARCH_FLAGS" > ${BUILD_DIR}/archflags \
     && BLAS_LIB=$(find /usr/lib/$(gcc -print-multiarch) -name "libopenblas.so" | head -1) \
     # MPICH
     && mkdir -p ${TEEMS_TMP} \
@@ -63,7 +68,15 @@ RUN echo 'APT::Install-Suggests "0";' >> /etc/apt/apt.conf.d/00-docker \
     && cd mpich \
     && wget https://www.mpich.org/static/downloads/${MPICH_VERSION}/mpich-${MPICH_VERSION}.tar.gz \
     && tar xfz mpich-${MPICH_VERSION}.tar.gz --strip-components=1 \
+    # production MPICH: -O3 + NDEBUG internally (install guide "Compiler
+    # Optimization Levels"); arch flags go in MPICHLIB_* so the mpicc/mpif90
+    # wrappers stay clean — downstream compiles set their own levels
     && ./configure --prefix=${BUILD_DIR}/lib/mpi \
+        --enable-fast=all,O3 \
+        MPICHLIB_CFLAGS="$ARCH_FLAGS" \
+        MPICHLIB_CXXFLAGS="$ARCH_FLAGS" \
+        MPICHLIB_FFLAGS="$ARCH_FLAGS" \
+        MPICHLIB_FCFLAGS="$ARCH_FLAGS" \
     && make \
     && make install \
     # PETSc
@@ -72,6 +85,8 @@ RUN echo 'APT::Install-Suggests "0";' >> /etc/apt/apt.conf.d/00-docker \
     && cd petsc \
     && mkdir -p ${BUILD_DIR}/LICENSES/petsc \
     && cp ${BUILD_DIR}/lib/petsc/LICENSE ${BUILD_DIR}/LICENSES/petsc \
+    # memalign=64: SIMD-friendly array alignment (AVX2/AVX-512, SVE);
+    # cxx/fortran bindings off: the solver calls PETSc from C only
     && python3 ./config/configure.py \
         PETSC_ARCH=${PETSC_ARCH} \
         PETSC_DIR=$PWD \
@@ -80,6 +95,9 @@ RUN echo 'APT::Install-Suggests "0";' >> /etc/apt/apt.conf.d/00-docker \
         COPTFLAGS="$OPT_FLAGS" \
         CXXOPTFLAGS="$OPT_FLAGS" \
         FOPTFLAGS="$OPT_FLAGS" \
+        --with-memalign=64 \
+        --with-cxx=0 \
+        --with-fortran-bindings=0 \
         --with-blas-lib="$BLAS_LIB" \
         --with-lapack-lib="$BLAS_LIB" \
         --with-shared-libraries=0 \

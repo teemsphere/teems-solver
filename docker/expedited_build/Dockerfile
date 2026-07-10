@@ -1,4 +1,8 @@
-FROM matthewcantele/teems_base:latest AS builder
+# Select the base variant matching the target ISA level (see
+# docs/image-publishing.md); the solver and HSL libraries below are
+# compiled at the level recorded in the base image's archflags file.
+ARG BASE_IMAGE=matthewcantele/teems_base:latest
+FROM ${BASE_IMAGE} AS builder
 
 ARG PATH_HSL_MA48
 ARG PATH_HSL_MA51
@@ -14,7 +18,8 @@ COPY ${PATH_HSL_MP48} ${BUILD_DIR}/hsl/mp48.tar.gz
 # without this the image silently ships stale solver code.
 COPY ./src ${BUILD_DIR}/src
 
-RUN mkdir -p ${BUILD_DIR}/LICENSES/hsl \
+RUN ARCH_FLAGS="$(cat ${BUILD_DIR}/archflags 2>/dev/null || true)" \
+    && mkdir -p ${BUILD_DIR}/LICENSES/hsl \
     && mkdir -p ${BUILD_DIR}/lib/ma48 \
     && tar xfz ${BUILD_DIR}/hsl/ma48.tar.gz --strip-components=1 -C ${BUILD_DIR}/lib/ma48 \
     && cp ${BUILD_DIR}/lib/ma48/LICENCE ${BUILD_DIR}/LICENSES/hsl \
@@ -26,15 +31,15 @@ RUN mkdir -p ${BUILD_DIR}/LICENSES/hsl \
     && tar xfz ${BUILD_DIR}/hsl/mp48.tar.gz --strip-components=1 -C ${BUILD_DIR}/lib/mp48 \
     && cd ${BUILD_DIR}/lib/ma48 \
     && autoreconf -fi \
-    && ./configure \
+    && ./configure CFLAGS="-O2 $ARCH_FLAGS" FFLAGS="-O2 $ARCH_FLAGS" FCFLAGS="-O2 $ARCH_FLAGS" \
     && make \
     && cd ${BUILD_DIR}/lib/ma51 \
     && autoreconf -fi \
-    && ./configure \
+    && ./configure CFLAGS="-O2 $ARCH_FLAGS" FFLAGS="-O2 $ARCH_FLAGS" FCFLAGS="-O2 $ARCH_FLAGS" \
     && make \
     && cd ${BUILD_DIR}/lib/mp48 \
     && autoreconf -fi \
-    && ./configure FFLAGS="-fallow-argument-mismatch" FCFLAGS="-fallow-argument-mismatch" \
+    && ./configure FFLAGS="-fallow-argument-mismatch -O2 $ARCH_FLAGS" FCFLAGS="-fallow-argument-mismatch -O2 $ARCH_FLAGS" \
     && make \
     && cp ${BUILD_DIR}/lib/mp48/src/hsl_mp48d.f90 ${BUILD_DIR}/src \
     && cp ${BUILD_DIR}/lib/mp48/src/ddeps.f ${BUILD_DIR}/src \
@@ -44,9 +49,9 @@ RUN mkdir -p ${BUILD_DIR}/LICENSES/hsl \
     && ./mp48_mod.sh \
     && cp ${BUILD_DIR}/lib/mc66/src/hsl_mc66d.f90 ${BUILD_DIR}/src \
     && cp ${BUILD_DIR}/lib/mc66/src/ddeps90.f90 ${BUILD_DIR}/src \
-    # final build
+    # final build — solver objects at the same ISA level as the base libs
     && cd ${BUILD_DIR}/src \
-    && make \
+    && make OPT="-Ofast $ARCH_FLAGS" \
     && mv ${BUILD_DIR}/src ${BUILD_DIR}/solver \
     && rm -rf ${BUILD_DIR}/hsl \
     && mkdir -p ${BUILD_DIR}/mpi-runtime/lib ${BUILD_DIR}/mpi-runtime/bin \
