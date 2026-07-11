@@ -7,8 +7,10 @@ phases 0–4 are recorded in the completed-phases log at the end of this
 file. `docs/solver-reference.md` describes the *resulting* system.
 
 **Standing rules**
-- Every change passes the golden suite (`.audit/verify.sh`, currently 9
-  bit-identical gates: 5 method + 3 real-shock + 1 GEMPACK-orientation) and,
+- Every change passes the golden suite (`.audit/verify.sh`, currently 14
+  bit-identical gates: 5 method + 3 real-shock + 1 GEMPACK-orientation +
+  4 subinterval gates spanning method × ranks × nsubints × inmemory,
+  the LU one run in both -inmemory modes) and,
   where performance-relevant, interleaved A/B benchmarks on the
   calibrated rigs. Benchmark only on an idle machine; use paired runs.
 - **Goal: full GEMPACK feature parity. Performance is the only veto.**
@@ -79,28 +81,42 @@ began in phase 5.
 
 ## Standing investigations
 
-- **Multi-subinterval (`-nsubints ≥ 2`) real-shock solves are broken**
-  (found 2026-07-11 while chasing a cross-method test failure; legacy —
-  pre-refactor binary affected too). Evidence (GTAP11c *and* GTAP12a,
-  so NOT a database defect): with a `pfactwld+1` uniform shock on
-  GTAP-RE/Mmid, composed output must contain the exogenous shock value
-  exactly, and at ns=1 all methods return pfactwld=1; at ns=2 LU/SBBD
-  return **0.5111** (silent half-shock; the two methods agree with each
-  other, so cross-method tests can pass on two consistently wrong
-  solutions), NDBBD returns 1.0, ns=3 aborts MA48 structurally
-  singular; old binary at ns=2 bound-aborts instead. Static
-  GTAPv7/Mmid/pfactwld+5 on GTAP11c: ns=1 → pfactwld=5 (correct),
-  ns=2 → lower-bound aborts (evfb/vcif/vdep) — the abort class
-  previously attributed to "GTAP12 data". Golden-suite blind spot:
-  Mmid goldens are null-shock (ns=1), real-shock goldens are Johansen —
-  no golden exercises shock × Mmid × subintervals. Next: read the
-  subinterval outer loop (main.c / solve_drivers.c shock splitting and
-  cumulative update accumulation) against the GEMPACK subinterval spec;
-  explain the exact 0.5111111 fraction and why the NDBBD path
-  accumulates correctly; fix behind the golden gate and add a
-  real-shock Mmid ns=2 golden; then re-audit the teems-R cross-method
-  tests and the GTAP12-data failure attributions (some may vanish).
-  Interim: treat ns ≥ 2 results with real shocks as untrustworthy.
+- **RESOLVED 2026-07-11 — multi-subinterval bug was TWO defects** (fixed
+  8778838 + the hsl_mp48d.patch revision; 14-gate golden suite green):
+  (1) *xc0 unguarded free* (ours, phase 5.3 inmemory refactor,
+  2026-07-05): `free(xc0)` in `solve_modified_midpoint` sat outside the
+  `if(!inmemory)` guard while its reload stayed inside — under
+  `-inmemory` the cumulative multiplier vanished for the sol>0
+  extrapolation passes of every subinterval after the first, so the
+  Richardson combination blended pass-inconsistent quantities (the
+  exact 23/45 signature) and composed output violated the exogenous
+  shock (pfactwld+1 → 0.5111). Symptoms varied by method/env: silent
+  half-shock (LU/SBBD), a wild interface element (SBBD-2 on GTAP12a),
+  bound aborts, ns=3 false singularity. Fix: free moved inside the
+  guard; ns=1 outputs proven bit-identical.
+  (2) *CGLOB overrun* (legacy, in the original project patch to
+  HSL_MP48): the memory-reduction patch re-dimensioned
+  `CGLOB(NEQ,NBLOCK)` → `CGLOB(MAXSBCOLS,NBLOCK)` with MAXSBCOLS
+  estimated from block column pointers — but the border block's true
+  column span (NCOL 5249 vs bound 1399 on the probe) exceeds any such
+  estimate, so *every* SBBD/DBBD solve wrote ~15KB past the array
+  (valgrind: invalid write, hsl_mp48d.f90:1293). Results stayed
+  correct only because the overrun addresses were read back before
+  reuse; ns≥2's allocation churn broke that and crashed
+  (munmap_chunk) in some environments. Fix: hsl_mp48d.patch now
+  measures the true per-block span in a pre-pass and sizes CGLOB from
+  it; valgrind-clean; all goldens bit-identical (the round-trip had
+  been output-neutral).
+  Golden suite widened to 14 gates: + nsub-lu (Mmid ns=2 LU-1, run in
+  BOTH -inmemory modes against one manifest — modes proven
+  bit-identical), nsub-sbbd (ns=2 SBBD-2), nsub-ndbbd (ns=3 NDBBD-2),
+  nsub-dbbd (static Mmid ns=2 DBBD-2); GTAP11c deployments with real
+  numeraire shocks (.audit/deploy_golden_nsub.R). Coverage now spans
+  solution methods × matrix methods × ranks × subintervals ×
+  inmemory. teems-R test-ems_solve.R 40/40 — the "GTAP12 data class"
+  cross-method failures were this bug, not the database.
+
+## Standing investigations
 
 - `-ndbbd_bl_rank`/`-nestfile` (expert overrides: hand-assign MPI ranks
   per NDBBD block from a CSV; default self-derives `ndbbdrank=ntime`):

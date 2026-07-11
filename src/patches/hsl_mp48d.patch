@@ -1,5 +1,5 @@
---- hsl_mp48d.f90	2026-07-04 00:48:05.698139151 +0000
-+++ hsl_mp48d.f90	2026-07-04 00:48:06.066141613 +0000
+--- hsl_mp48d.f90
++++ hsl_mp48d.f90
 @@ -1,3 +1,5 @@
 +!-Add MYIW1 and MYLMX;
 +!-Change CGLOB=Max col number in a block (including border) x NBLOCK
@@ -14,16 +14,70 @@
        INTEGER ICNTL(20)      ! Control parameters.
  ! ICNTL(1)     Error output unit (default 6)
  ! ICNTL(2)     Warning output unit (default 6)
-@@ -1153,7 +1156,7 @@
-          DEALLOCATE (data%private%CGLOB, STAT=ST)
+@@ -544,7 +547,7 @@
+               K,KL, &
+               L,L1,LCNT,LDGN,LGUARD, &
+               LLPTR,LORDER,LP, &
+-              N,NBLOCK,NEQ,NIN,NPROC,NVAR,NCOL,NL,NNULL, &
++              N,NBLOCK,NEQ,NIN,NPROC,NVAR,NCOL,NL,NNULL,MAXNCOL, &
+               RANK,ST,STRM,WRN
+       LOGICAL EX,OPEN,LERR,LFLAG,LWRN
+ 
+@@ -1150,11 +1153,9 @@
+          ALLOCATE (IW(NEQ), &
+                    IWORK(2*NEQ),STAT=ST)
+          IF (ST /= 0) GO TO 180
+-         DEALLOCATE (data%private%CGLOB, STAT=ST)
           DEALLOCATE (data%private%GLOBAL, STAT=ST)
           DEALLOCATE (data%private%INULL, STAT=ST)
 -         ALLOCATE (data%private%CGLOB(NEQ,NBLOCK), &
-+         ALLOCATE (data%private%CGLOB(data%MAXSBCOLS,NBLOCK), & !NEQ
-                    data%private%GLOBAL(LORDER,NBLOCK), &
+-                   data%private%GLOBAL(LORDER,NBLOCK), &
++         ALLOCATE (data%private%GLOBAL(LORDER,NBLOCK), &
                     data%private%INULL(NEQ), &
                     STAT=ST)
-@@ -1634,6 +1637,7 @@
+          IF (ST /= 0) GO TO 180
+@@ -1242,6 +1243,40 @@
+          data%BORDER = NIN
+ 
+          IWORK(1:2*NEQ) = 0
++! Measure the largest per-block column span (distinct columns
++! appearing in a block, including its border columns) before
++! dimensioning CGLOB: the border block exceeds any bound derived
++! from the block column pointers.
++         MAXNCOL = 0
++         DO JBLOCK = 1,NBLOCK
++            NCOL = 0
++            L1 = data%private%SUBPTR(JBLOCK)
++            DO L = 1,data%NEQSB(JBLOCK)
++               J1 = data%EQPTR(L1)
++               J2 = data%EQPTR(L1+1)-1
++               DO J = J1,J2
++                  K = data%EQVAR(J)
++                  IF (IWORK(K) == 0) THEN
++                     IWORK(K) = 1
++                     NCOL = NCOL + 1
++                  END IF
++               END DO
++               L1 = L1 + 1
++            END DO
++            IF (NCOL > MAXNCOL) MAXNCOL = NCOL
++            L1 = data%private%SUBPTR(JBLOCK)
++            DO L = 1,data%NEQSB(JBLOCK)
++               J1 = data%EQPTR(L1)
++               J2 = data%EQPTR(L1+1)-1
++               DO J = J1,J2
++                  IWORK(data%EQVAR(J)) = 0
++               END DO
++               L1 = L1 + 1
++            END DO
++         END DO
++         DEALLOCATE (data%private%CGLOB, STAT=ST)
++         ALLOCATE (data%private%CGLOB(MAX(MAXNCOL,1),NBLOCK),STAT=ST)
++         IF (ST /= 0) GO TO 180
+          DO 190 JBLOCK = 1,NBLOCK
+ ! Flag columns that appear within the block and add up
+ ! number of columns in block
+@@ -1634,6 +1669,7 @@
                NBLOCK,NEQ,NPROC,NC,NZBLK,NCMX,NZMX,NVAR,NP, &
                RANK,STRM,SRC,VALCRD,WRN
  
@@ -31,7 +85,7 @@
        INTEGER IOS        !  Holds IOSTAT parameter for files.
        INTEGER ST         !  Holds STAT parameter (ALLOCATE statement)
        INTEGER STD        !  Holds STAT parameter (DEALLOCATE statement)
-@@ -1659,6 +1663,7 @@
+@@ -1659,6 +1695,7 @@
        INTEGER, DIMENSION (:), ALLOCATABLE :: IFIRST
        INTEGER, DIMENSION (:), ALLOCATABLE :: IW
        INTEGER, DIMENSION (:), ALLOCATABLE :: IW1
@@ -39,7 +93,7 @@
        INTEGER, DIMENSION (:), ALLOCATABLE :: IRN
        INTEGER, DIMENSION (:), ALLOCATABLE :: JCN
        INTEGER, DIMENSION (:), ALLOCATABLE :: JFIRST
-@@ -2139,6 +2144,8 @@
+@@ -2139,6 +2176,8 @@
                  NEXTC(1:NCMX), &
                  ROWPTR(1:LORDER+1), &
                  STAT=ST)
@@ -48,7 +102,7 @@
        IF (ST /= 0) GO TO 190
        IF (ICONTROL(8) == 0) THEN
                  ALLOCATE (LASTR(1:MMX), &
-@@ -2203,12 +2210,12 @@
+@@ -2203,12 +2242,12 @@
  
        FLAG = 0
        IDUP = 0
@@ -64,7 +118,7 @@
           data%private%IMAP(1:NVARSB(LCNT),LCNT) = 0
           JBLOCK = data%IBLOCK(LCNT)
  ! M is number of rows in the block
-@@ -2227,9 +2234,9 @@
+@@ -2227,9 +2266,9 @@
             DO 220 K = KSTART,KSTOP - 1
               I = data%EQVAR(J1+K-1)
               J = J + 1
@@ -76,7 +130,7 @@
               ELSE
  ! We have a duplicate in row L
                 IDUP1 = IDUP1 + 1
-@@ -2241,7 +2248,7 @@
+@@ -2241,7 +2280,7 @@
    220      CONTINUE
             KSTART = KSTOP
    230    CONTINUE
@@ -85,7 +139,7 @@
           data%private%IDUP(LCNT) = IDUP1
           IDUP = IDUP + IDUP1
    240 CONTINUE
-@@ -2315,8 +2322,8 @@
+@@ -2315,8 +2354,8 @@
  ! Call MP48_MA60A/AD to perform analyse.
  ! Loop over submatrices.
        FLAG = 0
@@ -96,7 +150,7 @@
        IF (ICONTROL(7) == 1 .OR. &
          (ICONTROL(7) == 2 .AND. RANK == 0)) THEN
  ! Find length required for VALUES.
-@@ -2402,8 +2409,8 @@
+@@ -2402,8 +2441,8 @@
                   I = data%EQVAR(J1+K-1)
                   J = J + 1
                   JJ = data%private%IMAP(J,LCNT)
@@ -107,7 +161,7 @@
                      ROWPTR(L+1) = ROWPTR(L+1) + 1
  ! Set col. index in IRN
                      IRN(JJ) = I
-@@ -2412,7 +2419,7 @@
+@@ -2412,7 +2451,7 @@
    260          CONTINUE
                 KSTART = KSTOP
    270        CONTINUE
@@ -116,7 +170,7 @@
             ELSE
               DO 271 L = 1,M
                 NVAR = data%EQPTR(L1+L) - data%EQPTR(L1+L-1)
-@@ -2422,8 +2429,8 @@
+@@ -2422,8 +2461,8 @@
                   I = data%EQVAR(J1+K-1)
                   J = J + 1
                   JJ = data%private%IMAP(J,LCNT)
@@ -127,7 +181,7 @@
                      ROWPTR(L+1) = ROWPTR(L+1) + 1
  ! Set col. index in IRN
                      IRN(JJ) = I
-@@ -2432,7 +2439,7 @@
+@@ -2432,7 +2471,7 @@
    261          CONTINUE
                 KSTART = KSTOP
    271        CONTINUE
@@ -136,7 +190,7 @@
             END IF
          END IF
  
-@@ -2618,6 +2625,7 @@
+@@ -2618,6 +2657,7 @@
        DEALLOCATE (IFIRST,STAT=ST)
        DEALLOCATE (IW,STAT=ST)
        DEALLOCATE (IW1,STAT=ST)
@@ -144,7 +198,7 @@
        DEALLOCATE (IRN,STAT=ST)
        DEALLOCATE (JCN,STAT=ST)
        DEALLOCATE (JFIRST,STAT=ST)
-@@ -2723,7 +2731,7 @@
+@@ -2723,7 +2763,7 @@
        INTEGER, DIMENSION (:,:), ALLOCATABLE :: IQM
  
  !     .. External Subroutines ..
@@ -153,7 +207,7 @@
  
  !     .. MPI routines
        EXTERNAL MPI_BARRIER,MPI_BCAST,MPI_COMM_RANK, &
-@@ -4092,7 +4100,7 @@
+@@ -4092,7 +4132,7 @@
  ! pattern (data%private%FJOB = 1)
         IF (data%private%FJOB == 1) THEN
  ! First call.
@@ -162,7 +216,7 @@
  
  ! Switch off printing from MA48
           data%private%ICNTL_48(1) = -1
-@@ -4109,8 +4117,8 @@
+@@ -4109,8 +4149,8 @@
           data%private%ICNTL_48(7) = 0
  
  ! Switch control from sparse to full matrix processing (default 0.5)
@@ -173,7 +227,7 @@
           data%private%CNTL_48(1) = CONTROL(1)
  ! Set threshold pivoting parameter
           data%private%CNTL_48(2) = CONTROL(2)
-@@ -4227,7 +4235,7 @@
+@@ -4227,7 +4267,7 @@
  ! (data%private%FJOB = 1)
           IF (data%private%FJOB == 1) THEN
             JOB48 = 1
@@ -182,7 +236,7 @@
                  data%private%IRN(1:LA),data%private%JCN(1:LA), &
                  data%private%KEEP48(1:LKEEP48), &
                  data%private%CNTL_48,data%private%ICNTL_48, &
-@@ -4315,7 +4323,7 @@
+@@ -4315,7 +4355,7 @@
           ALLOCATE (IW(1:2*RINTER+2*NINTER),STAT=ST )
           IF (ST /= 0) GO TO 420
  
@@ -191,7 +245,7 @@
                  data%private%IRN(1:LA),data%private%JCN(1:NE), &
                  data%private%KEEP48(1:LKEEP48),data%private%CNTL_48, &
                  data%private%ICNTL_48,W,IW, &
-@@ -4595,7 +4603,7 @@
+@@ -4595,7 +4635,7 @@
        INTEGER, DIMENSION (:), ALLOCATABLE :: NVARSB
  
  !     .. External Subroutines ..
@@ -200,7 +254,7 @@
  
  !     .. MPI routines
        EXTERNAL MPI_BARRIER,MPI_BCAST,MPI_COMM_RANK, &
-@@ -4990,7 +4998,7 @@
+@@ -4990,7 +5030,7 @@
           JOB48 = 1
           LKEEP48 =  data%private%LKEEP48
  
@@ -209,7 +263,7 @@
                data%private%IRN(1:LA), &
                       data%private%KEEP48(1:LKEEP48),data%private%CNTL_48, &
                       data%private%ICNTL_48,B1,X1,ERR48,W,IW, &
-@@ -5245,7 +5253,7 @@
+@@ -5245,7 +5285,7 @@
  
        SUBROUTINE MP48ED(M,N,KEEP,LKEEP,INFO)
  ! This subroutine computes statistics for MA48
