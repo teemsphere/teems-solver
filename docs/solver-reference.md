@@ -63,7 +63,7 @@ Solver outputs, consumed by `ems_compose()`:
 | `.set` | `nset × set_def` — set definitions |
 | `.sel` | `nsetspace × set_element` — set elements with superset positions |
 | `.mds` | 4 × long: `nsetspace, nvar, nvarele, nset` |
-| `.stats.json` | per-run ordering statistics: system size, method, `netcut`, border sizes, per-block variable/equation counts (null/empty when no bordered ordering was built). Written before the solve, so failed runs still record their ordering; feeds `matrix_method` auto-calibration |
+| `.stats.json` | per-run ordering statistics (v2): system size, method, `netcut`, border sizes, per-block variable/equation counts (null/empty when no bordered ordering was built), plus `chain_set`/`partition_set` with `chain_source`/`partition_source` (`explicit`/`structural`/`none`) and, when the partition probe ran, the full `partition_auto` candidate table (§6). Written before the solve, so failed runs still record their ordering; feeds `matrix_method` auto-calibration |
 
 The structs are written raw; teems-R's `parse_solution.cpp` mirrors their
 layout, so `array_def`/`set_def`/`set_element` are an ABI shared with
@@ -332,11 +332,60 @@ forces `-nsubints 1`.
 | 0 `MM_LU` | serial MA48 LU | any | single rank does the factorization |
 | 1 `MM_SBBD` | singly bordered block diagonal via HSL_MP48 [HK16] | **intertemporal** | blocks by time period; MC66 ordering optional (`-withmc66`), direct ordering by default; factors held in MP48 memory (sized by `-laA/-laDi`) |
 | 2 `MM_DBBD` | doubly bordered block diagonal [KH19] | **static** (regional blocks) | C-side block factorization (MA48 kernels), factor handoff via scratch files |
-| 3 `MM_NDBBD` | nested DBBD [KH19] | **intertemporal, T ≫ R** | regional blocks nested inside time blocks; requires `-regset`; nested ordering auto-enabled |
+| 3 `MM_NDBBD` | nested DBBD [KH19] | **intertemporal, T ≫ R** | partition blocks nested inside chain blocks; nested ordering auto-enabled |
 
 Production guidance (measured, see §9): SBBD is the primary intertemporal
 method; DBBD the primary static method; NDBBD targets many-timestep,
 few-region models — its crossover point vs SBBD is still being mapped.
+
+### Structural partition detection
+
+The bordered orderings need two dimensions, and neither is a property
+of a set's *name* — both are derived from the structure of the equation
+system at run time:
+
+- **Chain dimension** (conventionally time): the top-level set whose
+  elements the equations couple through lead/lag index offsets
+  (`x(...,t+1)`). Detected by scanning the equations for offset
+  references; the `(intertemporal)` TAB qualifier only licenses the
+  syntax and is cross-checked (a qualified set that no equation
+  offset-references gets no chain treatment, offsets on an unqualified
+  set draw a warning, offsets spanning several top-level sets draw a
+  warning and the most-referenced set wins).
+- **Diagonal-block partition** (conventionally regions; used by DBBD
+  and NDBBD): every set with two or more elements outside the chain
+  family that indexes at least one variable dimension — directly or
+  through a subset, so finer subregional-style sets compete on equal
+  terms — is probed: the pre-Jacobian ordering scan runs against it and
+  the first counting pass measures the border and block sizes that
+  partition would produce. A candidate is viable with ≥ `n_tasks`
+  nonempty blocks and a border under half the system; the smallest
+  border wins, near-ties (2 %) broken by block balance. In nested
+  (NDBBD) mode the per-chain-block interface column counts as border —
+  it is the local border the interface solve pays for. Sets coupled by
+  cross-element sums (market clearing over regions, adjacency-matrix
+  sums over spatial grids) price themselves out through the measured
+  border rather than through any name- or qualifier-based rule.
+
+The probe costs one equation-section scan per candidate, runs once
+before the ordering, and is skipped entirely when the transitional
+flags below resolve the dimensions explicitly. The full candidate table
+(set, blocks, border, min/max block, viable) is logged at verbosity 1
+and recorded in `stats.json` under `partition_auto`, with
+`chain_source`/`partition_source` saying how each dimension was
+resolved — the structural evidence for future matrix-method selection
+(a `-solmed NoSol` run yields it without solving). The scan sees
+*declared* structure only; value-aware element-level classification
+(e.g. recognising a banded adjacency coefficient as nearly
+partitionable) is roadmap 6.5/E3.
+
+`-enable_time` and `-regset <name>` remain as transitional explicit
+overrides with their historical behavior, and are slated for removal;
+`-regset auto` is accepted as an alias for omitting the flag. A named
+set that matches nothing warns and falls back to structural detection
+(DBBD/NDBBD) or runs unpartitioned (LU/SBBD). NDBBD aborts with a
+remedy when either dimension resolves to none; DBBD aborts when both
+do.
 
 The bordered solve follows [KH19] steps 1–5: LU-factor diagonal blocks in
 parallel; form interface contributions **B·V** (`vecbivi` — the paper's
@@ -484,8 +533,8 @@ method (basis of the golden-run verification, below).
 | `-solmed <name>` | `Mmid` | solution method (§5) |
 | `-step1/-step2/-step3` | 2/4/8 | Gragg step counts (all odd or all even) |
 | `-nsubints n` | 1 | shock subintervals |
-| `-regset <SET>` | — | regional set for ordering (required: LU output ordering, DBBD, NDBBD) |
-| `-enable_time` | off | time-based SBBD ordering override |
+| `-regset <SET>` | structural detection (DBBD/NDBBD) | transitional override: names the diagonal-block partition set explicitly (§6); `auto` = same as omitting; unmatched names warn and fall back to detection; LU/SBBD take no partition unless one is named; slated for removal |
+| `-enable_time` | structural detection (SBBD/DBBD/NDBBD) | transitional override: force chain ordering from the `(intertemporal)` qualifier (or `-enable_time 0` to suppress it); LU orders the chain dimension only when this is given; slated for removal |
 | `-laA/-laDi/-laD n` | 2 (teems-R: 300/500/200) | workspace sizing, % of nnz |
 | `-cntl_3 x` | — | HSL iterative-refinement threshold |
 | `-cntl_6 x` | 0 | MA50 ordering control |
@@ -507,12 +556,18 @@ teems-R populates these from `ems_solve()` arguments
 ## 12. Verification and development infrastructure
 
 - **Golden runs** (`.audit/verify.sh`, dev-machine): rebuilds from the
-  working tree in the `teems-audit` container and checks nine solves
+  working tree in the `teems-audit` container and checks 14 solves
   bit-identically against manifests anchored to the pre-refactor binary:
   GTAPv7 static LU/Johansen; GTAP-RE intertemporal LU/Mmid; GTAP-RE
   SBBD, DBBD, NDBBD at 2 ranks; three real-shock runs (2D probe, 4D,
-  swap); and a GEMPACK-orientation matrix shock (2D, both dims free).
+  swap); a GEMPACK-orientation matrix shock (2D, both dims free); and
+  four subinterval gates spanning method × ranks × nsubints × inmemory.
   Any behavior change fails the gate.
+- **Structural-detection acceptance** (`.audit/accept_structural.sh`):
+  reruns the NDBBD, DBBD (intertemporal + static) and SBBD golden
+  configurations with `-regset`/`-enable_time` removed and requires the
+  structurally detected ordering to reproduce the golden manifests
+  bit-identically.
 - **Benchmark rigs**: `.audit/bench_run.sh` (wall/RSS via `time -v`),
   `.audit/strace_run.sh` (per-file write-byte accounting), deployments
   under `.audit/bench-*` produced by teems-R scripts.

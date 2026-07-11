@@ -13,14 +13,19 @@ static char help[] = "Solves a CGE model in parallel with KSP.\n\
    sizes and per-block variable/equation counts. Written before the
    solve so failed runs still record their ordering; consumed by
    teems-R for matrix_method calibration. Fields are null when no
-   bordered ordering was built (no -enable_time/-regset). */
+   bordered ordering was built (no chain/partition dimension).
+   chain_source/partition_source say how each dimension was determined
+   ("explicit" flag, "structural" detection, or "none"); auto_json
+   carries the partition-candidate table (NULL when nothing was
+   probed). */
 static void ordering_stats_write(cmf_file_entry *iodata, int niodata, int noutdata, int nsoldata,
                                  long VecSize, offset_t nvarele, offset_t nexo,
                                  dim_t matsol, char *solmed, dim_t nesteddbbd, long mpisize, dim_t mc66,
                                  offset_t alltimeset, offset_t allregset, set_def *sets,
                                  offset_t ntime, offset_t nreg, offset_t ndblock,
                                  offset_t netcut, offset_t nintraeq,
-                                 offset_t *countvarintra1, offset_t *counteqnoadd) {
+                                 offset_t *countvarintra1, offset_t *counteqnoadd,
+                                 const char *chain_source, const char *partition_source, const char *auto_json) {
   static const char *matsol_names[] = {"LU","SBBD","DBBD","NDBBD"};
   char statspath[TABREADLINE+16];
   int i;
@@ -38,7 +43,7 @@ static void ordering_stats_write(cmf_file_entry *iodata, int niodata, int noutda
   }
   bool bordered=alltimeset>=0||allregset>=0;
   fprintf(fp,"{\n");
-  fprintf(fp,"  \"version\": 1,\n");
+  fprintf(fp,"  \"version\": 2,\n");
   fprintf(fp,"  \"vecsize\": %ld,\n",VecSize);
   fprintf(fp,"  \"nvarele\": %ld,\n",nvarele);
   fprintf(fp,"  \"nexo\": %ld,\n",nexo);
@@ -48,10 +53,13 @@ static void ordering_stats_write(cmf_file_entry *iodata, int niodata, int noutda
   fprintf(fp,"  \"mc66\": %d,\n",(int)mc66);
   fprintf(fp,"  \"mpi_size\": %ld,\n",mpisize);
   fprintf(fp,"  \"bordered\": %s,\n",bordered?"true":"false");
-  if(alltimeset>=0)fprintf(fp,"  \"time_set\": \"%s\",\n  \"ntime\": %ld,\n",sets[alltimeset].setname,ntime);
-  else fprintf(fp,"  \"time_set\": null,\n  \"ntime\": null,\n");
-  if(allregset>=0)fprintf(fp,"  \"reg_set\": \"%s\",\n  \"nreg\": %ld,\n",sets[allregset].setname,nreg);
-  else fprintf(fp,"  \"reg_set\": null,\n  \"nreg\": null,\n");
+  fprintf(fp,"  \"chain_source\": \"%s\",\n",chain_source);
+  fprintf(fp,"  \"partition_source\": \"%s\",\n",partition_source);
+  if(alltimeset>=0)fprintf(fp,"  \"chain_set\": \"%s\",\n  \"time_set\": \"%s\",\n  \"ntime\": %ld,\n",sets[alltimeset].setname,sets[alltimeset].setname,ntime);
+  else fprintf(fp,"  \"chain_set\": null,\n  \"time_set\": null,\n  \"ntime\": null,\n");
+  if(allregset>=0)fprintf(fp,"  \"partition_set\": \"%s\",\n  \"reg_set\": \"%s\",\n  \"nreg\": %ld,\n",sets[allregset].setname,sets[allregset].setname,nreg);
+  else fprintf(fp,"  \"partition_set\": null,\n  \"reg_set\": null,\n  \"nreg\": null,\n");
+  if(auto_json!=NULL)fprintf(fp,"%s",auto_json);
   fprintf(fp,"  \"ndblock\": %ld,\n",ndblock);
   if(bordered) {
     fprintf(fp,"  \"netcut\": %ld,\n",netcut);
@@ -67,6 +75,474 @@ static void ordering_stats_write(cmf_file_entry *iodata, int niodata, int noutda
   for (j=0; j<ndblock; j++)fprintf(fp,"%s%ld",j?",":"",counteqnoadd[j]);
   fprintf(fp,"]\n}\n");
   fclose(fp);
+}
+
+/* ====================================================================
+   Structural partition detection
+
+   The bordered orderings need two inputs: the chain dimension (the set
+   whose elements the equations couple through lead/lag index offsets;
+   conventionally time) and the diagonal-block partition set
+   (conventionally regions). Neither is a property of a set's name or
+   declaration: both follow from how the system of equations references
+   each set, so the routines below derive them from the equations. The
+   explicit -enable_time/-regset flags remain as transitional overrides
+   with their historical behavior and are slated for removal.
+   ==================================================================== */
+
+/* Mark intsup on every set nested inside a qualified chain set, so the
+   ordering can map subset elements onto chain-block positions. Extracted
+   verbatim from the inline marking (both the explicit-flag path and the
+   structural path must produce identical maps). */
+static void chain_flags_apply(set_def *sets, dim_t nset) {
+  offset_t i,j;
+  for(i=0; i<nset; i++) {
+    for(j=1; j<MAXSUPSET; j++) {
+      if(sets[i].subsetid[j]>-1) {
+        if(sets[sets[i].subsetid[j]].intertemp) {
+          sets[i].intsup=j;
+          break;
+        }
+      }
+      else break;
+    }
+  }
+}
+
+/* Mark the chosen partition set and every set nested inside it
+   (regsup gives the superset slot whose element positions index the
+   diagonal blocks). Extracted verbatim from the inline marking. */
+static void partition_flags_apply(set_def *sets, dim_t nset, offset_t partset) {
+  offset_t i,j;
+  sets[partset].regional=true;
+  for(i=0; i<nset; i++) {
+    for(j=1; j<MAXSUPSET; j++) {
+      if(sets[i].subsetid[j]>-1) {
+        if(sets[sets[i].subsetid[j]].regional) {
+          sets[i].regional=true;
+          sets[i].regsup=j;
+          break;
+        }
+      }
+      else break;
+    }
+  }
+}
+
+/* Reset the partition marks between probe candidates (regional/regsup
+   are zero from calloc until a partition is applied). */
+static void partition_flags_clear(set_def *sets, dim_t nset) {
+  offset_t i;
+  for(i=0; i<nset; i++) {
+    sets[i].regional=false;
+    sets[i].regsup=0;
+  }
+}
+
+/* First ordering pass, shared by the live ordering below and the
+   partition probe: count the endogenous variable elements that fall
+   inside each diagonal block under the current chain/partition marks
+   (border variables and exogenous elements excluded). countvar must be
+   zeroed, length ndblock. Extracted verbatim from the three inline
+   counting passes. */
+static void block_var_count(array_def *vars, offset_t nvar, set_def *sets, set_element *set_elems,
+                            closure_entry *closure_vals, bool *var_inter,
+                            dim_t *orderintra, dim_t *orderreg,
+                            offset_t alltimeset, offset_t allregset, offset_t nreg, dim_t nesteddbbd,
+                            offset_t *countvar) {
+  offset_t i,j,j0,j1,j2,j4;
+  offset_t j3=0;
+  if(nesteddbbd==1) {
+    for (i=0; i<nvar; i++) {
+      for (j=0; j<vars[i].nelem; j++) {
+        if(!closure_vals[j3+j].is_exogenous) {
+          if(!var_inter[i]) {
+            j0=j;
+            j2=-1;
+            for(j1=0; j1<orderintra[i]+1; j1++) {
+              j2=j0/vars[i].strides[j1];
+              j0-=j2*vars[i].strides[j1];
+            }
+            j0=j;
+            j4=-1;
+            for(j1=0; j1<orderreg[i]+1; j1++) {
+              j4=j0/vars[i].strides[j1];
+              j0-=j4*vars[i].strides[j1];
+            }
+            if(j4>-1)if(sets[vars[i].setid[orderreg[i]]].regsup>0)j4=set_elems[sets[vars[i].setid[orderreg[i]]].offset+j4].superset_pos[sets[vars[i].setid[orderreg[i]]].regsup];
+            if(sets[vars[i].setid[orderintra[i]]].intsup>0)j2=set_elems[sets[vars[i].setid[orderintra[i]]].offset+j2].superset_pos[sets[vars[i].setid[orderintra[i]]].intsup];
+            if(orderreg[i]>-1)countvar[j2*(nreg+1)+j4]++;
+            else countvar[j2*(nreg+1)+nreg]++;
+          }
+        }
+      }
+      j3+=vars[i].nelem;
+    }
+  }
+  else if(alltimeset>=0) {
+    for (i=0; i<nvar; i++) {
+      for (j=0; j<vars[i].nelem; j++) {
+        if(!closure_vals[j3+j].is_exogenous) {
+          if(!var_inter[i]) {
+            j0=j;
+            j2=-1;
+            for(j1=0; j1<orderintra[i]+1; j1++) {
+              j2=j0/vars[i].strides[j1];
+              j0-=j2*vars[i].strides[j1];
+            }
+            if(allregset>=0) {
+              j0=j;
+              j4=-1;
+              for(j1=0; j1<orderreg[i]+1; j1++) {
+                j4=j0/vars[i].strides[j1];
+                j0-=j4*vars[i].strides[j1];
+              }
+              if(sets[vars[i].setid[orderreg[i]]].regsup>0)j4=set_elems[sets[vars[i].setid[orderreg[i]]].offset+j4].superset_pos[sets[vars[i].setid[orderreg[i]]].regsup];
+              countvar[j2*nreg+j4]++;
+            }
+            else {
+              countvar[j2]++;
+            }
+          }
+        }
+      }
+      j3+=vars[i].nelem;
+    }
+  }
+  else if(allregset>=0) {
+    for (i=0; i<nvar; i++) {
+      for (j=0; j<vars[i].nelem; j++) {
+        if(!closure_vals[j3+j].is_exogenous) {
+          if(!var_inter[i]) {
+            j0=j;
+            j4=-1;
+            for(j1=0; j1<orderreg[i]+1; j1++) {
+              j4=j0/vars[i].strides[j1];
+              j0-=j4*vars[i].strides[j1];
+            }
+            if(sets[vars[i].setid[orderreg[i]]].regsup>0)j4=set_elems[sets[vars[i].setid[orderreg[i]]].offset+j4].superset_pos[sets[vars[i].setid[orderreg[i]]].regsup];
+            countvar[j4]++;
+          }
+        }
+      }
+      j3+=vars[i].nelem;
+    }
+  }
+}
+
+/* Structural chain scan: walk the equation statements and count, per
+   declared dimension set, the variable references carrying a lead/lag
+   index offset (x{t+1} after normalization/encoding). The offsets ARE
+   the chain structure; the (intertemporal) qualifier only licenses the
+   syntax and is cross-checked by the caller. Statement preprocessing
+   and reference matching mirror equation_order_read. */
+static int chain_refs_scan(char *fname, set_def *sets, dim_t nset, array_def *coefs, offset_t ncof,
+                           array_def *vars, offset_t nvar, elem_value *elem_vals,
+                           offset_t *refcount) {
+  FILE *filehandle;
+  char line[TABREADLINE],linecopy[TABREADLINE],idxlist[TABREADLINE],vname[TABREADLINE];
+  char commsyntax[NAMESIZE];
+  char *readitem=NULL,*p=NULL,*pend=NULL,*tok=NULL;
+  solve_real zerodivide=0;
+  dim_t fdim,i4;
+  offset_t l;
+  int i,np,varindx1,varindx2,leadlag;
+  strcpy(commsyntax,"equation");
+  filehandle=fopen(fname,"r");
+  if(filehandle==NULL)return 0;
+  while (tab_next_statement_resolved(commsyntax,filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
+    if (strstr(line,"(default")!=NULL)continue;
+    str_replace_first(line, commsyntax, "");
+    str_replace_first(line, "(linear)", "");
+    while (str_replace_all(line,"  ", " "));
+    while (str_replace_char(line, '[', '('));
+    while (str_replace_char(line, ']', ')'));
+    strcpy(linecopy,line);
+    fdim=str_count_ci(line, "(all,");
+    if (fdim==0) {
+      readitem = strtok(line+1," ");
+      readitem = strtok(NULL,"=");
+      strcpy(vname,readitem);
+      strcpy(line,linecopy);
+      readitem = strtok(line,"=");
+      readitem = strtok(NULL,";");
+      strcat(readitem,"-");
+      strcat(readitem,"(");
+      strcat(readitem,vname);
+      strcat(readitem,")");
+    }
+    else {
+      readitem = strtok(line+1,"(");
+      strcpy(line,linecopy);
+      i=str_rfind_ci(line, "(all,");
+      readitem=line+i;
+      readitem = strtok(readitem,")");
+      readitem = strtok(NULL,"=");
+      strcpy(vname,readitem);
+      strcpy(line,linecopy);
+      readitem = strtok(line,"=");
+      readitem = strtok(NULL,";");
+      strcat(readitem,"-");
+      strcat(readitem,"(");
+      strcat(readitem,vname);
+      strcat(readitem,")");
+    }
+    while (str_replace_all(readitem," ", ""));
+    while (formula_normalize(readitem)==1);
+    leadlag_encode(readitem);
+    np=str_count_ci(readitem,"p_");
+    for (i=0; i<np; i++) {
+      varindx2=0;
+      while(-1<0) {
+        varindx1=str_find_ci(readitem+varindx2,"p_");
+        if(varindx1==-1) break;
+        varindx2=varindx2+varindx1;
+        if(varindx2==0||readitem[varindx2-1]=='*'||readitem[varindx2-1]=='+'||readitem[varindx2-1]=='-'||readitem[varindx2-1]=='('||readitem[varindx2-1]==',') break;
+        else varindx2++;
+      }
+      if(varindx1==-1) break;
+      readitem=readitem+varindx2+2;
+      p=strpbrk(readitem,"{+*-/^)");
+      if(p==NULL||*p!='{')continue;/* reference without indices */
+      strncpy(vname,readitem,p-readitem);
+      vname[p-readitem]='\0';
+      for (l=0; l<nvar; l++) {
+        if (strcmp(vars[l].cofname,vname)==0)break;
+      }
+      if(l==nvar)continue;
+      pend=strchr(p,'}');
+      if(pend==NULL)continue;
+      strncpy(idxlist,p+1,pend-p-1);
+      idxlist[pend-p-1]='\0';
+      i4=0;
+      tok=strtok(idxlist,",");
+      while(tok!=NULL&&i4<vars[l].size) {
+        leadlag=0;
+        parse_index_leadlag(tok,&leadlag);
+        if(leadlag!=0)refcount[vars[l].setid[i4]]++;
+        i4++;
+        tok=strtok(NULL,",");
+      }
+    }
+  }
+  fclose(filehandle);
+  return 1;
+}
+
+/* Aggregate the per-dimension lead/lag reference counts onto top-level
+   sets and pick the chain dimension (most-referenced top-level set; -1
+   when the equations use no offsets). The (intertemporal) qualifier is
+   cross-checked and mismatches reported; structure decides. */
+static offset_t chain_set_select(set_def *sets, dim_t nset, offset_t *refcount, PetscInt rank) {
+  offset_t i,top,chain=-1,nchain=0;
+  offset_t j;
+  offset_t *topcount=(offset_t *) calloc (nset,sizeof(offset_t));
+  for(i=0; i<nset; i++) {
+    if(refcount[i]==0)continue;
+    top=i;
+    if(sets[i].subsetid[1]!=-1) {
+      for(j=1; j<MAXSUPSET; j++) {
+        if(sets[i].subsetid[j]==-1)break;
+        if(sets[sets[i].subsetid[j]].subsetid[1]==-1) {
+          top=sets[i].subsetid[j];
+          break;
+        }
+      }
+    }
+    topcount[top]+=refcount[i];
+  }
+  for(i=0; i<nset; i++) {
+    if(topcount[i]>0) {
+      nchain++;
+      if(chain<0||topcount[i]>topcount[chain])chain=i;
+    }
+  }
+  if(rank==0) {
+    if(nchain>1) {
+      printf("Warning: lead/lag references span %ld top-level sets (",nchain);
+      for(i=0; i<nset; i++)if(topcount[i]>0)printf(" %s:%ld",sets[i].setname,topcount[i]);
+      printf(" ); using %s as the chain dimension, the others are ordered as ordinary sets\n",sets[chain].setname);
+    }
+    if(chain>=0&&!sets[chain].intertemp)
+      printf("Warning: equations apply lead/lag offsets to set %s, which lacks the (intertemporal) qualifier\n",sets[chain].setname);
+    if(chain<0) {
+      i=set_find_alltime(sets,nset);
+      if(i>=0)logmsg(1,"Set %s is declared (intertemporal) but no equation uses lead/lag offsets; no chain ordering applied\n",sets[i].setname);
+    }
+    if(chain>=0)logmsg(1,"Chain dimension detected structurally: set %s (size %d), %ld lead/lag references\n",sets[chain].setname,sets[chain].size,topcount[chain]);
+  }
+  free(topcount);
+  return chain;
+}
+
+/* Probe one candidate partition set: apply its marks, run the
+   pre-Jacobian ordering scan and the first counting pass, and report
+   the border size and per-block extremes that partition would produce.
+   Everything touched is restored or freed; the run itself is
+   unchanged. In nested mode the per-chain-block interface column is
+   excluded from the block extremes (it is not a parallel block). */
+static int partition_probe(char *tabfile, set_def *sets, dim_t nset, set_element *set_elems,
+                           array_def *coefs, offset_t ncof, array_def *vars, offset_t nvar,
+                           elem_value *elem_vals, offset_t ncofele, offset_t nvarele,
+                           closure_entry *closure_vals, offset_t neq, offset_t VecSize,
+                           offset_t alltimeset, offset_t ntime, dim_t nesteddbbd, offset_t cand,
+                           offset_t *netcut_out, offset_t *nblocks_out, offset_t *blkmin_out, offset_t *blkmax_out) {
+  char commsyntax[NAMESIZE];
+  offset_t i,nreg,ndblock,total,bmin,bmax;
+  strcpy(commsyntax,"equation");
+  nreg=sets[cand].size;
+  if(nesteddbbd==1)ndblock=ntime*(nreg+1);
+  else if(alltimeset>=0)ndblock=ntime*nreg;
+  else ndblock=nreg;
+  bool *var_inter=(bool *) calloc (nvar,sizeof(bool));
+  dim_t *orderintra=(dim_t *) malloc (nvar*sizeof(dim_t));
+  dim_t *orderreg=(dim_t *) malloc (nvar*sizeof(dim_t));
+  for(i=0; i<nvar; i++) {
+    orderintra[i]=-1;
+    orderreg[i]=-1;
+  }
+  array_def *eq_defs=(array_def *) calloc (neq,sizeof(array_def));
+  bool *eq_intertemp=(bool *) calloc (neq,sizeof(bool));
+  dim_t *eq_time=(dim_t *) malloc (neq*sizeof(dim_t));
+  dim_t *eq_reg=(dim_t *) malloc (neq*sizeof(dim_t));
+  for(i=0; i<neq; i++) {
+    eq_time[i]=-1;
+    eq_reg[i]=-1;
+  }
+  offset_t *countvar=(offset_t *) calloc (ndblock,sizeof(offset_t));
+  partition_flags_apply(sets,nset,cand);
+  if(nesteddbbd==1)equation_order_read_nested(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,closure_vals,var_inter,eq_defs,eq_intertemp,eq_time,eq_reg,cand,alltimeset,orderintra,orderreg);
+  else equation_order_read(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,closure_vals,var_inter,eq_defs,eq_intertemp,eq_time,eq_reg,cand,alltimeset,orderintra,orderreg);
+  block_var_count(vars,nvar,sets,set_elems,closure_vals,var_inter,orderintra,orderreg,alltimeset,cand,nreg,nesteddbbd,countvar);
+  partition_flags_clear(sets,nset);
+  total=0;
+  bmin=-1;
+  bmax=0;
+  for(i=0; i<ndblock; i++) {
+    /* in nested mode the per-chain-block interface column is the local
+       border the interface solve pays for — score it as border, not as
+       an intra block */
+    if(nesteddbbd==1&&i%(nreg+1)==nreg)continue;
+    total+=countvar[i];
+    if(bmin<0||countvar[i]<bmin)bmin=countvar[i];
+    if(countvar[i]>bmax)bmax=countvar[i];
+  }
+  *netcut_out=VecSize-total;
+  *nblocks_out=ndblock;
+  *blkmin_out=bmin<0?0:bmin;
+  *blkmax_out=bmax;
+  free(var_inter);
+  free(orderintra);
+  free(orderreg);
+  free(eq_defs);
+  free(eq_intertemp);
+  free(eq_time);
+  free(eq_reg);
+  free(countvar);
+  return 1;
+}
+
+/* Structural partition selection: probe every candidate set (two or
+   more elements, outside the chain family, indexing at least one
+   variable dimension directly or through a subset) and choose the one
+   with the smallest border, breaking near-ties (2%) by block balance.
+   A candidate is viable when it yields at least n_tasks blocks, a
+   border below half the system, and no empty block. Returns the set id
+   or -1 when no candidate is viable. Deterministic integer arithmetic
+   throughout, so every rank reaches the same answer independently.
+   *auto_json receives the stats.json candidate table (malloc'd; caller
+   frees). */
+static offset_t partition_auto_select(char *tabfile, set_def *sets, dim_t nset, set_element *set_elems,
+                                      array_def *coefs, offset_t ncof, array_def *vars, offset_t nvar,
+                                      elem_value *elem_vals, offset_t ncofele, offset_t nvarele,
+                                      closure_entry *closure_vals, offset_t neq, offset_t VecSize,
+                                      offset_t alltimeset, offset_t ntime, dim_t nesteddbbd,
+                                      long mpisize, PetscInt rank, char **auto_json) {
+  offset_t i,s,d,chosen=-1,bestcut=-1,ncand=0;
+  offset_t j;
+  bool *isdim=(bool *) calloc (nset,sizeof(bool));
+  bool *iscand=(bool *) calloc (nset,sizeof(bool));
+  bool *viable=(bool *) calloc (nset,sizeof(bool));
+  offset_t *cnetcut=(offset_t *) calloc (nset,sizeof(offset_t));
+  offset_t *cnblocks=(offset_t *) calloc (nset,sizeof(offset_t));
+  offset_t *cmin=(offset_t *) calloc (nset,sizeof(offset_t));
+  offset_t *cmax=(offset_t *) calloc (nset,sizeof(offset_t));
+  for(i=0; i<nvar; i++)for(d=0; d<vars[i].size; d++)isdim[vars[i].setid[d]]=true;
+  for(s=0; s<nset; s++) {
+    if(sets[s].size<2)continue;
+    if(sets[s].intertemp)continue;/* chain-family syntax carrier */
+    if(alltimeset>=0) {
+      if(s==alltimeset)continue;
+      for(j=1; j<MAXSUPSET; j++) {
+        if(sets[s].subsetid[j]==-1)break;
+        if(sets[s].subsetid[j]==alltimeset)break;
+      }
+      if(j<MAXSUPSET&&sets[s].subsetid[j]==alltimeset)continue;/* nested in the chain set */
+    }
+    if(!isdim[s]) {/* usable when some variable dimension maps into s */
+      for(d=0; d<nset; d++) {
+        if(!isdim[d])continue;
+        for(j=1; j<MAXSUPSET; j++) {
+          if(sets[d].subsetid[j]==-1)break;
+          if(sets[d].subsetid[j]==s)break;
+        }
+        if(j<MAXSUPSET&&sets[d].subsetid[j]==s)break;
+      }
+      if(d==nset)continue;
+    }
+    iscand[s]=true;
+    ncand++;
+  }
+  if(rank==0)logmsg(1,"Partition detection: probing %ld candidate sets against the equation structure\n",ncand);
+  for(s=0; s<nset; s++) {
+    if(!iscand[s])continue;
+    partition_probe(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele,nvarele,closure_vals,neq,VecSize,alltimeset,ntime,nesteddbbd,s,&cnetcut[s],&cnblocks[s],&cmin[s],&cmax[s]);
+    viable[s]=cnblocks[s]>=mpisize&&2*cnetcut[s]<VecSize&&cmin[s]>0;
+    if(rank==0)logmsg(1,"  %-14s blocks %6ld  border %8ld (%5.1f%%)  block min/max %ld/%ld  %s\n",
+                        sets[s].setname,cnblocks[s],cnetcut[s],VecSize>0?100.0*cnetcut[s]/VecSize:0.0,
+                        cmin[s],cmax[s],viable[s]?"viable":"not viable");
+  }
+  for(s=0; s<nset; s++) {
+    if(!viable[s])continue;
+    if(bestcut<0||cnetcut[s]<bestcut)bestcut=cnetcut[s];
+  }
+  for(s=0; s<nset; s++) {
+    if(!viable[s])continue;
+    if(50*cnetcut[s]>51*bestcut)continue;/* outside the 2% near-tie band */
+    if(chosen<0)chosen=s;
+    else if(cmin[s]*cmax[chosen]>cmin[chosen]*cmax[s])chosen=s;/* better balance */
+  }
+  if(rank==0) {
+    if(chosen>=0)logmsg(1,"Partition detection: selected set %s (%ld blocks, border %.1f%% of system)\n",
+                          sets[chosen].setname,cnblocks[chosen],VecSize>0?100.0*cnetcut[chosen]/VecSize:0.0);
+    else if(ncand>0)logmsg(1,"Partition detection: no viable candidate (need >=%ld nonempty blocks and a border below half the system)\n",mpisize);
+    else logmsg(1,"Partition detection: no candidate sets to probe\n");
+  }
+  {
+    size_t cap=256+(size_t)ncand*256;
+    char *js=(char *) malloc (cap);
+    size_t off=0;
+    off+=snprintf(js+off,cap-off,"  \"partition_auto\": {\n    \"candidates\": [");
+    j=0;
+    for(s=0; s<nset; s++) {
+      if(!iscand[s])continue;
+      off+=snprintf(js+off,cap-off,"%s\n      {\"set\": \"%s\", \"size\": %d, \"nblocks\": %ld, \"netcut\": %ld, \"block_min\": %ld, \"block_max\": %ld, \"viable\": %s}",
+                    j?",":"",sets[s].setname,sets[s].size,cnblocks[s],cnetcut[s],cmin[s],cmax[s],viable[s]?"true":"false");
+      j++;
+      if(off>=cap-256)break;
+    }
+    if(chosen>=0)off+=snprintf(js+off,cap-off,"\n    ],\n    \"chosen\": \"%s\"\n  },\n",sets[chosen].setname);
+    else off+=snprintf(js+off,cap-off,"\n    ],\n    \"chosen\": null\n  },\n");
+    *auto_json=js;
+  }
+  free(isdim);
+  free(iscand);
+  free(viable);
+  free(cnetcut);
+  free(cnblocks);
+  free(cmin);
+  free(cmax);
+  return chosen;
 }
 
 #undef __FUNCT__
@@ -306,12 +782,14 @@ int main(int argc,char **args) {
   if (!flg) {
     strcpy(filename,"./reg.cmf");//orani03.cmf");
   }
-  PetscOptionsGetBool(PETSC_NULLPTR,NULL, "-enable_time", &sbbd_overuser,PETSC_NULLPTR);/* Overrid MC66 ordering */
+  PetscBool enable_time_given=PETSC_FALSE;
+  PetscOptionsGetBool(PETSC_NULLPTR,NULL, "-enable_time", &sbbd_overuser,&enable_time_given);/* transitional override: absent, the chain dimension is detected from the equations */
   regset[0]='\0';
   PetscOptionsGetString(NULL,NULL,"-regset",regset,NAMESIZE,&flg);
   if(regset[0]!='\0')for(i=0; i<NAMESIZE; i++) {
       regset[i]=tolower((int)regset[i]);
     }
+  if(strcmp(regset,"auto")==0)regset[0]='\0';/* transitional alias: same as absent, structural detection */
   PetscOptionsGetString(NULL,NULL,"-solmed",solmed,NAMESIZE,&flg);
   if (!flg) {
     strcpy(solmed,"Mmid");//orani03.cmf");
@@ -382,7 +860,8 @@ int main(int argc,char **args) {
           break;
         }
     if(regset[0]!='\0'&&allregset<0)
-      printf("Warning: -regset %s matches no set in the TAB file; continuing without a regional partition.\n",regset);
+      printf("Warning: -regset %s matches no set in the TAB file; %s.\n",regset,
+             (matsol==MM_DBBD||matsol==MM_NDBBD)?"falling back to structural partition detection":"continuing without a partition");
   }
   if(nohsl) {
     MPI_Bcast(sets,nset*sizeof(set_def), MPI_BYTE,0, PETSC_COMM_WORLD);
@@ -480,34 +959,8 @@ int main(int argc,char **args) {
         ntime=ndblock;
       }
     }
-    if(allregset>=0) {
-      sets[allregset].regional=true;
-      for(i=0; i<nset; i++) {
-        for(j=1; j<MAXSUPSET; j++) {
-          if(sets[i].subsetid[j]>-1) {
-            if(sets[sets[i].subsetid[j]].regional) {
-              sets[i].regional=true;
-              sets[i].regsup=j;
-              break;
-            }
-          }
-          else break;
-        }
-      }
-    }
-    if(alltimeset>=0) {
-      for(i=0; i<nset; i++) {
-        for(j=1; j<MAXSUPSET; j++) {
-          if(sets[i].subsetid[j]>-1) {
-            if(sets[sets[i].subsetid[j]].intertemp) {
-              sets[i].intsup=j;
-              break;
-            }
-          }
-          else break;
-        }
-      }
-    }
+    if(allregset>=0)partition_flags_apply(sets,nset,allregset);
+    if(alltimeset>=0)chain_flags_apply(sets,nset);
     ndblock1=ndblock;
     logmsg(2,"rank %d alltime set %ld allreg %ld size %ld\n",rank,alltimeset,allregset,ndblock);
   }
@@ -521,21 +974,27 @@ int main(int argc,char **args) {
     MPI_Bcast(&ntime,sizeof(offset_t), MPI_BYTE,0, PETSC_COMM_WORLD);
     MPI_Bcast(&nreg,sizeof(offset_t), MPI_BYTE,0, PETSC_COMM_WORLD);
   }
-  /* NDBBD partitions the system time-block x regional-block; without
-     both partition sets the ordering below indexes with ntime/nreg = 0
-     and dies in a bare MPI abort. Fail here with the remedy instead
-     (alltimeset/allregset were broadcast above, so every rank takes
-     this branch together). */
-  if(matsol==MM_NDBBD&&(alltimeset<0||allregset<0)) {
+  /* Structural detection is pending for whatever the transitional
+     -enable_time/-regset flags did not resolve explicitly; it runs
+     just before the ordering, once the equations are readable. Only
+     the bordered methods consume these dimensions. */
+  bool structural_time=(!enable_time_given)&&(matsol==MM_SBBD||matsol==MM_DBBD||matsol==MM_NDBBD);
+  bool structural_reg=(matsol==MM_DBBD||matsol==MM_NDBBD)&&allregset<0;
+  /* NDBBD partitions the system chain-block x partition-block; without
+     both dimensions the ordering below indexes with ntime/nreg = 0 and
+     dies in a bare MPI abort. Fail here with the remedy instead when
+     nothing is pending (alltimeset/allregset were broadcast above, so
+     every rank takes this branch together); the check is repeated
+     after structural detection otherwise. */
+  if(matsol==MM_NDBBD&&!structural_time&&!structural_reg&&(alltimeset<0||allregset<0)) {
     if(rank==0) {
-      if(allregset<0)printf("Error: NDBBD (-matsol 3) requires -regset <name> naming the TAB set that partitions the regional blocks%s.\n",
+      if(allregset<0)printf("Error: NDBBD (-matsol 3) requires a diagonal-block partition set%s.\n",
                             regset[0]!='\0'?" (the -regset given matched no set in the TAB file)":"");
-      if(alltimeset<0)printf("Error: NDBBD (-matsol 3) requires -enable_time and an (intertemporal) set in the TAB file.\n");
+      if(alltimeset<0)printf("Error: NDBBD (-matsol 3) requires a chain (intertemporal) set in the TAB file.\n");
     }
     PetscFinalize();
     return 1;
   }
-  if(nesteddbbd==1)ndbbddrank1=(PetscInt *) calloc(ntime,sizeof(PetscInt));
   ndblock=ndblock1;
   logmsg(2,"rank %d ndblock %ld allreg %ld\n",rank,ndblock,allregset);
 
@@ -741,6 +1200,61 @@ int main(int argc,char **args) {
   if(rank==rank_hsl) {
     logmsg(2,"neq %ld\n",neq);
   }
+  /* ---------------- structural partition resolution ----------------
+     Derive whatever the transitional flags left unresolved from the
+     equation system itself: the chain dimension from the lead/lag
+     offsets the equations actually use, and the diagonal-block
+     partition from probing every structurally eligible set. Runs on
+     every rank that performs the ordering (all ranks under nohsl,
+     rank 0 under HSL) as pure integer analysis of identical data, so
+     all ranks reach the same result without communication. */
+  const char *chain_source="none",*partition_source="none";
+  char *partition_auto_json=NULL;
+  if(alltimeset>=0)chain_source="explicit";
+  if(allregset>=0)partition_source="explicit";
+  if((structural_time||structural_reg)&&rank==rank_hsl) {
+    if(structural_time) {
+      offset_t *chainrefs=(offset_t *) calloc (nset,sizeof(offset_t));
+      chain_refs_scan(tabfile,sets,nset,coefs,ncof,vars,nvar,elem_vals,chainrefs);
+      alltimeset=chain_set_select(sets,nset,chainrefs,rank);
+      free(chainrefs);
+      if(alltimeset>=0) {
+        chain_flags_apply(sets,nset);
+        chain_source="structural";
+      }
+    }
+    if(alltimeset>=0)ntime=sets[alltimeset].size;
+    if(structural_reg) {
+      allregset=partition_auto_select(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele,nvarele,closure_vals,neq,(offset_t)VecSize,alltimeset,ntime,nesteddbbd,(long)mpisize,rank,&partition_auto_json);
+      if(allregset>=0) {
+        partition_flags_apply(sets,nset,allregset);
+        partition_source="structural";
+      }
+    }
+    if(allregset>=0)nreg=sets[allregset].size;
+    /* rebuild the block geometry from the resolved dimensions */
+    if(alltimeset>=0&&allregset>=0) {
+      if(nesteddbbd==1)ndblock=ntime*(nreg+1);
+      else ndblock=ntime*nreg;
+    }
+    else if(alltimeset>=0)ndblock=ntime;
+    else if(allregset>=0)ndblock=nreg;
+    ndblock1=ndblock;
+  }
+  if((structural_time||structural_reg)&&matsol==MM_NDBBD&&(alltimeset<0||allregset<0)) {
+    if(rank==0) {
+      if(alltimeset<0)printf("Error: NDBBD (-matsol 3) needs a chain dimension, but no equation couples set elements through lead/lag offsets.\n");
+      if(allregset<0)printf("Error: NDBBD (-matsol 3) needs a diagonal-block partition and no viable set was detected (see the candidate table above); pass -regset <name> to force one or choose another -matsol.\n");
+    }
+    PetscFinalize();
+    return 1;
+  }
+  if(structural_reg&&matsol==MM_DBBD&&alltimeset<0&&allregset<0) {
+    if(rank==0)printf("Error: DBBD (-matsol 2) needs a diagonal-block partition and no viable set was detected (see the candidate table above); pass -regset <name> to force one or use -matsol 0 (LU).\n");
+    PetscFinalize();
+    return 1;
+  }
+  if(nesteddbbd==1)ndbbddrank1=(PetscInt *) calloc(ntime,sizeof(PetscInt));
   offset_t *countvarintra1= (offset_t *) calloc (ndblock+1,sizeof(offset_t));
   array_def *eq_defs= (array_def *) calloc (neq,sizeof(array_def));//recycle ha_cgeset
   bool *eq_intertemp= (bool *) calloc (neq,sizeof(bool));//recycle ha_cgeset
@@ -765,32 +1279,7 @@ int main(int argc,char **args) {
   switch (nesteddbbd) {
   case 1 : ;/* missing partition sets already abort above (NDBBD requires both) */
     offset_t *countvarintra= (offset_t *) calloc (ndblock,sizeof(offset_t));
-    j3=0;
-    for (i=0; i<nvar; i++) {
-      for (j=0; j<vars[i].nelem; j++) {
-        if(!closure_vals[j3+j].is_exogenous) {
-          if(!var_inter[i]) {
-            j0=j;
-            j2=-1;
-            for(j1=0; j1<orderintra[i]+1; j1++) {
-              j2=j0/vars[i].strides[j1];
-              j0-=j2*vars[i].strides[j1];
-            }
-            j0=j;
-            j4=-1;
-            for(j1=0; j1<orderreg[i]+1; j1++) {
-              j4=j0/vars[i].strides[j1];
-              j0-=j4*vars[i].strides[j1];
-            }
-            if(j4>-1)if(sets[vars[i].setid[orderreg[i]]].regsup>0)j4=set_elems[sets[vars[i].setid[orderreg[i]]].offset+j4].superset_pos[sets[vars[i].setid[orderreg[i]]].regsup];
-            if(sets[vars[i].setid[orderintra[i]]].intsup>0)j2=set_elems[sets[vars[i].setid[orderintra[i]]].offset+j2].superset_pos[sets[vars[i].setid[orderintra[i]]].intsup];
-            if(orderreg[i]>-1)countvarintra[j2*(nreg+1)+j4]++;
-            else countvarintra[j2*(nreg+1)+nreg]++;
-          }
-        }
-      }
-      j3+=vars[i].nelem;
-    }
+    block_var_count(vars,nvar,sets,set_elems,closure_vals,var_inter,orderintra,orderreg,alltimeset,allregset,nreg,nesteddbbd,countvarintra);
     if(rank==rank_hsl) {
       j2=countvarintra[0];
       countvarintra[0]=0;
@@ -860,33 +1349,7 @@ int main(int argc,char **args) {
   default :
     if(alltimeset>=0) {
       offset_t *countvarintra= (offset_t *) calloc (ndblock,sizeof(offset_t));
-      j3=0;
-      for (i=0; i<nvar; i++) {
-        for (j=0; j<vars[i].nelem; j++) {
-          if(!closure_vals[j3+j].is_exogenous) {
-            if(!var_inter[i]) {
-              j0=j;
-              for(j1=0; j1<orderintra[i]+1; j1++) {
-                j2=j0/vars[i].strides[j1];
-                j0-=j2*vars[i].strides[j1];
-              }
-              if(allregset>=0) {
-                j0=j;
-                for(j1=0; j1<orderreg[i]+1; j1++) {
-                  j4=j0/vars[i].strides[j1];
-                  j0-=j4*vars[i].strides[j1];
-                }
-                if(sets[vars[i].setid[orderreg[i]]].regsup>0)j4=set_elems[sets[vars[i].setid[orderreg[i]]].offset+j4].superset_pos[sets[vars[i].setid[orderreg[i]]].regsup];
-                countvarintra[j2*nreg+j4]++;
-              }
-              else {
-                countvarintra[j2]++;
-              }
-            }
-          }
-        }
-        j3+=vars[i].nelem;
-      }
+      block_var_count(vars,nvar,sets,set_elems,closure_vals,var_inter,orderintra,orderreg,alltimeset,allregset,nreg,nesteddbbd,countvarintra);
       if(rank==rank_hsl) {
         j2=countvarintra[0];
         countvarintra[0]=0;
@@ -952,23 +1415,7 @@ int main(int argc,char **args) {
     else {
       if(allregset>=0) {
         offset_t *countvarintra= (offset_t *) calloc (ndblock,sizeof(offset_t));
-        j3=0;
-        for (i=0; i<nvar; i++) {
-          for (j=0; j<vars[i].nelem; j++) {
-            if(!closure_vals[j3+j].is_exogenous) {
-              if(!var_inter[i]) {
-                j0=j;
-                for(j1=0; j1<orderreg[i]+1; j1++) {
-                  j4=j0/vars[i].strides[j1];
-                  j0-=j4*vars[i].strides[j1];
-                }
-                if(sets[vars[i].setid[orderreg[i]]].regsup>0)j4=set_elems[sets[vars[i].setid[orderreg[i]]].offset+j4].superset_pos[sets[vars[i].setid[orderreg[i]]].regsup];
-                countvarintra[j4]++;
-              }
-            }
-          }
-          j3+=vars[i].nelem;
-        }
+        block_var_count(vars,nvar,sets,set_elems,closure_vals,var_inter,orderintra,orderreg,alltimeset,allregset,nreg,nesteddbbd,countvarintra);
         if(rank==rank_hsl) {
           j2=countvarintra[0];
           countvarintra[0]=0;
@@ -1215,7 +1662,11 @@ int main(int argc,char **args) {
   }
   /* rank 0 always holds valid ordering data: rank_hsl==0 under HSL, and
      under nohsl every rank computes the full ordering */
-  if(rank==0)ordering_stats_write(iodata,niodata,noutdata,nsoldata,(long)VecSize,nvarele,nexo,matsol,solmed,nesteddbbd,(long)mpisize,mc66,alltimeset,allregset,sets,ntime,nreg,ndblock,netcut,nintraeq,countvarintra1,counteqnoadd);
+  if(rank==0)ordering_stats_write(iodata,niodata,noutdata,nsoldata,(long)VecSize,nvarele,nexo,matsol,solmed,nesteddbbd,(long)mpisize,mc66,alltimeset,allregset,sets,ntime,nreg,ndblock,netcut,nintraeq,countvarintra1,counteqnoadd,chain_source,partition_source,partition_auto_json);
+  if(partition_auto_json!=NULL) {
+    free(partition_auto_json);
+    partition_auto_json=NULL;
+  }
   free(eq_defs);
   free(eq_time_offsets);
   free(eq_reg_offsets);
@@ -1275,11 +1726,8 @@ int main(int argc,char **args) {
   if(rank==rank_hsl) {
     jacobian_preallocate(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,nexo,closure_vals,ndblock,alltimeset,allregset,eq_intertemp,eq_addr,eq_time,eq_reg,counteq,nintraeq,&sbbd_overrid,Istart,Iend,&dnz,dnnz,&onz,onnz,&dnzB,dnnzB,&onzB,onnzB,nesteddbbd);
   }
-  if(sbbd_overrid&&!sbbd_overuser) {
-    printf("Warning: the model appears intertemporal; pass -enable_time to use the bordered ordering\n");
-  }
-  if(sbbd_overuser) {
-    sbbd_overrid=false;
+  if(rank==0&&sbbd_overrid&&alltimeset<0) {
+    printf("Warning: the equations reference intertemporal sets but this run's ordering ignores that structure; a bordered matrix method (-matsol 1/2/3) would detect and exploit it\n");
   }
   free(eq_intertemp);
   free(eq_time);
