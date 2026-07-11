@@ -332,7 +332,7 @@ forces `-nsubints 1`.
 | 0 `MM_LU` | serial MA48 LU | any | single rank does the factorization |
 | 1 `MM_SBBD` | singly bordered block diagonal via HSL_MP48 [HK16] | **intertemporal** | blocks by time period; MC66 ordering optional (`-withmc66`), direct ordering by default; factors held in MP48 memory (sized by `-laA/-laDi`) |
 | 2 `MM_DBBD` | doubly bordered block diagonal [KH19] | **static** (regional blocks) | C-side block factorization (MA48 kernels), factor handoff via scratch files |
-| 3 `MM_NDBBD` | nested DBBD [KH19] | **intertemporal, T ≫ R** | regional blocks nested inside time blocks; requires `-regset`; `-nesteddbbd 1` |
+| 3 `MM_NDBBD` | nested DBBD [KH19] | **intertemporal, T ≫ R** | regional blocks nested inside time blocks; requires `-regset`; nested ordering auto-enabled |
 
 Production guidance (measured, see §9): SBBD is the primary intertemporal
 method; DBBD the primary static method; NDBBD targets many-timestep,
@@ -486,7 +486,6 @@ method (basis of the golden-run verification, below).
 | `-nsubints n` | 1 | shock subintervals |
 | `-regset <SET>` | — | regional set for ordering (required: LU output ordering, DBBD, NDBBD) |
 | `-enable_time` | off | time-based SBBD ordering override |
-| `-nesteddbbd {0,1}` | 0 | nested (NDBBD) ordering |
 | `-laA/-laDi/-laD n` | 2 (teems-R: 300/500/200) | workspace sizing, % of nnz |
 | `-cntl_3 x` | — | HSL iterative-refinement threshold |
 | `-cntl_6 x` | 0 | MA50 ordering control |

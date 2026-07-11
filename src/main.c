@@ -235,7 +235,7 @@ int main(int argc,char **args) {
   if(section_threads==0)section_threads=max_threads;
   PetscOptionsGetInt(NULL,NULL,"-nsubints",&subints,NULL);
   PetscOptionsGetInt(NULL,NULL,"-nsbbdblocks",&nsbbdblocks,NULL);
-  PetscOptionsGetInt(NULL,NULL,"-nesteddbbd",&nesteddbbd,NULL);
+  nesteddbbd=(matsol==MM_NDBBD)?1:0;/* nested ordering exists only for the NDBBD solve; any other pairing is broken */
   PetscOptionsGetInt(NULL,NULL,"-nowrites",&nowrites,NULL);
   PetscOptionsGetReal(NULL,NULL,"-cntl_6",&cntl6,NULL); /* CNTL6 in Mat Order */
   PetscOptionsGetReal(NULL,NULL,"-cntl_3",&cntl3,NULL);/*Iterative threshold */
@@ -763,8 +763,7 @@ int main(int argc,char **args) {
     if(alltimeset>=0||allregset>=0)for(i=0; i<neq; i++)eq_intertemp[i]=!eq_intertemp[i];
   }
   switch (nesteddbbd) {
-  case 1 :
-    if(!(alltimeset>=0&&allregset>=0))printf("Warning: -nesteddbbd 1 but the model lacks both time and regional partition sets\n");
+  case 1 : ;/* missing partition sets already abort above (NDBBD requires both) */
     offset_t *countvarintra= (offset_t *) calloc (ndblock,sizeof(offset_t));
     j3=0;
     for (i=0; i<nvar; i++) {

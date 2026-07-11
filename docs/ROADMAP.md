@@ -138,7 +138,14 @@ began in phase 5.
   permutes accordingly. Removed `-ndbbd_bl_rank`, `-nestfile`,
   `-presol`, `csv_read_ints()`, and the dead `./ndbbd_drank.csv`
   fallback; teems-R no longer passes `-presol 1` (compatible both
-  directions — old binaries ignored the value anyway).
+  directions — old binaries ignored the value anyway). Follow-up in the
+  same sweep: `-nesteddbbd` removed too — it only ever restated
+  `-matsol 3` (teems-R derived it from `matrix_method == "NDBBD"`; a
+  mismatch in either direction was simply broken), so the solver now
+  derives `nesteddbbd = (matsol==MM_NDBBD)`. NB solver-side this one
+  is NOT ignorable by old binaries: an old solver given a new teems-R
+  command runs NDBBD un-nested — runtime images must carry a solver
+  at/after this change (teems:dev rebuilt).
 
 - NDBBD-vs-SBBD crossover at scale (medium ACTS, 8–16 ranks, cluster
   hardware) — dev-box sweep found no NDBBD win region.
