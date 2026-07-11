@@ -79,6 +79,29 @@ began in phase 5.
 
 ## Standing investigations
 
+- **Multi-subinterval (`-nsubints ≥ 2`) real-shock solves are broken**
+  (found 2026-07-11 while chasing a cross-method test failure; legacy —
+  pre-refactor binary affected too). Evidence (GTAP11c *and* GTAP12a,
+  so NOT a database defect): with a `pfactwld+1` uniform shock on
+  GTAP-RE/Mmid, composed output must contain the exogenous shock value
+  exactly, and at ns=1 all methods return pfactwld=1; at ns=2 LU/SBBD
+  return **0.5111** (silent half-shock; the two methods agree with each
+  other, so cross-method tests can pass on two consistently wrong
+  solutions), NDBBD returns 1.0, ns=3 aborts MA48 structurally
+  singular; old binary at ns=2 bound-aborts instead. Static
+  GTAPv7/Mmid/pfactwld+5 on GTAP11c: ns=1 → pfactwld=5 (correct),
+  ns=2 → lower-bound aborts (evfb/vcif/vdep) — the abort class
+  previously attributed to "GTAP12 data". Golden-suite blind spot:
+  Mmid goldens are null-shock (ns=1), real-shock goldens are Johansen —
+  no golden exercises shock × Mmid × subintervals. Next: read the
+  subinterval outer loop (main.c / solve_drivers.c shock splitting and
+  cumulative update accumulation) against the GEMPACK subinterval spec;
+  explain the exact 0.5111111 fraction and why the NDBBD path
+  accumulates correctly; fix behind the golden gate and add a
+  real-shock Mmid ns=2 golden; then re-audit the teems-R cross-method
+  tests and the GTAP12-data failure attributions (some may vanish).
+  Interim: treat ns ≥ 2 results with real shocks as untrustworthy.
+
 - `-ndbbd_bl_rank`/`-nestfile` (expert overrides: hand-assign MPI ranks
   per NDBBD block from a CSV; default self-derives `ndbbdrank=ntime`):
   look into how they work and where they earn their keep — plausibly
