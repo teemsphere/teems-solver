@@ -1846,9 +1846,14 @@ bool solve_modified_midpoint(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt d
             fwrite(xc0, sizeof(solve_real),nvarele, tempvar);
             fclose(tempvar);
             }
-            }
+            /* xc0 must stay resident in inmemory mode: it carries the
+               cumulative multiplier into the sol>0 extrapolation passes
+               of each subinterval (the disk path reloads it from
+               _tempxcO). Freeing it unconditionally silently dropped the
+               sol>0 subinterval contributions under -inmemory. */
             free(xc0);
             xc0=NULL;
+            }
           }
 
     if(rank==rank_hsl&&sol==maxsol-1) {
