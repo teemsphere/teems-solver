@@ -101,7 +101,6 @@ enum bound_type     { BT_GE=1, BT_GT=2, BT_LE=3, BT_LT=4 };          /* hcge_cof
 | ha_csumindx | sum_dedup_indices |
 | hcge_wvar | tab_write_variables |
 | hcge_wdata | outputs_write_csv |
-| intreadCSV | csv_read_ints |
 
 ### tab_parse.c (was ha_cgetab.c)
 | current | new |

@@ -474,7 +474,7 @@ int ndbbd_order(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscI
       strcat(filename,j1name);
       strcat(filename,".bin");
       if((presolfile=fopen(filename, "r"))==NULL) {
-        printf("Error: cannot open interface file %s; run the preparation solve first (-presol 1)\n",filename);
+        printf("Error: cannot open interface file %s; the presolve pass did not produce it (check scratch space)\n",filename);
       }
       frd=fread(insized, sizeof(int), 5, presolfile);
       fclose(presolfile);

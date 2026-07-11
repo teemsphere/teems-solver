@@ -193,7 +193,7 @@ normalization, duplicate SUM-index renaming (`sum_dedup_indices`), and
 variable-declaration append (`tab_write_variables`).
 `datafile_read_header_info` / `datafile_read_labels` read text data-file
 headers. `outputs_write_csv` writes the post-simulation
-set/coefficient CSVs. `csv_read_ints` reads the optional `-nestfile`.
+set/coefficient CSVs.
 
 ### tab_parse.c
 
@@ -361,8 +361,11 @@ re-run). teems-R defaults 300/500/200.
 - **OpenMP** within rank: `-maxthreads` (global), `-smllthreads` (caps
   selected sections); formula evaluation and updates parallelize over
   elements with per-thread copies of the op-list.
-- NDBBD's last (interface) block rank can be overridden via
-  `-ndbbd_bl_rank` + `-nestfile <csv>`.
+- NDBBD's per-time interface blocks are rank-revealed in-solve: the
+  ordering presolve bounds each block's rank by min(nrow,ncol), the
+  MA51 presolve factorization measures the true numerical rank, and
+  `ndbbd_order` permutes any rank-deficient rows/columns out to the
+  outer border before the solve proper.
 
 ## 8. Scratch, memory, and the in-memory mode
 
@@ -484,7 +487,6 @@ method (basis of the golden-run verification, below).
 | `-regset <SET>` | — | regional set for ordering (required: LU output ordering, DBBD, NDBBD) |
 | `-enable_time` | off | time-based SBBD ordering override |
 | `-nesteddbbd {0,1}` | 0 | nested (NDBBD) ordering |
-| `-presol {0,1}` | — | persist/reuse ordering & factor preparation |
 | `-laA/-laDi/-laD n` | 2 (teems-R: 300/500/200) | workspace sizing, % of nnz |
 | `-cntl_3 x` | — | HSL iterative-refinement threshold |
 | `-cntl_6 x` | 0 | MA50 ordering control |
@@ -494,7 +496,6 @@ method (basis of the golden-run verification, below).
 | `-tempdir <dir>` | `/tmp/` (or `TMPDIR`) | scratch directory |
 | `-inmemory {0,1}` | 1 except NDBBD | §8 |
 | `-nsbbdblocks n` | 2 | SBBD block-count hint |
-| `-ndbbd_bl_rank n` / `-nestfile <csv>` | — | NDBBD interface-block rank override |
 | `-stoiter n` | 1 | stochastic repetitions |
 | `-nowrites n` | 0 | suppress output writes |
 | `-verbosity {0,1,2}` | 1 | 0 = errors/warnings + accuracy summary only; 1 = phase progress and timings; 2 = per-rank/per-block debug detail (also exported as `TEEMS_VERBOSITY` for the Fortran kernels; MA48 duplicate-entry notes appear only at 2) |

@@ -78,9 +78,9 @@ int main(int argc,char **args) {
   PC       pc;   /* preconditionercontext */
   PetscRandom  rctx;   /* random number generator context */
   PetscInt  rank=0,mpisize,rank_hsl=0;
-  PetscInt     VecSize=0,Istart=0,Iend=0,dnz=0,onz=0,dnzB=0,onzB=0,count,*onnz,*dnnz,*onnzB,*dnnzB,its,ndbbdrank=0;
+  PetscInt     VecSize=0,Istart=0,Iend=0,dnz=0,onz=0,dnzB=0,onzB=0,count,*onnz,*dnnz,*onnzB,*dnnzB,its;
   PetscErrorCode ierr;
-  PetscBool   flg,presol;
+  PetscBool   flg;
   PetscScalar  value,zero=0;
   PetscLogDouble time0,time1;
   clock_t timestr,timeend,timemulti;
@@ -237,10 +237,8 @@ int main(int argc,char **args) {
   PetscOptionsGetInt(NULL,NULL,"-nsbbdblocks",&nsbbdblocks,NULL);
   PetscOptionsGetInt(NULL,NULL,"-nesteddbbd",&nesteddbbd,NULL);
   PetscOptionsGetInt(NULL,NULL,"-nowrites",&nowrites,NULL);
-  PetscOptionsGetBool(NULL,NULL,"-presol",&presol,NULL); /* preparation for next solution */
   PetscOptionsGetReal(NULL,NULL,"-cntl_6",&cntl6,NULL); /* CNTL6 in Mat Order */
   PetscOptionsGetReal(NULL,NULL,"-cntl_3",&cntl3,NULL);/*Iterative threshold */
-  PetscOptionsGetInt(NULL,NULL,"-ndbbd_bl_rank",&ndbbdrank,NULL);/*Override default rank for last block in NDBBD method. Read text file. >0 text column. Use with care*/
   PetscOptionsGetInt(NULL,NULL,"-stoiter",&StoIter,NULL);
   {
     PetscInt verb=verbosity;
@@ -298,12 +296,11 @@ int main(int argc,char **args) {
       return 1;
     }
   }
-  PetscInt *ndbbddrank1= (PetscInt *) calloc (ndbbdrank,sizeof(PetscInt));
-  PetscOptionsGetString(NULL,NULL,"-nestfile",filename,TABREADLINE,&flg);
-  if (!flg) {
-    strcpy(filename,"./ndbbd_drank.csv");//orani03.cmf");
-  }
-  if (flg)csv_read_ints(filename,ndbbddrank1,ndbbdrank);//
+  /* Per-time-block interface ranks for NDBBD: the ordering presolve
+     records min(nrow,ncol) per block, the rank-revealing factorization
+     tightens it to the true numerical rank (allocated once ntime is
+     known). */
+  PetscInt *ndbbddrank1=NULL;
   logmsg(2,"matsol %d\n",matsol);
   PetscOptionsGetString(NULL,NULL,"-cmdfile",filename,TABREADLINE,&flg);
   if (!flg) {
@@ -538,11 +535,7 @@ int main(int argc,char **args) {
     PetscFinalize();
     return 1;
   }
-  if(nesteddbbd==1&&ntime!=ndbbdrank) {
-    ndbbdrank=ntime;
-    free(ndbbddrank1);
-    ndbbddrank1=(PetscInt *) calloc(ndbbdrank,sizeof(PetscInt));
-  }
+  if(nesteddbbd==1)ndbbddrank1=(PetscInt *) calloc(ntime,sizeof(PetscInt));
   ndblock=ndblock1;
   logmsg(2,"rank %d ndblock %ld allreg %ld\n",rank,ndblock,allregset);
 
@@ -1366,7 +1359,7 @@ int main(int argc,char **args) {
       inmemory=0;
     } else if(rank==0)logmsg(1,"inmemory: keeping ~%ld MB of value arrays resident per rank\n",need/1048576);
   }
-  if(solmethod==SM_JOHANSEN)solve_johansen(nohsl,VecSize,A,dnz,dnnz,onz,onnz,B,dnzB,dnnzB,onzB,onnzB,vecb,vece,rank,rank_hsl,mpisize,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,&elem_vals,ncofele+nvarele,ncofele,nvarele,&closure_vals,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,eq_addr,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,presol,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,&xcf);
+  if(solmethod==SM_JOHANSEN)solve_johansen(nohsl,VecSize,A,dnz,dnnz,onz,onnz,B,dnzB,dnnzB,onzB,onnzB,vecb,vece,rank,rank_hsl,mpisize,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,&elem_vals,ncofele+nvarele,ncofele,nvarele,&closure_vals,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,eq_addr,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,&xcf);
   
   int stepcount;
   int nsteps=3;
@@ -1374,7 +1367,7 @@ int main(int argc,char **args) {
   FILE* solution;
   int maxsol=3;
 
-    if(solmethod==SM_MODIFIED_MIDPOINT)solve_modified_midpoint(nohsl,VecSize,&A,dnz,dnnz,onz,onnz,&B,dnzB,dnnzB,onzB,onnzB,&vecb,&vece,rank,rank_hsl,mpisize,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,&elem_vals,ncofele+nvarele,ncofele,nvarele,&closure_vals,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,eq_addr,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,presol,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,subints,fcomm,&xcf,0);
+    if(solmethod==SM_MODIFIED_MIDPOINT)solve_modified_midpoint(nohsl,VecSize,&A,dnz,dnnz,onz,onnz,&B,dnzB,dnnzB,onzB,onnzB,&vecb,&vece,rank,rank_hsl,mpisize,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,&elem_vals,ncofele+nvarele,ncofele,nvarele,&closure_vals,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,eq_addr,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,subints,fcomm,&xcf,0);
     
   if(solmethod==SM_STOCHASTIC){
     MPI_Barrier(PETSC_COMM_WORLD);
@@ -1398,13 +1391,13 @@ int main(int argc,char **args) {
     }
       if(rank==rank_hsl)subinterval_update(rank,tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,closure_vals,nvarele,10*laA,subints,1,1,0);
       
-      solve_modified_midpoint(nohsl,VecSize,&A,dnz,dnnz,onz,onnz,&B,dnzB,dnnzB,onzB,onnzB,&vecb,&vece,rank,rank_hsl,mpisize,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,&elem_vals,ncofele+nvarele,ncofele,nvarele,&closure_vals,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,eq_addr,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,presol,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,subints,fcomm,&xcf,0);
+      solve_modified_midpoint(nohsl,VecSize,&A,dnz,dnnz,onz,onnz,&B,dnzB,dnnzB,onzB,onnzB,&vecb,&vece,rank,rank_hsl,mpisize,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,&elem_vals,ncofele+nvarele,ncofele,nvarele,&closure_vals,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,eq_addr,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,subints,fcomm,&xcf,0);
   logmsg(2,"ncof %ld rank %d\n",ncof,rank);
   }
   }
   if(solmethod==SM_STOSIM){
     MPI_Barrier(PETSC_COMM_WORLD);
-      solve_modified_midpoint(nohsl,VecSize,&A,dnz,dnnz,onz,onnz,&B,dnzB,dnnzB,onzB,onnzB,&vecb,&vece,rank,rank_hsl,mpisize,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,&elem_vals,ncofele+nvarele,ncofele,nvarele,&closure_vals,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,eq_addr,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,presol,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,subints,fcomm,&xcf,2);
+      solve_modified_midpoint(nohsl,VecSize,&A,dnz,dnnz,onz,onnz,&B,dnzB,dnnzB,onzB,onnzB,&vecb,&vece,rank,rank_hsl,mpisize,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,&elem_vals,ncofele+nvarele,ncofele,nvarele,&closure_vals,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,eq_addr,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,subints,fcomm,&xcf,2);
   }
     
   if(rank==rank_hsl) {

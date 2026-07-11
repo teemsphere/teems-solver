@@ -118,17 +118,27 @@ began in phase 5.
 
 ## Standing investigations
 
-- `-ndbbd_bl_rank`/`-nestfile` (expert overrides: hand-assign MPI ranks
-  per NDBBD block from a CSV; default self-derives `ndbbdrank=ntime`):
-  look into how they work and where they earn their keep — plausibly
-  load-balancing heterogeneous block sizes (unbalanced regional blocks,
-  the per-time remainder blocks visible in stats.json `block_nvar`) or
-  pinning blocks on heterogeneous/cluster nodes. If a real use case
-  exists, document it and consider folding into the auto-calibration
-  (compute the assignment from measured block sizes instead of a
-  hand-written CSV); if not, candidate for removal. NB the fallback
-  `strcpy(filename,"./ndbbd_drank.csv")` in main.c is dead code — the
-  CSV is only read when `-nestfile` is explicitly passed. There's also the enable NDBBD arg that used to be passed.
+- ~~`-ndbbd_bl_rank`/`-nestfile` per-block rank overrides~~ RESOLVED
+  (2026-07-11): removed. Investigation corrected the semantics — "rank"
+  is the NUMERICAL rank of each per-time interface block (the local
+  border of the nested DBBD), not an MPI rank assignment. The options
+  were a vestige of the research code's two-run workflow (`-presol`
+  preparation run wrote per-block interface files recording each
+  block's true rank from the rank-revealing MA51 factorization; a
+  second run consumed them, with the CSV carrying the ranks between
+  runs). Since the first TEEMS commit the presolve pass is hardcoded
+  inline (`presol=1` at every NDBBD call site) and
+  `ndbbd_order_presolve` unconditionally overwrites every array entry
+  with min(nrow,ncol) before anything reads it — the CSV values could
+  never influence a solve, on any code path; `-presol` was equally
+  inert (parameter overwritten at all use sites; it was also read into
+  an uninitialized bool when the flag was absent). The "fold into
+  auto-calibration" idea is already the shipped behavior: the in-solve
+  presolve measures each interface block's true rank and shrinks/
+  permutes accordingly. Removed `-ndbbd_bl_rank`, `-nestfile`,
+  `-presol`, `csv_read_ints()`, and the dead `./ndbbd_drank.csv`
+  fallback; teems-R no longer passes `-presol 1` (compatible both
+  directions — old binaries ignored the value anyway).
 
 - NDBBD-vs-SBBD crossover at scale (medium ACTS, 8–16 ranks, cluster
   hardware) — dev-box sweep found no NDBBD win region.

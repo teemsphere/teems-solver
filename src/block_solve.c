@@ -1545,12 +1545,12 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
     strcat(filename,j1name);
     strcat(filename,".bin");
     if((presolfile=fopen(filename, "r"))==NULL) {
-      printf("Error: cannot open interface file %s; run the preparation solve first (-presol 1)\n",filename);
+      printf("Error: cannot open interface file %s; the presolve pass did not produce it (check scratch space)\n",filename);
     }
     fwrt=fread(insizeda, sizeof(int), 5+nreg*insizes, presolfile);
     fclose(presolfile);
     remove(filename);
-    if( fwrt== 0)printf("Error: short read on interface file %s; run the preparation solve first (-presol 1)\n",filename);
+    if( fwrt== 0)printf("Error: short read on interface file %s; the presolve pass did not produce it (check scratch space)\n",filename);
     nrow=insizeda[0];
     ncol=insizeda[1];
     nz1=insizeda[2];
@@ -2138,11 +2138,11 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
     #pragma omp critical
     {
     if((presolfile=fopen(filename, "r"))==NULL) {
-      printf("Error: cannot open interface file %s; run the preparation solve first (-presol 1)\n",filename);
+      printf("Error: cannot open interface file %s; the presolve pass did not produce it (check scratch space)\n",filename);
     }
     frd=fread(insizeda, sizeof(int), 5+nreg*insizes, presolfile);
     fclose(presolfile);
-    if( frd== 0)printf("Error: short read on interface file %s; run the preparation solve first (-presol 1)\n",filename);
+    if( frd== 0)printf("Error: short read on interface file %s; the presolve pass did not produce it (check scratch space)\n",filename);
     }
     if(insizeda0<insizeda[0])insizeda0=insizeda[0];
     if(insizeda1<insizeda[1])insizeda1=insizeda[1];
@@ -2184,12 +2184,12 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
     strcat(filename,j1name);
     strcat(filename,".bin");
     if((presolfile=fopen(filename, "r"))==NULL) {
-      printf("Error: cannot open interface file %s; run the preparation solve first (-presol 1)\n",filename);
+      printf("Error: cannot open interface file %s; the presolve pass did not produce it (check scratch space)\n",filename);
     }
     frd=fread(insizeda, sizeof(int), 5+nreg*insizes, presolfile);
     fclose(presolfile);
     remove(filename);
-    if( frd== 0)printf("Error: short read on interface file %s; run the preparation solve first (-presol 1)\n",filename);
+    if( frd== 0)printf("Error: short read on interface file %s; the presolve pass did not produce it (check scratch space)\n",filename);
     }
     nrow=insizeda[3];
     ncol=insizeda[3];

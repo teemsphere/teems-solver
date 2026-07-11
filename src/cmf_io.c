@@ -1035,25 +1035,3 @@ int tab_read_set_name(char *filename, char *varname, int indx, char *setname) {
   return -1;
 }
 
-bool csv_read_ints(char *fileName,int* vec, int vecCol) {
-  FILE * filehandle;
-  char line[DATREADLINE],*p;
-  int i=0,j;
-  filehandle = fopen(fileName,"r");
-  j=0;
-  while (fgets(line,DATREADLINE,filehandle)) {
-    if(j==0){j++;continue;}
-    strcat(line,",");
-      for(i=0; i<vecCol+1; i++) {
-        if(i==0) {
-          p = strtok(line,",");
-        } else {
-          p = strtok(NULL,",");
-          vec[i-1]=atoi(p);
-        }
-      }
-    j++;
-  }
-  fclose(filehandle);
-  return true;
-}
