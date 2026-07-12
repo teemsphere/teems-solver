@@ -314,7 +314,7 @@ from tarball build-args.
 | `Johansen` | one-step solution of the linearized system [D20; Johansen 1960] |
 | `Mmid` | Gragg's modified midpoint with Richardson extrapolation over `-step1/-step2/-step3` step counts (default 2-4-8), per subinterval [GM "Gragg"; Pearson 1991] |
 | `Stochastic`, `StoSim` | Mmid-based stochastic variants (repeat solves, `-stoiter`) |
-| `NoSol` | preparation only |
+| `NoSol` | preparation only — runs the full pre-solve pipeline (data, formulas, structural detection, ordering, `stats.json`) and skips the solve; a sub-second structure probe of a model (§6) |
 
 Mmid mechanics: for each step count `s`, the shock is applied in `s`
 sub-steps; after each sub-step the Jacobian is refilled and solved, data
@@ -383,9 +383,11 @@ partitionable) is roadmap 6.5/E3.
 overrides with their historical behavior, and are slated for removal;
 `-regset auto` is accepted as an alias for omitting the flag. A named
 set that matches nothing warns and falls back to structural detection
-(DBBD/NDBBD) or runs unpartitioned (LU/SBBD). NDBBD aborts with a
-remedy when either dimension resolves to none; DBBD aborts when both
-do.
+(DBBD/NDBBD) or runs unpartitioned (LU/SBBD). Method-vs-structure
+mismatches abort with a remedy: NDBBD when either dimension resolves
+to none, DBBD when both do, and SBBD when no chain dimension exists
+(previously HSL_MP48 received zero blocks, errored, and the run still
+finished with exit 0 and no solution).
 
 The bordered solve follows [KH19] steps 1–5: LU-factor diagonal blocks in
 parallel; form interface contributions **B·V** (`vecbivi` — the paper's

@@ -1254,6 +1254,20 @@ int main(int argc,char **args) {
     PetscFinalize();
     return 1;
   }
+  /* method-vs-structure check: SBBD without a chain dimension hands
+     HSL_MP48 zero blocks — the factorization errors out and the run
+     used to finish with exit 0 and no solution. Abort cleanly instead.
+     Under HSL only rank 0 resolves alltimeset, so the verdict is
+     broadcast to keep the exit collective. */
+  if(matsol==MM_SBBD) {
+    int sbbd_nochain=(rank==0&&alltimeset<0)?1:0;
+    MPI_Bcast(&sbbd_nochain,1,MPI_INT,0,PETSC_COMM_WORLD);
+    if(sbbd_nochain) {
+      if(rank==0)printf("Error: SBBD (-matsol 1) requires a chain dimension, but the equations couple no set through lead/lag offsets; use -matsol 0 (LU) or -matsol 2 (DBBD) for static models.\n");
+      PetscFinalize();
+      return 1;
+    }
+  }
   if(nesteddbbd==1)ndbbddrank1=(PetscInt *) calloc(ntime,sizeof(PetscInt));
   offset_t *countvarintra1= (offset_t *) calloc (ndblock+1,sizeof(offset_t));
   array_def *eq_defs= (array_def *) calloc (neq,sizeof(array_def));//recycle ha_cgeset
