@@ -561,7 +561,6 @@ int tab_preprocess(char *filename, char *newtabfile) {
       str_replace_first(readline,"coefficient(", "coefficient (");
       str_replace_first(readline,"variable(", "variable (");
       str_replace_first(readline,"update(", "update (");
-      str_replace_first(readline,"splinter(", "splinter (");
       str_replace_first(readline,"read(", "read (");
       str_replace_first(readline,"write(", "write (");
       str_replace_first(readline,"zerodivide(", "zerodivide (");
@@ -598,11 +597,6 @@ int tab_preprocess(char *filename, char *newtabfile) {
         strcpy(commsyntax,"update");
         check=1;
       }
-      if(str_find_ci(readline,"splinter ")==1||str_find_ci(readline,"splinter ")==0) {//if(ha_cgefind(readline,"splinter ")>-1) {
-        strcpy(commsyntax,"splinter");
-        check=1;
-      }
-
       if(str_find_ci(readline,"zerodivide ")==1||str_find_ci(readline,"zerodivide ")==0) {//if(ha_cgefind(readline,"zerodivide ")>-1) {
         strcpy(commsyntax,"zerodivide");
         check=1;

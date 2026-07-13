@@ -66,8 +66,7 @@ Binary `hsl` → `teems-solver` is deferred: path is hardcoded in teems-R
 
 ```c
 enum matrix_method  { MM_LU=0, MM_SBBD=1, MM_DBBD=2, MM_NDBBD=3 };   /* [HK16][KH19]; matches teems-R */
-enum solution_method{ SM_MODIFIED_MIDPOINT=1, SM_JOHANSEN=10,        /* [GM "Gragg"; D20; Pearson 1991] */
-                      SM_STOCHASTIC=20, SM_STOSIM=21, SM_NOSOLVE=100 };
+enum solution_method{ SM_MODIFIED_MIDPOINT=1, SM_JOHANSEN=10, SM_NOSOLVE=100 }; /* [GM "Gragg"; D20; Pearson 1991] */
 enum bound_type     { BT_GE=1, BT_GT=2, BT_LE=3, BT_LT=4 };          /* hcge_cof.gltype */
 /* formula_op.op and operand type codes get named constants likewise */
 ```
@@ -139,7 +138,6 @@ enum bound_type     { BT_GE=1, BT_GT=2, BT_LE=3, BT_LT=4 };          /* hcge_cof
 | hnew_arset | parse_index_leadlag |
 | hnew_update | updates_apply (midpoint flag) [GM "update"] |
 | hnew_gupd | updates_apply_product |
-| hnew_biupd | subinterval_update [GM "subinterval"] |
 
 ### jacobian.c / block_order.c / block_solve.c / solve_drivers.c (was ha_newmfparse.c)
 | current | new | rationale |
@@ -155,7 +153,6 @@ enum bound_type     { BT_GE=1, BT_GT=2, BT_LE=3, BT_LT=4 };          /* hcge_cof
 | HaNDBBDParPre / HaNDBBDParSol | ndbbd_presolve / ndbbd_solve | pre-solve/back-solve [KH19 steps 1–5] |
 | NDBBD_sol / NDBBD_sol_nread1 | ndbbd_block_solve / ndbbd_block_solve_mem | disk-staged vs in-memory block solve |
 | HaReduce / HaReduceNoComp | reduce_to_rank / reduce_to_rank_nocompress | chunked MPI reduction of B_i·V_i products |
-| spline | cubic_spline | |
 | Johansen | solve_johansen | [GM; D20; Johansen 1960] |
 | ModMidPoint | solve_modified_midpoint | Gragg's modified midpoint [GM "Gragg"; Pearson 1991] |
 

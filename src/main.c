@@ -625,7 +625,7 @@ int main(int argc,char **args) {
   char tempfilenam[255],tempchar[255],solmed[NAMESIZE],solchar[255];
   int niodata=0,nj,mem_fac=0,noutdata=0,nsoldata=0,nowrites=0;
   offset_t nsetspace=0,dcount,ndblock=0,netcut=0,ndblock1,nreg=0,ntime=0;
-  dim_t nset=0,vsize,dim1,nlength=0,matsol=0,laA=2,laDi=2,laD=2,nsbbdblocks=2,nesteddbbd=0,mc66=0,subints=1,subindx,StoIter=1;
+  dim_t nset=0,vsize,dim1,nlength=0,matsol=0,laA=2,laDi=2,laD=2,nsbbdblocks=2,nesteddbbd=0,mc66=0,subints=1,subindx;
   offset_t alltimeset=-1,allregset=-1;
   PetscReal cntl6=0,cntl3;
   if(rank<10) {
@@ -715,7 +715,6 @@ int main(int argc,char **args) {
   PetscOptionsGetInt(NULL,NULL,"-nowrites",&nowrites,NULL);
   PetscOptionsGetReal(NULL,NULL,"-cntl_6",&cntl6,NULL); /* CNTL6 in Mat Order */
   PetscOptionsGetReal(NULL,NULL,"-cntl_3",&cntl3,NULL);/*Iterative threshold */
-  PetscOptionsGetInt(NULL,NULL,"-stoiter",&StoIter,NULL);
   {
     PetscInt verb=verbosity;
     PetscOptionsGetInt(NULL,NULL,"-verbosity",&verb,NULL);/* 0 errors/results, 1 progress (default), 2 debug */
@@ -801,11 +800,9 @@ int main(int argc,char **args) {
   int solmethod=0;
   if(strcmp(solmed,"Gragg")==0)solmethod=SM_GRAGG;
   if(strcmp(solmed,"Johansen")==0)solmethod=SM_JOHANSEN;
-  if(strcmp(solmed,"Stochastic")==0)solmethod=SM_STOCHASTIC;
-  if(strcmp(solmed,"StoSim")==0)solmethod=SM_STOSIM;
   if(strcmp(solmed,"NoSol")==0)solmethod=SM_NOSOLVE;
   if(solmethod==0) {
-    if(rank==0)printf("Error: unknown -solmed %s (valid: Gragg, Johansen, Stochastic, StoSim, NoSol)\n",solmed);
+    if(rank==0)printf("Error: unknown -solmed %s (valid: Gragg, Johansen, NoSol)\n",solmed);
     PetscFinalize();
     return 1;
   }
@@ -1831,45 +1828,11 @@ int main(int argc,char **args) {
   }
   if(solmethod==SM_JOHANSEN)solve_johansen(nohsl,VecSize,A,dnz,dnnz,onz,onnz,B,dnzB,dnnzB,onzB,onnzB,vecb,vece,rank,rank_hsl,mpisize,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,&elem_vals,ncofele+nvarele,ncofele,nvarele,&closure_vals,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,eq_addr,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,&xcf);
   
-  int stepcount;
-  int nsteps=3;
-  solve_real vpercents=1.0,perprecis=0;
   FILE* solution;
-  int maxsol=3;
 
-    if(solmethod==SM_GRAGG)solve_gragg(nohsl,VecSize,&A,dnz,dnnz,onz,onnz,&B,dnzB,dnnzB,onzB,onnzB,&vecb,&vece,rank,rank_hsl,mpisize,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,&elem_vals,ncofele+nvarele,ncofele,nvarele,&closure_vals,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,eq_addr,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,subints,fcomm,&xcf,0);
-    
-  if(solmethod==SM_STOCHASTIC){
-    MPI_Barrier(PETSC_COMM_WORLD);
-  for(j=0;j<StoIter;j++){
-    if(j>0){
-              if(nohsl) {
-                VecCreate(PETSC_COMM_WORLD,&vece);
-              }
-              else {
-                VecCreate(PETSC_COMM_SELF,&vece);
-              }
-              if(nohsl) {
-                VecSetType(vece,VECMPI);
-              }
-              else {
-                VecSetType(vece,VECSEQ);
-              }
-              if(nesteddbbd==1)VecSetSizes(vece,localsize,VecSize);
-              else VecSetSizes(vece,PETSC_DECIDE,VecSize);
-              VecSetOption(vece, VEC_IGNORE_NEGATIVE_INDICES,PETSC_TRUE);
-    }
-      if(rank==rank_hsl)subinterval_update(rank,tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,closure_vals,nvarele,10*laA,subints,1,1,0);
-      
-      solve_gragg(nohsl,VecSize,&A,dnz,dnnz,onz,onnz,&B,dnzB,dnnzB,onzB,onnzB,&vecb,&vece,rank,rank_hsl,mpisize,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,&elem_vals,ncofele+nvarele,ncofele,nvarele,&closure_vals,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,eq_addr,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,subints,fcomm,&xcf,0);
-  logmsg(2,"ncof %ld rank %d\n",ncof,rank);
-  }
-  }
-  if(solmethod==SM_STOSIM){
-    MPI_Barrier(PETSC_COMM_WORLD);
-      solve_gragg(nohsl,VecSize,&A,dnz,dnnz,onz,onnz,&B,dnzB,dnnzB,onzB,onnzB,&vecb,&vece,rank,rank_hsl,mpisize,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,&elem_vals,ncofele+nvarele,ncofele,nvarele,&closure_vals,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,eq_addr,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,subints,fcomm,&xcf,2);
-  }
-    
+  if(solmethod==SM_GRAGG)solve_gragg(nohsl,VecSize,&A,dnz,dnnz,onz,onnz,&B,dnzB,dnnzB,onzB,onnzB,&vecb,&vece,rank,rank_hsl,mpisize,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,&elem_vals,ncofele+nvarele,ncofele,nvarele,&closure_vals,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,eq_addr,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,subints,fcomm,&xcf);
+
+
   if(rank==rank_hsl) {
     for (i=niodata+noutdata; i<niodata+noutdata+nsoldata; i++) {
       if (strcmp("solfiles",iodata[i].logname)==0) {

@@ -1,159 +1,6 @@
 #include <teems_solver.h>
 #include <hsl_kernels.h>
 
-bool cubic_spline(solve_real* y,solve_real* x,solve_real sx0,solve_real sxn,int size,solve_real* w,int laA){//sizeof(x)=size+1
-  offset_t lasize;
-  solve_real *matval= (solve_real *) calloc (6*4*size,sizeof(solve_real));
-  solve_real *bval= (solve_real *) calloc (4*size,sizeof(solve_real));
-  int *irn= (int *) calloc (6*4*size,sizeof(int));
-  int *jcn= (int *) calloc (6*4*size,sizeof(int));
-  if(size<3){
-    printf("Error: too few points for spline extrapolation\n");
-    return 0;
-  }
-  int i,j,mindx=0,bindx=0,i1,i2;
-  int *insize=(int *) calloc (4,sizeof(int));
-  insize[0]=4*size;
-  insize[1]=4*size;
-  
-  for(i=1;i<size+1;i++){//ai+bixi+cixi2+dixi3=yi//indx 1:n
-    matval[mindx]=1;
-    irn[mindx]=i;
-    jcn[mindx]=i;
-    mindx++;
-    matval[mindx]=x[i];
-    irn[mindx]=i;
-    jcn[mindx]=i+size;
-    mindx++;
-    matval[mindx]=x[i]*x[i];
-    irn[mindx]=i;
-    jcn[mindx]=i+2*size;
-    mindx++;
-    matval[mindx]=x[i]*x[i]*x[i];
-    irn[mindx]=i;
-    jcn[mindx]=i+3*size;
-    mindx++;
-    bval[bindx]=y[i];
-    bindx++;
-  }
-  for(i=size;i<2*size;i++){//aip+bipxi+cipxi2+dipxi3=yi//indx 0:n-1
-    i1=i+1;
-    i2=i-size;
-    matval[mindx]=1;
-    irn[mindx]=i1;
-    jcn[mindx]=i1-size;
-    mindx++;
-    matval[mindx]=x[i2];
-    irn[mindx]=i1;
-    jcn[mindx]=i1;
-    mindx++;
-    matval[mindx]=x[i2]*x[i2];
-    irn[mindx]=i1;
-    jcn[mindx]=i1+size;
-    mindx++;
-    matval[mindx]=x[i2]*x[i2]*x[i2];
-    irn[mindx]=i1;
-    jcn[mindx]=i1+2*size;
-    mindx++;
-    bval[bindx]=y[i2];
-    bindx++;
-  }
-    matval[mindx]=1;
-    irn[mindx]=2*size+1;
-    jcn[mindx]=1+size;
-    mindx++;
-    matval[mindx]=2*x[0];
-    irn[mindx]=2*size+1;
-    jcn[mindx]=1+2*size;
-    mindx++;
-    matval[mindx]=3*x[0]*x[0];
-    irn[mindx]=2*size+1;
-    jcn[mindx]=1+3*size;
-    mindx++;
-    bval[bindx]=(y[1]-y[0])/(x[1]-x[0]);//sx0;//
-    bindx++;
-  for(i=2*size+2;i<3*size+1;i++){//indx 1:n-1
-    matval[mindx]=1;
-    irn[mindx]=i;
-    jcn[mindx]=i-size-1;
-    mindx++;
-    matval[mindx]=-1;
-    irn[mindx]=i;
-    jcn[mindx]=i-size;
-    mindx++;
-
-    matval[mindx]=2*x[i-2*size-1];
-    irn[mindx]=i;
-    jcn[mindx]=i-1;
-    mindx++;
-    matval[mindx]=-2*x[i-2*size-1];
-    irn[mindx]=i;
-    jcn[mindx]=i;
-    mindx++;
-
-    matval[mindx]=3*x[i-2*size-1]*x[i-2*size-1];
-    irn[mindx]=i;
-    jcn[mindx]=i+size-1;
-    mindx++;
-    matval[mindx]=-3*x[i-2*size-1]*x[i-2*size-1];
-    irn[mindx]=i;
-    jcn[mindx]=i+size;
-    mindx++;
-    bval[bindx]=0;
-    bindx++;
-  }
-  for(i=3*size+1;i<4*size;i++){//indx 1:n-1
-    matval[mindx]=2;
-    irn[mindx]=i;
-    jcn[mindx]=i-size;
-    mindx++;
-    matval[mindx]=-2;
-    irn[mindx]=i;
-    jcn[mindx]=i-size+1;
-    mindx++;
-
-    matval[mindx]=6*x[i-3*size];
-    irn[mindx]=i;
-    jcn[mindx]=i;
-    mindx++;
-    matval[mindx]=-6*x[i-3*size];
-    irn[mindx]=i;
-    jcn[mindx]=i+1;
-    mindx++;
-    bval[bindx]=0;
-    bindx++;
-  }
-    matval[mindx]=1;
-    irn[mindx]=4*size;
-    jcn[mindx]=2*size;
-    mindx++;
-    matval[mindx]=2*x[size];
-    irn[mindx]=4*size;
-    jcn[mindx]=3*size;
-    mindx++;
-    matval[mindx]=3*x[size]*x[size];
-    irn[mindx]=4*size;
-    jcn[mindx]=4*size;
-    mindx++;
-    bval[bindx]=(y[size]-y[size-1])/(x[size]-x[size-1]);//sxn;//
-    logmsg(2,"slop %lf app slop %lf y1 %lf y0 %lf\n",sxn,bval[bindx],y[size],y[size-1]);
-    bindx++;
-  insize[2]=mindx;
-  lasize=ceil((laA*10/100.0)*mindx);
-  insize[3]=laA*10;
-  irn=realloc(irn,lasize*sizeof(int));
-  jcn=realloc(jcn,lasize*sizeof(int));
-  matval=realloc(matval,lasize*sizeof(solve_real));
-  spec48_ssol2la_(insize,irn,jcn,matval,bval,w);
-    logmsg(2,"bindx %d val %lf w1 %lf w2 %lf w3 %lf x %lf\n",bindx,w[size-1]+w[size-1+size]*x[size]+w[size-1+2*size]*x[size]*x[size]+w[size-1+3*size]*x[size]*x[size]*x[size],w[size-1],w[size-1+size],w[size-1+2*size],y[size]);
-  free(insize);
-  free(matval);
-  free(bval);
-  free(irn);
-  free(jcn);
-  return 1;
-}
-
 bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt* dnnz,PetscInt onz,PetscInt* onnz,Mat B,PetscInt dnzB,PetscInt* dnnzB,PetscInt onzB,PetscInt* onnzB,Vec vecb,Vec vece,PetscInt rank,PetscInt rank_hsl,PetscInt mpisize,char* tabfile, char *commsyntax,set_def *sets,dim_t nset, set_element *set_elems, array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar, elem_value **elem_vals2,offset_t ncofvar,offset_t ncofele,offset_t nvarele,closure_entry **closure_vals2,offset_t alltimeset,offset_t allregset,offset_t nintraeq,dim_t matsol,PetscInt Istart,PetscInt Iend,  offset_t nreg, offset_t ntime, offset_t *eq_addr, offset_t ndblock, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laDi,dim_t laD,PetscReal cntl3,PetscReal cntl6,dim_t nesteddbbd,int localsize,PetscInt *ndbbddrank1,fortran_int* indata,dim_t mc66,fortran_int *ptx,struct timeval begintime,solve_real **xcf2){ //Johansen
   char tempfilenam[256],tempchar[256];
   PetscScalar value,*vals=NULL;
@@ -554,7 +401,7 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
     return 1;
   }
 
-bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt* dnnz,PetscInt onz,PetscInt* onnz,Mat* B1,PetscInt dnzB,PetscInt* dnnzB,PetscInt onzB,PetscInt* onnzB,Vec* vecb1,Vec *vece1,PetscInt rank,PetscInt rank_hsl,PetscInt mpisize,char* tabfile, char *commsyntax,set_def *sets,dim_t nset, set_element *set_elems, array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar, elem_value **elem_vals2,offset_t ncofvar,offset_t ncofele,offset_t nvarele,closure_entry **closure_vals2,offset_t alltimeset,offset_t allregset,offset_t nintraeq,dim_t matsol,PetscInt Istart,PetscInt Iend,  offset_t nreg, offset_t ntime, offset_t *eq_addr, offset_t ndblock, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laDi,dim_t laD,PetscReal cntl3,PetscReal cntl6,dim_t nesteddbbd,int localsize,PetscInt *ndbbddrank1,fortran_int* indata,dim_t mc66,fortran_int *ptx,struct timeval begintime,dim_t subints,MPI_Fint fcomm,solve_real **xcf2,int Isbiupd){ /* Gragg method (smoothed modified midpoint), Pearson 1991 eq. 6.1 / Alg. 7.1.2 */
+bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt* dnnz,PetscInt onz,PetscInt* onnz,Mat* B1,PetscInt dnzB,PetscInt* dnnzB,PetscInt onzB,PetscInt* onnzB,Vec* vecb1,Vec *vece1,PetscInt rank,PetscInt rank_hsl,PetscInt mpisize,char* tabfile, char *commsyntax,set_def *sets,dim_t nset, set_element *set_elems, array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar, elem_value **elem_vals2,offset_t ncofvar,offset_t ncofele,offset_t nvarele,closure_entry **closure_vals2,offset_t alltimeset,offset_t allregset,offset_t nintraeq,dim_t matsol,PetscInt Istart,PetscInt Iend,  offset_t nreg, offset_t ntime, offset_t *eq_addr, offset_t ndblock, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laDi,dim_t laD,PetscReal cntl3,PetscReal cntl6,dim_t nesteddbbd,int localsize,PetscInt *ndbbddrank1,fortran_int* indata,dim_t mc66,fortran_int *ptx,struct timeval begintime,dim_t subints,MPI_Fint fcomm,solve_real **xcf2){ /* Gragg method (smoothed modified midpoint), Pearson 1991 eq. 6.1 / Alg. 7.1.2 */
   char tempfilenam[256],tempchar[256],solchar[255];
   PetscScalar value,*vals;
   PetscErrorCode ierr;
@@ -1191,8 +1038,6 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
             else {
               updates_apply(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,1);
             }
-            if(Isbiupd==1)subinterval_update(rank,tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,closure_vals,nvarele,laA,subints,1,0,nsteps);
-            if(Isbiupd==2)subinterval_update(rank,tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,closure_vals,nvarele,laA,subints,1,2,nsteps);
             strcpy(commsyntax,"formula");
             IsIni=false;
             formulas_execute(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,IsIni);
@@ -1800,8 +1645,6 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
           }
           for(i=0; i<ncofele; i++) elem_vals[i].value=elem_vals[i].initial;
           updates_apply_product(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele);
-          if(Isbiupd==1)subinterval_update(rank,tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,closure_vals,nvarele,laA,subints,1,0,nsteps);
-          if(Isbiupd==2)subinterval_update(rank,tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,closure_vals,nvarele,laA,subints,1,2,nsteps);
           strcpy(commsyntax,"formula");
           IsIni=false;
           formulas_execute(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,IsIni);

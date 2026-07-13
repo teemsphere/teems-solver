@@ -157,8 +157,8 @@ A single `main()`: option parsing (§11); the node-level communicator
 split (`node_comm`, `node_tail_comm`); CMF read and TAB preprocess;
 phases 3–8 of §3 in order; the `-inmemory` default and residency
 estimate; solve dispatch on `solution_method` (`solve_johansen`,
-`solve_modified_midpoint`, and the `SM_STOCHASTIC`/`SM_STOSIM` repeat
-loops); finally the output CSVs and the five solution binaries (§1).
+`solve_gragg`); finally the output CSVs and the five solution
+binaries (§1).
 Johansen LU solves run inline here through `spec48_single_` /
 `spec48_nomc66_`.
 
@@ -221,9 +221,7 @@ evaluates the resulting `formula_op` program per element with
 `formula_eval` under OpenMP (per-thread program copies). `sum_eval`
 materializes `SUM(...)` partials into `sum_value` arrays.
 `updates_apply` (midpoint flag per §5) and `updates_apply_product`
-implement UPDATE statements. `subinterval_update` re-applies shocks at
-subinterval boundaries, optionally spline-interpolated (`cubic_spline`
-from `solve_drivers.c`) — the `Isbiupd` path used by stochastic modes.
+implement UPDATE statements.
 
 ### jacobian.c
 
@@ -268,12 +266,12 @@ The [KH19] steps 1–5 machinery:
 
 ### solve_drivers.c
 
-`solve_johansen` and `solve_modified_midpoint` (§5): shock-vector
+`solve_johansen` and `solve_gragg` (§5): shock-vector
 assembly, per-step Jacobian refill and solve (LU inline, or
 `dbbd_solve` / `ndbbd_*` per `-matsol`), update application, Richardson
 extrapolation and per-element precision accounting, the subinterval
 loop. All class-1 spill/reload sites of §8 are here, guarded by
-`inmemory`. `cubic_spline` supports `subinterval_update`.
+`inmemory`.
 
 ### hsl_kernels.f90 / hsl_kernels.h
 
@@ -313,7 +311,6 @@ from tarball build-args.
 |---|---|
 | `Johansen` | one-step solution of the linearized system [D20; Johansen 1960] |
 | `Gragg` | Gragg's method (smoothed modified midpoint) with Richardson extrapolation over `-step1/-step2/-step3` step counts (default 2-4-8), per subinterval [GM "Gragg"; Pearson 1991 eq. 6.1/Alg. 7.1.2]; `Mmid` accepted as a deprecated alias (warns) |
-| `Stochastic`, `StoSim` | Gragg-based stochastic variants (repeat solves, `-stoiter`) |
 | `NoSol` | preparation only — runs the full pre-solve pipeline (data, formulas, structural detection, ordering, `stats.json`) and skips the solve; a sub-second structure probe of a model (§6) |
 
 Gragg mechanics: for each step count `s`, the shock is applied in `s`
@@ -550,7 +547,6 @@ method (basis of the golden-run verification, below).
 | `-tempdir <dir>` | `/tmp/` (or `TMPDIR`) | scratch directory |
 | `-inmemory {0,1}` | 1 except NDBBD | §8 |
 | `-nsbbdblocks n` | 2 | SBBD block-count hint |
-| `-stoiter n` | 1 | stochastic repetitions |
 | `-nowrites n` | 0 | suppress output writes |
 | `-verbosity {0,1,2}` | 1 | 0 = errors/warnings + accuracy summary only; 1 = phase progress and timings; 2 = per-rank/per-block debug detail (also exported as `TEEMS_VERBOSITY` for the Fortran kernels; MA48 duplicate-entry notes appear only at 2) |
 | `-nox` | — | PETSc: no X output |
