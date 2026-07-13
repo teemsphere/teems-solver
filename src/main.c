@@ -550,9 +550,6 @@ static offset_t partition_auto_select(char *tabfile, set_def *sets, dim_t nset, 
 int main(int argc,char **args) {
   Vec      vecb,vece,x;  /* approx solution, RHS, exact solution */
   Mat      A,B;    /* linear system matrix */
-  KSP      ksp;   /* linear solver context */
-  PC       pc;   /* preconditionercontext */
-  PetscRandom  rctx;   /* random number generator context */
   PetscInt  rank=0,mpisize,rank_hsl=0;
   PetscInt     VecSize=0,Istart=0,Iend=0,dnz=0,onz=0,dnzB=0,onzB=0,count,*onnz,*dnnz,*onnzB,*dnnzB,its;
   PetscErrorCode ierr;
