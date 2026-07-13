@@ -798,12 +798,17 @@ int main(int argc,char **args) {
     if(rank==0)printf("Warning: -solmed Mmid is deprecated; the method is Gragg's (smoothed modified midpoint) — use -solmed Gragg\n");
     strcpy(solmed,"Gragg");
   }
-  int solmethod;
+  int solmethod=0;
   if(strcmp(solmed,"Gragg")==0)solmethod=SM_GRAGG;
   if(strcmp(solmed,"Johansen")==0)solmethod=SM_JOHANSEN;
   if(strcmp(solmed,"Stochastic")==0)solmethod=SM_STOCHASTIC;
   if(strcmp(solmed,"StoSim")==0)solmethod=SM_STOSIM;
   if(strcmp(solmed,"NoSol")==0)solmethod=SM_NOSOLVE;
+  if(solmethod==0) {
+    if(rank==0)printf("Error: unknown -solmed %s (valid: Gragg, Johansen, Stochastic, StoSim, NoSol)\n",solmed);
+    PetscFinalize();
+    return 1;
+  }
   logmsg(2,"Sol med %d regset %s\n",solmethod,regset);
 
   #pragma omp parallel private(i)
