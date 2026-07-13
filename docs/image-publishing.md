@@ -171,7 +171,11 @@ docker build --pull \
   when performance matters.
 - To hold several variants side by side, tag them apart
   (`teems:v3`, `teems:v2`) and point teems-R at one with
-  `ems_option_set(docker_tag = "v3")`.
+  `ems_option_set(docker_tag = "v3")`. When `docker_tag` is left
+  unset, teems-R auto-selects: it probes the host's supported
+  levels (`ld.so --help`) and runs the highest level that has a
+  matching local image (`teems:x86-64-v3` or `teems:v3`), falling
+  back to `teems:latest`.
 
 **Validation** (maintainer, after any flag or dependency change):
 
