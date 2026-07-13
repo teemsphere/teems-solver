@@ -380,11 +380,10 @@ resolved — the structural evidence for future matrix-method selection
 (e.g. recognising a banded adjacency coefficient as nearly
 partitionable) is roadmap 6.5/E3.
 
-`-enable_time` and `-regset <name>` remain as transitional explicit
-overrides with their historical behavior, and are slated for removal;
-`-regset auto` is accepted as an alias for omitting the flag. A named
-set that matches nothing warns and falls back to structural detection
-(DBBD/NDBBD) or runs unpartitioned (LU/SBBD). Method-vs-structure
+The transitional `-enable_time`/`-regset` overrides were removed once
+structural detection reproduced their results bit-identically on the
+golden suite; stale flags in old commands are silently ignored by the
+options parser. Method-vs-structure
 mismatches abort with a remedy: NDBBD when either dimension resolves
 to none, DBBD when both do, and SBBD when no chain dimension exists
 (previously HSL_MP48 received zero blocks, errored, and the run still
@@ -536,8 +535,6 @@ method (basis of the golden-run verification, below).
 | `-solmed <name>` | `Gragg` | solution method (§5) |
 | `-step1/-step2/-step3` | 2/4/8 | Gragg step counts (all odd or all even) |
 | `-nsubints n` | 1 | shock subintervals |
-| `-regset <SET>` | structural detection (DBBD/NDBBD) | transitional override: names the diagonal-block partition set explicitly (§6); `auto` = same as omitting; unmatched names warn and fall back to detection; LU/SBBD take no partition unless one is named; slated for removal |
-| `-enable_time` | structural detection (SBBD/DBBD/NDBBD) | transitional override: force chain ordering from the `(intertemporal)` qualifier (or `-enable_time 0` to suppress it); LU orders the chain dimension only when this is given; slated for removal |
 | `-laA/-laDi/-laD n` | 2 (teems-R: 300/500/200) | workspace sizing, % of nnz |
 | `-cntl_3 x` | — | HSL iterative-refinement threshold |
 | `-cntl_6 x` | 0 | MA50 ordering control |
@@ -567,9 +564,10 @@ teems-R populates these from `ems_solve()` arguments
   Any behavior change fails the gate.
 - **Structural-detection acceptance** (`.audit/accept_structural.sh`):
   reruns the NDBBD, DBBD (intertemporal + static) and SBBD golden
-  configurations with `-regset`/`-enable_time` removed and requires the
-  structurally detected ordering to reproduce the golden manifests
-  bit-identically.
+  configurations flag-free and requires the structurally detected
+  ordering to reproduce the golden manifests bit-identically (this
+  gate is what licensed removing the transitional
+  `-regset`/`-enable_time` overrides).
 - **Benchmark rigs**: `.audit/bench_run.sh` (wall/RSS via `time -v`),
   `.audit/strace_run.sh` (per-file write-byte accounting), deployments
   under `.audit/bench-*` produced by teems-R scripts.

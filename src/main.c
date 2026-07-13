@@ -15,7 +15,7 @@ static char help[] = "Solves a CGE model in parallel with KSP.\n\
    teems-R for matrix_method calibration. Fields are null when no
    bordered ordering was built (no chain/partition dimension).
    chain_source/partition_source say how each dimension was determined
-   ("explicit" flag, "structural" detection, or "none"); auto_json
+   ("structural" detection or "none"); auto_json
    carries the partition-candidate table (NULL when nothing was
    probed). */
 static void ordering_stats_write(cmf_file_entry *iodata, int niodata, int noutdata, int nsoldata,
@@ -85,9 +85,10 @@ static void ordering_stats_write(cmf_file_entry *iodata, int niodata, int noutda
    conventionally time) and the diagonal-block partition set
    (conventionally regions). Neither is a property of a set's name or
    declaration: both follow from how the system of equations references
-   each set, so the routines below derive them from the equations. The
-   explicit -enable_time/-regset flags remain as transitional overrides
-   with their historical behavior and are slated for removal.
+   each set, so the routines below derive them from the equations.
+   (The transitional -enable_time/-regset overrides were removed once
+   detection reproduced their results bit-identically; stale flags in
+   old commands are ignored by the options parser.)
    ==================================================================== */
 
 /* Mark intsup on every set nested inside a qualified chain set, so the
@@ -609,7 +610,7 @@ int main(int argc,char **args) {
 
   gettimeofday(&begintime, NULL);
   bool sbbd_overrid=false;
-  PetscBool sbbd_overuser=false,nohsl=false;
+  PetscBool nohsl=false;
   char ch='y';
   if(rank==0) {
     logmsg(2,"Notes:\n  Shock statement values follow GEMPACK ordering (first subscript varies fastest).\n  Declare intertemporal variables with minimum dimension to minimise the net cut,\n  e.g. capital(REG,TIME)=qo(\"capital\",REG,TIME) rather than shocking qo(COM,REG,TIME).\n  laA/laDi control solver workspace sizes; use the smallest that solves.\n  Beware CRLF line endings in model text files.\n");
@@ -618,7 +619,7 @@ int main(int argc,char **args) {
   //**************************************************************************************
   //****************************** READ SET ELEMENT***************************************
   //**************************************************************************************
-  char tabfile[TABREADLINE],newtabfile[TABREADLINE]="_temp_tab_file",newtabfile1[TABREADLINE]="_temp_tab_new_file",closure[TABREADLINE],shock[TABREADLINE],filename[TABREADLINE],longname[TABREADLINE],vname[NAMESIZE],copyline[TABREADLINE],regset[NAMESIZE];
+  char tabfile[TABREADLINE],newtabfile[TABREADLINE]="_temp_tab_file",newtabfile1[TABREADLINE]="_temp_tab_new_file",closure[TABREADLINE],shock[TABREADLINE],filename[TABREADLINE],longname[TABREADLINE],vname[NAMESIZE],copyline[TABREADLINE];
   char tempfilenam[255],tempchar[255],solmed[NAMESIZE],solchar[255];
   int niodata=0,nj,mem_fac=0,noutdata=0,nsoldata=0,nowrites=0;
   offset_t nsetspace=0,dcount,ndblock=0,netcut=0,ndblock1,nreg=0,ntime=0;
@@ -778,14 +779,6 @@ int main(int argc,char **args) {
   if (!flg) {
     strcpy(filename,"./reg.cmf");//orani03.cmf");
   }
-  PetscBool enable_time_given=PETSC_FALSE;
-  PetscOptionsGetBool(PETSC_NULLPTR,NULL, "-enable_time", &sbbd_overuser,&enable_time_given);/* transitional override: absent, the chain dimension is detected from the equations */
-  regset[0]='\0';
-  PetscOptionsGetString(NULL,NULL,"-regset",regset,NAMESIZE,&flg);
-  if(regset[0]!='\0')for(i=0; i<NAMESIZE; i++) {
-      regset[i]=tolower((int)regset[i]);
-    }
-  if(strcmp(regset,"auto")==0)regset[0]='\0';/* transitional alias: same as absent, structural detection */
   PetscOptionsGetString(NULL,NULL,"-solmed",solmed,NAMESIZE,&flg);
   if (!flg) {
     strcpy(solmed,"Gragg");
@@ -803,7 +796,7 @@ int main(int argc,char **args) {
     PetscFinalize();
     return 1;
   }
-  logmsg(2,"Sol med %d regset %s\n",solmethod,regset);
+  logmsg(2,"Sol med %d\n",solmethod);
 
   #pragma omp parallel private(i)
   {
@@ -858,20 +851,11 @@ int main(int argc,char **args) {
       sets[i].offset=nsetspace;
       nsetspace=nsetspace+sets[i].size;
     }
-    if(regset[0]!='\0')for (i=0; i<nset; i++)if(strcmp(regset,sets[i].setname)==0) {
-          allregset=i;
-          break;
-        }
-    if(regset[0]!='\0'&&allregset<0)
-      printf("Warning: -regset %s matches no set in the TAB file; %s.\n",regset,
-             (matsol==MM_DBBD||matsol==MM_NDBBD)?"falling back to structural partition detection":"continuing without a partition");
   }
   if(nohsl) {
     MPI_Bcast(sets,nset*sizeof(set_def), MPI_BYTE,0, PETSC_COMM_WORLD);
-    MPI_Bcast(&allregset,sizeof(offset_t), MPI_BYTE,0, PETSC_COMM_WORLD);
     MPI_Bcast(&nsetspace,sizeof(offset_t), MPI_BYTE,0, PETSC_COMM_WORLD);
   }
-  logmsg(2,"rank %d regset %s indx %ld\n",rank,regset,allregset);
   set_element *set_elems= (set_element *) calloc (nsetspace,sizeof(set_element));
   logmsg(2,"nset %d nsetspace %ld\n",nset,nsetspace);
   for (i=0; i<nsetspace; i++)for (j=0; j<MAXSUPSET; j++)set_elems[i].superset_pos[j]=-1;
@@ -939,67 +923,19 @@ int main(int argc,char **args) {
     subsets_read(tabfile, set_elems, sets,nset);
     j2=1;
     while(j2==1)for(i=1; i<MAXSUPSET; i++)subset_map_build(set_elems,sets,nset,&j2); //printf("check %d\n",i);}
-    if(sbbd_overuser) {
-      alltimeset=set_find_alltime(sets,nset);
-    }
-    if(alltimeset>=0||allregset>=0) {
-      if(alltimeset>=0&&allregset>=0) {
-        ndblock=sets[alltimeset].size*sets[allregset].size;
-        nreg=sets[allregset].size;
-        ntime=sets[alltimeset].size;
-      }
-      if(alltimeset>=0&&allregset>=0&&nesteddbbd==1) {
-        ndblock=sets[alltimeset].size*(sets[allregset].size+1);
-        nreg=sets[allregset].size;
-        ntime=sets[alltimeset].size;
-      }
-      if(alltimeset<0&&allregset>=0) {
-        ndblock=sets[allregset].size;
-        nreg=ndblock;
-      }
-      if(alltimeset>=0&&allregset<0) {
-        ndblock=sets[alltimeset].size;
-        ntime=ndblock;
-      }
-    }
-    if(allregset>=0)partition_flags_apply(sets,nset,allregset);
-    if(alltimeset>=0)chain_flags_apply(sets,nset);
     ndblock1=ndblock;
-    logmsg(2,"rank %d alltime set %ld allreg %ld size %ld\n",rank,alltimeset,allregset,ndblock);
   }
   MPI_Barrier(PETSC_COMM_WORLD);
   if(nohsl) {
-    MPI_Bcast(&alltimeset,sizeof(offset_t), MPI_BYTE,0, PETSC_COMM_WORLD);
-    MPI_Bcast(&allregset,sizeof(offset_t), MPI_BYTE,0, PETSC_COMM_WORLD);
     MPI_Bcast(sets,nset*sizeof(set_def), MPI_BYTE,0, PETSC_COMM_WORLD);
     MPI_Bcast(set_elems,nsetspace*sizeof(set_element), MPI_BYTE,0, PETSC_COMM_WORLD);
-    MPI_Bcast(&ndblock1,sizeof(offset_t), MPI_BYTE,0, PETSC_COMM_WORLD);
-    MPI_Bcast(&ntime,sizeof(offset_t), MPI_BYTE,0, PETSC_COMM_WORLD);
-    MPI_Bcast(&nreg,sizeof(offset_t), MPI_BYTE,0, PETSC_COMM_WORLD);
   }
-  /* Structural detection is pending for whatever the transitional
-     -enable_time/-regset flags did not resolve explicitly; it runs
-     just before the ordering, once the equations are readable. Only
-     the bordered methods consume these dimensions. */
-  bool structural_time=(!enable_time_given)&&(matsol==MM_SBBD||matsol==MM_DBBD||matsol==MM_NDBBD);
-  bool structural_reg=(matsol==MM_DBBD||matsol==MM_NDBBD)&&allregset<0;
-  /* NDBBD partitions the system chain-block x partition-block; without
-     both dimensions the ordering below indexes with ntime/nreg = 0 and
-     dies in a bare MPI abort. Fail here with the remedy instead when
-     nothing is pending (alltimeset/allregset were broadcast above, so
-     every rank takes this branch together); the check is repeated
-     after structural detection otherwise. */
-  if(matsol==MM_NDBBD&&!structural_time&&!structural_reg&&(alltimeset<0||allregset<0)) {
-    if(rank==0) {
-      if(allregset<0)printf("Error: NDBBD (-matsol 3) requires a diagonal-block partition set%s.\n",
-                            regset[0]!='\0'?" (the -regset given matched no set in the TAB file)":"");
-      if(alltimeset<0)printf("Error: NDBBD (-matsol 3) requires a chain (intertemporal) set in the TAB file.\n");
-    }
-    PetscFinalize();
-    return 1;
-  }
+  /* The chain dimension and the diagonal-block partition are derived
+     structurally just before the ordering, once the equations are
+     readable. Only the bordered methods consume these dimensions. */
+  bool structural_time=(matsol==MM_SBBD||matsol==MM_DBBD||matsol==MM_NDBBD);
+  bool structural_reg=(matsol==MM_DBBD||matsol==MM_NDBBD);
   ndblock=ndblock1;
-  logmsg(2,"rank %d ndblock %ld allreg %ld\n",rank,ndblock,allregset);
 
   //**************************************************************************************
   //****************************** END READ SET ELEMENT***********************************
@@ -1204,17 +1140,15 @@ int main(int argc,char **args) {
     logmsg(2,"neq %ld\n",neq);
   }
   /* ---------------- structural partition resolution ----------------
-     Derive whatever the transitional flags left unresolved from the
-     equation system itself: the chain dimension from the lead/lag
-     offsets the equations actually use, and the diagonal-block
-     partition from probing every structurally eligible set. Runs on
-     every rank that performs the ordering (all ranks under nohsl,
-     rank 0 under HSL) as pure integer analysis of identical data, so
-     all ranks reach the same result without communication. */
+     Derive the ordering dimensions from the equation system itself:
+     the chain dimension from the lead/lag offsets the equations
+     actually use, and the diagonal-block partition from probing every
+     structurally eligible set. Runs on every rank that performs the
+     ordering (all ranks under nohsl, rank 0 under HSL) as pure
+     integer analysis of identical data, so all ranks reach the same
+     result without communication. */
   const char *chain_source="none",*partition_source="none";
   char *partition_auto_json=NULL;
-  if(alltimeset>=0)chain_source="explicit";
-  if(allregset>=0)partition_source="explicit";
   if((structural_time||structural_reg)&&rank==rank_hsl) {
     if(structural_time) {
       offset_t *chainrefs=(offset_t *) calloc (nset,sizeof(offset_t));
@@ -1247,13 +1181,13 @@ int main(int argc,char **args) {
   if((structural_time||structural_reg)&&matsol==MM_NDBBD&&(alltimeset<0||allregset<0)) {
     if(rank==0) {
       if(alltimeset<0)printf("Error: NDBBD (-matsol 3) needs a chain dimension, but no equation couples set elements through lead/lag offsets.\n");
-      if(allregset<0)printf("Error: NDBBD (-matsol 3) needs a diagonal-block partition and no viable set was detected (see the candidate table above); pass -regset <name> to force one or choose another -matsol.\n");
+      if(allregset<0)printf("Error: NDBBD (-matsol 3) needs a diagonal-block partition and no viable set was detected (see the candidate table above); choose another -matsol.\n");
     }
     PetscFinalize();
     return 1;
   }
   if(structural_reg&&matsol==MM_DBBD&&alltimeset<0&&allregset<0) {
-    if(rank==0)printf("Error: DBBD (-matsol 2) needs a diagonal-block partition and no viable set was detected (see the candidate table above); pass -regset <name> to force one or use -matsol 0 (LU).\n");
+    if(rank==0)printf("Error: DBBD (-matsol 2) needs a diagonal-block partition and no viable set was detected (see the candidate table above); use -matsol 0 (LU).\n");
     PetscFinalize();
     return 1;
   }
