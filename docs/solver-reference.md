@@ -312,17 +312,21 @@ from tarball build-args.
 | value | method |
 |---|---|
 | `Johansen` | one-step solution of the linearized system [D20; Johansen 1960] |
-| `Mmid` | Gragg's modified midpoint with Richardson extrapolation over `-step1/-step2/-step3` step counts (default 2-4-8), per subinterval [GM "Gragg"; Pearson 1991] |
-| `Stochastic`, `StoSim` | Mmid-based stochastic variants (repeat solves, `-stoiter`) |
+| `Gragg` | Gragg's method (smoothed modified midpoint) with Richardson extrapolation over `-step1/-step2/-step3` step counts (default 2-4-8), per subinterval [GM "Gragg"; Pearson 1991 eq. 6.1/Alg. 7.1.2]; `Mmid` accepted as a deprecated alias (warns) |
+| `Stochastic`, `StoSim` | Gragg-based stochastic variants (repeat solves, `-stoiter`) |
 | `NoSol` | preparation only — runs the full pre-solve pipeline (data, formulas, structural detection, ordering, `stats.json`) and skips the solve; a sub-second structure probe of a model (§6) |
 
-Mmid mechanics: for each step count `s`, the shock is applied in `s`
-sub-steps; after each sub-step the Jacobian is refilled and solved, data
-updated (midpoint rule: value advances from `substep_base` by twice the
-computed change). The three solutions are Richardson-extrapolated with
-weights `extrap_w1..3` derived from the step ratios; per-element error
-codes are accumulated (`xc124`) and reported as precision counts.
-teems-R maps `solution_method="mod_midpoint"` → `Mmid`; `"Johansen"`
+Gragg mechanics: for each step count `s`, the shock is applied in `s`
+sub-steps — Euler first step, then midpoint leapfrog (value advances
+from `substep_base` by twice the computed change), each preceded by a
+Jacobian refill and solve — followed by one extra refill+solve at the
+final state feeding the terminal smoothing pass
+½(z_s + z_{s−1} + Δz), i.e. s+1 factorizations per pass (Pearson 1991
+eq. 6.1). The three solutions are Richardson-extrapolated with weights
+`extrap_w1..3` derived from the step ratios (valid for the even-power
+error expansion Gragg's theorem guarantees for even `s`); per-element
+error codes are accumulated (`xc124`) and reported as precision counts.
+teems-R maps `solution_method="Gragg"` → `Gragg`; `"Johansen"`
 forces `-nsubints 1`.
 
 ## 6. Matrix methods (`-matsol`, `enum matrix_method`)
@@ -428,7 +432,7 @@ small per-rank preprocessed TAB copies.
 Two spill classes exist:
 
 1. **Driver array spills** (`solve_drivers.c`): before each factorization
-   the value arrays (`elem_vals`, `closure_vals`) and Mmid step state
+   the value arrays (`elem_vals`, `closure_vals`) and Gragg step state
    (`clag1`, `varchange`, `xc*`) are written to `_temp*.bin` files and
    freed, then re-read after the solve.
 2. **Block factor handoff** (DBBD/NDBBD): per-block LU factors
@@ -463,9 +467,9 @@ Benchmarks (GTAP12 database; 20-core/30GB node; 2 ranks unless noted):
 |---|---|---|---|---|
 | static R32×medium | 1.35M eq | LU-1, Johansen | 12.4s | 0.41–0.48GB |
 | static R32×medium | 1.35M eq | DBBD-2, Johansen | 20.4s | 0.61–0.66GB |
-| intertemporal WB7×medium, T=21 | 4.36M eq | SBBD-2, Mmid | 107–115s | 1.1–1.6GB |
-| intertemporal WB7×medium, T=21 | 4.36M eq | NDBBD-2, Mmid | 314–334s | 1.1–1.3GB |
-| intertemporal WB7×medium, T=21 | 4.36M eq | DBBD-2, Mmid (off-domain) | ~420s | 2.1–2.6GB |
+| intertemporal WB7×medium, T=21 | 4.36M eq | SBBD-2, Gragg | 107–115s | 1.1–1.6GB |
+| intertemporal WB7×medium, T=21 | 4.36M eq | NDBBD-2, Gragg | 314–334s | 1.1–1.3GB |
+| intertemporal WB7×medium, T=21 | 4.36M eq | DBBD-2, Gragg (off-domain) | ~420s | 2.1–2.6GB |
 
 Scratch traffic before the in-memory work (202k-eq model, per solve):
 SBBD 274MB, NDBBD 1.36GB — the motivation for §8.
@@ -506,7 +510,7 @@ each; raw walls in `.audit/ab_phase5_results.txt`):
   on RAM-cost grounds; on slow/network scratch the resident mode
   (`ems_solve(inmemory = TRUE)`) is expected to win — this box's fast
   local scratch + page cache is the best case for the file path.
-- **Small-model cost structure** (GTAP-RE 10.5k eq, LU-1 Mmid, 1.16s
+- **Small-model cost structure** (GTAP-RE 10.5k eq, LU-1 Gragg, 1.16s
   wall): `jacobian_fill` = 0.71s (61%, equation parse + mandatory
   per-step refill); `formulas_execute` = 0.04s (3.4%). Formula op-list
   caching was dropped on these numbers; the equation path belongs to
@@ -532,7 +536,7 @@ method (basis of the golden-run verification, below).
 |---|---|---|
 | `-cmdfile <path>` | `./reg.cmf` | CMF file |
 | `-matsol {0,1,2,3}` | 0 | matrix method (§6) |
-| `-solmed <name>` | `Mmid` | solution method (§5) |
+| `-solmed <name>` | `Gragg` | solution method (§5) |
 | `-step1/-step2/-step3` | 2/4/8 | Gragg step counts (all odd or all even) |
 | `-nsubints n` | 1 | shock subintervals |
 | `-regset <SET>` | structural detection (DBBD/NDBBD) | transitional override: names the diagonal-block partition set explicitly (§6); `auto` = same as omitting; unmatched names warn and fall back to detection; LU/SBBD take no partition unless one is named; slated for removal |
@@ -560,7 +564,7 @@ teems-R populates these from `ems_solve()` arguments
 - **Golden runs** (`.audit/verify.sh`, dev-machine): rebuilds from the
   working tree in the `teems-audit` container and checks 14 solves
   bit-identically against manifests anchored to the pre-refactor binary:
-  GTAPv7 static LU/Johansen; GTAP-RE intertemporal LU/Mmid; GTAP-RE
+  GTAPv7 static LU/Johansen; GTAP-RE intertemporal LU/Gragg; GTAP-RE
   SBBD, DBBD, NDBBD at 2 ranks; three real-shock runs (2D probe, 4D,
   swap); a GEMPACK-orientation matrix shock (2D, both dims free); and
   four subinterval gates spanning method × ranks × nsubints × inmemory.

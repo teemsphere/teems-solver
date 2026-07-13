@@ -792,10 +792,14 @@ int main(int argc,char **args) {
   if(strcmp(regset,"auto")==0)regset[0]='\0';/* transitional alias: same as absent, structural detection */
   PetscOptionsGetString(NULL,NULL,"-solmed",solmed,NAMESIZE,&flg);
   if (!flg) {
-    strcpy(solmed,"Mmid");//orani03.cmf");
+    strcpy(solmed,"Gragg");
+  }
+  if(strcmp(solmed,"Mmid")==0) {/* transitional alias: the multi-step method has always been Gragg's smoothed modified midpoint (Pearson 1991) */
+    if(rank==0)printf("Warning: -solmed Mmid is deprecated; the method is Gragg's (smoothed modified midpoint) — use -solmed Gragg\n");
+    strcpy(solmed,"Gragg");
   }
   int solmethod;
-  if(strcmp(solmed,"Mmid")==0)solmethod=SM_MODIFIED_MIDPOINT;
+  if(strcmp(solmed,"Gragg")==0)solmethod=SM_GRAGG;
   if(strcmp(solmed,"Johansen")==0)solmethod=SM_JOHANSEN;
   if(strcmp(solmed,"Stochastic")==0)solmethod=SM_STOCHASTIC;
   if(strcmp(solmed,"StoSim")==0)solmethod=SM_STOSIM;
@@ -1803,7 +1807,7 @@ int main(int argc,char **args) {
 
   if(inmemory) {
     /* Residency cost of skipping the driver spills: value arrays plus the
-       modified-midpoint step state. Fall back to scratch files unless it
+       Gragg step state. Fall back to scratch files unless it
        fits comfortably in available memory. */
     long need=(long)(ncofele+nvarele)*sizeof(elem_value)
              +(long)nvarele*(sizeof(closure_entry)+6*sizeof(solve_real)+sizeof(int));
@@ -1828,7 +1832,7 @@ int main(int argc,char **args) {
   FILE* solution;
   int maxsol=3;
 
-    if(solmethod==SM_MODIFIED_MIDPOINT)solve_modified_midpoint(nohsl,VecSize,&A,dnz,dnnz,onz,onnz,&B,dnzB,dnnzB,onzB,onnzB,&vecb,&vece,rank,rank_hsl,mpisize,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,&elem_vals,ncofele+nvarele,ncofele,nvarele,&closure_vals,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,eq_addr,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,subints,fcomm,&xcf,0);
+    if(solmethod==SM_GRAGG)solve_gragg(nohsl,VecSize,&A,dnz,dnnz,onz,onnz,&B,dnzB,dnnzB,onzB,onnzB,&vecb,&vece,rank,rank_hsl,mpisize,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,&elem_vals,ncofele+nvarele,ncofele,nvarele,&closure_vals,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,eq_addr,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,subints,fcomm,&xcf,0);
     
   if(solmethod==SM_STOCHASTIC){
     MPI_Barrier(PETSC_COMM_WORLD);
@@ -1852,13 +1856,13 @@ int main(int argc,char **args) {
     }
       if(rank==rank_hsl)subinterval_update(rank,tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,closure_vals,nvarele,10*laA,subints,1,1,0);
       
-      solve_modified_midpoint(nohsl,VecSize,&A,dnz,dnnz,onz,onnz,&B,dnzB,dnnzB,onzB,onnzB,&vecb,&vece,rank,rank_hsl,mpisize,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,&elem_vals,ncofele+nvarele,ncofele,nvarele,&closure_vals,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,eq_addr,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,subints,fcomm,&xcf,0);
+      solve_gragg(nohsl,VecSize,&A,dnz,dnnz,onz,onnz,&B,dnzB,dnnzB,onzB,onnzB,&vecb,&vece,rank,rank_hsl,mpisize,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,&elem_vals,ncofele+nvarele,ncofele,nvarele,&closure_vals,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,eq_addr,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,subints,fcomm,&xcf,0);
   logmsg(2,"ncof %ld rank %d\n",ncof,rank);
   }
   }
   if(solmethod==SM_STOSIM){
     MPI_Barrier(PETSC_COMM_WORLD);
-      solve_modified_midpoint(nohsl,VecSize,&A,dnz,dnnz,onz,onnz,&B,dnzB,dnnzB,onzB,onnzB,&vecb,&vece,rank,rank_hsl,mpisize,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,&elem_vals,ncofele+nvarele,ncofele,nvarele,&closure_vals,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,eq_addr,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,subints,fcomm,&xcf,2);
+      solve_gragg(nohsl,VecSize,&A,dnz,dnnz,onz,onnz,&B,dnzB,dnnzB,onzB,onnzB,&vecb,&vece,rank,rank_hsl,mpisize,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,&elem_vals,ncofele+nvarele,ncofele,nvarele,&closure_vals,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,eq_addr,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,subints,fcomm,&xcf,2);
   }
     
   if(rank==rank_hsl) {
