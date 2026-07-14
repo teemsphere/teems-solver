@@ -34,7 +34,7 @@ bug: base libs at `-march=native`, solver objects at plain baseline).
 | `x86-64-v3` | amd64 | Intel Haswell 2013+ / AMD Zen 1+ (AVX2, FMA) | the recommended performance tag; most user machines qualify |
 | `x86-64-v4` | amd64 | AVX-512 chips (Intel server/12th-gen-, AMD Zen 4+) | publish only if the A/B gate shows a win over v3 |
 | `armv8-a` (arm64 default) | arm64 | every 64-bit ARM incl. all Apple M-series, Graviton | NEON is part of the baseline |
-| `armv8.2-a`, `armv8.4-a`, `armv8-a+sve` … | arm64 | newer ARM (M1+ is ≥ v8.4; Graviton3+ has SVE) | benchmark before publishing — see §7 |
+| `armv8.2-a`, `armv8.4-a`, `armv8-a+sve` … | arm64 | newer ARM (M1+ is ≥ v8.4; Graviton3+ has SVE) | benchmark before publishing — see §6 |
 
 Two performance facts to keep in mind when deciding how many variants
 to publish:
@@ -71,82 +71,177 @@ emulation has historically been the flaky path. Strongly prefer a
 native arm64 builder when one is available — an Apple-silicon Mac
 running Docker Desktop, an AWS Graviton instance, or GitHub Actions'
 free arm64 runners — and combine the per-arch pushes into one manifest
-afterwards (§5). QEMU remains acceptable for occasional rebuilds if no
+afterwards (Phase C/D of §4). QEMU remains acceptable for occasional rebuilds if no
 native machine is at hand.
 
-## 4. Building the base variants
+## 4. Release runbook — every step, in order
 
-Run from the repository root (the Dockerfile `COPY ./src` needs the
-repo as context). One build per (platform, MARCH) pair:
+Work through this top to bottom; each step lists what to run and what
+"done" looks like. Nothing here is optional. As of 2026-07-14 the
+variant set is **`x86-64-v2` + `armv8-a` only** — `x86-64-v3` was
+A/B-vetoed (§6); publishing a v3/v4/arm-tier tag requires new
+benchmark evidence first.
 
-```bash
-V=1.1.0   # base image version — bump on every published change
+### Phase A — preconditions (nothing touches Docker Hub yet)
 
-# amd64, portable default (x86-64-v2)
-docker buildx build --builder teems-builder \
-  --platform linux/amd64 \
-  -t matthewcantele/teems_base:x86-64-v2 \
-  -t matthewcantele/teems_base:${V}-x86-64-v2 \
-  -f docker/base_build/Dockerfile --push .
+- [ ] **A1. The release is actually ready.** Publishing is batched at
+  a golden re-anchor slot: every change that breaks bit-identity and
+  is planned for this release has landed (check the roadmap work
+  order). If something bit-breaking is still pending, stop — do not
+  publish twice in one cycle.
+- [ ] **A2. Clean trees at the release commit.** `git status` clean in
+  teems-solver *and* teems-R; record both commit hashes — they go in
+  the release notes. The buildx build ships the repo as context, so an
+  uncommitted tree publishes untracked state silently.
+- [ ] **A3. Golden suite green.** `.audit/verify.sh` → 14/14 PASS at
+  the release commit (audit container on the current base flags).
+- [ ] **A4. teems-R suite green** against a local expedited image
+  built from the release commit (`testthat::test_dir`, `NOT_CRAN=true`
+  — several files skip otherwise). Expected: 0 fail, 0 warn.
+- [ ] **A5. Bump the version — BEFORE building.** The labels are baked
+  into the image at build time:
+  - `docker/base_build/Dockerfile` → `org.opencontainers.image.version`
+  - `docker/base_build/README.md` → version badge
+  Commit the bump. Set `V=` in Phase B to the same value.
+- [ ] **A6. Docker Hub access.** `docker login` as an account with
+  push rights to `matthewcantele/teems_base`.
+- [ ] **A7. buildx builder present.** `docker buildx ls` shows
+  `teems-builder` (docker-container driver). If absent:
+  `docker buildx create --name teems-builder --driver docker-container --bootstrap`
+- [ ] **A8. HSL licence check.** Only `teems_base` is ever pushed. No
+  `teems:*` tag (expedited/full output) may leave the machine — those
+  contain HSL code.
 
-# amd64, performance tier (AVX2/FMA)
-docker buildx build --builder teems-builder \
-  --platform linux/amd64 --build-arg MARCH=x86-64-v3 \
-  -t matthewcantele/teems_base:x86-64-v3 \
-  -t matthewcantele/teems_base:${V}-x86-64-v3 \
-  -f docker/base_build/Dockerfile --push .
+### Phase B — build & push amd64
 
-# arm64, portable default (covers all M-series and Graviton)
-docker buildx build --builder teems-builder \
-  --platform linux/arm64 \
-  -t matthewcantele/teems_base:armv8-a \
-  -t matthewcantele/teems_base:${V}-armv8-a \
-  -f docker/base_build/Dockerfile --push .
-```
+Run from the **repository root** at the release commit (the
+Dockerfile `COPY ./src` needs the repo as context).
 
-Notes:
+- [ ] **B1.**
+  ```bash
+  V=1.1.0   # must match the label bumped in A5
 
-- `--build-arg MARCH=...` overrides the per-arch default
-  (`x86-64-v2` / `armv8-a`). Never pass `native` for a published
-  image — that bakes in the build host's CPU.
-- Each variant takes ~40 min natively (MPICH + PETSc from source).
-- The version-pinned tags (`${V}-…`) are immutable history; the plain
-  level tags are what `latest` and users track.
-- `-march` changes do **not** preserve bit-identical solver output:
-  plan a golden re-anchoring (§6) whenever the published levels
-  change.
+  docker buildx build --builder teems-builder \
+    --platform linux/amd64 \
+    -t matthewcantele/teems_base:x86-64-v2 \
+    -t matthewcantele/teems_base:${V}-x86-64-v2 \
+    -f docker/base_build/Dockerfile --push .
+  ```
+  ~40 min natively (MPICH + PETSc from source). The `${V}-…` tag is
+  immutable history; the plain level tag is what `latest` and users
+  track. Never pass `--build-arg MARCH=native` for anything published
+  — that bakes in the build host's CPU (the original SIGILL bug).
 
-## 5. Publishing: the `latest` manifest
+### Phase C — build & push arm64
 
-`latest` should be a multi-arch manifest whose per-arch entries are
-the *portable* variants, so a bare `FROM matthewcantele/teems_base`
-is always safe:
+- [ ] **C1.** Strongly prefer a **native arm64 builder** (Apple-silicon
+  Docker Desktop, a Graviton instance, or GitHub Actions arm64
+  runners): QEMU cross-building works but MPICH+PETSc compile for
+  hours under emulation and it has historically been the flaky path.
+  On the arm machine (repo at the same release commit, same login):
+  ```bash
+  docker buildx build --builder teems-builder \
+    --platform linux/arm64 \
+    -t matthewcantele/teems_base:armv8-a \
+    -t matthewcantele/teems_base:${V}-armv8-a \
+    -f docker/base_build/Dockerfile --push .
+  ```
+  (`armv8-a` is the per-arch default `MARCH`; it covers every
+  M-series and Graviton — NEON is in the baseline.)
 
-```bash
-docker buildx imagetools create -t matthewcantele/teems_base:latest \
-  matthewcantele/teems_base:x86-64-v2 \
-  matthewcantele/teems_base:armv8-a
+### Phase D — the `latest` manifest
 
-# verify what got published
-docker buildx imagetools inspect matthewcantele/teems_base:latest
-```
+- [ ] **D1.** `latest` = multi-arch manifest of the *portable*
+  variants, so a bare `FROM matthewcantele/teems_base` is always safe:
+  ```bash
+  docker buildx imagetools create -t matthewcantele/teems_base:latest \
+    matthewcantele/teems_base:x86-64-v2 \
+    matthewcantele/teems_base:armv8-a
+  ```
+- [ ] **D2.** Verify what actually got published:
+  ```bash
+  docker buildx imagetools inspect matthewcantele/teems_base:latest
+  ```
+  Expected: two platform entries (linux/amd64, linux/arm64) whose
+  digests match the pushed level tags.
 
-Publishing checklist:
+### Phase E — post-push validation (all of it, every release)
 
-1. All variant builds pushed (§4) and the `latest` manifest updated.
-2. `docker pull` each tag on a clean machine (or after
-   `docker image rm`) and confirm `docker run --rm <tag> cat
-   /opt/teems-solver/archflags` prints the expected level.
-3. Build the expedited image from each published base variant and run
-   the golden suite against it (§6).
-4. On the oldest amd64 hardware available, run one expedited solve
-   from the `x86-64-v2` base — this is the SIGILL regression test.
-5. Bump the version labels in `docker/base_build/Dockerfile`
-   (`org.opencontainers.image.version`) and
-   `docker/base_build/README.md`; update the manual's dependencies
-   page if user-facing commands changed.
+- [ ] **E1. Clean-pull + flag check per tag.** On a machine that
+  doesn't have the images (or after `docker image rm`):
+  ```bash
+  for t in x86-64-v2 armv8-a latest; do
+    docker pull matthewcantele/teems_base:$t
+    docker run --rm matthewcantele/teems_base:$t cat /opt/teems-solver/archflags
+  done
+  ```
+  Expected output: `-march=x86-64-v2`, `-march=armv8-a`, and (for
+  `latest`) whichever matches the pulling host's arch.
+- [ ] **E2. Expedited build from the published base** (§5, with
+  `BASE_IMAGE=matthewcantele/teems_base:x86-64-v2 --pull`), then the
+  teems-R suite against that image. This proves end users can
+  reproduce the runtime image from what is actually on Docker Hub.
+- [ ] **E3. Instruction census** on the expedited binary — the SIGILL
+  regression test that needs no old hardware:
+  ```bash
+  c=$(docker create teems:latest); docker cp $c:/opt/teems-solver/solver/teems-solver /tmp/ts; docker rm $c
+  objdump -d /tmp/ts | grep -cE '%ymm|%zmm'   # must print 0 for the v2 base
+  ```
+  **Pedantry that bit us once:** grep the *register* syntax
+  (`%ymm`/`%zmm`). A bare `ymm` matches PETSc symbol names containing
+  "S**ymm**etric" and inflates the count. Also note the slim runtime
+  image has no `objdump` — extract the binary and inspect on the host,
+  as above.
+- [ ] **E4. Runtime ENV check.**
+  `docker run --rm teems:latest /bin/bash -c 'echo $OPENBLAS_NUM_THREADS'`
+  must print `1` (the ~20% multi-rank win, §6; baked in both
+  expedited and full Dockerfiles).
+- [ ] **E5. Audit container from the published base.** Rebuild the
+  `teems-audit` container `FROM matthewcantele/teems_base:x86-64-v2`
+  (HSL libs at `-O2 $ARCH_FLAGS`; copy `libma48.so*`/`libma51.so*` to
+  `/usr/local/lib` and run `ldconfig` — without this the built solver
+  fails to load at run time) and rerun `.audit/verify.sh`. Expected:
+  14/14 bit-identical. If not: a Debian/toolchain drift between the
+  local base and the published rebuild changed codegen — diagnose,
+  and either pin the drifted package or consciously re-anchor. Do
+  not shrug this off; the manifests are the release's ground truth.
+- [ ] **E6. Real-hardware smoke.** One expedited solve on the oldest
+  amd64 machine available (belt-and-braces on top of E3), and one on
+  an arm64 machine if available.
+- [ ] **E7. SIGILL canary retired?** If any user-facing docs still
+  warn about the `-march=native` SIGILL, update them now.
 
-## 6. The expedited build (what users — and the validation flow — run)
+### Phase F — after validation
+
+- [ ] **F1. Manual.** Update `teems-manual` (dependencies page) if any
+  user-facing command changed; rebuild/publish the site.
+- [ ] **F2. Release notes** must mention (accumulated since the last
+  published image):
+  - solver binary renamed `hsl` → `teems-solver`; a `hsl` symlink
+    ships in **this** release for old scripts and will be removed in
+    the **next** one;
+  - `-regset`/`-enable_time` (and `-nesteddbbd`/`-presol`) removed —
+    old commands still run (stale flags are ignored); structural
+    detection chooses the ordering dimensions;
+  - `-solmed Mmid` deprecated in favour of `Gragg` (alias warns);
+  - `OPENBLAS_NUM_THREADS=1` is the runtime default (override with
+    `docker run -e` if ever needed);
+  - published amd64 base is now portable `x86-64-v2` (fixes SIGILL on
+    pre-AVX-512 hosts); no v3 tag — measured no win (§6).
+- [ ] **F3. Schedule the follow-up:** remove the `hsl` transition
+  symlink from expedited + full Dockerfiles in the next release
+  (roadmap it now, or it will be forgotten).
+- [ ] **F4. Bookkeeping.** Flip the roadmap 6.6 row to done; note the
+  published digests + `V` in the roadmap or release notes.
+
+### Rollback
+
+The `${V}-…` tags are immutable history — never overwrite them. If a
+published level tag is bad, re-point `latest` at the previous good
+variants with `docker buildx imagetools create` (same command as D1,
+old digests) and push a fixed level tag under a bumped `V`.
+
+## 5. The expedited build (what users — and the validation flow — run)
 
 ```bash
 # from the repo root, with the four HSL tarballs in hsl/
@@ -186,9 +281,9 @@ docker build --pull \
 2. Run the teems-R test suite against the new `teems:latest`
    (`test-ems_solve.R` exercises deploy → solve → compose end to
    end).
-3. A/B the performance claim that justified the variant (§7).
+3. A/B the performance claim that justified the variant (§6).
 
-## 7. Benchmark gates
+## 6. Benchmark gates
 
 Per the roadmap's standing rule, a performance-motivated variant needs
 interleaved A/B evidence on an idle machine (`.audit/bench_run.sh`
@@ -229,7 +324,7 @@ future BLAS-heavy workload wants a pool).
 Record results in `docs/solver-reference.md` §9 and flip the
 corresponding roadmap 6.6 rows.
 
-## 8. What lives where (quick reference)
+## 7. What lives where (quick reference)
 
 | Concern | File | Knob |
 |---|---|---|
