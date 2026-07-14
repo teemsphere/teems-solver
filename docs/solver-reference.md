@@ -512,6 +512,21 @@ each; raw walls in `.audit/ab_phase5_results.txt`):
   caching was dropped on these numbers; the equation path belongs to
   condensation (ROADMAP 6.2).
 
+- **ISA level and BLAS threading** (2026-07-14, 6.6(d) A/Bs through
+  the runtime images, `.audit/ab_march.sh`): `x86-64-v3` shows **no
+  win** over `v2` — SBBD-2 on bench-inter-L medians 128.0s (v3) vs
+  125.5s (v2), static LU-1 neutral — consistent with the BLAS3
+  kernels already dispatching per-CPU at runtime and the rest being
+  memory-bound; only the v2 base is published. The `x86-64-v2` flag
+  scheme itself proved **bit-identical** to the historical
+  no-`-march` build across the entire golden suite (v2 adds no
+  FP-semantic instructions; FMA arrives at v3). Separately,
+  `OPENBLAS_NUM_THREADS=1` beat the uncapped pthread pool by **~20%**
+  on SBBD-2 at 4.36M eq (medians 103.5s vs 128.7s, decisive in every
+  interleaved pair — one BLAS pool per rank oversubscribes the box);
+  it is baked into the runtime images as an `ENV` and is
+  golden-bit-identical.
+
 Determinism: repeated same-binary runs are bit-identical for every
 method (basis of the golden-run verification, below).
 

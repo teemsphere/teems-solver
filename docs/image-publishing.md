@@ -208,6 +208,24 @@ rigs; min-of-N, paired runs, discard first-run-of-session walls):
   bench rigs and bake the winner into the expedited runtime stage as
   an `ENV`.
 
+**Results (2026-07-14, 20-core dev box, interleaved pairs, warmups
+discarded; harness `.audit/ab_march.sh`, run through the runtime
+images exactly as teems-R invokes them):**
+
+| A/B | rig | medians | verdict |
+|---|---|---|---|
+| `x86-64-v3` vs `v2` | bench-inter-L SBBD-2 (4.36M eq, Gragg 2-4-8) | v2 125.5s / v3 128.0s | v3 ≈2% *slower*; no win |
+| `x86-64-v3` vs `v2` | bench-static LU-1 (1.35M eq, Johansen) | v2 14.74s / v3 14.63s | neutral |
+| `OPENBLAS_NUM_THREADS=1` vs unset | bench-inter-L SBBD-2, v2 image | 103.5s vs 128.7s | **~20% win, decisive in every pair** — baked as `ENV` into both runtime Dockerfiles |
+
+Verdicts applied: **publish v2 only** (the v3 tag stays unpublished
+until some workload shows a win — consistent with BLAS3 already
+dispatching optimally at runtime; the solver's own code is
+memory-bound); `OPENBLAS_NUM_THREADS=1` is the runtime default
+(golden outputs verified bit-identical under it, so no re-anchor was
+needed; override with `docker run -e OPENBLAS_NUM_THREADS=N` if a
+future BLAS-heavy workload wants a pool).
+
 Record results in `docs/solver-reference.md` §9 and flip the
 corresponding roadmap 6.6 rows.
 

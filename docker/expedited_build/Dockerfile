@@ -80,6 +80,10 @@ ARG USER_GID=$USER_UID
 
 ARG DEBIAN_FRONTEND=noninteractive
 ENV PATH="${BUILD_DIR}/lib/mpi/bin:$PATH"
+# One BLAS thread per MPI rank: the pthread OpenBLAS otherwise opens a
+# full thread pool per rank and oversubscribes (measured ~20% wall cost
+# on SBBD-2 at 4.4M equations; golden outputs bit-identical either way)
+ENV OPENBLAS_NUM_THREADS=1
 
 # solver binary and LICENSES
 COPY --from=builder ${BUILD_DIR}/solver/teems-solver ${BUILD_DIR}/solver/teems-solver
