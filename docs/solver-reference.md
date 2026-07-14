@@ -555,8 +555,13 @@ teems-R populates these from `ems_solve()` arguments
 ## 12. Verification and development infrastructure
 
 - **Golden runs** (`.audit/verify.sh`, dev-machine): rebuilds from the
-  working tree in the `teems-audit` container and checks 14 solves
-  bit-identically against manifests anchored to the pre-refactor binary:
+  working tree in the `teems-audit` container (an `x86-64-v2` base
+  since 2026-07-14; build mirrors the expedited image's
+  `make OPT="-Ofast $ARCH_FLAGS"`) and checks 14 solves bit-identically
+  against manifests anchored 2026-07-14 to the v2 flag scheme with
+  flag-free commands (the original anchors traced back to the
+  pre-refactor binary; the v2 re-anchor was proven to carry exactly
+  the flag-removal delta — the v2 build itself changed no output bit):
   GTAPv7 static LU/Johansen; GTAP-RE intertemporal LU/Gragg; GTAP-RE
   SBBD, DBBD, NDBBD at 2 ranks; three real-shock runs (2D probe, 4D,
   swap); a GEMPACK-orientation matrix shock (2D, both dims free); and
