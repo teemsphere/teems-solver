@@ -1,34 +1,345 @@
 #include <teems_solver.h>
 #include <hsl_kernels.h>
 
+/* ===== compiled equation programs (roadmap 6.2, small-model lever) =====
+ *
+ * jacobian_fill used to re-derive every equation's parse artifacts --
+ * quantifier bindings, linear-variable references, SUM bodies, the
+ * per-occurrence coefficient ops programs -- from the TAB text on every
+ * per-step refill.  The structures below hold those artifacts explicitly,
+ * splitting each statement into a build phase (parse + formula_compile,
+ * step-invariant) and an execute phase (SUM evaluation + element loop +
+ * MatSetValues, per-step values).  Ops programs bind coefficients,
+ * variables and sums as offsets into elem_vals/sum_vals (see
+ * formula_bind_operand), so a built program remains valid when values
+ * change between steps.
+ */
+
+/* one SUM(...) body: compiled ops + its quantifier frame; evaluation
+   writes the summed values into sum_vals[base .. base+nloops) */
+typedef struct
+{
+  formula_op *ops;
+  int nops;
+  quantifier *arSet;                /* nouter carried dims + summed index */
+  dim_t nouter;                     /* carried dims (= sum_cof size) */
+  offset_t nloops;                  /* product of carried dim sizes */
+  offset_t dcountdim[4*MAXVARDIM];  /* carried-dim strides */
+  offset_t sumset_size;             /* elements of the summed set */
+  offset_t base;                    /* first target slot in sum_vals */
+} sum_prog;
+
+/* one linear-variable occurrence: the compiled coefficient program */
+typedef struct
+{
+  bool built;                       /* false = rows outside this rank */
+  offset_t LinVarIndx;
+  dim_t fdimlin;
+  offset_t nloopsfac;
+  quantifier *arSet;                /* fdimlin quantifiers */
+  offset_t dcountdim2[4*MAXVARDIM];
+  dim_t dcountdim3[MAXVARDIM];      /* variable dim -> arSet position */
+  dim_t supset[MAXSUPSET];          /* superset_pos column per dim, 0 = direct */
+  dim_t dimleadlag[MAXVARDIM];
+  sum_prog *sums;                   /* coefficient-expression sums */
+  int nsums;
+  formula_op *ops;
+  int nops;
+} linvar_prog;
+
+/* one equation statement */
+typedef struct
+{
+  bool inproc;                      /* any row of the block on this rank */
+  solve_real zerodivide;
+  sum_prog *eqsums;                 /* linear-variable-free sums */
+  int neqsums;
+  sum_value *sum_vals;              /* shared value store for all sums */
+  linvar_prog *lv;
+  int nlv;
+} stmt_prog;
+
+/* Build one innermost SUM of formulain into *out: compile the body,
+   record the quantifier frame and target slots, and replace the SUM text
+   with its generated-name reference.  This is the build half of the
+   former eq_sum_eval/sum_eval pair; evaluation happens per step in
+   sum_prog_eval.  skip_linvar_sums skips bodies referencing linear
+   variables (the equation-level pass; those sums are handled per
+   occurrence).  Returns 1 when a sum was built, 0 when none remain. */
+static int sum_prog_build(char *formulain, char *commsyntax, bool skip_linvar_sums, sum_def *sum_cof, int j, set_def *sets, array_def *coefs, offset_t ncof, array_def *vars, offset_t nvar, offset_t ncofele, int totalsum, formula_op *ops, int *sumindx, sum_prog *out) {
+  char *readitem,*p;
+  char interchar[NAMESIZE],line[TABREADLINE],line1[TABREADLINE];
+  int nops,length,k=0,k1=0,i=0;
+  dim_t dcount,l;
+  offset_t nloops;
+  length=strlen(formulain);
+  readitem=formulain;
+  while (i<length) {
+    k=str_find_ci(readitem,commsyntax);
+    if (k==-1) {
+      return 0;
+    }
+    if (k==0||formulain[i+k-1]=='+'||formulain[i+k-1]=='-'||formulain[i+k-1]=='*'||formulain[i+k-1]=='/'||formulain[i+k-1]=='^'||formulain[i+k-1]=='('||formulain[i+k-1]==',') {
+      readitem=formulain+i+k;
+      strcpy(line,readitem);
+      sum_extract(line);
+      k1=str_find_ci(line+4,commsyntax);
+      if (k1!=-1) {
+        i=i+k+4;
+        readitem=formulain+i;
+      }
+      else if (skip_linvar_sums&&(str_find_ci(line,",p_")>-1||str_find_ci(line,"*p_")>-1||str_find_ci(line,"+p_")>-1||str_find_ci(line,"-p_")>-1||str_find_ci(line,"(p_")>-1)) {
+        i=i+k+4;
+        readitem=formulain+i;
+      }
+      else {
+        strcpy(line1,line);
+        p=strtok(line,",");
+        p=strtok(NULL,",");
+        p=strtok(NULL,"\0");
+        p[strlen(p)-1]='\0';
+        out->nouter=sum_cof[j].size;
+        out->arSet= (quantifier *) calloc (sum_cof[j].size+1,sizeof(quantifier));
+        for (l=0; l<sum_cof[j].size; l++) {
+          out->arSet[l].setid=sum_cof[j].setid[l];
+          strcpy(out->arSet[l].index_name,sum_cof[j].dimnames[l]);
+        }
+        nloops=1;
+        for (l=0; l<sum_cof[j].size; l++) {
+          nloops=nloops*sets[out->arSet[l].setid].size;
+          dcount=sum_cof[j].size-l;
+          if(dcount==sum_cof[j].size) {
+            out->dcountdim[dcount-1]=1;
+          }
+          else {
+            out->dcountdim[dcount-1]=out->dcountdim[dcount]*sets[out->arSet[dcount].setid].size;
+          }
+        }
+        out->nloops=nloops;
+        out->arSet[sum_cof[j].size].setid=sum_cof[j].sumsetid;
+        strcpy(out->arSet[sum_cof[j].size].index_name,sum_cof[j].sumindx);
+        out->sumset_size=sets[sum_cof[j].sumsetid].size;
+        nops=0;
+        formula_compile(p,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,&nops,out->arSet,(dim_t)(sum_cof[j].size+1));
+        out->ops= (formula_op *) malloc (nops*sizeof(formula_op));
+        memcpy(out->ops,ops,nops*sizeof(formula_op));
+        out->nops=nops;
+        out->base=*sumindx;
+        *sumindx=*sumindx+nloops;
+        strcpy(interchar,sum_cof[j].sumname);
+        strcat(interchar,"{");
+        for (l=0; l<sum_cof[j].size; l++) {
+          strcat(interchar,sum_cof[j].dimnames[l]);
+          strcat(interchar,",");
+        }
+        if (interchar[strlen(interchar)-1]==',') {
+          interchar[strlen(interchar)-1]='}';
+        }
+        else {
+          if (interchar[strlen(interchar)-1]=='{') {
+            interchar[strlen(interchar)-1]='\0';
+          }
+          else {
+            strcat(interchar,"}");
+          }
+        }
+        while(str_replace_all(formulain,line1,interchar)!=NULL);
+        return 1;
+      }
+    }
+    else {
+      i=i+k+4;
+      readitem=formulain+i;
+    }
+  }
+  return 0;
+}
+
+/* Evaluate one built SUM into sum_vals: same OpenMP layout, thread-copy
+   pattern and per-element arithmetic order as the former inline loops. */
+static void sum_prog_eval(sum_prog *sp, set_def *sets, set_element *set_elems, elem_value *elem_vals, sum_value *sum_vals, solve_real zerodivide) {
+  dim_t dcount;
+  offset_t l,l1,l2,superset_pos;
+  solve_real vval;
+  quantifier *arSet2=NULL;
+  formula_op *ops1=NULL;
+  #pragma omp parallel private(l,l1,l2,dcount,superset_pos,vval,arSet2,ops1) shared(elem_vals,sum_vals,sp)
+  {
+  if(omp_get_thread_num()!=0){
+    arSet2=realloc(arSet2,(sp->nouter+1)*sizeof(quantifier));
+    memcpy(arSet2,sp->arSet,(sp->nouter+1)*sizeof(quantifier));
+    ops1=realloc(ops1,sp->nops*sizeof(formula_op));
+    memcpy(ops1,sp->ops,sp->nops*sizeof(formula_op));
+  }else{
+    ops1=sp->ops;
+    arSet2=sp->arSet;
+  }
+  #pragma omp for
+  for (l=0; l<sp->nloops; l++) {
+    l2=l;
+    for (dcount=0; dcount<sp->nouter; dcount++) {
+      superset_pos=l2/sp->dcountdim[dcount];
+      arSet2[dcount].indx=superset_pos;
+      l2=l2-superset_pos*sp->dcountdim[dcount];
+    }
+    vval=0;
+    for (l1=0; l1<sp->sumset_size; l1++) {
+      arSet2[sp->nouter].indx=l1;
+      vval+=formula_eval(elem_vals,sets,set_elems,sum_vals,ops1,sp->nops,arSet2,(dim_t)(sp->nouter+1),zerodivide);
+    }
+    sum_vals[sp->base+l].value=vval;
+  }
+  if(omp_get_thread_num()!=0){
+    free(arSet2);
+    arSet2=NULL;
+    free(ops1);
+    ops1=NULL;
+  }else{
+    ops1=NULL;
+    arSet2=NULL;
+  }
+  }
+}
+
+/* Free one statement's built programs. */
+static void stmt_prog_free(stmt_prog *st) {
+  int i,s;
+  for (s=0; s<st->neqsums; s++) {
+    free(st->eqsums[s].ops);
+    free(st->eqsums[s].arSet);
+  }
+  free(st->eqsums);
+  for (i=0; i<st->nlv; i++) {
+    for (s=0; s<st->lv[i].nsums; s++) {
+      free(st->lv[i].sums[s].ops);
+      free(st->lv[i].sums[s].arSet);
+    }
+    free(st->lv[i].sums);
+    free(st->lv[i].ops);
+    free(st->lv[i].arSet);
+  }
+  free(st->lv);
+  free(st->sum_vals);
+  memset(st,0,sizeof(stmt_prog));
+}
+
+/* Execute one built statement: evaluate its SUM programs in build order
+   (equation-level first, then per occurrence -- the order they were
+   evaluated inline before the split), then run each occurrence's element
+   loop filling A (endogenous columns) and B (exogenous columns).  Loop
+   layout, OpenMP scheduling and MatSetValues pattern are unchanged. */
+static void stmt_prog_execute(stmt_prog *st, offset_t matrow, offset_t *eq_addr, offset_t nloops, set_def *sets, set_element *set_elems, elem_value *elem_vals, closure_entry *closure_vals, array_def *vars, PetscInt Istart1, PetscInt Iend1, Mat A, Mat B) {
+  int s,i;
+  dim_t dcount;
+  offset_t lj,l1,l2,li3,i3,i5,sj;
+  PetscInt Iindx,Jindx;
+  solve_real vval;
+  quantifier *arSet1=NULL;
+  formula_op *ops1=NULL;
+  if(!st->inproc) return;
+  for (s=0; s<st->neqsums; s++) sum_prog_eval(&st->eqsums[s],sets,set_elems,elem_vals,st->sum_vals,st->zerodivide);
+  for (i=0; i<st->nlv; i++) {
+    linvar_prog *lv=&st->lv[i];
+    if(!lv->built) continue;
+    for (s=0; s<lv->nsums; s++) sum_prog_eval(&lv->sums[s],sets,set_elems,elem_vals,st->sum_vals,st->zerodivide);
+    #pragma omp parallel private(lj,Jindx,i3,sj,i5,l2,dcount,l1,li3,Iindx,arSet1,ops1,vval) shared(elem_vals,st,lv,closure_vals,vars,eq_addr)
+    {
+    if(omp_get_thread_num()!=0){
+      arSet1=realloc(arSet1,lv->fdimlin*sizeof(quantifier));
+      memcpy(arSet1,lv->arSet,lv->fdimlin*sizeof(quantifier));
+      ops1=realloc(ops1,lv->nops*sizeof(formula_op));
+      memcpy(ops1,lv->ops,lv->nops*sizeof(formula_op));
+    }else{
+      ops1=lv->ops;
+      arSet1=lv->arSet;
+    }
+      solve_real *value= (solve_real *) calloc (lv->nloopsfac,sizeof(solve_real));
+      PetscInt *jcn= (PetscInt *) calloc (lv->nloopsfac,sizeof(PetscInt));
+      solve_real *valueb= (solve_real *) calloc (lv->nloopsfac,sizeof(solve_real));
+      PetscInt *jcnb= (PetscInt *) calloc (lv->nloopsfac,sizeof(PetscInt));
+    #pragma omp for
+      for (i5=0; i5<nloops; i5++) {
+        Jindx=eq_addr[matrow+i5];
+        if(Jindx>=Istart1&&Jindx<Iend1) {
+          i3=0;
+          sj=0;
+          for (lj=i5*lv->nloopsfac; lj<(i5+1)*lv->nloopsfac; lj++) {
+          l2=lj;
+          for (dcount=0; dcount<lv->fdimlin; dcount++) {
+            l1=(offset_t) l2/lv->dcountdim2[dcount];
+            arSet1[dcount].indx=l1;
+            l2=l2-l1*lv->dcountdim2[dcount];
+          }
+          li3=0;
+          for (dcount=0; dcount<vars[lv->LinVarIndx].size; dcount++) {
+            if(lv->supset[dcount]==0) {
+              li3=li3+(arSet1[lv->dcountdim3[dcount]].indx+lv->dimleadlag[dcount])*vars[lv->LinVarIndx].strides[dcount];
+            }
+            else {
+              li3=li3+(set_elems[sets[arSet1[lv->dcountdim3[dcount]].setid].offset+arSet1[lv->dcountdim3[dcount]].indx].superset_pos[lv->supset[dcount]]+lv->dimleadlag[dcount])*vars[lv->LinVarIndx].strides[dcount];
+            }
+          }
+          vval=formula_eval(elem_vals,sets,set_elems,st->sum_vals,ops1,lv->nops,arSet1,lv->fdimlin,st->zerodivide);
+          Iindx=closure_vals[vars[lv->LinVarIndx].offset+li3].exo_index;
+          if (!closure_vals[vars[lv->LinVarIndx].offset+li3].is_exogenous&&vval!=0) {
+            value[i3]=vval;
+            jcn[i3]=Iindx;
+            i3++;
+          }
+          if (closure_vals[vars[lv->LinVarIndx].offset+li3].is_exogenous&&vval!=0) {
+            valueb[sj]=-vval;
+            jcnb[sj]=Iindx;
+            sj++;
+          }
+        }
+        if(i3>0)MatSetValues(A,1,&Jindx,i3,jcn,value,ADD_VALUES);
+        if(sj>0)MatSetValues(B,1,&Jindx,sj,jcnb,valueb,ADD_VALUES);
+        }
+      }
+      free(value);
+      free(jcn);
+      free(valueb);
+      free(jcnb);
+    if(omp_get_thread_num()!=0){
+      free(arSet1);
+      arSet1=NULL;
+      free(ops1);
+      ops1=NULL;
+    }else{
+      ops1=NULL;
+      arSet1=NULL;
+    }
+    }
+  }
+}
+
 int jacobian_fill(char *fname, char *commsyntax,set_def *sets,offset_t nset, set_element *set_elems, array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar, elem_value *elem_vals,offset_t ncofvar,offset_t ncofele,closure_entry *closure_vals,offset_t ndblock,offset_t alltimeset,offset_t allregset,offset_t *eq_addr,offset_t *counteq,offset_t nintraeq,Mat A,Mat B) {
   FILE * filehandle;
-  char tline[TABREADLINE],line[TABREADLINE],line1[TABREADLINE],leftline[TABREADLINE],linecopy[TABREADLINE];//,set1[NAMESIZE],set2[NAMESIZE];
-  char vname[TABREADLINE],sumsyntax[NAMESIZE],lintmp[TABREADLINE];//,*p1=NULL;
-  char *readitem=NULL,*p=NULL,*p1=NULL;//,*p2=NULL,*varpnts;
-  solve_real vval;
-  PetscScalar    vvalpetsc;
-  PetscInt Iindx,Jindx=0,Istart1,Iend1,matrow,rowindx;//,jfix=0
+  char tline[TABREADLINE],line[TABREADLINE],line1[TABREADLINE],leftline[TABREADLINE],linecopy[TABREADLINE];
+  char vname[TABREADLINE],sumsyntax[NAMESIZE],lintmp[TABREADLINE];
+  char *readitem=NULL,*p=NULL,*p1=NULL;
+  PetscInt Jindx=0,Istart1,Iend1,matrow;
   PetscErrorCode ierr;
   solve_real zerodivide=0;
   PetscMPIInt  mpisize1;
   bool isinproc;
+  stmt_prog st;
   ierr = MatGetOwnershipRange(A,&Istart1,&Iend1);
   MPI_Comm_size(PETSC_COMM_WORLD,&mpisize1);
   CHKERRQ(ierr);
   dim_t fdim,np,dcount,fdimlin=0,i4,sup,supset[MAXSUPSET];
   int totalsum,sumcount=1,sumcount1=0,lvar,lvar1,lvar2,lvar3,lvar4;
-  offset_t lj,l1,i1=0,sumbegadd,dcountdim1[4*MAXVARDIM],dcountdim2[4*MAXVARDIM],dcountdim3[4*MAXVARDIM],nloops,nloopslin,nloopsfac,li3,nsumele,nsumele1,l2,eqindx=0,ltime;//,sizelinvars,totlinvars,templinvars
+  offset_t lj,l1,i1=0,sumbegadd,dcountdim1[4*MAXVARDIM],dcountdim2[4*MAXVARDIM],dcountdim3[4*MAXVARDIM],nloops,nloopslin,nloopsfac,li3,nsumele,nsumele1,l2,eqindx=0;
   int sumindx,npow,npar,nmul,nplu,ndiv,nmin,nops=0,nlinvars,leadlag,varindx1,varindx2;
-  offset_t j,sj,l,i3,i5,i,arsetdim=0,nops_alloc=0;
-  quantifier *arSet1=NULL;
-  formula_op *ops1= NULL;
+  offset_t sj,l,i3,i,arsetdim=0,nops_alloc=0;
 
   filehandle = fopen(fname,"r");
-  matrow=0;//nintraeq;
+  matrow=0;
 
   while (tab_next_statement_resolved(commsyntax,filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
     if (strstr(line,"(default")==NULL) {
+      memset(&st,0,sizeof(stmt_prog));
+      st.zerodivide=zerodivide;
       str_replace_first(line, commsyntax, "");
       str_replace_first(line, "(linear)", "");
       while (str_replace_all(line,"  ", " "));
@@ -279,6 +590,7 @@ int jacobian_fill(char *fname, char *commsyntax,set_def *sets,offset_t nset, set
         }
       }
       else isinproc=true;
+      st.inproc=isinproc;
       if(isinproc) {
         strcpy(line,line1);
         readitem=line;
@@ -300,8 +612,7 @@ int jacobian_fill(char *fname, char *commsyntax,set_def *sets,offset_t nset, set
           li3=li3+i1;
         }
         nsumele=li3;
-        sum_value *sum_vals= (sum_value *) calloc (nsumele*nlinvars,sizeof(sum_value));
-
+        st.sum_vals= (sum_value *) calloc (nsumele*nlinvars,sizeof(sum_value));
         strcpy(line,line1);
         readitem=line;
         sumcount=0;
@@ -330,12 +641,16 @@ int jacobian_fill(char *fname, char *commsyntax,set_def *sets,offset_t nset, set
         strcpy(line,line1);
         readitem=line;
         sumindx=0;
-        while (eq_sum_eval(readitem,sumsyntax,sets,nset,set_elems,elem_vals,ncofvar,ncofele,coefs,ncof,vars,nvar,sum_cof,totalsum,sum_vals,nsumele,ops,arSet,fdim+1,&sumindx,sumcount,zerodivide)==1) {
+        st.eqsums= (sum_prog *) calloc (totalsum+1,sizeof(sum_prog));
+        while (sum_prog_build(readitem,sumsyntax,true,sum_cof,sumcount,sets,coefs,ncof,vars,nvar,ncofele,totalsum,ops,&sumindx,&st.eqsums[st.neqsums])==1) {
           sumcount++;
+          st.neqsums++;
         }
         strcpy(line1,readitem);
         sumbegadd=nsumele;
         sumcount1=sumcount;
+        st.lv= (linvar_prog *) calloc (nlinvars,sizeof(linvar_prog));
+        st.nlv=nlinvars;
         for (i=0; i<nlinvars; i++) {
           Jindx=eq_addr[matrow];
           if(Jindx>=Iend1)continue;
@@ -414,8 +729,10 @@ int jacobian_fill(char *fname, char *commsyntax,set_def *sets,offset_t nset, set
           }
           strcpy(line,leftline);
           readitem=line;
-          while (sum_eval(readitem,sumsyntax,sets,nset,set_elems,elem_vals,ncofvar,ncofele,coefs,ncof,vars,nvar,sum_cof,totalsum,sum_vals,nsumele1,ops,arSet,fdimlin+1,&sumindx,sumcount,zerodivide)==1) {
+          st.lv[i].sums= (sum_prog *) calloc (totalsum-sumcount+1,sizeof(sum_prog));
+          while (sum_prog_build(readitem,sumsyntax,false,sum_cof,sumcount,sets,coefs,ncof,vars,nvar,ncofele,totalsum,ops,&sumindx,&st.lv[i].sums[st.lv[i].nsums])==1) {
             sumcount++;
+            st.lv[i].nsums++;
           }
           nops=0;
           formula_compile(readitem,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,&nops,arSet,fdimlin);
@@ -437,78 +754,26 @@ int jacobian_fill(char *fname, char *commsyntax,set_def *sets,offset_t nset, set
             }
             else supset[dcount]=0;
           }
-        #pragma omp parallel private(lj,Jindx,i3,sj,i5,l2,dcount,l1,li3,Iindx,ierr,arSet1,ops1,vval) shared(elem_vals,arSet)
-        {
-        if(omp_get_thread_num()!=0){
-          arSet1=realloc(arSet1,arsetdim*sizeof(quantifier));
-          memcpy(arSet1,arSet,arsetdim*sizeof(quantifier));
-          ops1=realloc(ops1,nops_alloc*sizeof(formula_op));
-          memcpy(ops1,ops,nops_alloc*sizeof(formula_op));
-        }else{
-          ops1=ops;
-          arSet1=arSet;
-        }
-          solve_real *value= (solve_real *) calloc (nloopsfac,sizeof(solve_real));
-          PetscInt *jcn= (PetscInt *) calloc (nloopsfac,sizeof(PetscInt));
-          solve_real *valueb= (solve_real *) calloc (nloopsfac,sizeof(solve_real));
-          PetscInt *jcnb= (PetscInt *) calloc (nloopsfac,sizeof(PetscInt));
-        #pragma omp for
-          for (i5=0; i5<nloops; i5++) {
-            Jindx=eq_addr[matrow+i5];//Jindx=ha_eqadd[matrow+(uvadd)lj/nloopsfac];
-            if(Jindx>=Istart1&&Jindx<Iend1) {
-              i3=0;
-              sj=0;
-              for (lj=i5*nloopsfac; lj<(i5+1)*nloopsfac; lj++) {
-              l2=lj;
-              for (dcount=0; dcount<fdimlin; dcount++) {
-                l1=(offset_t) l2/dcountdim2[dcount];
-                arSet1[dcount].indx=l1;
-                l2=l2-l1*dcountdim2[dcount];
-              }
-              li3=0;
-              for (dcount=0; dcount<vars[LinVars[i].LinVarIndx].size; dcount++) {
-                if(supset[dcount]==0) {
-                  li3=li3+(arSet1[dcountdim3[dcount]].indx+LinVars[i].dimleadlag[dcount])*vars[LinVars[i].LinVarIndx].strides[dcount];
-                }
-                else {
-                  li3=li3+(set_elems[sets[arSet1[dcountdim3[dcount]].setid].offset+arSet1[dcountdim3[dcount]].indx].superset_pos[supset[dcount]]+LinVars[i].dimleadlag[dcount])*vars[LinVars[i].LinVarIndx].strides[dcount];
-                }
-              }
-              vval=formula_eval(elem_vals,sets,set_elems,sum_vals,ops1,nops,arSet1,fdimlin,zerodivide);
-              Iindx=closure_vals[vars[LinVars[i].LinVarIndx].offset+li3].exo_index;
-              if (!closure_vals[vars[LinVars[i].LinVarIndx].offset+li3].is_exogenous&&vval!=0) {
-                value[i3]=vval;
-                jcn[i3]=Iindx;
-                i3++;
-              }
-              if (closure_vals[vars[LinVars[i].LinVarIndx].offset+li3].is_exogenous&&vval!=0) {
-                valueb[sj]=-vval;
-                jcnb[sj]=Iindx;
-                sj++;
-              }
-            }
-            if(i3>0)MatSetValues(A,1,&Jindx,i3,jcn,value,ADD_VALUES);
-            if(sj>0)MatSetValues(B,1,&Jindx,sj,jcnb,valueb,ADD_VALUES);
-            }
+          st.lv[i].ops= (formula_op *) malloc (nops*sizeof(formula_op));
+          memcpy(st.lv[i].ops,ops,nops*sizeof(formula_op));
+          st.lv[i].nops=nops;
+          st.lv[i].LinVarIndx=LinVars[i].LinVarIndx;
+          st.lv[i].fdimlin=fdimlin;
+          st.lv[i].nloopsfac=nloopsfac;
+          st.lv[i].arSet= (quantifier *) malloc (fdimlin*sizeof(quantifier));
+          memcpy(st.lv[i].arSet,arSet,fdimlin*sizeof(quantifier));
+          for (dcount=0; dcount<fdimlin; dcount++) st.lv[i].dcountdim2[dcount]=dcountdim2[dcount];
+          for (dcount=0; dcount<vars[LinVars[i].LinVarIndx].size; dcount++) {
+            st.lv[i].dcountdim3[dcount]=dcountdim3[dcount];
+            st.lv[i].supset[dcount]=supset[dcount];
+            st.lv[i].dimleadlag[dcount]=LinVars[i].dimleadlag[dcount];
           }
-          free(value);
-          free(jcn);
-          free(valueb);
-          free(jcnb);
-        if(omp_get_thread_num()!=0){
-          free(arSet1);
-          arSet1=NULL;
-          free(ops1);
-          ops1=NULL;
-        }else{
-          ops1=NULL;
-          arSet1=NULL;
-        }
-        }
+          st.lv[i].built=true;
         }
         free(sum_cof);
-        free(sum_vals);
       }
+      stmt_prog_execute(&st,matrow,eq_addr,nloops,sets,set_elems,elem_vals,closure_vals,vars,Istart1,Iend1,A,B);
+      stmt_prog_free(&st);
       matrow+=nloops;
       eqindx++;
 
@@ -848,238 +1113,6 @@ int eq_sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifier 
         }
       }
 
-    }
-    else {
-      i=i+k+4;
-      readitem=formulain+i;
-    }
-  }
-  return 0;
-}
-
-int eq_sum_eval(char *formulain, char *commsyntax,set_def *sets,dim_t nset, set_element *set_elems,elem_value *elem_vals,offset_t ncofvar,offset_t ncofele, array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar,sum_def *sum_cof,int totalsum,sum_value *sum_vals,offset_t nsumele,formula_op *ops,quantifier *arSet1,dim_t fdim,int *sumindx,int j, solve_real zerodivide) {
-  char *readitem,*p;//,*p1,interchar2[NAMESIZE],line5[TABREADLINE];
-  char interchar[NAMESIZE],line[TABREADLINE],line1[TABREADLINE],line2[TABREADLINE];//,line3[TABREADLINE],line4[TABREADLINE];//,interchar1[NAMESIZE]
-  int i=0,k=0,k1=0,length;//,simpl=0;//,ncur=0,ncuri,l3,l4,l5,l6,l7
-  dim_t dcount,superset_pos,fdimsumcof,l;
-  offset_t dcountdim1[4*MAXVARDIM],nloops,l1,l2,l3;
-  int nops;
-  solve_real vval;
-  quantifier *arSet2=NULL;
-  formula_op *ops1= NULL;
-  offset_t arsetsize;
-  length=strlen(formulain);
-  readitem=formulain;
-  while (i<length) {
-    k=str_find_ci(readitem,commsyntax);
-    if (k==-1) {
-      return 0;
-    }
-    if (k==0) {
-      readitem=formulain+i+k;
-      strcpy(line,readitem);
-      sum_extract(line);
-      k1=str_find_ci(line+4,commsyntax);
-      if (k1!=-1) {
-        i=i+k+4;
-        readitem=formulain+i;
-      }
-      else {
-        if(str_find_ci(line,",p_")>-1||str_find_ci(line,"*p_")>-1||str_find_ci(line,"+p_")>-1||str_find_ci(line,"-p_")>-1||str_find_ci(line,"(p_")>-1) {
-          i=i+k+4;
-          readitem=formulain+i;
-        }
-        else {
-          strcpy(line1,line);
-          p=strtok(line,",");
-          p=strtok(NULL,",");
-          p=strtok(NULL,"\0");
-          p[strlen(p)-1]='\0';
-          strcpy(line2,p);
-          arsetsize=sum_cof[j].size+1;
-          quantifier *arSet= (quantifier *) calloc (arsetsize,sizeof(quantifier));
-          for (l=0; l<sum_cof[j].size; l++) {
-            arSet[l].setid=sum_cof[j].setid[l];
-            strcpy(arSet[l].index_name,sum_cof[j].dimnames[l]);
-          }
-          nloops=1;
-          for (l=0; l<sum_cof[j].size; l++) {
-            nloops=nloops*sets[arSet[l].setid].size;
-            dcount=sum_cof[j].size-l;
-            if(dcount==sum_cof[j].size) {
-              dcountdim1[dcount-1]=1;
-            }
-            else {
-              dcountdim1[dcount-1]=dcountdim1[dcount]*sets[arSet[dcount].setid].size;
-            }
-          }
-          arSet[sum_cof[j].size].setid=sum_cof[j].sumsetid;
-          strcpy(arSet[sum_cof[j].size].index_name,sum_cof[j].sumindx);
-          fdimsumcof=sum_cof[j].size+1;
-          nops=0;
-          formula_compile(p,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,&nops,arSet,fdimsumcof);
-        #pragma omp parallel private(l3,l1,l2,dcount,superset_pos,vval,arSet2,ops1) shared(elem_vals,arSet,sum_vals)
-        {
-        if(omp_get_thread_num()!=0){
-          arSet2=realloc(arSet2,arsetsize*sizeof(quantifier));
-          memcpy(arSet2,arSet,arsetsize*sizeof(quantifier));
-          ops1=realloc(ops1,nops*sizeof(formula_op));
-          memcpy(ops1,ops,nops*sizeof(formula_op));
-        }else{
-          ops1=ops;
-          arSet2=arSet;
-        }
-        #pragma omp for
-          for (l3=0; l3<nloops; l3++) {
-            l2=l3;
-            for (dcount=0; dcount<sum_cof[j].size; dcount++) {
-              superset_pos=(offset_t) l2/dcountdim1[dcount];
-              arSet2[dcount].indx=superset_pos;
-              l2=l2-superset_pos*dcountdim1[dcount];
-            }
-            vval=0;
-            for (l1=0; l1<sets[sum_cof[j].sumsetid].size; l1++) {
-              arSet2[sum_cof[j].size].indx=l1;
-              vval+=formula_eval(elem_vals,sets,set_elems,sum_vals,ops1,nops,arSet2,fdimsumcof,zerodivide);
-            }
-            sum_vals[*sumindx+l3].value=vval;
-          }
-        if(omp_get_thread_num()!=0){
-          free(arSet2);
-          arSet2=NULL;
-          free(ops1);
-          ops1=NULL;
-        }else{
-          ops1=NULL;
-          arSet2=NULL;
-        }
-        }
-          *sumindx=*sumindx+nloops;
-          strcpy(interchar,sum_cof[j].sumname);
-          strcat(interchar,"{");
-          for (l=0; l<sum_cof[j].size; l++) {
-            strcat(interchar,sum_cof[j].dimnames[l]);
-            strcat(interchar,",");
-          }
-          if (interchar[strlen(interchar)-1]==',') {
-            interchar[strlen(interchar)-1]='}';
-          }
-          else {
-            if (interchar[strlen(interchar)-1]=='{') {
-              interchar[strlen(interchar)-1]='\0';
-            }
-            else {
-              strcat(interchar,"}");
-            }
-          }
-          while(str_replace_all(formulain,line1,interchar)!=NULL);
-          free(arSet);
-          return 1;
-        }
-      }
-
-    }
-    else if (formulain[i+k-1]=='+'||formulain[i+k-1]=='-'||formulain[i+k-1]=='*'||formulain[i+k-1]=='/'||formulain[i+k-1]=='^'||formulain[i+k-1]=='('||formulain[i+k-1]==',') {
-      readitem=formulain+i+k;
-      strcpy(line,readitem);
-      sum_extract(line);
-      k1=str_find_ci(line+4,commsyntax);
-      if (k1!=-1) {
-        i=i+k+4;
-        readitem=formulain+i;
-      }
-      else {
-        if(str_find_ci(line,",p_")>-1||str_find_ci(line,"*p_")>-1||str_find_ci(line,"+p_")>-1||str_find_ci(line,"-p_")>-1||str_find_ci(line,"(p_")>-1) {
-          i=i+k+4;
-          readitem=formulain+i;
-        }
-        else {
-          strcpy(line1,line);
-          p=strtok(line,",");
-          p=strtok(NULL,",");
-          p=strtok(NULL,"\0");
-          p[strlen(p)-1]='\0';
-          arsetsize=sum_cof[j].size+1;
-          quantifier *arSet= (quantifier *) calloc (arsetsize,sizeof(quantifier));
-          for (l=0; l<sum_cof[j].size; l++) {
-            arSet[l].setid=sum_cof[j].setid[l];
-            strcpy(arSet[l].index_name,sum_cof[j].dimnames[l]);
-          }
-          nloops=1;
-          for (l=0; l<sum_cof[j].size; l++) {
-            nloops=nloops*sets[arSet[l].setid].size;//sum_cof[j].dims[l];
-            dcount=sum_cof[j].size-l;
-            if(dcount==sum_cof[j].size) {
-              dcountdim1[dcount-1]=1;
-            }
-            else {
-              dcountdim1[dcount-1]=dcountdim1[dcount]*sets[arSet[dcount].setid].size;
-            }
-          }
-          arSet[sum_cof[j].size].setid=sum_cof[j].sumsetid;
-          strcpy(arSet[sum_cof[j].size].index_name,sum_cof[j].sumindx);
-          fdimsumcof=sum_cof[j].size+1;
-          nops=0;
-          formula_compile(p,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,&nops,arSet,fdimsumcof);
-        #pragma omp parallel private(l3,l1,l2,dcount,superset_pos,vval,arSet2,ops1) shared(elem_vals,arSet,sum_vals)
-        {
-        if(omp_get_thread_num()!=0){
-          arSet2=realloc(arSet2,arsetsize*sizeof(quantifier));
-          memcpy(arSet2,arSet,arsetsize*sizeof(quantifier));
-          ops1=realloc(ops1,nops*sizeof(formula_op));
-          memcpy(ops1,ops,nops*sizeof(formula_op));
-        }else{
-          ops1=ops;
-          arSet2=arSet;
-        }
-        #pragma omp for
-          for (l3=0; l3<nloops; l3++) {
-            l2=l3;
-            for (dcount=0; dcount<sum_cof[j].size; dcount++) {
-              superset_pos=(offset_t) l2/dcountdim1[dcount];
-              arSet2[dcount].indx=superset_pos;
-              l2=l2-superset_pos*dcountdim1[dcount];
-            }
-            vval=0;
-            for (l1=0; l1<sets[sum_cof[j].sumsetid].size; l1++) {
-              arSet2[sum_cof[j].size].indx=l1;
-              vval+=formula_eval(elem_vals,sets,set_elems,sum_vals,ops1,nops,arSet2,fdimsumcof,zerodivide);
-            }
-            sum_vals[(offset_t)*sumindx+l3].value=vval;//ha_sumele[*sumindx+l2].varval=vval;
-          }
-        if(omp_get_thread_num()!=0){
-          free(arSet2);
-          arSet2=NULL;
-          free(ops1);
-          ops1=NULL;
-        }else{
-          ops1=NULL;
-          arSet2=NULL;
-        }
-        }
-          *sumindx=*sumindx+nloops;
-          strcpy(interchar,sum_cof[j].sumname);
-          strcat(interchar,"{");
-          for (l=0; l<sum_cof[j].size; l++) {
-            strcat(interchar,sum_cof[j].dimnames[l]);
-            strcat(interchar,",");
-          }
-          if (interchar[strlen(interchar)-1]==',') {
-            interchar[strlen(interchar)-1]='}';
-          }
-          else {
-            if (interchar[strlen(interchar)-1]=='{') {
-              interchar[strlen(interchar)-1]='\0';
-            }
-            else {
-              strcat(interchar,"}");
-            }
-          }
-          while(str_replace_all(formulain,line1,interchar));
-          free(arSet);
-          return 1;
-        }
-      }
     }
     else {
       i=i+k+4;
