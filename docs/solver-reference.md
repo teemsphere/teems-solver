@@ -233,9 +233,14 @@ counts nonzeros per row for exact PETSc preallocation (diagonal and
 off-diagonal, for both A and B). `jacobian_fill` walks each equation
 block, differentiates the linearized terms per element, and fills
 A (endogenous columns) and B (exogenous columns, whose product with the
-shock vector forms the RHS). `eq_sum_parse` / `eq_sum_eval` /
-`eq_sum_replace` / `eq_linvar_read` handle SUM terms and
-linear-variable references inside equations.
+shock vector forms the RHS). Since the 6.2 phase-0 refactor each
+statement is compiled once per solve into a cached program
+(`stmt_prog`: quantifier frames, per-occurrence coefficient ops from
+`formula_compile`, SUM bodies as `sum_prog` records) and later fills
+only re-evaluate it; the cache is per rank, keyed to the matrix
+ownership range, and released by `jacobian_cache_free()`.
+`eq_sum_parse` / `eq_sum_replace` / `eq_linvar_read` handle SUM terms
+and linear-variable references during the build phase.
 
 ### block_order.c
 
@@ -511,6 +516,19 @@ each; raw walls in `.audit/ab_phase5_results.txt`):
   per-step refill); `formulas_execute` = 0.04s (3.4%). Formula op-list
   caching was dropped on these numbers; the equation path belongs to
   condensation (ROADMAP 6.2).
+- **Compiled-equation cache** (2026-07-16, ROADMAP 6.2 phase 0,
+  `.audit/ab_eqcache.sh`, interleaved pairs, first run discarded):
+  `jacobian_fill` split into a build phase (parse + `formula_compile`
+  programs, run once per solve per rank) and an execute phase (SUM +
+  element evaluation, run per step); later fills re-walk the statement
+  file only to refresh `zerodivide` defaults. Wall medians old → new:
+  GTAP-RE 10.5k LU-1 Gragg **1.60s → 0.76s (−52%)** — the small-model
+  lever above, collected; 202k LU-1 Gragg 10.90s → 10.25s (−6%); 202k
+  SBBD-2 Gragg 5.22s → 4.94s (−5%, new faster in every pair). RSS cost
+  is the cache itself: +3–8MB/rank. Golden-bit-identical (14/14) and
+  valgrind-clean; the remaining per-fill parse work is the statement
+  walk, which stays because `zerodivide` may reference scalar
+  coefficients whose values change between steps.
 
 - **ISA level and BLAS threading** (2026-07-14, 6.6(d) A/Bs through
   the runtime images, `.audit/ab_march.sh`): `x86-64-v3` shows **no
