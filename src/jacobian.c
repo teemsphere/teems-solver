@@ -51,7 +51,8 @@ typedef struct
 typedef struct
 {
   bool inproc;                      /* any row of the block on this rank */
-  solve_real zerodivide;
+  offset_t nloops;                  /* rows in this equation block */
+  solve_real zerodivide;            /* refreshed per fill (may reference a scalar coefficient) */
   sum_prog *eqsums;                 /* linear-variable-free sums */
   int neqsums;
   sum_value *sum_vals;              /* shared value store for all sums */
@@ -223,6 +224,26 @@ static void stmt_prog_free(stmt_prog *st) {
   memset(st,0,sizeof(stmt_prog));
 }
 
+/* Per-rank cache of the built statement programs.  The equation
+   structure is fixed for the whole solve -- only coefficient values
+   change between steps -- so the first jacobian_fill call builds every
+   statement's programs and later calls only re-evaluate them.  The
+   cache is keyed to the matrix row ownership range; if a caller ever
+   presents a different layout the cache rebuilds from scratch. */
+static stmt_prog *stmt_cache=NULL;
+static int stmt_cache_n=0;
+static bool stmt_cache_built=false;
+static PetscInt stmt_cache_Istart=-1,stmt_cache_Iend=-1;
+
+void jacobian_cache_free(void) {
+  int i;
+  for (i=0; i<stmt_cache_n; i++) stmt_prog_free(&stmt_cache[i]);
+  free(stmt_cache);
+  stmt_cache=NULL;
+  stmt_cache_n=0;
+  stmt_cache_built=false;
+}
+
 /* Execute one built statement: evaluate its SUM programs in build order
    (equation-level first, then per occurrence -- the order they were
    evaluated inline before the split), then run each occurrence's element
@@ -323,7 +344,7 @@ int jacobian_fill(char *fname, char *commsyntax,set_def *sets,offset_t nset, set
   solve_real zerodivide=0;
   PetscMPIInt  mpisize1;
   bool isinproc;
-  stmt_prog st;
+  stmt_prog *stp=NULL;
   ierr = MatGetOwnershipRange(A,&Istart1,&Iend1);
   MPI_Comm_size(PETSC_COMM_WORLD,&mpisize1);
   CHKERRQ(ierr);
@@ -336,10 +357,31 @@ int jacobian_fill(char *fname, char *commsyntax,set_def *sets,offset_t nset, set
   filehandle = fopen(fname,"r");
   matrow=0;
 
+  if (stmt_cache_built&&(Istart1!=stmt_cache_Istart||Iend1!=stmt_cache_Iend)) jacobian_cache_free();
+  if (stmt_cache_built) {
+    /* fast path: statements already compiled; walk the file only to
+       refresh zerodivide defaults (they may reference scalar
+       coefficients whose values change between steps) */
+    int sidx=0;
+    while (tab_next_statement_resolved(commsyntax,filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
+      if (strstr(line,"(default")==NULL) {
+        stmt_cache[sidx].zerodivide=zerodivide;
+        stmt_prog_execute(&stmt_cache[sidx],matrow,eq_addr,stmt_cache[sidx].nloops,sets,set_elems,elem_vals,closure_vals,vars,Istart1,Iend1,A,B);
+        matrow+=stmt_cache[sidx].nloops;
+        sidx++;
+      }
+    }
+    fclose(filehandle);
+    return 1;
+  }
+
   while (tab_next_statement_resolved(commsyntax,filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
     if (strstr(line,"(default")==NULL) {
-      memset(&st,0,sizeof(stmt_prog));
-      st.zerodivide=zerodivide;
+      stmt_cache=realloc(stmt_cache,(stmt_cache_n+1)*sizeof(stmt_prog));
+      stp=&stmt_cache[stmt_cache_n];
+      stmt_cache_n++;
+      memset(stp,0,sizeof(stmt_prog));
+      stp->zerodivide=zerodivide;
       str_replace_first(line, commsyntax, "");
       str_replace_first(line, "(linear)", "");
       while (str_replace_all(line,"  ", " "));
@@ -590,7 +632,7 @@ int jacobian_fill(char *fname, char *commsyntax,set_def *sets,offset_t nset, set
         }
       }
       else isinproc=true;
-      st.inproc=isinproc;
+      stp->inproc=isinproc;
       if(isinproc) {
         strcpy(line,line1);
         readitem=line;
@@ -612,7 +654,7 @@ int jacobian_fill(char *fname, char *commsyntax,set_def *sets,offset_t nset, set
           li3=li3+i1;
         }
         nsumele=li3;
-        st.sum_vals= (sum_value *) calloc (nsumele*nlinvars,sizeof(sum_value));
+        stp->sum_vals= (sum_value *) calloc (nsumele*nlinvars,sizeof(sum_value));
         strcpy(line,line1);
         readitem=line;
         sumcount=0;
@@ -641,16 +683,16 @@ int jacobian_fill(char *fname, char *commsyntax,set_def *sets,offset_t nset, set
         strcpy(line,line1);
         readitem=line;
         sumindx=0;
-        st.eqsums= (sum_prog *) calloc (totalsum+1,sizeof(sum_prog));
-        while (sum_prog_build(readitem,sumsyntax,true,sum_cof,sumcount,sets,coefs,ncof,vars,nvar,ncofele,totalsum,ops,&sumindx,&st.eqsums[st.neqsums])==1) {
+        stp->eqsums= (sum_prog *) calloc (totalsum+1,sizeof(sum_prog));
+        while (sum_prog_build(readitem,sumsyntax,true,sum_cof,sumcount,sets,coefs,ncof,vars,nvar,ncofele,totalsum,ops,&sumindx,&stp->eqsums[stp->neqsums])==1) {
           sumcount++;
-          st.neqsums++;
+          stp->neqsums++;
         }
         strcpy(line1,readitem);
         sumbegadd=nsumele;
         sumcount1=sumcount;
-        st.lv= (linvar_prog *) calloc (nlinvars,sizeof(linvar_prog));
-        st.nlv=nlinvars;
+        stp->lv= (linvar_prog *) calloc (nlinvars,sizeof(linvar_prog));
+        stp->nlv=nlinvars;
         for (i=0; i<nlinvars; i++) {
           Jindx=eq_addr[matrow];
           if(Jindx>=Iend1)continue;
@@ -729,10 +771,10 @@ int jacobian_fill(char *fname, char *commsyntax,set_def *sets,offset_t nset, set
           }
           strcpy(line,leftline);
           readitem=line;
-          st.lv[i].sums= (sum_prog *) calloc (totalsum-sumcount+1,sizeof(sum_prog));
-          while (sum_prog_build(readitem,sumsyntax,false,sum_cof,sumcount,sets,coefs,ncof,vars,nvar,ncofele,totalsum,ops,&sumindx,&st.lv[i].sums[st.lv[i].nsums])==1) {
+          stp->lv[i].sums= (sum_prog *) calloc (totalsum-sumcount+1,sizeof(sum_prog));
+          while (sum_prog_build(readitem,sumsyntax,false,sum_cof,sumcount,sets,coefs,ncof,vars,nvar,ncofele,totalsum,ops,&sumindx,&stp->lv[i].sums[stp->lv[i].nsums])==1) {
             sumcount++;
-            st.lv[i].nsums++;
+            stp->lv[i].nsums++;
           }
           nops=0;
           formula_compile(readitem,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,&nops,arSet,fdimlin);
@@ -754,26 +796,26 @@ int jacobian_fill(char *fname, char *commsyntax,set_def *sets,offset_t nset, set
             }
             else supset[dcount]=0;
           }
-          st.lv[i].ops= (formula_op *) malloc (nops*sizeof(formula_op));
-          memcpy(st.lv[i].ops,ops,nops*sizeof(formula_op));
-          st.lv[i].nops=nops;
-          st.lv[i].LinVarIndx=LinVars[i].LinVarIndx;
-          st.lv[i].fdimlin=fdimlin;
-          st.lv[i].nloopsfac=nloopsfac;
-          st.lv[i].arSet= (quantifier *) malloc (fdimlin*sizeof(quantifier));
-          memcpy(st.lv[i].arSet,arSet,fdimlin*sizeof(quantifier));
-          for (dcount=0; dcount<fdimlin; dcount++) st.lv[i].dcountdim2[dcount]=dcountdim2[dcount];
+          stp->lv[i].ops= (formula_op *) malloc (nops*sizeof(formula_op));
+          memcpy(stp->lv[i].ops,ops,nops*sizeof(formula_op));
+          stp->lv[i].nops=nops;
+          stp->lv[i].LinVarIndx=LinVars[i].LinVarIndx;
+          stp->lv[i].fdimlin=fdimlin;
+          stp->lv[i].nloopsfac=nloopsfac;
+          stp->lv[i].arSet= (quantifier *) malloc (fdimlin*sizeof(quantifier));
+          memcpy(stp->lv[i].arSet,arSet,fdimlin*sizeof(quantifier));
+          for (dcount=0; dcount<fdimlin; dcount++) stp->lv[i].dcountdim2[dcount]=dcountdim2[dcount];
           for (dcount=0; dcount<vars[LinVars[i].LinVarIndx].size; dcount++) {
-            st.lv[i].dcountdim3[dcount]=dcountdim3[dcount];
-            st.lv[i].supset[dcount]=supset[dcount];
-            st.lv[i].dimleadlag[dcount]=LinVars[i].dimleadlag[dcount];
+            stp->lv[i].dcountdim3[dcount]=dcountdim3[dcount];
+            stp->lv[i].supset[dcount]=supset[dcount];
+            stp->lv[i].dimleadlag[dcount]=LinVars[i].dimleadlag[dcount];
           }
-          st.lv[i].built=true;
+          stp->lv[i].built=true;
         }
         free(sum_cof);
       }
-      stmt_prog_execute(&st,matrow,eq_addr,nloops,sets,set_elems,elem_vals,closure_vals,vars,Istart1,Iend1,A,B);
-      stmt_prog_free(&st);
+      stp->nloops=nloops;
+      stmt_prog_execute(stp,matrow,eq_addr,stp->nloops,sets,set_elems,elem_vals,closure_vals,vars,Istart1,Iend1,A,B);
       matrow+=nloops;
       eqindx++;
 
@@ -782,6 +824,9 @@ int jacobian_fill(char *fname, char *commsyntax,set_def *sets,offset_t nset, set
       free(arSet);
     }
   }
+  stmt_cache_built=true;
+  stmt_cache_Istart=Istart1;
+  stmt_cache_Iend=Iend1;
   fclose(filehandle);
   return 1;
 }

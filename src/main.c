@@ -1763,6 +1763,8 @@ int main(int argc,char **args) {
 
   if(solmethod==SM_GRAGG)solve_gragg(nohsl,VecSize,&A,dnz,dnnz,onz,onnz,&B,dnzB,dnnzB,onzB,onnzB,&vecb,&vece,rank,rank_hsl,mpisize,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,&elem_vals,ncofele+nvarele,ncofele,nvarele,&closure_vals,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,eq_addr,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,subints,fcomm,&xcf);
 
+  jacobian_cache_free();
+
 
   if(rank==rank_hsl) {
     for (i=niodata+noutdata; i<niodata+noutdata+nsoldata; i++) {
