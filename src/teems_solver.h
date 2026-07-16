@@ -170,13 +170,38 @@ typedef struct
 } elem_store ;
 
 
-/* closure and shock for one variable element */
+/* closure and shock for one variable element.  exo_index is the matrix
+   column for exogenous/endogenous elements; for backsolved elements it
+   is the compact index into the per-step recovered-value array. */
 typedef struct
 {
   exo_idx_t exo_index;
   bool is_exogenous;
+  bool is_backsolved;
   store_real shock_value;
 } closure_entry ;
+
+/* one "backsolve <var> using <eq> ;" statement (GEMPACK manual 10.16,
+   14.1.3): the variable and its defining equation are eliminated from
+   the condensed system; the solver recovers the variable's per-step
+   values from the equation after each solve, before the data updates. */
+typedef struct
+{
+  char eqname[NAMESIZE];   /* nominated defining equation */
+  offset_t varindx;        /* index into vars[] */
+  offset_t elem_base;      /* first slot in the recovered-value array */
+} backsolve_def ;
+extern backsolve_def *backsolves; /* nominated backsolve pairs, TAB order */
+extern int nbacksolve;            /* number of backsolve statements */
+extern offset_t nbselems;         /* total backsolved variable elements */
+/* "equation" scan filter: SKIP excludes the nominated defining equations
+   (every consumer of the scan then sees only the condensed system);
+   ONLY inverts the filter for the recovery-program build. */
+enum bs_scan_mode { BS_SCAN_SKIP=0, BS_SCAN_ONLY=1 };
+extern int backsolve_scan_mode;
+offset_t backsolve_read(char *fname, array_def *vars, offset_t nvar, closure_entry *closure_vals);
+int backsolve_validate_refs(char *fname, array_def *vars);
+int tab_equation_name(char *stmt, char *eqname);
 
 /* one (all,index,SET) quantifier with its current position */
 typedef struct
@@ -295,6 +320,14 @@ int eq_sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifier 
 int eq_sum_replace(char *formulain, char *commsyntax,int LinIndx, eq_var_ref *LinVars,array_def *vars);
 int jacobian_fill(char *fname, char *commsyntax,set_def *sets,offset_t nset, set_element *set_elems, array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar, elem_value *elem_vals,offset_t ncofvar,offset_t ncofele,closure_entry *closure_vals,offset_t ndblock,offset_t alltimeset,offset_t allregset,offset_t *eq_addr,offset_t *counteq,offset_t nintraeq,Mat A,Mat B);
 void jacobian_cache_free(void); /* release the per-rank compiled-statement cache */
+/* Recover the backsolved variables' per-step values from their retained
+   defining equations (GEMPACK 14.1.3: after the condensed solve, before
+   the data updates).  x = this step's solution vector; exo_z = per-element
+   exogenous per-step changes captured at the vece fill sites; bsvals
+   (nbselems) receives the recovered changes at each pair's elem_base.
+   Returns -1 on a zero pivot or a malformed defining equation. */
+int backsolve_recover(char *fname, char *commsyntax,set_def *sets,offset_t nset, set_element *set_elems, array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar, elem_value *elem_vals,offset_t ncofele,closure_entry *closure_vals,solve_real *x,solve_real *exo_z,solve_real *bsvals);
+void backsolve_cache_free(void);
 int eq_linvar_read(char *formulain,eq_var_ref *LinVars,int linindx,array_def *vars);
 int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,set_element *set_elems,array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar,elem_value *elem_vals,offset_t ncofvar,offset_t ncofele, offset_t nexo,closure_entry *closure_vals,offset_t ndblock,offset_t alltimeset,offset_t allregset,bool *eq_intertemp,offset_t *eq_addr,dim_t *eq_time,dim_t *eq_reg,offset_t *counteq,offset_t nintraeq,bool *sbbd_overrid,PetscInt Istart,PetscInt Iend,PetscInt *dnz,PetscInt *dnnz,PetscInt *onz,PetscInt *onnz,PetscInt *dnzB,PetscInt *dnnzB,PetscInt *onzB,PetscInt *onnzB,int nesteddbbd);
 int equation_order_read(char *fname, char *commsyntax,set_def *sets,dim_t nset,set_element *set_elems,array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar,elem_value *elem_vals,offset_t ncofvar,offset_t ncofele,closure_entry *closure_vals,bool *var_inter,array_def *eq_defs,bool *eq_intertemp,dim_t *eq_orderintra,dim_t *eq_orderreg,offset_t allregset,offset_t alltimeset,dim_t *orderintra,dim_t *orderreg);

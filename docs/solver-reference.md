@@ -88,6 +88,19 @@ The solver reads a GEMPACK-style TAB subset (statement syntax per [GM]):
 - `update` — product-form and explicit updates (`updates_apply()`,
   `updates_apply_product()`); the modified-midpoint variant applies
   `substep_base + 2·Δ` (see §5).
+- `backsolve <var> using <eq>` — condensation ([GM] 10.16, 14.1.3): the
+  named endogenous variable and its nominated defining equation are
+  excluded from the solved system (`backsolve_read()` marks the elements;
+  an "equation"-scan filter in `tab_parse.c` hides the equation from
+  counting, ordering, preallocation, fill, and structural detection), and
+  the variable's per-step changes are recovered from the retained
+  equation after each solve, before the data updates
+  (`backsolve_recover()`, riding the compiled statement programs of §9;
+  zero pivot aborts the run).  The symbolic side of condensation —
+  rewriting every other equation to eliminate the variable, `omit`,
+  `substitute` — is teems-R's job (`ems_model(omit=, backsolve=)`);
+  `omit`/`substitute` statements reaching the solver abort with a
+  pointer back to model preparation.
 - `swap` (closure) and shock statements — parsed by `closure_read()` /
   `shocks_read()` into per-element `closure_entry` records.
 
@@ -119,6 +132,9 @@ Generated temporaries use the reserved prefixes `gen_sum`, `gen_par`,
 6. **Closure and shocks** (`closure_read`, `shocks_read`) — the
    exogenous/endogenous partition must leave `VecSize − nexo` equations
    square; shocks divided across subintervals when `-nsubints > 1`.
+   **Backsolve statements** (`backsolve_read`, `backsolve_validate_refs`)
+   then mark condensed-out elements; `VecSize` shrinks by `nbselems` and
+   the nominated defining equations vanish from every "equation" scan.
 7. **Equation ordering** (`equation_order_read[_nested]`) — assigns
    equations/variables to diagonal blocks by region/time per the matrix
    method; computes `netcut` (border size) [HK16 §5]. Rank 0 records the
@@ -126,7 +142,9 @@ Generated temporaries use the reserved prefixes `gen_sum`, `gen_par`,
 8. **Jacobian preallocation and fill** (`jacobian_preallocate`,
    `jacobian_fill`) — PETSc AIJ matrices A (endogenous) and B
    (exogenous columns → RHS).
-9. **Solve** (§5/§6), **updates**, iterate per step/subinterval.
+9. **Solve** (§5/§6); **backsolve recovery** (`backsolve_recover`, per
+   step, after the solve and before the updates — [GM] 14.1.3);
+   **updates**; iterate per step/subinterval.
 10. **Outputs** — CSVs (`outputs_write_csv`) and solution binaries.
 
 ## 4. Source guide
@@ -141,9 +159,9 @@ to its new one, with the literature source of each term):
 | `globals.c` | 13 | single definitions of the program-wide globals |
 | `str_util.c` | 109 | case-insensitive string search helpers |
 | `cmf_io.c` | ~1,060 | CMF reading, TAB preprocessing, data-file headers, output CSVs |
-| `tab_parse.c` | ~3,650 | TAB language: sets, declarations, data reads, closure, shocks |
+| `tab_parse.c` | ~4,100 | TAB language: sets, declarations, data reads, closure, shocks, backsolve statements + equation-scan filter |
 | `formula.c` | ~3,280 | FORMULA compile/eval, UPDATE application, subinterval re-shocking |
-| `jacobian.c` | ~2,510 | equation ordering, derivative-matrix preallocation and fill |
+| `jacobian.c` | ~2,900 | equation ordering, derivative-matrix preallocation and fill, backsolve recovery programs |
 | `block_order.c` | 541 | (N)DBBD row/column ordering into bordered block form |
 | `block_solve.c` | ~3,240 | (N)DBBD parallel factorization, interface problem, back-solve |
 | `solve_drivers.c` | ~2,040 | Johansen and modified-midpoint drivers; spill/residency logic |

@@ -47,6 +47,9 @@ static void ordering_stats_write(cmf_file_entry *iodata, int niodata, int noutda
   fprintf(fp,"  \"vecsize\": %ld,\n",VecSize);
   fprintf(fp,"  \"nvarele\": %ld,\n",nvarele);
   fprintf(fp,"  \"nexo\": %ld,\n",nexo);
+  /* condensation fields only when active, so uncondensed runs stay
+     byte-identical to the version-2 layout */
+  if(nbacksolve>0)fprintf(fp,"  \"nbacksolve\": %d,\n  \"nbselems\": %ld,\n",nbacksolve,nbselems);
   fprintf(fp,"  \"matrix_method\": \"%s\",\n",(matsol>=MM_LU&&matsol<=MM_NDBBD)?matsol_names[matsol]:"unknown");
   fprintf(fp,"  \"solution_method\": \"%s\",\n",solmed);
   fprintf(fp,"  \"nested_dbbd\": %d,\n",(int)nesteddbbd);
@@ -156,7 +159,7 @@ static void block_var_count(array_def *vars, offset_t nvar, set_def *sets, set_e
   if(nesteddbbd==1) {
     for (i=0; i<nvar; i++) {
       for (j=0; j<vars[i].nelem; j++) {
-        if(!closure_vals[j3+j].is_exogenous) {
+        if(!closure_vals[j3+j].is_exogenous&&!closure_vals[j3+j].is_backsolved) {
           if(!var_inter[i]) {
             j0=j;
             j2=-1;
@@ -183,7 +186,7 @@ static void block_var_count(array_def *vars, offset_t nvar, set_def *sets, set_e
   else if(alltimeset>=0) {
     for (i=0; i<nvar; i++) {
       for (j=0; j<vars[i].nelem; j++) {
-        if(!closure_vals[j3+j].is_exogenous) {
+        if(!closure_vals[j3+j].is_exogenous&&!closure_vals[j3+j].is_backsolved) {
           if(!var_inter[i]) {
             j0=j;
             j2=-1;
@@ -213,7 +216,7 @@ static void block_var_count(array_def *vars, offset_t nvar, set_def *sets, set_e
   else if(allregset>=0) {
     for (i=0; i<nvar; i++) {
       for (j=0; j<vars[i].nelem; j++) {
-        if(!closure_vals[j3+j].is_exogenous) {
+        if(!closure_vals[j3+j].is_exogenous&&!closure_vals[j3+j].is_backsolved) {
           if(!var_inter[i]) {
             j0=j;
             j4=-1;
@@ -1078,6 +1081,12 @@ int main(int argc,char **args) {
     nexo1=nexo;
     strcpy(commsyntax,"shock");
     if(shocks_read(shock,commsyntax,closure_vals,nvarele,vars,nvar,sets,nset,set_elems,subints)==-1)return 0;
+    /* backsolve statements: mark the eliminated elements (the flags ride
+       the closure broadcast) and check the condensed system's references
+       before any equation scan runs with the filter active */
+    if(backsolve_read(tabfile,vars,nvar,closure_vals)==-1)return 0;
+    if(backsolve_validate_refs(tabfile,vars)==-1)return 0;
+    if(nbacksolve>0)logmsg(1,"Backsolving %d variables (%ld elements) from retained defining equations\n",nbacksolve,nbselems);
   }
   if(nohsl) {
     if(nvarele*sizeof(closure_entry)>1500000000) {
@@ -1093,6 +1102,12 @@ int main(int argc,char **args) {
       MPI_Bcast(closure_vals,nvarele*sizeof(closure_entry), MPI_BYTE,0, PETSC_COMM_WORLD);
     }
     MPI_Bcast(&nexo1,sizeof(offset_t), MPI_BYTE,0, PETSC_COMM_WORLD);
+    MPI_Bcast(&nbacksolve,sizeof(int), MPI_BYTE,0, PETSC_COMM_WORLD);
+    MPI_Bcast(&nbselems,sizeof(offset_t), MPI_BYTE,0, PETSC_COMM_WORLD);
+    if(nbacksolve>0) {
+      if(rank!=0)backsolves=realloc(backsolves,nbacksolve*sizeof(backsolve_def));
+      MPI_Bcast(backsolves,nbacksolve*sizeof(backsolve_def), MPI_BYTE,0, PETSC_COMM_WORLD);
+    }
   }
   nexo=nexo1;
   strcpy(commsyntax,"formula");
@@ -1124,8 +1139,11 @@ int main(int argc,char **args) {
   //**************************************************************************************
   //****************************** MATRIX FROM FORMULA************************************
   //**************************************************************************************
-  VecSize = (PetscInt) nvarele-nexo;
-  if(rank==0)logmsg(1,"System size %d equations (%ld exogenous)\n",VecSize,nexo);
+  VecSize = (PetscInt) (nvarele-nexo-nbselems);
+  if(rank==0) {
+    if(nbselems>0)logmsg(1,"System size %d equations (%ld exogenous, %ld backsolved)\n",VecSize,nexo,nbselems);
+    else logmsg(1,"System size %d equations (%ld exogenous)\n",VecSize,nexo);
+  }
   strcpy(commsyntax,"equation");
   offset_t neq=0,neq1;
   if(rank==0) {
@@ -1251,7 +1269,7 @@ int main(int argc,char **args) {
     for (i=0; i<nvar; i++) {
       for (j=0; j<vars[i].nelem; j++) {
         j5=j3+j;
-        if(!closure_vals[j5].is_exogenous) {
+        if(!closure_vals[j5].is_exogenous&&!closure_vals[j5].is_backsolved) {
           if(!var_inter[i]) {
             j0=j;
             j2=-1;
@@ -1321,7 +1339,7 @@ int main(int argc,char **args) {
       for (i=0; i<nvar; i++) {
         for (j=0; j<vars[i].nelem; j++) {
           j5=j3+j;
-          if(!closure_vals[j5].is_exogenous) {
+          if(!closure_vals[j5].is_exogenous&&!closure_vals[j5].is_backsolved) {
             if(!var_inter[i]) {
               j0=j;
               for(j1=0; j1<orderintra[i]+1; j1++) {
@@ -1387,7 +1405,7 @@ int main(int argc,char **args) {
         for (i=0; i<nvar; i++) {
           for (j=0; j<vars[i].nelem; j++) {
             j5=j3+j;
-            if(!closure_vals[j5].is_exogenous) {
+            if(!closure_vals[j5].is_exogenous&&!closure_vals[j5].is_backsolved) {
               if(!var_inter[i]) {
                 j0=j;
                 for(j1=0; j1<orderreg[i]+1; j1++) {
@@ -1425,7 +1443,7 @@ int main(int argc,char **args) {
           for (j=0; j<vars[i].nelem; j++) {
             j3=j0+j;
 
-            if (!closure_vals[j3].is_exogenous) {
+            if (!closure_vals[j3].is_exogenous&&!closure_vals[j3].is_backsolved) {
               closure_vals[j3].exo_index+=j2;
               j2++;
             }
@@ -1764,6 +1782,8 @@ int main(int argc,char **args) {
   if(solmethod==SM_GRAGG)solve_gragg(nohsl,VecSize,&A,dnz,dnnz,onz,onnz,&B,dnzB,dnnzB,onzB,onnzB,&vecb,&vece,rank,rank_hsl,mpisize,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,&elem_vals,ncofele+nvarele,ncofele,nvarele,&closure_vals,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,eq_addr,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,subints,fcomm,&xcf);
 
   jacobian_cache_free();
+  backsolve_cache_free();
+  free(backsolves);
 
 
   if(rank==rank_hsl) {

@@ -334,54 +334,29 @@ static void stmt_prog_execute(stmt_prog *st, offset_t matrow, offset_t *eq_addr,
   }
 }
 
-int jacobian_fill(char *fname, char *commsyntax,set_def *sets,offset_t nset, set_element *set_elems, array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar, elem_value *elem_vals,offset_t ncofvar,offset_t ncofele,closure_entry *closure_vals,offset_t ndblock,offset_t alltimeset,offset_t allregset,offset_t *eq_addr,offset_t *counteq,offset_t nintraeq,Mat A,Mat B) {
-  FILE * filehandle;
-  char tline[TABREADLINE],line[TABREADLINE],line1[TABREADLINE],leftline[TABREADLINE],linecopy[TABREADLINE];
+/* Build one equation statement's compiled programs into *stp (the build
+   half of the former jacobian_fill loop body; the statement text in line
+   is consumed).  force_all treats every row of the block as owned --
+   backsolve recovery programs are evaluated outside the matrix ownership
+   split -- while the fill path keeps the exact eq_addr/[Istart1,Iend1)
+   pruning it always had. */
+static void stmt_prog_build_one(char *line, stmt_prog *stp, char *commsyntax,
+                                set_def *sets, offset_t nset, array_def *coefs, offset_t ncof,
+                                array_def *vars, offset_t nvar, offset_t ncofele,
+                                offset_t *eq_addr, offset_t matrow,
+                                PetscInt Istart1, PetscInt Iend1, PetscMPIInt mpisize1,
+                                bool force_all) {
+  char tline[TABREADLINE],line1[TABREADLINE],leftline[TABREADLINE],linecopy[TABREADLINE];
   char vname[TABREADLINE],sumsyntax[NAMESIZE],lintmp[TABREADLINE];
   char *readitem=NULL,*p=NULL,*p1=NULL;
-  PetscInt Jindx=0,Istart1,Iend1,matrow;
-  PetscErrorCode ierr;
-  solve_real zerodivide=0;
-  PetscMPIInt  mpisize1;
+  PetscInt Jindx=0;
   bool isinproc;
-  stmt_prog *stp=NULL;
-  ierr = MatGetOwnershipRange(A,&Istart1,&Iend1);
-  MPI_Comm_size(PETSC_COMM_WORLD,&mpisize1);
-  CHKERRQ(ierr);
   dim_t fdim,np,dcount,fdimlin=0,i4,sup,supset[MAXSUPSET];
   int totalsum,sumcount=1,sumcount1=0,lvar,lvar1,lvar2,lvar3,lvar4;
-  offset_t lj,l1,i1=0,sumbegadd,dcountdim1[4*MAXVARDIM],dcountdim2[4*MAXVARDIM],dcountdim3[4*MAXVARDIM],nloops,nloopslin,nloopsfac,li3,nsumele,nsumele1,l2,eqindx=0;
+  offset_t lj,l1,i1=0,sumbegadd,dcountdim1[4*MAXVARDIM],dcountdim2[4*MAXVARDIM],dcountdim3[4*MAXVARDIM],nloops,nloopslin,nloopsfac,li3,nsumele,nsumele1,l2;
   int sumindx,npow,npar,nmul,nplu,ndiv,nmin,nops=0,nlinvars,leadlag,varindx1,varindx2;
   offset_t sj,l,i3,i,arsetdim=0,nops_alloc=0;
 
-  filehandle = fopen(fname,"r");
-  matrow=0;
-
-  if (stmt_cache_built&&(Istart1!=stmt_cache_Istart||Iend1!=stmt_cache_Iend)) jacobian_cache_free();
-  if (stmt_cache_built) {
-    /* fast path: statements already compiled; walk the file only to
-       refresh zerodivide defaults (they may reference scalar
-       coefficients whose values change between steps) */
-    int sidx=0;
-    while (tab_next_statement_resolved(commsyntax,filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
-      if (strstr(line,"(default")==NULL) {
-        stmt_cache[sidx].zerodivide=zerodivide;
-        stmt_prog_execute(&stmt_cache[sidx],matrow,eq_addr,stmt_cache[sidx].nloops,sets,set_elems,elem_vals,closure_vals,vars,Istart1,Iend1,A,B);
-        matrow+=stmt_cache[sidx].nloops;
-        sidx++;
-      }
-    }
-    fclose(filehandle);
-    return 1;
-  }
-
-  while (tab_next_statement_resolved(commsyntax,filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
-    if (strstr(line,"(default")==NULL) {
-      stmt_cache=realloc(stmt_cache,(stmt_cache_n+1)*sizeof(stmt_prog));
-      stp=&stmt_cache[stmt_cache_n];
-      stmt_cache_n++;
-      memset(stp,0,sizeof(stmt_prog));
-      stp->zerodivide=zerodivide;
       str_replace_first(line, commsyntax, "");
       str_replace_first(line, "(linear)", "");
       while (str_replace_all(line,"  ", " "));
@@ -622,7 +597,8 @@ int jacobian_fill(char *fname, char *commsyntax,set_def *sets,offset_t nset, set
         }
       }
       isinproc=false;
-      if(mpisize1>1) {
+      if(force_all) isinproc=true;
+      else if(mpisize1>1) {
         for (lj=0; lj<nloops; lj++) {
           Jindx=eq_addr[matrow+lj];
           if(Jindx>=Istart1&&Jindx<Iend1) {
@@ -694,8 +670,10 @@ int jacobian_fill(char *fname, char *commsyntax,set_def *sets,offset_t nset, set
         stp->lv= (linvar_prog *) calloc (nlinvars,sizeof(linvar_prog));
         stp->nlv=nlinvars;
         for (i=0; i<nlinvars; i++) {
-          Jindx=eq_addr[matrow];
-          if(Jindx>=Iend1)continue;
+          if(!force_all) {
+            Jindx=eq_addr[matrow];
+            if(Jindx>=Iend1)continue;
+          }
           i3=0;
           nloopslin=nloops;
           if (fdim==0) {
@@ -726,8 +704,10 @@ int jacobian_fill(char *fname, char *commsyntax,set_def *sets,offset_t nset, set
               }
             }
           nloopsfac=(offset_t)nloopslin/nloops;
-          Jindx=eq_addr[matrow+(offset_t)(nloopslin-1)/nloopsfac];
-          if(Jindx<Istart1)continue;
+          if(!force_all) {
+            Jindx=eq_addr[matrow+(offset_t)(nloopslin-1)/nloopsfac];
+            if(Jindx<Istart1)continue;
+          }
           
           fdimlin=fdim+i3;
           if (i3>0) {
@@ -815,19 +795,312 @@ int jacobian_fill(char *fname, char *commsyntax,set_def *sets,offset_t nset, set
         free(sum_cof);
       }
       stp->nloops=nloops;
-      stmt_prog_execute(stp,matrow,eq_addr,stp->nloops,sets,set_elems,elem_vals,closure_vals,vars,Istart1,Iend1,A,B);
-      matrow+=nloops;
-      eqindx++;
 
       free(ops);
       free(LinVars);
       free(arSet);
+}
+
+int jacobian_fill(char *fname, char *commsyntax,set_def *sets,offset_t nset, set_element *set_elems, array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar, elem_value *elem_vals,offset_t ncofvar,offset_t ncofele,closure_entry *closure_vals,offset_t ndblock,offset_t alltimeset,offset_t allregset,offset_t *eq_addr,offset_t *counteq,offset_t nintraeq,Mat A,Mat B) {
+  FILE * filehandle;
+  char line[TABREADLINE];
+  PetscInt Istart1,Iend1,matrow;
+  PetscErrorCode ierr;
+  solve_real zerodivide=0;
+  PetscMPIInt  mpisize1;
+  stmt_prog *stp=NULL;
+  offset_t eqindx=0;
+  ierr = MatGetOwnershipRange(A,&Istart1,&Iend1);
+  MPI_Comm_size(PETSC_COMM_WORLD,&mpisize1);
+  CHKERRQ(ierr);
+
+  filehandle = fopen(fname,"r");
+  matrow=0;
+
+  if (stmt_cache_built&&(Istart1!=stmt_cache_Istart||Iend1!=stmt_cache_Iend)) jacobian_cache_free();
+  if (stmt_cache_built) {
+    /* fast path: statements already compiled; walk the file only to
+       refresh zerodivide defaults (they may reference scalar
+       coefficients whose values change between steps) */
+    int sidx=0;
+    while (tab_next_statement_resolved(commsyntax,filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
+      if (strstr(line,"(default")==NULL) {
+        stmt_cache[sidx].zerodivide=zerodivide;
+        stmt_prog_execute(&stmt_cache[sidx],matrow,eq_addr,stmt_cache[sidx].nloops,sets,set_elems,elem_vals,closure_vals,vars,Istart1,Iend1,A,B);
+        matrow+=stmt_cache[sidx].nloops;
+        sidx++;
+      }
+    }
+    fclose(filehandle);
+    return 1;
+  }
+
+  while (tab_next_statement_resolved(commsyntax,filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
+    if (strstr(line,"(default")==NULL) {
+      stmt_cache=realloc(stmt_cache,(stmt_cache_n+1)*sizeof(stmt_prog));
+      stp=&stmt_cache[stmt_cache_n];
+      stmt_cache_n++;
+      memset(stp,0,sizeof(stmt_prog));
+      stp->zerodivide=zerodivide;
+      stmt_prog_build_one(line,stp,commsyntax,sets,nset,coefs,ncof,vars,nvar,ncofele,eq_addr,matrow,Istart1,Iend1,mpisize1,false);
+      stmt_prog_execute(stp,matrow,eq_addr,stp->nloops,sets,set_elems,elem_vals,closure_vals,vars,Istart1,Iend1,A,B);
+      matrow+=stp->nloops;
+      eqindx++;
     }
   }
   stmt_cache_built=true;
   stmt_cache_Istart=Istart1;
   stmt_cache_Iend=Iend1;
   fclose(filehandle);
+  return 1;
+}
+
+/* ===== backsolve recovery (GEMPACK manual 14.1.3, roadmap 6.2) ========
+ *
+ * A backsolved variable and its nominated defining equation are excluded
+ * from the condensed system (the "equation" scan filter in tab_parse.c
+ * hides the equation; main.c assigns the variable no matrix column).
+ * After each step's solve, before the data updates, the retained defining
+ * equation is evaluated row by row with the step's known changes:
+ *
+ *     sum over occurrences of  a_v * z_v  =  0
+ *     =>  x_bs = -(sum over surviving occurrences) / a_pivot
+ *
+ * where z_v is x[column] for endogenous survivors and the captured vece
+ * value for exogenous ones.  The rows ride the same compiled statement
+ * programs as jacobian_fill (stmt_prog_build_one with force_all: no
+ * ownership pruning -- recovery is a per-rank computation wherever the
+ * update loops run).  teems-R's condensation guarantees each defining
+ * equation references surviving variables plus exactly one plain
+ * occurrence of its own backsolved variable, index-bijective with the
+ * equation's domain; the build checks those properties and the execute
+ * aborts on a zero pivot. */
+typedef struct
+{
+  stmt_prog st;
+  int pair;        /* index into backsolves[] */
+  bool checked;    /* row->element bijection verified on first execute */
+} bs_prog;
+static bs_prog *bs_cache=NULL;
+static int bs_cache_n=0;
+static bool bs_cache_built=false;
+
+void backsolve_cache_free(void) {
+  int i;
+  for (i=0; i<bs_cache_n; i++) stmt_prog_free(&bs_cache[i].st);
+  free(bs_cache);
+  bs_cache=NULL;
+  bs_cache_n=0;
+  bs_cache_built=false;
+}
+
+/* Format element li3 of variable v as "name(ele1,ele2,...)" for error
+   messages. */
+static void bs_element_label(array_def *vars, offset_t v, offset_t li3, set_def *sets, set_element *set_elems, char *out) {
+  dim_t d;
+  offset_t idx;
+  strcpy(out,vars[v].cofname);
+  if (vars[v].size==0) return;
+  strcat(out,"(");
+  for (d=0; d<vars[v].size; d++) {
+    idx=li3/vars[v].strides[d];
+    li3-=idx*vars[v].strides[d];
+    strcat(out,set_elems[sets[vars[v].setid[d]].offset+idx].setele);
+    if (d<vars[v].size-1) strcat(out,",");
+  }
+  strcat(out,")");
+}
+
+/* Evaluate one defining equation's rows and write the recovered per-step
+   changes into bsvals at the pair's elem_base.  Aborts the run on a zero
+   pivot or a defective row->element mapping: continuing would write a
+   wrong solution. */
+static void bs_prog_execute(bs_prog *bp, set_def *sets, set_element *set_elems,
+                            elem_value *elem_vals, closure_entry *closure_vals,
+                            array_def *vars, solve_real *x, solve_real *exo_z,
+                            solve_real *bsvals) {
+  stmt_prog *st=&bp->st;
+  backsolve_def *bd=&backsolves[bp->pair];
+  char label[TABREADLINE];
+  int s,i;
+  dim_t dcount;
+  offset_t lj,l1,l2,li3,i5,gidx;
+  solve_real vval;
+  quantifier *arSet1=NULL;
+  formula_op *ops1=NULL;
+  int pivbad=0;
+  solve_real *acc= (solve_real *) calloc (st->nloops,sizeof(solve_real));
+  solve_real *piv= (solve_real *) calloc (st->nloops,sizeof(solve_real));
+  offset_t *pivelem= (offset_t *) malloc (st->nloops*sizeof(offset_t));
+  for (i5=0; i5<st->nloops; i5++) pivelem[i5]=-1;
+  for (s=0; s<st->neqsums; s++) sum_prog_eval(&st->eqsums[s],sets,set_elems,elem_vals,st->sum_vals,st->zerodivide);
+  for (i=0; i<st->nlv; i++) {
+    linvar_prog *lv=&st->lv[i];
+    if(!lv->built) continue;
+    for (s=0; s<lv->nsums; s++) sum_prog_eval(&lv->sums[s],sets,set_elems,elem_vals,st->sum_vals,st->zerodivide);
+    #pragma omp parallel private(lj,i5,l2,dcount,l1,li3,gidx,arSet1,ops1,vval) shared(elem_vals,st,lv,closure_vals,vars,acc,piv,pivelem,x,exo_z,bp,bd,pivbad)
+    {
+    if(omp_get_thread_num()!=0){
+      arSet1=realloc(arSet1,lv->fdimlin*sizeof(quantifier));
+      memcpy(arSet1,lv->arSet,lv->fdimlin*sizeof(quantifier));
+      ops1=realloc(ops1,lv->nops*sizeof(formula_op));
+      memcpy(ops1,lv->ops,lv->nops*sizeof(formula_op));
+    }else{
+      ops1=lv->ops;
+      arSet1=lv->arSet;
+    }
+    #pragma omp for
+      for (i5=0; i5<st->nloops; i5++) {
+        for (lj=i5*lv->nloopsfac; lj<(i5+1)*lv->nloopsfac; lj++) {
+          l2=lj;
+          for (dcount=0; dcount<lv->fdimlin; dcount++) {
+            l1=(offset_t) l2/lv->dcountdim2[dcount];
+            arSet1[dcount].indx=l1;
+            l2=l2-l1*lv->dcountdim2[dcount];
+          }
+          li3=0;
+          for (dcount=0; dcount<vars[lv->LinVarIndx].size; dcount++) {
+            if(lv->supset[dcount]==0) {
+              li3=li3+(arSet1[lv->dcountdim3[dcount]].indx+lv->dimleadlag[dcount])*vars[lv->LinVarIndx].strides[dcount];
+            }
+            else {
+              li3=li3+(set_elems[sets[arSet1[lv->dcountdim3[dcount]].setid].offset+arSet1[lv->dcountdim3[dcount]].indx].superset_pos[lv->supset[dcount]]+lv->dimleadlag[dcount])*vars[lv->LinVarIndx].strides[dcount];
+            }
+          }
+          vval=formula_eval(elem_vals,sets,set_elems,st->sum_vals,ops1,lv->nops,arSet1,lv->fdimlin,st->zerodivide);
+          gidx=vars[lv->LinVarIndx].offset+li3;
+          if (lv->LinVarIndx==bd->varindx) {
+            /* pivot: same-pattern occurrences (possibly on both sides)
+               combine into the algebraic pivot coefficient */
+            piv[i5]+=vval;
+            if (pivelem[i5]==-1) pivelem[i5]=li3;
+            else if (pivelem[i5]!=li3) pivbad=1;
+          }
+          else if (closure_vals[gidx].is_exogenous) {
+            acc[i5]+=vval*exo_z[gidx];
+          }
+          else {
+            acc[i5]+=vval*x[closure_vals[gidx].exo_index];
+          }
+        }
+      }
+    if(omp_get_thread_num()!=0){
+      free(arSet1);
+      arSet1=NULL;
+      free(ops1);
+      ops1=NULL;
+    }else{
+      ops1=NULL;
+      arSet1=NULL;
+    }
+    }
+  }
+  if (pivbad) {
+    printf("Error: the occurrences of %s in defining equation %s map to different elements in the same row; the condensation must combine same-pattern terms before deployment (GEMPACK manual 14.1.10)\n",vars[bd->varindx].cofname,bd->eqname);
+    MPI_Abort(PETSC_COMM_WORLD,1);
+  }
+  if (!bp->checked) {
+    /* one-time bijection check: every element of the backsolved variable
+       must be recovered by exactly one row of the defining equation */
+    char *seen= (char *) calloc (vars[bd->varindx].nelem,sizeof(char));
+    for (i5=0; i5<st->nloops; i5++) {
+      if (pivelem[i5]<0||pivelem[i5]>=vars[bd->varindx].nelem||seen[pivelem[i5]]) {
+        printf("Error: defining equation %s does not map one-to-one onto backsolved variable %s; redeploy the model so the condensation validates this backsolve\n",bd->eqname,vars[bd->varindx].cofname);
+        MPI_Abort(PETSC_COMM_WORLD,1);
+      }
+      seen[pivelem[i5]]=1;
+    }
+    free(seen);
+    bp->checked=true;
+  }
+  for (i5=0; i5<st->nloops; i5++) {
+    if (piv[i5]==0) {
+      bs_element_label(vars,bd->varindx,pivelem[i5],sets,set_elems,label);
+      printf("Error: zero pivot backsolving %s from equation %s at this step; the defining equation cannot determine the variable here (GEMPACK would report the same singularity) -- nominate a different equation or leave the variable in the system\n",label,bd->eqname);
+      MPI_Abort(PETSC_COMM_WORLD,1);
+    }
+    bsvals[bd->elem_base+pivelem[i5]]=-acc[i5]/piv[i5];
+  }
+  free(acc);
+  free(piv);
+  free(pivelem);
+}
+
+int backsolve_recover(char *fname, char *commsyntax,set_def *sets,offset_t nset, set_element *set_elems, array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar, elem_value *elem_vals,offset_t ncofele,closure_entry *closure_vals,solve_real *x,solve_real *exo_z,solve_real *bsvals) {
+  FILE *filehandle;
+  char line[TABREADLINE],eqname[NAMESIZE];
+  solve_real zerodivide=0;
+  int i,pr,sidx=0;
+  offset_t d;
+  bs_prog *bp=NULL;
+  if (nbacksolve==0) return 0;
+  backsolve_scan_mode=BS_SCAN_ONLY;
+  filehandle=fopen(fname,"r");
+  if (bs_cache_built) {
+    /* refresh zerodivide defaults, as in the jacobian_fill fast path */
+    while (tab_next_statement_resolved(commsyntax,filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
+      if (strstr(line,"(default")==NULL) {
+        bs_cache[sidx].st.zerodivide=zerodivide;
+        sidx++;
+      }
+    }
+  }
+  else {
+    while (tab_next_statement_resolved(commsyntax,filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
+      if (strstr(line,"(default")!=NULL) continue;
+      tab_equation_name(line,eqname);
+      pr=-1;
+      for (i=0; i<nbacksolve; i++) {
+        if (strcmp(backsolves[i].eqname,eqname)==0) {
+          pr=i;
+          break;
+        }
+      }
+      if (pr==-1) continue; /* cannot happen: the ONLY filter admits nominated equations */
+      bs_cache=realloc(bs_cache,(bs_cache_n+1)*sizeof(bs_prog));
+      bp=&bs_cache[bs_cache_n];
+      bs_cache_n++;
+      memset(bp,0,sizeof(bs_prog));
+      bp->pair=pr;
+      bp->st.zerodivide=zerodivide;
+      stmt_prog_build_one(line,&bp->st,commsyntax,sets,nset,coefs,ncof,vars,nvar,ncofele,NULL,0,0,0,1,true);
+      if (bp->st.nloops!=vars[backsolves[pr].varindx].nelem) {
+        printf("Error: defining equation %s has %ld rows but backsolved variable %s has %ld elements; they must match one-to-one\n",backsolves[pr].eqname,bp->st.nloops,vars[backsolves[pr].varindx].cofname,vars[backsolves[pr].varindx].nelem);
+        MPI_Abort(PETSC_COMM_WORLD,1);
+      }
+      {
+        int npivot=0;
+        for (i=0; i<bp->st.nlv; i++) {
+          if (bp->st.lv[i].LinVarIndx!=backsolves[pr].varindx) continue;
+          npivot++;
+          if (bp->st.lv[i].nloopsfac!=1) {
+            printf("Error: an occurrence of %s in defining equation %s carries indices outside the equation's quantifiers; it cannot be backsolved from this equation (GEMPACK manual 14.1.10)\n",vars[backsolves[pr].varindx].cofname,backsolves[pr].eqname);
+            MPI_Abort(PETSC_COMM_WORLD,1);
+          }
+          for (d=0; d<vars[backsolves[pr].varindx].size; d++) {
+            if (bp->st.lv[i].dimleadlag[d]!=0) {
+              printf("Error: an occurrence of %s in defining equation %s carries a lead/lag offset; it cannot be backsolved from this equation (GEMPACK manual 14.1.10)\n",vars[backsolves[pr].varindx].cofname,backsolves[pr].eqname);
+              MPI_Abort(PETSC_COMM_WORLD,1);
+            }
+          }
+        }
+        if (npivot==0) {
+          printf("Error: defining equation %s does not reference backsolved variable %s\n",backsolves[pr].eqname,vars[backsolves[pr].varindx].cofname);
+          MPI_Abort(PETSC_COMM_WORLD,1);
+        }
+      }
+    }
+    if (bs_cache_n!=nbacksolve) {
+      printf("Error: %d backsolve statements but %d nominated defining equations found in the TAB file\n",nbacksolve,bs_cache_n);
+      MPI_Abort(PETSC_COMM_WORLD,1);
+    }
+    bs_cache_built=true;
+  }
+  fclose(filehandle);
+  backsolve_scan_mode=BS_SCAN_SKIP;
+  for (i=0; i<bs_cache_n; i++) {
+    bs_prog_execute(&bs_cache[i],sets,set_elems,elem_vals,closure_vals,vars,x,exo_z,bsvals);
+  }
   return 1;
 }
 

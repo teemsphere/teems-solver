@@ -611,6 +611,21 @@ int tab_preprocess(char *filename, char *newtabfile) {
         strcpy(commsyntax,"assertion");
         check=1;
       }
+      /* condensation statements (GEMPACK manual 10.16): backsolve is
+         honored downstream; omit/substitute must be resolved by teems-R
+         before deployment and abort in backsolve_read */
+      if(str_find_ci(readline,"backsolve ")==1||str_find_ci(readline,"backsolve ")==0) {
+        strcpy(commsyntax,"backsolve");
+        check=1;
+      }
+      if(str_find_ci(readline,"omit ")==1||str_find_ci(readline,"omit ")==0) {
+        strcpy(commsyntax,"omit");
+        check=1;
+      }
+      if(str_find_ci(readline,"substitute ")==1||str_find_ci(readline,"substitute ")==0) {
+        strcpy(commsyntax,"substitute");
+        check=1;
+      }
       if (strchr(readline,';')!=NULL) {
         if (check==1) {
           if (readline[0]==' ') fprintf(fout,"%s\n",readline+1);

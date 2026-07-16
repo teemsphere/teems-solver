@@ -3666,7 +3666,51 @@ char *closure_next_statement(char *commsyntax, FILE *filehandle, char *readline)
   return NULL;
 }
 
-char *tab_next_statement(char *commsyntax, FILE *filehandle, char *readline,offset_t rlinesize) {
+/* Extract the equation name from a full "equation ..." statement into
+   eqname (lowercased by tab_preprocess; an optional "(linear)" qualifier
+   may precede the name).  Returns 0 for option statements such as
+   "equation (default=...)" that carry no name. */
+int tab_equation_name(char *stmt, char *eqname) {
+  char *p=stmt+strlen("equation");
+  int i=0;
+  while (*p==' '||*p=='\n'||*p=='\r'||*p=='\t') p++;
+  if (strncmp(p,"(linear)",8)==0) {
+    p+=8;
+    while (*p==' '||*p=='\n'||*p=='\r'||*p=='\t') p++;
+  }
+  if (*p=='('||*p=='\0') return 0;
+  while (*p!='\0'&&*p!=' '&&*p!='('&&*p!='\n'&&*p!='\r'&&*p!='\t'&&*p!='#'&&*p!=';'&&i<NAMESIZE-1) {
+    eqname[i]=tolower((int)*p);
+    i++;
+    p++;
+  }
+  eqname[i]='\0';
+  return i>0;
+}
+
+/* Backsolve filter for "equation" scans: in SKIP mode the nominated
+   defining equations are invisible to every consumer (count, ordering,
+   preallocation, fill, structural detection), so they all see the same
+   condensed system; ONLY mode inverts the filter for the recovery build.
+   Returns 1 when stmt must be rejected by the current scan. */
+static int backsolve_eq_reject(char *commsyntax, char *stmt) {
+  char eqname[NAMESIZE];
+  int i,hit=0;
+  if (nbacksolve==0) return 0;
+  if (strcmp(commsyntax,"equation")!=0) return 0;
+  if (tab_equation_name(stmt,eqname)) {
+    for (i=0; i<nbacksolve; i++) {
+      if (strcmp(backsolves[i].eqname,eqname)==0) {
+        hit=1;
+        break;
+      }
+    }
+  }
+  if (backsolve_scan_mode==BS_SCAN_ONLY) return !hit;
+  return hit;
+}
+
+static char *tab_next_statement_raw(char *commsyntax, FILE *filehandle, char *readline,offset_t rlinesize) {
   int check1=0,i,count1=0;
   while (commsyntax[count1] != '\0') {
     count1++;
@@ -3712,7 +3756,16 @@ char *tab_next_statement(char *commsyntax, FILE *filehandle, char *readline,offs
   }
   return NULL;
 }
-char *tab_next_statement_resolved(char *commsyntax, FILE *filehandle, char *readline, elem_value *record, array_def *coefs,offset_t ncof,solve_real *zerodivide,offset_t rlinesize) {
+char *tab_next_statement(char *commsyntax, FILE *filehandle, char *readline,offset_t rlinesize) {
+  char *r;
+  while ((r=tab_next_statement_raw(commsyntax,filehandle,readline,rlinesize))!=NULL) {
+    if (backsolve_eq_reject(commsyntax,r)) continue;
+    return r;
+  }
+  return NULL;
+}
+
+static char *tab_next_statement_resolved_raw(char *commsyntax, FILE *filehandle, char *readline, elem_value *record, array_def *coefs,offset_t ncof,solve_real *zerodivide,offset_t rlinesize) {
   int check1=0,count1=0;
   char *zerosyntax="zerodivide default",*p,*zerosyntax1="zerodivide (",*zerosyntax2="zerodivide(";
   while (commsyntax[count1] != '\0') {
@@ -3762,6 +3815,196 @@ char *tab_next_statement_resolved(char *commsyntax, FILE *filehandle, char *read
     }
   }
   return NULL;
+}
+
+char *tab_next_statement_resolved(char *commsyntax, FILE *filehandle, char *readline, elem_value *record, array_def *coefs,offset_t ncof,solve_real *zerodivide,offset_t rlinesize) {
+  char *r;
+  while ((r=tab_next_statement_resolved_raw(commsyntax,filehandle,readline,record,coefs,ncof,zerodivide,rlinesize))!=NULL) {
+    if (backsolve_eq_reject(commsyntax,r)) continue;
+    return r;
+  }
+  return NULL;
+}
+
+/* Read the "backsolve <var> using <eq> ;" statements (GEMPACK manual
+   10.16; lowercased and one-per-line after tab_preprocess).  Marks every
+   element of each named variable in closure_vals and assigns its compact
+   slot in the recovered-value array.  Returns the total number of
+   backsolved elements, or -1 on an invalid statement. */
+offset_t backsolve_read(char *fname, array_def *vars, offset_t nvar, closure_entry *closure_vals) {
+  FILE *filehandle;
+  char line[TABREADLINE]="\0",commsyntax[NAMESIZE],*p,*vname,*using,*eqname,*term;
+  offset_t i,j,l;
+  strcpy(commsyntax,"backsolve");
+  filehandle=fopen(fname,"r");
+  if (filehandle==NULL) {
+    printf("Error: cannot open %s\n",fname);
+    return -1;
+  }
+  while (tab_next_statement_raw(commsyntax,filehandle,line,TABREADLINE)) {
+    while (str_replace_all(line,"\n"," "));
+    while (str_replace_all(line,"\r"," "));
+    while (str_replace_all(line,"  "," "));
+    p=line+strlen("backsolve");
+    vname=strtok(p," ");
+    using=strtok(NULL," ");
+    eqname=strtok(NULL," ;");
+    term=strtok(NULL," ;");
+    if (vname==NULL||using==NULL||eqname==NULL||strcmp(using,"using")!=0||(term!=NULL&&term[0]!='\0')) {
+      printf("Error: malformed backsolve statement \"%s\"; expected \"backsolve <variable> using <equation> ;\"\n",line);
+      fclose(filehandle);
+      return -1;
+    }
+    j=-1;
+    for (i=0; i<nvar; i++) {
+      if (strcmp(vars[i].cofname,vname)==0) {
+        j=i;
+        break;
+      }
+    }
+    /* GEMPACK 10.16: the linear name p_X/c_X may stand for the variable */
+    if (j==-1&&(strncmp(vname,"p_",2)==0||strncmp(vname,"c_",2)==0)) {
+      for (i=0; i<nvar; i++) {
+        if (strcmp(vars[i].cofname,vname+2)==0) {
+          j=i;
+          break;
+        }
+      }
+    }
+    if (j==-1) {
+      printf("Error: backsolve names variable %s but no such variable is declared\n",vname);
+      fclose(filehandle);
+      return -1;
+    }
+    for (i=0; i<nbacksolve; i++) {
+      if (backsolves[i].varindx==j) {
+        printf("Error: variable %s is backsolved more than once\n",vars[j].cofname);
+        fclose(filehandle);
+        return -1;
+      }
+      if (strcmp(backsolves[i].eqname,eqname)==0) {
+        printf("Error: equation %s is nominated by more than one backsolve statement\n",eqname);
+        fclose(filehandle);
+        return -1;
+      }
+    }
+    for (l=vars[j].offset; l<vars[j].offset+vars[j].nelem; l++) {
+      if (closure_vals[l].is_exogenous) {
+        printf("Error: backsolved variable %s is exogenous in the closure; a backsolved variable must be endogenous (GEMPACK manual 14.1.3)\n",vars[j].cofname);
+        fclose(filehandle);
+        return -1;
+      }
+      closure_vals[l].is_backsolved=true;
+      closure_vals[l].exo_index=(exo_idx_t)(nbselems+(l-vars[j].offset));
+    }
+    backsolves=realloc(backsolves,(nbacksolve+1)*sizeof(backsolve_def));
+    strncpy(backsolves[nbacksolve].eqname,eqname,NAMESIZE-1);
+    backsolves[nbacksolve].eqname[NAMESIZE-1]='\0';
+    backsolves[nbacksolve].varindx=j;
+    backsolves[nbacksolve].elem_base=nbselems;
+    nbacksolve++;
+    nbselems+=vars[j].nelem;
+  }
+  fclose(filehandle);
+  /* omit/substitute are symbolic condensation actions the solver cannot
+     perform; teems-R resolves them during model preparation */
+  strcpy(commsyntax,"omit");
+  filehandle=fopen(fname,"r");
+  if (tab_next_statement_raw(commsyntax,filehandle,line,TABREADLINE)!=NULL) {
+    printf("Error: the TAB file contains an omit statement; omission is resolved during model preparation (ems_model(omit=)) and must not reach the solver\n");
+    fclose(filehandle);
+    return -1;
+  }
+  fclose(filehandle);
+  strcpy(commsyntax,"substitute");
+  filehandle=fopen(fname,"r");
+  if (tab_next_statement_raw(commsyntax,filehandle,line,TABREADLINE)!=NULL) {
+    printf("Error: the TAB file contains a substitute statement; substitution is resolved during model preparation (ems_model(backsolve=)) and must not reach the solver\n");
+    fclose(filehandle);
+    return -1;
+  }
+  fclose(filehandle);
+  return nbselems;
+}
+
+/* Validate the condensed system's references once the backsolve pairs are
+   known: every nominated defining equation must exist and reference its
+   backsolved variable, and no retained equation may reference any
+   backsolved variable (teems-R eliminates such references during
+   condensation; a leftover reference means the TAB and the backsolve
+   statements disagree).  Equation text references linear variables with
+   the p_ prefix added by tab_write_variables.  Returns -1 on error. */
+int backsolve_validate_refs(char *fname, array_def *vars) {
+  FILE *filehandle;
+  char line[TABREADLINE]="\0",commsyntax[NAMESIZE],eqname[NAMESIZE],ref[NAMESIZE+4];
+  int i,k,hit;
+  offset_t l;
+  int *eqfound;
+  if (nbacksolve==0) return 0;
+  eqfound=calloc(nbacksolve,sizeof(int));
+  strcpy(commsyntax,"equation");
+  filehandle=fopen(fname,"r");
+  if (filehandle==NULL) {
+    printf("Error: cannot open %s\n",fname);
+    free(eqfound);
+    return -1;
+  }
+  while (tab_next_statement_raw(commsyntax,filehandle,line,TABREADLINE)) {
+    if (strstr(line,"(default")!=NULL) continue;
+    if (!tab_equation_name(line,eqname)) continue;
+    hit=-1;
+    for (i=0; i<nbacksolve; i++) {
+      if (strcmp(backsolves[i].eqname,eqname)==0) {
+        hit=i;
+        break;
+      }
+    }
+    if (hit>=0) eqfound[hit]=1;
+    for (i=0; i<nbacksolve; i++) {
+      strcpy(ref,"p_");
+      strcat(ref,vars[backsolves[i].varindx].cofname);
+      /* a reference is p_<name> delimited on both sides (so p_pm inside
+         p_pms or exp_pm does not count) */
+      k=str_find_ci(line,ref);
+      while (k>-1) {
+        l=k+strlen(ref);
+        if ((k==0||(!isalnum((int)line[k-1])&&line[k-1]!='_'))
+            &&!isalnum((int)line[l])&&line[l]!='_') break;
+        {
+          int k2=str_find_ci(line+l,ref);
+          k=(k2==-1)?-1:(int)(l+k2);
+        }
+      }
+      if (k>-1) {
+        if (hit==i) continue;                     /* its own defining equation */
+        if (hit>=0) {
+          printf("Error: defining equation %s (backsolves %s) also references backsolved variable %s; each retained defining equation may reference only surviving variables and its own backsolved variable\n",eqname,vars[backsolves[hit].varindx].cofname,vars[backsolves[i].varindx].cofname);
+        }
+        else {
+          printf("Error: equation %s references backsolved variable %s; a backsolved variable must be eliminated from every retained equation (redeploy the model so the condensation rewrites this equation)\n",eqname,vars[backsolves[i].varindx].cofname);
+        }
+        fclose(filehandle);
+        free(eqfound);
+        return -1;
+      }
+      if (hit==i) {
+        printf("Error: defining equation %s does not reference its backsolved variable %s\n",eqname,vars[backsolves[i].varindx].cofname);
+        fclose(filehandle);
+        free(eqfound);
+        return -1;
+      }
+    }
+  }
+  fclose(filehandle);
+  for (i=0; i<nbacksolve; i++) {
+    if (!eqfound[i]) {
+      printf("Error: backsolve for %s nominates equation %s but no such equation is declared\n",vars[backsolves[i].varindx].cofname,backsolves[i].eqname);
+      free(eqfound);
+      return -1;
+    }
+  }
+  free(eqfound);
+  return 0;
 }
 
 char *str_replace_first(char *line, char *finditem, char *replitem) {

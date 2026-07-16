@@ -26,7 +26,14 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
   elem_value *elem_vals;
   elem_vals=*elem_vals2;
   elem_value *elem_vals1=NULL;
-  
+  /* backsolve recovery workspace: exogenous per-step changes as placed in
+     vece, and the recovered changes of the backsolved elements */
+  solve_real *exo_z=NULL,*bsvals=NULL;
+  if(nbselems>0) {
+    exo_z= (solve_real *) calloc (nvarele,sizeof(solve_real));
+    bsvals= (solve_real *) calloc (nbselems,sizeof(solve_real));
+  }
+
     if(nohsl) {
       MatCreate(PETSC_COMM_WORLD,&A);
     }
@@ -88,6 +95,7 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
         value = closure_vals[count].shock_value;
         dnz=closure_vals[count].exo_index;
         VecSetValues(vece,1,&dnz,&value,INSERT_VALUES);
+        if(exo_z!=NULL)exo_z[count]=closure_vals[count].shock_value;
       }
     }
     MPI_Barrier(PETSC_COMM_WORLD);
@@ -356,6 +364,9 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
     xcf=*xcf2;
     if(rank==rank_hsl) {
       elem_vals1=elem_vals+ncofele;
+      /* recover the backsolved elements from their defining equations
+         before the updates read any variable's change (GEMPACK 14.1.3) */
+      if(nbselems>0)backsolve_recover(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele,closure_vals,x0,exo_z,bsvals);
       for(i=0; i<nvar; i++) {
         if(vars[i].change_real) {
           for(j=vars[i].offset; j<vars[i].nelem+vars[i].offset; j++) {
@@ -364,6 +375,12 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
               elem_vals1[j].value+=closure_vals[j].shock_value;
               xcf[j]=closure_vals[j].shock_value;//varchange[j]
               elem_vals1[j].substep_base=closure_vals[j].shock_value;
+            }
+            else if(closure_vals[j].is_backsolved) {
+              elem_vals1[j].initial=elem_vals1[j].value;
+              elem_vals1[j].value+=bsvals[closure_vals[j].exo_index];
+              xcf[j]=bsvals[closure_vals[j].exo_index];
+              elem_vals1[j].substep_base=bsvals[closure_vals[j].exo_index];
             }
             else {
               elem_vals1[j].initial=elem_vals1[j].value;
@@ -380,6 +397,12 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
               elem_vals1[j].value+=closure_vals[j].shock_value*elem_vals1[j].initial/100;
               xcf[j]=closure_vals[j].shock_value;//varchange[j]
               elem_vals1[j].substep_base=closure_vals[j].shock_value;
+            }
+            else if(closure_vals[j].is_backsolved) {
+              elem_vals1[j].initial=elem_vals1[j].value;
+              xcf[j]=bsvals[closure_vals[j].exo_index];
+              elem_vals1[j].value+=bsvals[closure_vals[j].exo_index]/100*elem_vals1[j].value;
+              elem_vals1[j].substep_base=bsvals[closure_vals[j].exo_index];
             }
             else {
               elem_vals1[j].initial=elem_vals1[j].value;
@@ -398,6 +421,8 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
     }
     elem_vals1=NULL;
     free(x0);
+    free(exo_z);
+    free(bsvals);
     return 1;
   }
 
@@ -455,6 +480,16 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
     int *xc124= (int *) calloc (1,sizeof(int));
     solve_real *clag1= (solve_real *) calloc (nvarele,sizeof(solve_real));
     solve_real *varchange= (solve_real *) calloc (nvarele,sizeof(solve_real));
+    /* backsolve recovery workspace: exogenous per-step changes as placed
+       in vece (captured at every vece fill site; used by the recovery of
+       the following step), and the recovered changes of the backsolved
+       elements.  Kept resident under !inmemory: recovery reads exo_z at
+       the same point the update loops read x1. */
+    solve_real *exo_z=NULL,*bsvals=NULL;
+    if(nbselems>0) {
+      exo_z= (solve_real *) calloc (nvarele,sizeof(solve_real));
+      bsvals= (solve_real *) calloc (nbselems,sizeof(solve_real));
+    }
     for(subindx=0; subindx<subints; subindx++) {
       for(sol=0; sol<maxsol; sol++) {
         if(sol==0)nsteps=steps1;
@@ -504,6 +539,7 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
                     }
                     elem_vals1[tindx1].substep_base=closure_vals[tindx1].shock_value/nsteps;
                     VecSetValue(vece,closure_vals[tindx1].exo_index,elem_vals1[tindx1].substep_base,INSERT_VALUES);
+                    if(exo_z!=NULL)exo_z[tindx1]=elem_vals1[tindx1].substep_base;
                   }
                   else {
                     if(sol==0) {
@@ -528,6 +564,7 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
                     elem_vals1[tindx1].substep_base=(100+(subindx+1)*temp2)/(100+subindx*temp2)-1;//ha_cgeshock[ha_var[i].begadd+j].ShockVal/nsteps;//(exp(log(1+ha_cgeshock[ha_var[i].begadd+j].ShockVal/100)/nsteps)-1)*100;
                     elem_vals1[tindx1].substep_base*=vpercents;//nsteps*100;
                     VecSetValue(vece,closure_vals[tindx1].exo_index,elem_vals1[tindx1].substep_base,INSERT_VALUES);
+                    if(exo_z!=NULL)exo_z[tindx1]=elem_vals1[tindx1].substep_base;
                   }
                   else {
                     if(sol==0) {
@@ -949,6 +986,10 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
           else VecSetSizes(vece,PETSC_DECIDE,VecSize);
           VecSetOption(vece, VEC_IGNORE_NEGATIVE_INDICES,PETSC_TRUE);
           elem_vals1=elem_vals+ncofele;
+          /* recover the backsolved elements from their defining equations
+             with this step's solution, before any update reads a
+             variable's change (GEMPACK 14.1.3) */
+          if(rank==rank_hsl&&nbselems>0)backsolve_recover(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele,closure_vals,x1,exo_z,bsvals);
           if(stepcount==0) {
             for(i=0; i<nvar; i++) {
               if(vars[i].change_real) {
@@ -957,6 +998,13 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
                     elem_vals1[tindx1].value+=elem_vals1[tindx1].substep_base;
                     varchange[tindx1]=elem_vals1[tindx1].substep_base;
                     VecSetValue(vece,closure_vals[tindx1].exo_index,elem_vals1[tindx1].substep_base,INSERT_VALUES);
+                    if(exo_z!=NULL)exo_z[tindx1]=elem_vals1[tindx1].substep_base;
+                  }
+                  else if(closure_vals[tindx1].is_backsolved) {
+                    varchange[tindx1]=bsvals[closure_vals[tindx1].exo_index];
+                    elem_vals1[tindx1].value+=bsvals[closure_vals[tindx1].exo_index];
+                    elem_vals1[tindx1].substep_base=bsvals[closure_vals[tindx1].exo_index];
+                    clag1[tindx1]=0;
                   }
                   else {
                     varchange[tindx1]=x1[closure_vals[tindx1].exo_index];
@@ -972,6 +1020,13 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
                     varchange[tindx1]=elem_vals1[tindx1].substep_base;
                     elem_vals1[tindx1].value*=(1+elem_vals1[tindx1].substep_base/100);
                     VecSetValue(vece,closure_vals[tindx1].exo_index,elem_vals1[tindx1].substep_base/(1+elem_vals1[tindx1].substep_base/100),INSERT_VALUES);
+                    if(exo_z!=NULL)exo_z[tindx1]=elem_vals1[tindx1].substep_base/(1+elem_vals1[tindx1].substep_base/100);
+                  }
+                  else if(closure_vals[tindx1].is_backsolved) {
+                    varchange[tindx1]=bsvals[closure_vals[tindx1].exo_index];
+                    elem_vals1[tindx1].substep_base=bsvals[closure_vals[tindx1].exo_index];
+                    elem_vals1[tindx1].value*=(1+elem_vals1[tindx1].substep_base/100);
+                    clag1[tindx1]=0;
                   }
                   else {
                     varchange[tindx1]=x1[closure_vals[tindx1].exo_index];
@@ -991,6 +1046,14 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
                     elem_vals1[tindx1].value+=elem_vals1[tindx1].substep_base;
                     varchange[tindx1]+=elem_vals1[tindx1].substep_base;
                     VecSetValue(vece,closure_vals[tindx1].exo_index,elem_vals1[tindx1].substep_base,INSERT_VALUES);
+                    if(exo_z!=NULL)exo_z[tindx1]=elem_vals1[tindx1].substep_base;
+                  }
+                  else if(closure_vals[tindx1].is_backsolved) {
+                    temp1=elem_vals1[tindx1].value;
+                    varchange[tindx1]=clag1[tindx1]+2*bsvals[closure_vals[tindx1].exo_index];
+                    elem_vals1[tindx1].substep_base=bsvals[closure_vals[tindx1].exo_index];
+                    elem_vals1[tindx1].value=clag1[tindx1]+2*bsvals[closure_vals[tindx1].exo_index];
+                    clag1[tindx1]=temp1;
                   }
                   else {
                     temp1=elem_vals1[tindx1].value;//change;
@@ -1011,6 +1074,14 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
                     varchange[tindx1]+=temp1;//*(1+ha_cofvar[ncofele+ha_var[i].begadd+j].varchange/100)
                     elem_vals1[tindx1].value=(1+varchange[tindx1]/100)*elem_vals1[tindx1].initial;
                     VecSetValue(vece,closure_vals[tindx1].exo_index,temp1/(1+varchange[tindx1]/100),INSERT_VALUES);
+                    if(exo_z!=NULL)exo_z[tindx1]=temp1/(1+varchange[tindx1]/100);
+                  }
+                  else if(closure_vals[tindx1].is_backsolved) {
+                    temp1=varchange[tindx1];
+                    varchange[tindx1]=clag1[tindx1]+2*bsvals[closure_vals[tindx1].exo_index]*(100+temp1)/100;
+                    elem_vals1[tindx1].substep_base=bsvals[closure_vals[tindx1].exo_index];
+                    elem_vals1[tindx1].value=(100+varchange[tindx1])/100*elem_vals1[tindx1].initial;
+                    clag1[tindx1]=temp1;
                   }
                   else {
                     temp1=varchange[tindx1];
@@ -1439,11 +1510,19 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
 
         }
         elem_vals1=elem_vals+ncofele;
+        /* recover the backsolved elements for the terminal smoothing
+           solve (same pre-update evaluation point as the step loop) */
+        if(rank==rank_hsl&&nbselems>0)backsolve_recover(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele,closure_vals,x1,exo_z,bsvals);
         for(i=0; i<nvar; i++) {
           if(vars[i].change_real) {
             for(tindx1=vars[i].offset; tindx1<vars[i].nelem+vars[i].offset; tindx1++) {
               if(closure_vals[tindx1].is_exogenous) {
                 elem_vals1[tindx1].value=0;
+              }
+              else if(closure_vals[tindx1].is_backsolved) {
+                varchange[tindx1]=0.5*(varchange[tindx1]+clag1[tindx1]+bsvals[closure_vals[tindx1].exo_index]);
+                elem_vals1[tindx1].value=0;
+                clag1[tindx1]=0;
               }
               else {
                 varchange[tindx1]=0.5*(varchange[tindx1]+clag1[tindx1]+x1[closure_vals[tindx1].exo_index]);
@@ -1456,6 +1535,11 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
             for(tindx1=vars[i].offset; tindx1<vars[i].nelem+vars[i].offset; tindx1++) {
               if(closure_vals[tindx1].is_exogenous) {
                 elem_vals1[tindx1].value=0;
+              }
+              else if(closure_vals[tindx1].is_backsolved) {
+                varchange[tindx1]=0.5*(varchange[tindx1]+clag1[tindx1]+bsvals[closure_vals[tindx1].exo_index]*(1+varchange[tindx1]/100));
+                elem_vals1[tindx1].value=0;
+                clag1[tindx1]=0;
               }
               else {
                 varchange[tindx1]=0.5*(varchange[tindx1]+clag1[tindx1]+x1[closure_vals[tindx1].exo_index]*(1+varchange[tindx1]/100));
@@ -1868,6 +1952,8 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
     xc124=NULL;
     free(clag1);
     free(varchange);
+    free(exo_z);
+    free(bsvals);
     gettimeofday(&endtime, NULL);
     if(rank==0)logmsg(1,"Gragg solve time %.2f s\n",(endtime.tv_sec - begintime.tv_sec)+((double)(endtime.tv_usec - begintime.tv_usec))/ 1000000);
               free(counteqs);
