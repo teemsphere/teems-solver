@@ -107,7 +107,10 @@ The solver reads a GEMPACK-style TAB subset (statement syntax per [GM]):
 Shock statement values follow GEMPACK-standard ordering (first
 subscript varies fastest; fixed dimensions collapsed to size 1).
 Startup notes remind that intertemporal variables should be declared
-with minimal dimensionality to keep the border (netcut) small.
+with minimal dimensionality to keep the border (netcut) small;
+element-level classification (§3 phase 7) limits the damage when a
+lead/lag reference fixes dimensions to elements, but full-set lead/lag
+references still border the variable's whole element block.
 
 Formulas are compiled once per statement into a `formula_op` program
 (operator enum `op_code`, operand types `operand_type`) and evaluated
@@ -137,7 +140,14 @@ Generated temporaries use the reserved prefixes `gen_sum`, `gen_par`,
    the nominated defining equations vanish from every "equation" scan.
 7. **Equation ordering** (`equation_order_read[_nested]`) — assigns
    equations/variables to diagonal blocks by region/time per the matrix
-   method; computes `netcut` (border size) [HK16 §5]. Rank 0 records the
+   method; computes `netcut` (border size) [HK16 §5]. Lead/lag
+   references border at element level (`border_mark_ref`): the mark
+   spans the referenced slice — fixed dims, which tab_preprocess turns
+   into singleton subsets, narrow it; the chain dim spans fully — so a
+   reference like `qo("capital",r,t+1)` borders only the capital slice
+   instead of the variable's whole element block. A mark covering the
+   whole variable collapses to the per-variable flag (`var_inter`),
+   which the partition rules also read. Rank 0 records the
    ordering to `<solfiles>.stats.json` (`ordering_stats_write`, §1).
 8. **Jacobian preallocation and fill** (`jacobian_preallocate`,
    `jacobian_fill`) — PETSc AIJ matrices A (endogenous) and B

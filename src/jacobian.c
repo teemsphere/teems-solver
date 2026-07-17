@@ -1632,7 +1632,69 @@ int eq_linvar_read(char *formulain,eq_var_ref *LinVars,int linindx,array_def *va
   return 1;
 }
 
-int equation_order_read(char *fname, char *commsyntax,set_def *sets,dim_t nset,set_element *set_elems,array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar,elem_value *elem_vals,offset_t ncofvar,offset_t ncofele,closure_entry *closure_vals,bool *var_inter,array_def *eq_defs,bool *eq_intertemp,dim_t *eq_orderintra,dim_t *eq_orderreg,offset_t allregset,offset_t alltimeset,dim_t *orderintra,dim_t *orderreg) {
+/* Element-level border marking for one lead/lag reference (6.5 E3).
+   Non-chain dims narrow the mark to the positions their index set
+   occupies inside the variable's declared set (tab_preprocess turns
+   quoted elements into singleton subsets, so fixed dims arrive here as
+   1-element sets); the chain dim and any unresolvable dim stay full.
+   A mark spanning the whole variable collapses to the whole-variable
+   flag, so unsliced references classify exactly as before. */
+static void border_mark_ref(eq_var_ref *ref, array_def *vars, set_def *sets, dim_t nset,
+                            set_element *set_elems, offset_t alltimeset,
+                            bool *var_inter, bool *ele_inter, bool nested,
+                            dim_t *orderintra, dim_t *orderreg) {
+  offset_t l=ref->LinVarIndx;
+  offset_t poscnt[MAXVARDIM],mstr[MAXVARDIM],*poslist[MAXVARDIM];
+  offset_t s,li,l2,i1,addr,total;
+  dim_t nd=vars[l].size,d,sup;
+  bool allfull=true;
+  if(var_inter[l])return;
+  if(alltimeset<0||orderintra[l]<0||nd==0) {
+    var_inter[l]=true;
+    if(nested) {
+      orderintra[l]=-1;
+      orderreg[l]=-1;
+    }
+    return;
+  }
+  for(d=0; d<nd; d++) {
+    poslist[d]=NULL;
+    poscnt[d]=sets[vars[l].setid[d]].size;
+    if(d==orderintra[l])continue; /* chain dim: full extent */
+    for(s=0; s<nset; s++)if(strcmp(sets[s].setname,ref->dimsetnames[d])==0)break;
+    if(s==nset||s==vars[l].setid[d]||sets[s].size==sets[vars[l].setid[d]].size)continue;
+    for(sup=1; sup<MAXSUPSET; sup++)if(sets[s].subsetid[sup]==vars[l].setid[d])break;
+    if(sup==MAXSUPSET)continue; /* not a resolvable subset of the declared set: keep full */
+    poslist[d]=(offset_t *) malloc (sets[s].size*sizeof(offset_t));
+    for(li=0; li<sets[s].size; li++)poslist[d][li]=set_elems[sets[s].offset+li].superset_pos[sup];
+    poscnt[d]=sets[s].size;
+    allfull=false;
+  }
+  if(allfull) {
+    var_inter[l]=true;
+    if(nested) {
+      orderintra[l]=-1;
+      orderreg[l]=-1;
+    }
+    return;
+  }
+  mstr[nd-1]=1;
+  for(d=nd-1; d>0; d--)mstr[d-1]=mstr[d]*poscnt[d];
+  total=mstr[0]*poscnt[0];
+  for(li=0; li<total; li++) {
+    l2=li;
+    addr=0;
+    for(d=0; d<nd; d++) {
+      i1=l2/mstr[d];
+      l2-=i1*mstr[d];
+      addr+=(poslist[d]==NULL?i1:poslist[d][i1])*vars[l].strides[d];
+    }
+    ele_inter[vars[l].offset+addr]=true;
+  }
+  for(d=0; d<nd; d++)free(poslist[d]);
+}
+
+int equation_order_read(char *fname, char *commsyntax,set_def *sets,dim_t nset,set_element *set_elems,array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar,elem_value *elem_vals,offset_t ncofvar,offset_t ncofele,closure_entry *closure_vals,bool *var_inter,bool *ele_inter,array_def *eq_defs,bool *eq_intertemp,dim_t *eq_orderintra,dim_t *eq_orderreg,offset_t allregset,offset_t alltimeset,dim_t *orderintra,dim_t *orderreg) {
   FILE * filehandle;
   char tline[TABREADLINE],line[TABREADLINE],line1[TABREADLINE],linecopy[TABREADLINE];//,set1[NAMESIZE],set2[NAMESIZE];
   char vname[TABREADLINE],lintmp[TABREADLINE];//,*p1=NULL;
@@ -1733,7 +1795,7 @@ int equation_order_read(char *fname, char *commsyntax,set_def *sets,dim_t nset,s
             p = strtok(NULL,"}");
             leadlag=0;
             parse_index_leadlag(p,&leadlag);
-            if(leadlag!=0)var_inter[l]=true;//printf("var %s\n",ha_var[l].cofname);}
+            LinVars[i3].dimleadlag[0]=leadlag;
             strcpy(LinVars[i3].dimnames[0],p);
             strcpy(lintmp,"(all,");
             strcat(lintmp,p);
@@ -1769,7 +1831,7 @@ int equation_order_read(char *fname, char *commsyntax,set_def *sets,dim_t nset,s
               p = strtok(NULL,",");
               leadlag=0;
               parse_index_leadlag(p,&leadlag);
-              if(leadlag!=0)var_inter[l]=true;//printf("var %s\n",ha_var[l].cofname);}
+              LinVars[i3].dimleadlag[i4]=leadlag;
               strcpy(LinVars[i3].dimnames[i4],p);
               strcpy(lintmp,"(all,");
               strcat(lintmp,p);
@@ -1802,7 +1864,7 @@ int equation_order_read(char *fname, char *commsyntax,set_def *sets,dim_t nset,s
             p = strtok(NULL,"}");
             leadlag=0;
             parse_index_leadlag(p,&leadlag);
-            if(leadlag!=0)var_inter[l]=true;//printf("var %s\n",ha_var[l].cofname);}
+            LinVars[i3].dimleadlag[i4]=leadlag;
             strcpy(LinVars[i3].dimnames[i4],p);
             strcpy(lintmp,"(all,");
             strcat(lintmp,p);
@@ -1898,6 +1960,13 @@ int equation_order_read(char *fname, char *commsyntax,set_def *sets,dim_t nset,s
           eq_intertemp[eqindx]=true;
         }
 
+      }
+      /* 6.5 E3: lead/lag references border at element level; must run
+         before the partition rules below, which read var_inter */
+      for (i4=0; i4<nlinvars; i4++) {
+        for(i=0; i<vars[LinVars[i4].LinVarIndx].size; i++)if(LinVars[i4].dimleadlag[i]!=0)break;
+        if(i==vars[LinVars[i4].LinVarIndx].size)continue;
+        border_mark_ref(&LinVars[i4],vars,sets,nset,set_elems,alltimeset,var_inter,ele_inter,false,orderintra,orderreg);
       }
       if(allregset>=0) {
         if(eqindx==0) {
@@ -1996,7 +2065,7 @@ int equation_order_read(char *fname, char *commsyntax,set_def *sets,dim_t nset,s
   return 1;
 }
 
-int equation_order_read_nested(char *fname, char *commsyntax,set_def *sets,dim_t nset,set_element *set_elems,array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar,elem_value *elem_vals,offset_t ncofvar,offset_t ncofele,closure_entry *closure_vals,bool *var_inter,array_def *eq_defs,bool *eq_intertemp,dim_t *eq_orderintra,dim_t *eq_orderreg,offset_t allregset,offset_t alltimeset,dim_t *orderintra,dim_t *orderreg) {
+int equation_order_read_nested(char *fname, char *commsyntax,set_def *sets,dim_t nset,set_element *set_elems,array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar,elem_value *elem_vals,offset_t ncofvar,offset_t ncofele,closure_entry *closure_vals,bool *var_inter,bool *ele_inter,array_def *eq_defs,bool *eq_intertemp,dim_t *eq_orderintra,dim_t *eq_orderreg,offset_t allregset,offset_t alltimeset,dim_t *orderintra,dim_t *orderreg) {
   FILE * filehandle;
   char tline[TABREADLINE],line[TABREADLINE],line1[TABREADLINE],linecopy[TABREADLINE];//,set1[NAMESIZE],set2[NAMESIZE];
   char vname[TABREADLINE],lintmp[TABREADLINE];//,*p1=NULL;
@@ -2098,11 +2167,7 @@ int equation_order_read_nested(char *fname, char *commsyntax,set_def *sets,dim_t
             p = strtok(NULL,"}");
             leadlag=0;
             parse_index_leadlag(p,&leadlag);
-            if(leadlag!=0) {
-              var_inter[l]=true;
-              orderintra[l]=-1;
-              orderreg[l]=-1;
-            }//printf("var %s\n",ha_var[l].cofname);}
+            LinVars[i3].dimleadlag[0]=leadlag;
             strcpy(LinVars[i3].dimnames[0],p);
             strcpy(lintmp,"(all,");
             strcat(lintmp,p);
@@ -2138,11 +2203,7 @@ int equation_order_read_nested(char *fname, char *commsyntax,set_def *sets,dim_t
               p = strtok(NULL,",");
               leadlag=0;
               parse_index_leadlag(p,&leadlag);
-              if(leadlag!=0) {
-                var_inter[l]=true;
-                orderintra[l]=-1;
-                orderreg[l]=-1;
-              }//printf("var %s\n",ha_var[l].cofname);}
+              LinVars[i3].dimleadlag[i4]=leadlag;
               strcpy(LinVars[i3].dimnames[i4],p);
               strcpy(lintmp,"(all,");
               strcat(lintmp,p);
@@ -2175,11 +2236,7 @@ int equation_order_read_nested(char *fname, char *commsyntax,set_def *sets,dim_t
             p = strtok(NULL,"}");
             leadlag=0;
             parse_index_leadlag(p,&leadlag);
-            if(leadlag!=0) {
-              var_inter[l]=true;
-              orderintra[l]=-1;
-              orderreg[l]=-1;
-            }//printf("var %s\n",ha_var[l].cofname);}
+            LinVars[i3].dimleadlag[i4]=leadlag;
             strcpy(LinVars[i3].dimnames[i4],p);
             strcpy(lintmp,"(all,");
             strcat(lintmp,p);
@@ -2278,6 +2335,15 @@ int equation_order_read_nested(char *fname, char *commsyntax,set_def *sets,dim_t
         }
       }
 
+      /* 6.5 E3: lead/lag references border at element level; must run
+         before the rules below, which read var_inter (a collapse to the
+         whole-variable flag also resets the order dims, as the inline
+         flagging used to) */
+      for (i4=0; i4<nlinvars; i4++) {
+        for(i=0; i<vars[LinVars[i4].LinVarIndx].size; i++)if(LinVars[i4].dimleadlag[i]!=0)break;
+        if(i==vars[LinVars[i4].LinVarIndx].size)continue;
+        border_mark_ref(&LinVars[i4],vars,sets,nset,set_elems,alltimeset,var_inter,ele_inter,true,orderintra,orderreg);
+      }
 
       j=0;
       for(i4=0; i4<nlinvars; i4++)for(i=0; i<vars[LinVars[i4].LinVarIndx].size; i++) if(sets[vars[LinVars[i4].LinVarIndx].setid[i]].intertemp)j++;

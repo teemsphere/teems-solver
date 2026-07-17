@@ -146,11 +146,11 @@ static void partition_flags_clear(set_def *sets, dim_t nset) {
 /* First ordering pass, shared by the live ordering below and the
    partition probe: count the endogenous variable elements that fall
    inside each diagonal block under the current chain/partition marks
-   (border variables and exogenous elements excluded). countvar must be
-   zeroed, length ndblock. Extracted verbatim from the three inline
-   counting passes. */
+   (border variables/elements and exogenous elements excluded).
+   countvar must be zeroed, length ndblock. Extracted verbatim from the
+   three inline counting passes. */
 static void block_var_count(array_def *vars, offset_t nvar, set_def *sets, set_element *set_elems,
-                            closure_entry *closure_vals, bool *var_inter,
+                            closure_entry *closure_vals, bool *var_inter, bool *ele_inter,
                             dim_t *orderintra, dim_t *orderreg,
                             offset_t alltimeset, offset_t allregset, offset_t nreg, dim_t nesteddbbd,
                             offset_t *countvar) {
@@ -160,7 +160,7 @@ static void block_var_count(array_def *vars, offset_t nvar, set_def *sets, set_e
     for (i=0; i<nvar; i++) {
       for (j=0; j<vars[i].nelem; j++) {
         if(!closure_vals[j3+j].is_exogenous&&!closure_vals[j3+j].is_backsolved) {
-          if(!var_inter[i]) {
+          if(!var_inter[i]&&!ele_inter[j3+j]) {
             j0=j;
             j2=-1;
             for(j1=0; j1<orderintra[i]+1; j1++) {
@@ -187,7 +187,7 @@ static void block_var_count(array_def *vars, offset_t nvar, set_def *sets, set_e
     for (i=0; i<nvar; i++) {
       for (j=0; j<vars[i].nelem; j++) {
         if(!closure_vals[j3+j].is_exogenous&&!closure_vals[j3+j].is_backsolved) {
-          if(!var_inter[i]) {
+          if(!var_inter[i]&&!ele_inter[j3+j]) {
             j0=j;
             j2=-1;
             for(j1=0; j1<orderintra[i]+1; j1++) {
@@ -217,7 +217,7 @@ static void block_var_count(array_def *vars, offset_t nvar, set_def *sets, set_e
     for (i=0; i<nvar; i++) {
       for (j=0; j<vars[i].nelem; j++) {
         if(!closure_vals[j3+j].is_exogenous&&!closure_vals[j3+j].is_backsolved) {
-          if(!var_inter[i]) {
+          if(!var_inter[i]&&!ele_inter[j3+j]) {
             j0=j;
             j4=-1;
             for(j1=0; j1<orderreg[i]+1; j1++) {
@@ -399,6 +399,7 @@ static int partition_probe(char *tabfile, set_def *sets, dim_t nset, set_element
   else if(alltimeset>=0)ndblock=ntime*nreg;
   else ndblock=nreg;
   bool *var_inter=(bool *) calloc (nvar,sizeof(bool));
+  bool *ele_inter=(bool *) calloc (nvarele,sizeof(bool));
   dim_t *orderintra=(dim_t *) malloc (nvar*sizeof(dim_t));
   dim_t *orderreg=(dim_t *) malloc (nvar*sizeof(dim_t));
   for(i=0; i<nvar; i++) {
@@ -415,9 +416,9 @@ static int partition_probe(char *tabfile, set_def *sets, dim_t nset, set_element
   }
   offset_t *countvar=(offset_t *) calloc (ndblock,sizeof(offset_t));
   partition_flags_apply(sets,nset,cand);
-  if(nesteddbbd==1)equation_order_read_nested(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,closure_vals,var_inter,eq_defs,eq_intertemp,eq_time,eq_reg,cand,alltimeset,orderintra,orderreg);
-  else equation_order_read(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,closure_vals,var_inter,eq_defs,eq_intertemp,eq_time,eq_reg,cand,alltimeset,orderintra,orderreg);
-  block_var_count(vars,nvar,sets,set_elems,closure_vals,var_inter,orderintra,orderreg,alltimeset,cand,nreg,nesteddbbd,countvar);
+  if(nesteddbbd==1)equation_order_read_nested(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,closure_vals,var_inter,ele_inter,eq_defs,eq_intertemp,eq_time,eq_reg,cand,alltimeset,orderintra,orderreg);
+  else equation_order_read(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,closure_vals,var_inter,ele_inter,eq_defs,eq_intertemp,eq_time,eq_reg,cand,alltimeset,orderintra,orderreg);
+  block_var_count(vars,nvar,sets,set_elems,closure_vals,var_inter,ele_inter,orderintra,orderreg,alltimeset,cand,nreg,nesteddbbd,countvar);
   partition_flags_clear(sets,nset);
   total=0;
   bmin=-1;
@@ -436,6 +437,7 @@ static int partition_probe(char *tabfile, set_def *sets, dim_t nset, set_element
   *blkmin_out=bmin<0?0:bmin;
   *blkmax_out=bmax;
   free(var_inter);
+  free(ele_inter);
   free(orderintra);
   free(orderreg);
   free(eq_defs);
@@ -1075,6 +1077,9 @@ int main(int argc,char **args) {
   free(coef_store);
   free(var_store);
   closure_entry *closure_vals= (closure_entry *) calloc (nvarele,sizeof(closure_entry));
+  /* element-level border marks (6.5 E3), populated by the ordering scan
+     alongside var_inter on the same ranks */
+  bool *ele_inter= (bool *) calloc (nvarele,sizeof(bool));
   if(rank==0) {
     strcpy(commsyntax,"exogenous");
     nexo=closure_read(closure,commsyntax,closure_vals,vars,nvar,sets,nset,set_elems);
@@ -1250,14 +1255,17 @@ int main(int argc,char **args) {
   }
   offset_t nintraendovar,summat;
   if(rank==rank_hsl) {
-    if(nesteddbbd==1)equation_order_read_nested(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,closure_vals,var_inter,eq_defs,eq_intertemp,eq_time,eq_reg,allregset,alltimeset,orderintra,orderreg);
-    else equation_order_read(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,closure_vals,var_inter,eq_defs,eq_intertemp,eq_time,eq_reg,allregset,alltimeset,orderintra,orderreg);
+    if(nesteddbbd==1)equation_order_read_nested(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,closure_vals,var_inter,ele_inter,eq_defs,eq_intertemp,eq_time,eq_reg,allregset,alltimeset,orderintra,orderreg);
+    else equation_order_read(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,closure_vals,var_inter,ele_inter,eq_defs,eq_intertemp,eq_time,eq_reg,allregset,alltimeset,orderintra,orderreg);
     if(alltimeset>=0||allregset>=0)for(i=0; i<neq; i++)eq_intertemp[i]=!eq_intertemp[i];
+    j0=0;
+    for(i=0; i<nvarele; i++)if(ele_inter[i])j0++;
+    if(j0>0&&rank==0)logmsg(1,"Element-level border classification: %ld elements bordered by sliced lead/lag references\n",j0);
   }
   switch (nesteddbbd) {
   case 1 : ;/* missing partition sets already abort above (NDBBD requires both) */
     offset_t *countvarintra= (offset_t *) calloc (ndblock,sizeof(offset_t));
-    block_var_count(vars,nvar,sets,set_elems,closure_vals,var_inter,orderintra,orderreg,alltimeset,allregset,nreg,nesteddbbd,countvarintra);
+    block_var_count(vars,nvar,sets,set_elems,closure_vals,var_inter,ele_inter,orderintra,orderreg,alltimeset,allregset,nreg,nesteddbbd,countvarintra);
     if(rank==rank_hsl) {
       j2=countvarintra[0];
       countvarintra[0]=0;
@@ -1279,7 +1287,7 @@ int main(int argc,char **args) {
       for (j=0; j<vars[i].nelem; j++) {
         j5=j3+j;
         if(!closure_vals[j5].is_exogenous&&!closure_vals[j5].is_backsolved) {
-          if(!var_inter[i]) {
+          if(!var_inter[i]&&!ele_inter[j5]) {
             j0=j;
             j2=-1;
             for(j1=0; j1<orderintra[i]+1; j1++) {
@@ -1327,7 +1335,7 @@ int main(int argc,char **args) {
   default :
     if(alltimeset>=0) {
       offset_t *countvarintra= (offset_t *) calloc (ndblock,sizeof(offset_t));
-      block_var_count(vars,nvar,sets,set_elems,closure_vals,var_inter,orderintra,orderreg,alltimeset,allregset,nreg,nesteddbbd,countvarintra);
+      block_var_count(vars,nvar,sets,set_elems,closure_vals,var_inter,ele_inter,orderintra,orderreg,alltimeset,allregset,nreg,nesteddbbd,countvarintra);
       if(rank==rank_hsl) {
         j2=countvarintra[0];
         countvarintra[0]=0;
@@ -1349,7 +1357,7 @@ int main(int argc,char **args) {
         for (j=0; j<vars[i].nelem; j++) {
           j5=j3+j;
           if(!closure_vals[j5].is_exogenous&&!closure_vals[j5].is_backsolved) {
-            if(!var_inter[i]) {
+            if(!var_inter[i]&&!ele_inter[j5]) {
               j0=j;
               for(j1=0; j1<orderintra[i]+1; j1++) {
                 j2=j0/vars[i].strides[j1];
@@ -1393,7 +1401,7 @@ int main(int argc,char **args) {
     else {
       if(allregset>=0) {
         offset_t *countvarintra= (offset_t *) calloc (ndblock,sizeof(offset_t));
-        block_var_count(vars,nvar,sets,set_elems,closure_vals,var_inter,orderintra,orderreg,alltimeset,allregset,nreg,nesteddbbd,countvarintra);
+        block_var_count(vars,nvar,sets,set_elems,closure_vals,var_inter,ele_inter,orderintra,orderreg,alltimeset,allregset,nreg,nesteddbbd,countvarintra);
         if(rank==rank_hsl) {
           j2=countvarintra[0];
           countvarintra[0]=0;
@@ -1415,7 +1423,7 @@ int main(int argc,char **args) {
           for (j=0; j<vars[i].nelem; j++) {
             j5=j3+j;
             if(!closure_vals[j5].is_exogenous&&!closure_vals[j5].is_backsolved) {
-              if(!var_inter[i]) {
+              if(!var_inter[i]&&!ele_inter[j5]) {
                 j0=j;
                 for(j1=0; j1<orderreg[i]+1; j1++) {
                   j6=j0/vars[i].strides[j1];
@@ -1470,6 +1478,7 @@ int main(int argc,char **args) {
   free(orderreg);
 
   free(var_inter);
+  free(ele_inter);
   strcpy(commsyntax,"equation");
   offset_t *eq_addr= (offset_t *) calloc (VecSize,sizeof(offset_t));//recycle ha_cgeset
   offset_t *eq_time_offsets= (offset_t *) calloc (neq,sizeof(offset_t));
