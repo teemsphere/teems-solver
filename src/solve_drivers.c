@@ -33,6 +33,13 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
     exo_z= (solve_real *) calloc (nvarele,sizeof(solve_real));
     bsvals= (solve_real *) calloc (nbselems,sizeof(solve_real));
   }
+  /* exogenous columns run 0..nexo-1; under heavy condensation nexo can
+     exceed VecSize, so vece and B's columns span BSize (the MPI methods
+     abort in main when nexo > VecSize, so nesteddbbd paths keep the
+     square layout) */
+  PetscInt BSize;
+  BSize=(PetscInt)(nvarele-VecSize-nbselems);      /* nexo */
+  BSize=(BSize>VecSize)?BSize:VecSize;
 
     if(nohsl) {
       MatCreate(PETSC_COMM_WORLD,&A);
@@ -66,7 +73,7 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
       MatCreate(PETSC_COMM_SELF,&B);
     }
     if(nesteddbbd==1)MatSetSizes(B,localsize,localsize,VecSize,VecSize);
-    else MatSetSizes(B,PETSC_DECIDE,PETSC_DECIDE,VecSize,VecSize);
+    else MatSetSizes(B,PETSC_DECIDE,PETSC_DECIDE,VecSize,BSize);
     if(nohsl) {
       MatSetType(B,MATMPIAIJ);
     }
@@ -152,8 +159,19 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
     if(rank==0)logmsg(1,"Matrix assembly time %.2f s\n",(endtime.tv_sec - begintime.tv_sec)+((double)(endtime.tv_usec - begintime.tv_usec))/ 1000000);
     CHKERRQ(ierr);
     PetscViewer viewer;
-    ierr = VecDuplicate(vece,&vecb);
-    CHKERRQ(ierr);
+    /* vecb spans the equation rows (VecSize); vece may be wider (BSize) */
+    {
+      if(nohsl) {
+        VecCreate(PETSC_COMM_WORLD,&vecb);
+        VecSetType(vecb,VECMPI);
+      }
+      else {
+        VecCreate(PETSC_COMM_SELF,&vecb);
+        VecSetType(vecb,VECSEQ);
+      }
+      if(nesteddbbd==1)VecSetSizes(vecb,localsize,VecSize);
+      else VecSetSizes(vecb,PETSC_DECIDE,VecSize);
+    }
     ierr = MatMult(B,vece,vecb);
     CHKERRQ(ierr);
     ierr = VecAssemblyBegin(vecb);
@@ -490,6 +508,12 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
       exo_z= (solve_real *) calloc (nvarele,sizeof(solve_real));
       bsvals= (solve_real *) calloc (nbselems,sizeof(solve_real));
     }
+    /* exogenous columns run 0..nexo-1; under heavy condensation nexo can
+       exceed VecSize, so vece and B's columns span BSize (the MPI methods
+       abort in main when nexo > VecSize) */
+    PetscInt BSize;
+    BSize=(PetscInt)(nvarele-VecSize-nbselems);      /* nexo */
+    BSize=(BSize>VecSize)?BSize:VecSize;
     for(subindx=0; subindx<subints; subindx++) {
       for(sol=0; sol<maxsol; sol++) {
         if(sol==0)nsteps=steps1;
@@ -517,7 +541,7 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
                 VecSetType(vece,VECSEQ);
               }
               if(nesteddbbd==1)VecSetSizes(vece,localsize,VecSize);
-              else VecSetSizes(vece,PETSC_DECIDE,VecSize);
+              else VecSetSizes(vece,PETSC_DECIDE,BSize);
               VecSetOption(vece, VEC_IGNORE_NEGATIVE_INDICES,PETSC_TRUE);
             }
             if(sol==0)for(i=0; i<ncofele; i++) {
@@ -647,7 +671,7 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
             MatCreate(PETSC_COMM_SELF,&B);
           }
           if(nesteddbbd==1)MatSetSizes(B,localsize,localsize,VecSize,VecSize);
-          else MatSetSizes(B,PETSC_DECIDE,PETSC_DECIDE,VecSize,VecSize);
+          else MatSetSizes(B,PETSC_DECIDE,PETSC_DECIDE,VecSize,BSize);
           if(nohsl) {
             MatSetType(B,MATMPIAIJ);
           }
@@ -706,8 +730,19 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
           CHKERRQ(ierr);
           ierr = MatAssemblyEnd(B,MAT_FINAL_ASSEMBLY);
           CHKERRQ(ierr);
-          ierr = VecDuplicate(vece,&vecb);
-          CHKERRQ(ierr);
+          /* vecb spans the equation rows (VecSize); vece may be wider (BSize) */
+          {
+      if(nohsl) {
+        VecCreate(PETSC_COMM_WORLD,&vecb);
+        VecSetType(vecb,VECMPI);
+      }
+      else {
+        VecCreate(PETSC_COMM_SELF,&vecb);
+        VecSetType(vecb,VECSEQ);
+      }
+      if(nesteddbbd==1)VecSetSizes(vecb,localsize,VecSize);
+      else VecSetSizes(vecb,PETSC_DECIDE,VecSize);
+    }
           if(rank==rank_hsl) {
             ierr = MatMult(B,vece,vecb);
             CHKERRQ(ierr);
@@ -983,7 +1018,7 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
             VecSetType(vece,VECSEQ);
           }
           if(nesteddbbd==1)VecSetSizes(vece,localsize,VecSize);
-          else VecSetSizes(vece,PETSC_DECIDE,VecSize);
+          else VecSetSizes(vece,PETSC_DECIDE,BSize);
           VecSetOption(vece, VEC_IGNORE_NEGATIVE_INDICES,PETSC_TRUE);
           elem_vals1=elem_vals+ncofele;
           /* recover the backsolved elements from their defining equations
@@ -1187,7 +1222,7 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
           MatCreate(PETSC_COMM_SELF,&B);
         }
         if(nesteddbbd==1)MatSetSizes(B,localsize,localsize,VecSize,VecSize);
-        else MatSetSizes(B,PETSC_DECIDE,PETSC_DECIDE,VecSize,VecSize);
+        else MatSetSizes(B,PETSC_DECIDE,PETSC_DECIDE,VecSize,BSize);
         if(nohsl) {
           MatSetType(B,MATMPIAIJ);
         }
@@ -1248,8 +1283,19 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
         CHKERRQ(ierr);
         ierr = MatAssemblyEnd(B,MAT_FINAL_ASSEMBLY);
         CHKERRQ(ierr);
-        ierr = VecDuplicate(vece,&vecb);
-        CHKERRQ(ierr);
+        /* vecb spans the equation rows (VecSize); vece may be wider (BSize) */
+        {
+      if(nohsl) {
+        VecCreate(PETSC_COMM_WORLD,&vecb);
+        VecSetType(vecb,VECMPI);
+      }
+      else {
+        VecCreate(PETSC_COMM_SELF,&vecb);
+        VecSetType(vecb,VECSEQ);
+      }
+      if(nesteddbbd==1)VecSetSizes(vecb,localsize,VecSize);
+      else VecSetSizes(vecb,PETSC_DECIDE,VecSize);
+    }
         if(rank==rank_hsl) {
           ierr = MatMult(B,vece,vecb);
           CHKERRQ(ierr);

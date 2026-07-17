@@ -1144,6 +1144,15 @@ int main(int argc,char **args) {
     if(nbselems>0)logmsg(1,"System size %d equations (%ld exogenous, %ld backsolved)\n",VecSize,nexo,nbselems);
     else logmsg(1,"System size %d equations (%ld exogenous)\n",VecSize,nexo);
   }
+  /* Heavy condensation can leave fewer unknowns than exogenous elements.
+     The sequential methods handle that with a widened shock vector (BSize
+     columns in B), but the parallel-layout preallocation still assumes a
+     square B, so the MPI methods abort cleanly instead of corrupting. */
+  if(nohsl&&nexo>VecSize) {
+    if(rank==0)printf("Error: the condensed system has %d unknowns but %ld exogenous elements; DBBD/NDBBD (-matsol 2/3) do not yet support nexo > system size -- use -matsol 0 (LU) or 1 (SBBD), or condense fewer variables\n",VecSize,nexo);
+    PetscFinalize();
+    return 1;
+  }
   strcpy(commsyntax,"equation");
   offset_t neq=0,neq1;
   if(rank==0) {
@@ -1669,7 +1678,9 @@ int main(int argc,char **args) {
     VecSetSizes(vece,localsize,VecSize);
   }
   else {
-    VecSetSizes(vece,PETSC_DECIDE,VecSize);
+    /* exogenous columns run 0..nexo-1; condensation can push nexo past
+       VecSize, so the shock vector and B's columns span BSize */
+    VecSetSizes(vece,PETSC_DECIDE,(VecSize>(PetscInt)nexo)?VecSize:(PetscInt)nexo);
   }
   VecSetOption(vece, VEC_IGNORE_NEGATIVE_INDICES,PETSC_TRUE);
   free(locals);
