@@ -57,7 +57,7 @@ Binary `hsl` → `teems-solver` is deferred: path is hardcoded in teems-R
 | temdir | scratch_dir | |
 | mymaxnumthrd | max_threads | |
 | smallthreads | section_threads | thread cap for selected OMP sections |
-| step1,step2,step3 | steps1,steps2,steps3 | Gragg step counts 2-4-8 [GM "multi-step"] |
+| step1,step2,step3 | steps1,steps2,steps3 | Gragg/Euler step counts 2-4-8 [GM "multi-step"] |
 | kindx1,kindx2 | step_ratio2,step_ratio3 | steps2/steps1, steps3/steps1 |
 | kval1,kval2,kval3 | extrap_w1,extrap_w2,extrap_w3 | Richardson extrapolation weights [GM "extrapolation", D20] |
 | HA_COMM,HA1_COMM | node_comm,node_tail_comm | per-node split; ranks-last-on-node group |

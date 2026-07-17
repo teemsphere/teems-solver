@@ -349,6 +349,7 @@ from tarball build-args.
 |---|---|
 | `Johansen` | one-step solution of the linearized system [D20; Johansen 1960] |
 | `Gragg` | Gragg's method (smoothed modified midpoint) with Richardson extrapolation over `-step1/-step2/-step3` step counts (default 2-4-8), per subinterval [GM "Gragg"; Pearson 1991 eq. 6.1/Alg. 7.1.2]; `Mmid` accepted as a deprecated alias (warns) |
+| `Euler` | forward Euler multistep with Richardson extrapolation over the same three step counts [GM "Euler"] — shares the Gragg driver with the leapfrog and terminal smoothing disabled; the truncation error series is `h` (not `h²`), so the extrapolation weights use the step ratios unsquared and each extra solution gains one order (not two). Any strictly increasing step counts are allowed (no parity rule) |
 | `NoSol` | preparation only — runs the full pre-solve pipeline (data, formulas, structural detection, ordering, `stats.json`) and skips the solve; a sub-second structure probe of a model (§6) |
 
 Gragg mechanics: for each step count `s`, the shock is applied in `s`
@@ -361,8 +362,20 @@ eq. 6.1). The three solutions are Richardson-extrapolated with weights
 `extrap_w1..3` derived from the step ratios (valid for the even-power
 error expansion Gragg's theorem guarantees for even `s`); per-element
 error codes are accumulated (`xc124`) and reported as precision counts.
-teems-R maps `solution_method="Gragg"` → `Gragg`; `"Johansen"`
-forces `-nsubints 1`.
+
+Euler mechanics: same driver and per-step refill+solve, but every
+sub-step is a forward step from the current state (`updates_apply`
+midpoint flag 0 throughout, no leapfrog history, no terminal
+refill+solve), i.e. `s` factorizations per pass. Robustness properties
+follow from using only local information: tolerates near-asymptote
+levels, severe shocks, and exact −100 % percent-change shocks that the
+midpoint family cannot start from (GM §"Gragg's method and the midpoint
+method"). Step counts must be strictly increasing; parity is
+unconstrained. Measured on GTAP-RE (40 % pfactwld, float64-coefficient
+diagnostic build): extrapolated error contracts ~8× per step-count
+doubling (the h³ rate), with Euler 8-16-32 matching Gragg 2-4-8.
+teems-R maps `solution_method="Gragg"/"Euler"` → the same `-solmed`
+values; `"Johansen"` forces `-nsubints 1`.
 
 ## 6. Matrix methods (`-matsol`, `enum matrix_method`)
 

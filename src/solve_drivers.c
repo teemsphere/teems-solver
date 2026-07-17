@@ -171,6 +171,11 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
       }
       if(nesteddbbd==1)VecSetSizes(vecb,localsize,VecSize);
       else VecSetSizes(vecb,PETSC_DECIDE,VecSize);
+      /* the (N)DBBD back-solves probe vecb with -1 sentinels for rows
+         other ranks own; VecDuplicate(vece) used to inherit this option
+         before vecb was created explicitly (the un-ignored -1 made
+         VecGetValues error out and drop the rest of the batch) */
+      VecSetOption(vecb, VEC_IGNORE_NEGATIVE_INDICES,PETSC_TRUE);
     }
     ierr = MatMult(B,vece,vecb);
     CHKERRQ(ierr);
@@ -444,7 +449,7 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
     return 1;
   }
 
-bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt* dnnz,PetscInt onz,PetscInt* onnz,Mat* B1,PetscInt dnzB,PetscInt* dnnzB,PetscInt onzB,PetscInt* onnzB,Vec* vecb1,Vec *vece1,PetscInt rank,PetscInt rank_hsl,PetscInt mpisize,char* tabfile, char *commsyntax,set_def *sets,dim_t nset, set_element *set_elems, array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar, elem_value **elem_vals2,offset_t ncofvar,offset_t ncofele,offset_t nvarele,closure_entry **closure_vals2,offset_t alltimeset,offset_t allregset,offset_t nintraeq,dim_t matsol,PetscInt Istart,PetscInt Iend,  offset_t nreg, offset_t ntime, offset_t *eq_addr, offset_t ndblock, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laDi,dim_t laD,PetscReal cntl3,PetscReal cntl6,dim_t nesteddbbd,int localsize,PetscInt *ndbbddrank1,fortran_int* indata,dim_t mc66,fortran_int *ptx,struct timeval begintime,dim_t subints,MPI_Fint fcomm,solve_real **xcf2){ /* Gragg method (smoothed modified midpoint), Pearson 1991 eq. 6.1 / Alg. 7.1.2 */
+bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt* dnnz,PetscInt onz,PetscInt* onnz,Mat* B1,PetscInt dnzB,PetscInt* dnnzB,PetscInt onzB,PetscInt* onnzB,Vec* vecb1,Vec *vece1,PetscInt rank,PetscInt rank_hsl,PetscInt mpisize,char* tabfile, char *commsyntax,set_def *sets,dim_t nset, set_element *set_elems, array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar, elem_value **elem_vals2,offset_t ncofvar,offset_t ncofele,offset_t nvarele,closure_entry **closure_vals2,offset_t alltimeset,offset_t allregset,offset_t nintraeq,dim_t matsol,PetscInt Istart,PetscInt Iend,  offset_t nreg, offset_t ntime, offset_t *eq_addr, offset_t ndblock, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laDi,dim_t laD,PetscReal cntl3,PetscReal cntl6,dim_t nesteddbbd,int localsize,PetscInt *ndbbddrank1,fortran_int* indata,dim_t mc66,fortran_int *ptx,struct timeval begintime,dim_t subints,MPI_Fint fcomm,int solmethod,solve_real **xcf2){ /* multistep driver: Gragg (smoothed modified midpoint, Pearson 1991 eq. 6.1 / Alg. 7.1.2) or forward Euler, per solmethod */
   char tempfilenam[256],tempchar[256],solchar[255];
   PetscScalar value,*vals;
   PetscErrorCode ierr;
@@ -485,6 +490,10 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
   solve_real vpercents=1.0,perprecis=0;
   FILE* solution;
   int maxsol=3;
+  /* Euler: forward step on every substep (no leapfrog, no terminal
+     smoothing pass) and an h — not h^2 — truncation error series, so
+     the Richardson weights below use the step ratios unsquared */
+  bool euler=(solmethod==SM_EULER);
               offset_t *counteqs= (offset_t *) calloc (ndblock+1,sizeof(offset_t));
               offset_t *counteqnoadds= (offset_t *) calloc (ndblock,sizeof(offset_t));
               offset_t *countvarintra1s= (offset_t *) calloc (ndblock+1,sizeof(offset_t));
@@ -517,8 +526,10 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
     for(subindx=0; subindx<subints; subindx++) {
       for(sol=0; sol<maxsol; sol++) {
         if(sol==0)nsteps=steps1;
-        if(sol==1) nsteps=(int)steps1*step_ratio2;
-        if(sol==2) nsteps=(int)steps1*step_ratio3;
+        /* llround: truncation could drop a step when the ratio is not
+           an integer multiple (Euler permits any increasing steps) */
+        if(sol==1) nsteps=(int)llround(steps1*step_ratio2);
+        if(sol==2) nsteps=(int)llround(steps1*step_ratio3);
         vpercents=(solve_real)100/nsteps;
         for(stepcount=0; stepcount<nsteps; stepcount++) {
           logmsg(2,"rank %d subint %d sol %d stepcount %d nsteps %d\n",rank,subindx,sol,stepcount,nsteps);
@@ -742,6 +753,11 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
       }
       if(nesteddbbd==1)VecSetSizes(vecb,localsize,VecSize);
       else VecSetSizes(vecb,PETSC_DECIDE,VecSize);
+      /* the (N)DBBD back-solves probe vecb with -1 sentinels for rows
+         other ranks own; VecDuplicate(vece) used to inherit this option
+         before vecb was created explicitly (the un-ignored -1 made
+         VecGetValues error out and drop the rest of the batch) */
+      VecSetOption(vecb, VEC_IGNORE_NEGATIVE_INDICES,PETSC_TRUE);
     }
           if(rank==rank_hsl) {
             ierr = MatMult(B,vece,vecb);
@@ -1073,6 +1089,58 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
               }
             }
           }
+          else if(euler) {
+            /* forward Euler substep: accumulate this step's change on the
+               current state; clag1 stays unused (no leapfrog history) */
+            for(i=0; i<nvar; i++) {
+              if(vars[i].change_real) {
+                for(tindx1=vars[i].offset; tindx1<vars[i].nelem+vars[i].offset; tindx1++) {
+                  if(closure_vals[tindx1].is_exogenous) {
+                    elem_vals1[tindx1].value+=elem_vals1[tindx1].substep_base;
+                    varchange[tindx1]+=elem_vals1[tindx1].substep_base;
+                    VecSetValue(vece,closure_vals[tindx1].exo_index,elem_vals1[tindx1].substep_base,INSERT_VALUES);
+                    if(exo_z!=NULL)exo_z[tindx1]=elem_vals1[tindx1].substep_base;
+                  }
+                  else if(closure_vals[tindx1].is_backsolved) {
+                    varchange[tindx1]+=bsvals[closure_vals[tindx1].exo_index];
+                    elem_vals1[tindx1].substep_base=bsvals[closure_vals[tindx1].exo_index];
+                    elem_vals1[tindx1].value+=bsvals[closure_vals[tindx1].exo_index];
+                  }
+                  else {
+                    varchange[tindx1]+=x1[closure_vals[tindx1].exo_index];
+                    elem_vals1[tindx1].substep_base=x1[closure_vals[tindx1].exo_index];
+                    elem_vals1[tindx1].value+=x1[closure_vals[tindx1].exo_index];
+                  }
+                }
+              }
+              else {
+                for(tindx1=vars[i].offset; tindx1<vars[i].nelem+vars[i].offset; tindx1++) {
+                  if(closure_vals[tindx1].is_exogenous) {
+                    temp2=closure_vals[tindx1].shock_value;//subints;
+                    temp1=(100+(subindx+1)*temp2)/(100+subindx*temp2)-1;
+                    temp1*=vpercents;
+                    elem_vals1[tindx1].substep_base=temp1/(1+varchange[tindx1]/100);
+                    varchange[tindx1]+=temp1;//*(1+ha_cofvar[ncofele+ha_var[i].begadd+j].varchange/100)
+                    elem_vals1[tindx1].value=(1+varchange[tindx1]/100)*elem_vals1[tindx1].initial;
+                    VecSetValue(vece,closure_vals[tindx1].exo_index,temp1/(1+varchange[tindx1]/100),INSERT_VALUES);
+                    if(exo_z!=NULL)exo_z[tindx1]=temp1/(1+varchange[tindx1]/100);
+                  }
+                  else if(closure_vals[tindx1].is_backsolved) {
+                    /* compound the per-step percent change onto the
+                       cumulative one before rebasing on the initial */
+                    varchange[tindx1]+=bsvals[closure_vals[tindx1].exo_index]*(100+varchange[tindx1])/100;
+                    elem_vals1[tindx1].substep_base=bsvals[closure_vals[tindx1].exo_index];
+                    elem_vals1[tindx1].value=(100+varchange[tindx1])/100*elem_vals1[tindx1].initial;
+                  }
+                  else {
+                    varchange[tindx1]+=x1[closure_vals[tindx1].exo_index]*(100+varchange[tindx1])/100;
+                    elem_vals1[tindx1].substep_base=x1[closure_vals[tindx1].exo_index];
+                    elem_vals1[tindx1].value=(100+varchange[tindx1])/100*elem_vals1[tindx1].initial;
+                  }
+                }
+              }
+            }
+          }
           else {
             for(i=0; i<nvar; i++) {
               if(vars[i].change_real) {
@@ -1138,7 +1206,7 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
           ierr = VecAssemblyEnd(vece);
           CHKERRQ(ierr);
           if(rank==rank_hsl) {
-            if(stepcount==0) {
+            if(stepcount==0||euler) {
               updates_apply(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,0);
             }
             else {
@@ -1158,6 +1226,11 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
         }
 
         strcpy(commsyntax,"equation");
+        /* Gragg's terminal smoothing pass: one more Jacobian build and
+           solve at the final state, then the half-sum correction. Euler
+           has no such pass — its accumulated varchange IS the solution,
+           so skip straight to the state reset (nothing was spilled). */
+        if(!euler) {
         if(rank==rank_hsl) {
 
 
@@ -1295,6 +1368,11 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
       }
       if(nesteddbbd==1)VecSetSizes(vecb,localsize,VecSize);
       else VecSetSizes(vecb,PETSC_DECIDE,VecSize);
+      /* the (N)DBBD back-solves probe vecb with -1 sentinels for rows
+         other ranks own; VecDuplicate(vece) used to inherit this option
+         before vecb was created explicitly (the un-ignored -1 made
+         VecGetValues error out and drop the rest of the batch) */
+      VecSetOption(vecb, VEC_IGNORE_NEGATIVE_INDICES,PETSC_TRUE);
     }
         if(rank==rank_hsl) {
           ierr = MatMult(B,vece,vecb);
@@ -1595,6 +1673,23 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
             }
           }
         }
+        }
+        else {
+          /* Euler: the last substep created vece for a next fill that
+             never comes; the smoothing pass destroyed it on the Gragg
+             path */
+          ierr = VecDestroy(&vece);
+          CHKERRQ(ierr);
+          /* reset the variable state for the next solution pass
+             (mirrors the zeroing the smoothing loop performs) */
+          elem_vals1=elem_vals+ncofele;
+          for(i=0; i<nvar; i++) {
+            for(tindx1=vars[i].offset; tindx1<vars[i].nelem+vars[i].offset; tindx1++) {
+              elem_vals1[tindx1].value=0;
+              clag1[tindx1]=0;
+            }
+          }
+        }
         if(rank==rank_hsl) {
           if(subindx!=0||sol!=0) {
             if(!inmemory){
@@ -1668,11 +1763,30 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
           }
           if(sol==0)xc12=realloc (xc12,nvarele*sizeof(solve_real));
           if(sol==0)xc24=realloc (xc24,nvarele*sizeof(solve_real));
+          {
+            /* Richardson weights for the current solution pass. q is the
+               step-ratio power matching the method's truncation error
+               series: h^2 for Gragg (even-power expansion, Pearson 1991
+               Thm 6.1), h for Euler. */
+            double q2=euler?step_ratio2:step_ratio2*step_ratio2;
+            double q3=euler?step_ratio3:step_ratio3*step_ratio3;
+            if(sol==0) {
+              extrap_w1=1.0/(q2-1.0);
+              extrap_w2=1.0/(1-q2)/(1.0-q3);
+            }
+            if(sol==1) {
+              extrap_w1=q2/(q2-1.0);
+              extrap_w2=q2/(q3-q2);
+              extrap_w3=q2*q2/(q2-q3)/(1.0-q2);
+            }
+            if(sol==2) {
+              extrap_w2=q3/(q3-q2);
+              extrap_w3=q3*q3/(q2-q3)/(1.0-q3);
+            }
+          }
           if(subindx>0) {
             if(sol==0)for(i=0; i<nvarele; i++) xc0[i]=1+xcf[i]/100;//if(i==1287)printf("sol!!!!!!!!!!!!!!!!!! %d step %d xc %lf xc0 %lf k %d\n",sol,stepcount,1.0+xc[k]/100,xc0[i],i);}
             if(sol==0) {
-              extrap_w1=1.0/(step_ratio2*step_ratio2-1.0);
-              extrap_w2=1.0/(1-step_ratio2*step_ratio2)/(1.0-step_ratio3*step_ratio3);
               for(i=0; i<nvar; i++) {
                 if(vars[i].change_real) {
                   for(k=vars[i].offset; k<vars[i].nelem+vars[i].offset; k++) {
@@ -1691,9 +1805,6 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
               }
             }
             if(sol==1) {
-              extrap_w1=step_ratio2*step_ratio2/(step_ratio2*step_ratio2-1.0);
-              extrap_w2=step_ratio2*step_ratio2/(step_ratio3*step_ratio3-step_ratio2*step_ratio2);
-              extrap_w3=step_ratio2*step_ratio2*step_ratio2*step_ratio2/(step_ratio2*step_ratio2-step_ratio3*step_ratio3)/(1.0-step_ratio2*step_ratio2);
               for(i=0; i<nvar; i++) {
                 if(vars[i].change_real) {
                   for(k=vars[i].offset; k<vars[i].nelem+vars[i].offset; k++) {
@@ -1712,8 +1823,6 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
               }
             }
             if(sol==2) {
-              extrap_w2=step_ratio3*step_ratio3/(step_ratio3*step_ratio3-step_ratio2*step_ratio2);
-              extrap_w3=step_ratio3*step_ratio3*step_ratio3*step_ratio3/(step_ratio2*step_ratio2-step_ratio3*step_ratio3)/(1.0-step_ratio3*step_ratio3);
               for(i=0; i<nvar; i++) {
                 if(vars[i].change_real) {
                   for(k=vars[i].offset; k<vars[i].nelem+vars[i].offset; k++) {
@@ -1732,17 +1841,12 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
           }
           else {
             if(sol==0){
-              extrap_w1=1.0/(step_ratio2*step_ratio2-1);
-              extrap_w2=1.0/(1-step_ratio2*step_ratio2)/(1-step_ratio3*step_ratio3);
               for(i=0; i<nvarele; i++) {
                 xc12[i]=-varchange[i]*extrap_w1;
                 xcf[i]+=varchange[i]*extrap_w2;
               }
             }
             if(sol==1) {
-              extrap_w1=step_ratio2*step_ratio2/(step_ratio2*step_ratio2-1.0);
-              extrap_w2=step_ratio2*step_ratio2/(step_ratio3*step_ratio3-step_ratio2*step_ratio2);
-              extrap_w3=step_ratio2*step_ratio2*step_ratio2*step_ratio2/(step_ratio2*step_ratio2-step_ratio3*step_ratio3)/(1.0-step_ratio2*step_ratio2);
               for(i=0; i<nvarele; i++) {
                 xc24[i]=-varchange[i]*extrap_w2;
                 xc12[i]+=varchange[i]*extrap_w1;
@@ -1750,8 +1854,6 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
               }
             }
             if(sol==2) {
-              extrap_w2=step_ratio3*step_ratio3/(step_ratio3*step_ratio3-step_ratio2*step_ratio2);
-              extrap_w3=step_ratio3*step_ratio3*step_ratio3*step_ratio3/(step_ratio2*step_ratio2-step_ratio3*step_ratio3)/(1.0-step_ratio3*step_ratio3);
               for(i=0; i<nvarele; i++) {
                 xc24[i]+=varchange[i]*extrap_w2;
                 xcf[i]+=varchange[i]*extrap_w3;
@@ -2001,7 +2103,7 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
     free(exo_z);
     free(bsvals);
     gettimeofday(&endtime, NULL);
-    if(rank==0)logmsg(1,"Gragg solve time %.2f s\n",(endtime.tv_sec - begintime.tv_sec)+((double)(endtime.tv_usec - begintime.tv_usec))/ 1000000);
+    if(rank==0)logmsg(1,"%s solve time %.2f s\n",euler?"Euler":"Gragg",(endtime.tv_sec - begintime.tv_sec)+((double)(endtime.tv_usec - begintime.tv_usec))/ 1000000);
               free(counteqs);
               free(counteqnoadds);
               free(countvarintra1s);

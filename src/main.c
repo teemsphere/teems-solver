@@ -664,42 +664,6 @@ int main(int argc,char **args) {
   if(steps2==0)steps2=4;
   PetscOptionsGetInt(NULL,NULL,"-step3",&steps3,NULL);
   if(steps3==0)steps3=8;
-  step_ratio2=steps1/(double)2;
-  i=(offset_t)steps1/2;
-  if(step_ratio2!=i){
-    //odd
-    step_ratio2=steps2/(double)2;
-    i=(offset_t)steps2/2;
-    if(step_ratio2==i){
-      printf("Error: -step1/-step2/-step3 must be all odd or all even (got %d %d %d)\n",steps1,steps2,steps3);
-      return 0;
-    }
-    step_ratio2=steps3/(double)2;
-    i=(offset_t)steps3/2;
-    if(step_ratio2==i){
-      printf("Error: -step1/-step2/-step3 must be all odd or all even (got %d %d %d)\n",steps1,steps2,steps3);
-      return 0;
-    }
-  }else{
-    //even
-    step_ratio2=steps2/(double)2;
-    i=(offset_t)steps2/2;
-    if(step_ratio2!=i){
-      printf("Error: -step1/-step2/-step3 must be all odd or all even (got %d %d %d)\n",steps1,steps2,steps3);
-      return 0;
-    }
-    step_ratio2=steps3/(double)2;
-    i=(offset_t)steps3/2;
-    if(step_ratio2!=i){
-      printf("Error: -step1/-step2/-step3 must be all odd or all even (got %d %d %d)\n",steps1,steps2,steps3);
-      return 0;
-    }
-  }
-  
-  step_ratio2=steps2/(double)steps1;
-  steps2=(PetscInt)steps2/steps1;
-  step_ratio3=steps3/(double)steps1;
-  steps3=(PetscInt)steps3/steps1;
   section_threads=0;
   max_threads=1;
   PetscOptionsGetInt(NULL,NULL,"-maxthreads",&max_threads,NULL);
@@ -794,14 +758,60 @@ int main(int argc,char **args) {
   }
   int solmethod=0;
   if(strcmp(solmed,"Gragg")==0)solmethod=SM_GRAGG;
+  if(strcmp(solmed,"Euler")==0)solmethod=SM_EULER;
   if(strcmp(solmed,"Johansen")==0)solmethod=SM_JOHANSEN;
   if(strcmp(solmed,"NoSol")==0)solmethod=SM_NOSOLVE;
   if(solmethod==0) {
-    if(rank==0)printf("Error: unknown -solmed %s (valid: Gragg, Johansen, NoSol)\n",solmed);
+    if(rank==0)printf("Error: unknown -solmed %s (valid: Gragg, Euler, Johansen, NoSol)\n",solmed);
     PetscFinalize();
     return 1;
   }
   logmsg(2,"Sol med %d\n",solmethod);
+  if(solmethod==SM_GRAGG) {
+    /* Gragg's h^2 error expansion (Pearson 1991 Thm 6.1) holds for even
+       step counts only; mixed parity also breaks the shared-power
+       extrapolation */
+    step_ratio2=steps1/(double)2;
+    i=(offset_t)steps1/2;
+    if(step_ratio2!=i){
+      //odd
+      step_ratio2=steps2/(double)2;
+      i=(offset_t)steps2/2;
+      if(step_ratio2==i){
+        printf("Error: -step1/-step2/-step3 must be all odd or all even (got %d %d %d)\n",steps1,steps2,steps3);
+        return 0;
+      }
+      step_ratio2=steps3/(double)2;
+      i=(offset_t)steps3/2;
+      if(step_ratio2==i){
+        printf("Error: -step1/-step2/-step3 must be all odd or all even (got %d %d %d)\n",steps1,steps2,steps3);
+        return 0;
+      }
+    }else{
+      //even
+      step_ratio2=steps2/(double)2;
+      i=(offset_t)steps2/2;
+      if(step_ratio2!=i){
+        printf("Error: -step1/-step2/-step3 must be all odd or all even (got %d %d %d)\n",steps1,steps2,steps3);
+        return 0;
+      }
+      step_ratio2=steps3/(double)2;
+      i=(offset_t)steps3/2;
+      if(step_ratio2!=i){
+        printf("Error: -step1/-step2/-step3 must be all odd or all even (got %d %d %d)\n",steps1,steps2,steps3);
+        return 0;
+      }
+    }
+  }
+  if((solmethod==SM_GRAGG||solmethod==SM_EULER)&&!(steps1<steps2&&steps2<steps3)) {
+    /* extrapolation needs three distinct step sizes (GEMPACK: i<j<k) */
+    printf("Error: -step1/-step2/-step3 must be strictly increasing (got %d %d %d)\n",steps1,steps2,steps3);
+    return 0;
+  }
+  step_ratio2=steps2/(double)steps1;
+  steps2=(PetscInt)steps2/steps1;
+  step_ratio3=steps3/(double)steps1;
+  steps3=(PetscInt)steps3/steps1;
 
   #pragma omp parallel private(i)
   {
@@ -1799,7 +1809,7 @@ int main(int argc,char **args) {
   
   FILE* solution;
 
-  if(solmethod==SM_GRAGG)solve_gragg(nohsl,VecSize,&A,dnz,dnnz,onz,onnz,&B,dnzB,dnnzB,onzB,onnzB,&vecb,&vece,rank,rank_hsl,mpisize,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,&elem_vals,ncofele+nvarele,ncofele,nvarele,&closure_vals,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,eq_addr,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,subints,fcomm,&xcf);
+  if(solmethod==SM_GRAGG||solmethod==SM_EULER)solve_gragg(nohsl,VecSize,&A,dnz,dnnz,onz,onnz,&B,dnzB,dnnzB,onzB,onnzB,&vecb,&vece,rank,rank_hsl,mpisize,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,&elem_vals,ncofele+nvarele,ncofele,nvarele,&closure_vals,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,eq_addr,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,subints,fcomm,solmethod,&xcf);
 
   jacobian_cache_free();
   backsolve_cache_free();
