@@ -56,8 +56,9 @@ typedef float store_real;    /* coefficient storage precision (halves memory tra
 /* -matsol matrix method (Ha & Kompas 2016; Kompas & Ha 2019).
    Values match teems-R's matrix_method argument. */
 enum matrix_method { MM_LU=0, MM_SBBD=1, MM_DBBD=2, MM_NDBBD=3 };
-/* -solmed solution method (GEMPACK manual; Pearson 1991) */
-enum solution_method { SM_GRAGG=1, SM_EULER=2, SM_JOHANSEN=10, SM_NOSOLVE=100 };
+/* -solmed solution method (GEMPACK manual; Pearson 1991; Schiffmann
+   2022 / GEMPACK 26.5 for the Runge-Kutta flavors) */
+enum solution_method { SM_GRAGG=1, SM_EULER=2, SM_RK2=3, SM_RK4=4, SM_BOSHA32=5, SM_DOPRI54=6, SM_JOHANSEN=10, SM_NOSOLVE=100 };
 /* array_def.gltype: bound imposed on levels values */
 enum bound_type { BT_NONE=0, BT_GE=1, BT_GT=2, BT_LE=3, BT_LT=4 };
 /* formula_op.Oper: compiled formula operation */
@@ -364,5 +365,12 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
    no smoothing pass, h error series (extrapolation weights differ
    accordingly). */
 bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A,PetscInt dnz,PetscInt* dnnz,PetscInt onz,PetscInt* onnz,Mat* B,PetscInt dnzB,PetscInt* dnnzB,PetscInt onzB,PetscInt* onnzB,Vec* vecb,Vec *vece,PetscInt rank,PetscInt rank_hsl,PetscInt mpisize,char* tabfile, char *commsyntax,set_def *sets,dim_t nset, set_element *set_elems, array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar, elem_value **elem_vals2,offset_t ncofvar,offset_t ncofele,offset_t nvarele,closure_entry **closure_vals2,offset_t alltimeset,offset_t allregset,offset_t nintraeq,dim_t matsol,PetscInt Istart,PetscInt Iend,  offset_t nreg, offset_t ntime, offset_t *eq_addr, offset_t ndblock, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laDi,dim_t laD,PetscReal cntl3,PetscReal cntl6,dim_t nesteddbbd,int localsize,PetscInt *ndbbddrank1,fortran_int* indata,dim_t mc66,fortran_int *ptx,struct timeval begintime,dim_t subints,MPI_Fint fcomm,int solmethod,solve_real **xcf2);
+/* solve_rk.c — Runge-Kutta drivers (GEMPACK 26.5; Schiffmann 2022):
+   solmethod picks the flavor (SM_RK2/SM_RK4/SM_BOSHA32/SM_DOPRI54),
+   steps1 the (initial) step count. adaptive: 0=no, 1=yes,
+   2=accuracy-only; epstol/retryadj/maxretries tune the embedded
+   controller. accmetric2 receives the per-element cumulative error
+   metrics (embedded flavors only; main writes them to the .acc file). */
+bool solve_rk(PetscBool nohsl,PetscInt VecSize,PetscInt dnz,PetscInt* dnnz,PetscInt onz,PetscInt* onnz,PetscInt dnzB,PetscInt* dnnzB,PetscInt onzB,PetscInt* onnzB,Vec *vece1,PetscInt rank,PetscInt rank_hsl,PetscInt mpisize,char* tabfile, char *commsyntax,set_def *sets,dim_t nset, set_element *set_elems, array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar, elem_value **elem_vals2,offset_t ncofele,offset_t nvarele,closure_entry **closure_vals2,offset_t alltimeset,offset_t allregset,offset_t nintraeq,dim_t matsol,PetscInt Istart,PetscInt Iend,offset_t nreg, offset_t ntime, offset_t *eq_addr, offset_t ndblock, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laDi,dim_t laD,PetscReal cntl3,PetscReal cntl6,dim_t nesteddbbd,int localsize,PetscInt *ndbbddrank1,fortran_int* indata,dim_t mc66,fortran_int *ptx,struct timeval begintime,MPI_Fint fcomm,int solmethod,int adaptive,double epstol,double retryadj,int maxretries,solve_real **xcf2,solve_real **accmetric2);
 #endif // TEEMS_SOLVER_H_INCLUDED
 

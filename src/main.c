@@ -759,14 +759,68 @@ int main(int argc,char **args) {
   int solmethod=0;
   if(strcmp(solmed,"Gragg")==0)solmethod=SM_GRAGG;
   if(strcmp(solmed,"Euler")==0)solmethod=SM_EULER;
+  if(strcmp(solmed,"RK2")==0)solmethod=SM_RK2;
+  if(strcmp(solmed,"RK4")==0)solmethod=SM_RK4;
+  if(strcmp(solmed,"BoSha32")==0)solmethod=SM_BOSHA32;
+  if(strcmp(solmed,"DoPri54")==0)solmethod=SM_DOPRI54;
   if(strcmp(solmed,"Johansen")==0)solmethod=SM_JOHANSEN;
   if(strcmp(solmed,"NoSol")==0)solmethod=SM_NOSOLVE;
   if(solmethod==0) {
-    if(rank==0)printf("Error: unknown -solmed %s (valid: Gragg, Euler, Johansen, NoSol)\n",solmed);
+    if(rank==0)printf("Error: unknown -solmed %s (valid: Gragg, Euler, RK2, RK4, BoSha32, DoPri54, Johansen, NoSol)\n",solmed);
     PetscFinalize();
     return 1;
   }
   logmsg(2,"Sol med %d\n",solmethod);
+  bool isrk=(solmethod==SM_RK2||solmethod==SM_RK4||solmethod==SM_BOSHA32||solmethod==SM_DOPRI54);
+  bool isrk_embedded=(solmethod==SM_BOSHA32||solmethod==SM_DOPRI54);
+  /* Runge-Kutta controls (GEMPACK 26.5.1/26.5.2): -adaptive
+     no|yes|accuracy-only (embedded flavors only; accuracy-only skips
+     the check-failure retries), -epstol the per-step error-metric
+     bound, -retryadj/-maxretries the check-failure retry policy */
+  int adaptive=0,maxretries=3;
+  PetscReal epstol=0.1,retryadj=0.5;
+  {
+    char adaptbuf[NAMESIZE];
+    PetscOptionsGetString(NULL,NULL,"-adaptive",adaptbuf,NAMESIZE,&flg);
+    if(flg) {
+      if(strcmp(adaptbuf,"no")==0)adaptive=0;
+      else if(strcmp(adaptbuf,"yes")==0)adaptive=1;
+      else if(strcmp(adaptbuf,"accuracy-only")==0)adaptive=2;
+      else {
+        if(rank==0)printf("Error: unknown -adaptive %s (valid: no, yes, accuracy-only)\n",adaptbuf);
+        PetscFinalize();
+        return 1;
+      }
+      if(adaptive&&!isrk_embedded) {
+        if(rank==0)printf("Error: -adaptive requires an embedded Runge-Kutta method (-solmed BoSha32 or DoPri54)\n");
+        PetscFinalize();
+        return 1;
+      }
+    }
+    PetscOptionsGetReal(NULL,NULL,"-epstol",&epstol,NULL);
+    PetscOptionsGetReal(NULL,NULL,"-retryadj",&retryadj,NULL);
+    PetscOptionsGetInt(NULL,NULL,"-maxretries",&maxretries,NULL);
+    if(isrk) {
+      if(steps1<1) {
+        if(rank==0)printf("Error: -step1 must be at least 1 for Runge-Kutta methods (got %d)\n",steps1);
+        PetscFinalize();
+        return 1;
+      }
+      if(subints>1) {
+        if(rank==0)printf("Error: subintervals are not available with Runge-Kutta methods (got -nsubints %d); increase -step1 instead\n",subints);
+        PetscFinalize();
+        return 1;
+      }
+      if(epstol<=0||retryadj<=0||retryadj>=1||maxretries<1) {
+        if(rank==0)printf("Error: -epstol and -retryadj must be positive (-retryadj below 1) and -maxretries at least 1\n");
+        PetscFinalize();
+        return 1;
+      }
+      if(adaptive&&epstol<0.005) {
+        if(rank==0)printf("Warning: -epstol %g is below 0.005; tolerances this tight are hard to achieve numerically and may reject many steps\n",(double)epstol);
+      }
+    }
+  }
   if(solmethod==SM_GRAGG) {
     /* Gragg's h^2 error expansion (Pearson 1991 Thm 6.1) holds for even
        step counts only; mixed parity also breaks the shared-power
@@ -1774,6 +1828,7 @@ int main(int argc,char **args) {
 
   solve_real *x1=NULL;//= (ha_cgetype *) calloc (VecSize,sizeof(ha_cgetype));
   solve_real *xcf=NULL;
+  solve_real *accmetric=NULL; /* embedded-RK cumulative error metrics */
   solve_real *x0=NULL;// (ha_cgetype *) calloc (1,sizeof(ha_cgetype));
   solve_real *b1=NULL;//= (ha_cgetype *) calloc (VecSize,sizeof(ha_cgetype));
   extern void spec48_ssol2la_(int *INSIZE,int *IRN, int *JCN, solve_real *VA, solve_real *B, solve_real *X);
@@ -1811,6 +1866,8 @@ int main(int argc,char **args) {
 
   if(solmethod==SM_GRAGG||solmethod==SM_EULER)solve_gragg(nohsl,VecSize,&A,dnz,dnnz,onz,onnz,&B,dnzB,dnnzB,onzB,onnzB,&vecb,&vece,rank,rank_hsl,mpisize,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,&elem_vals,ncofele+nvarele,ncofele,nvarele,&closure_vals,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,eq_addr,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,subints,fcomm,solmethod,&xcf);
 
+  if(isrk)solve_rk(nohsl,VecSize,dnz,dnnz,onz,onnz,dnzB,dnnzB,onzB,onnzB,&vece,rank,rank_hsl,mpisize,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,&elem_vals,ncofele,nvarele,&closure_vals,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,eq_addr,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,fcomm,solmethod,adaptive,(double)epstol,(double)retryadj,maxretries,&xcf,&accmetric);
+
   jacobian_cache_free();
   backsolve_cache_free();
   free(backsolves);
@@ -1835,6 +1892,19 @@ int main(int argc,char **args) {
     }
     fwrite(xcf, sizeof(solve_real),nvarele, solution);
     fclose(solution);
+    if(accmetric!=NULL) {
+      /* embedded-RK cumulative error metrics, one double per variable
+         element in .bin order (GEMPACK's <sol>.acc equivalent) */
+      strcpy(solchar,tempchar);
+      strcat(solchar,".acc");
+      logmsg(2,"solchar %s\n",solchar);
+      if ( (solution = fopen(solchar, "wb")) == NULL ) {
+        printf("Error: cannot open %s for writing\n",solchar);
+        return 1;
+      }
+      fwrite(accmetric, sizeof(solve_real),nvarele, solution);
+      fclose(solution);
+    }
     strcpy(solchar,tempchar);
     strcat(solchar,".var");
     logmsg(2,"solchar %s\n",solchar);
@@ -1892,6 +1962,7 @@ int main(int argc,char **args) {
   free(closure_vals);
   free(elem_vals);
   free(xcf);
+  free(accmetric);
   if(x0!=NULL)free(x0);
 //**************************************************************************************
 //**************************************END HSL*****************************************
