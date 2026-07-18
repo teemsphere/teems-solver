@@ -321,6 +321,11 @@ int eq_sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifier 
 int eq_sum_replace(char *formulain, char *commsyntax,int LinIndx, eq_var_ref *LinVars,array_def *vars);
 int jacobian_fill(char *fname, char *commsyntax,set_def *sets,offset_t nset, set_element *set_elems, array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar, elem_value *elem_vals,offset_t ncofvar,offset_t ncofele,closure_entry *closure_vals,offset_t ndblock,offset_t alltimeset,offset_t allregset,offset_t *eq_addr,offset_t *counteq,offset_t nintraeq,Mat A,Mat B);
 void jacobian_cache_free(void); /* release the per-rank compiled-statement cache */
+/* -fastrefac sequential-LU persistent refactorize (solve_drivers.c): the
+   COO pattern and MA48 pivot sequence persist across steps/stages, later
+   factorizations run MA48B/BD JOB=2 */
+void lu_fastrefac_solve(Mat A,PetscInt VecSize,dim_t laA,solve_real *rhs,solve_real *x);
+void lu_fastrefac_free(void); /* release persistent LU state after the solve dispatch */
 /* Recover the backsolved variables' per-step values from their retained
    defining equations (GEMPACK 14.1.3: after the condensed solve, before
    the data updates).  x = this step's solution vector; exo_z = per-element

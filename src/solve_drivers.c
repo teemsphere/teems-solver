@@ -1,6 +1,91 @@
 #include <teems_solver.h>
 #include <hsl_kernels.h>
 
+/* Persistent-factor sequential LU (-fastrefac): the Jacobian's stored
+   pattern is fixed across steps, so the MA48 pivot sequence is computed
+   once and later steps only refactorize (MA48B/BD JOB=2) with fresh
+   values.  Extraction keeps explicitly-stored zeros: an entry that is
+   zero at the analyse state can become nonzero at a later step and must
+   be present in the pattern.  rank_hsl only. */
+static int *fr_irn=NULL,*fr_jcn=NULL;
+static solve_real *fr_values=NULL;
+static PetscInt fr_nz=-1;
+static offset_t fr_lasize=0;   /* current LA; grows on MA48 -3 returns and stays grown */
+static int fr_ready=0;
+
+static void lu_fastrefac_extract(Mat A,PetscInt VecSize,dim_t laA) {
+  Mat_SeqAIJ *aa=(Mat_SeqAIJ*)A->data;
+  PetscInt i,j;
+  offset_t floorla;
+  free(fr_irn);
+  free(fr_jcn);
+  free(fr_values);
+  fr_nz=aa->nz;
+  floorla=ceil((laA/100.0)*fr_nz);
+  if(fr_lasize<floorla)fr_lasize=floorla;
+  fr_irn=(int *) calloc (fr_lasize,sizeof(int));
+  fr_jcn=(int *) calloc (fr_lasize,sizeof(int));
+  fr_values=(solve_real *) calloc (fr_lasize,sizeof(solve_real));
+  for(i=0; i<VecSize; i++)for(j=aa->i[i]; j<aa->i[i+1]; j++) {
+      fr_irn[j]=i+1;
+      fr_jcn[j]=aa->j[j]+1;
+      fr_values[j]=aa->a[j];
+    }
+  fr_ready=0;
+}
+
+void lu_fastrefac_solve(Mat A,PetscInt VecSize,dim_t laA,solve_real *rhs,solve_real *x) {
+  int insize[6];
+  Mat_SeqAIJ *aa=(Mat_SeqAIJ*)A->data;
+  PetscInt i;
+  int tries;
+  if(!fr_ready||aa->nz!=fr_nz) {
+    lu_fastrefac_extract(A,VecSize,laA);
+  }
+  else {
+    for(i=0; i<fr_nz; i++)fr_values[i]=aa->a[i];
+  }
+  for(tries=0; tries<6; tries++) {
+    insize[0]=VecSize;
+    insize[1]=VecSize;
+    insize[2]=fr_nz;
+    insize[3]=(int)fr_lasize;
+    insize[4]=fr_ready;
+    insize[5]=0;
+    spec48_ssol2la_p_(insize,fr_irn,fr_jcn,fr_values,rhs,x);
+    if(insize[4]==0) {
+      fr_ready=1;
+      return;
+    }
+    if(insize[4]==-3) {
+      /* MA48 workspace too small: grow to at least its suggested size
+         (doubling floor guarantees progress) and redo the analyse */
+      offset_t newla=insize[5];
+      if(newla<2*fr_lasize)newla=2*fr_lasize;
+      logmsg(1,"Note: MA48 workspace grown from %ld to %ld reals (equivalent -laA %ld)\n",
+             (long)fr_lasize,(long)newla,(long)ceil((100.0*newla)/fr_nz));
+      fr_lasize=newla;
+    }
+    /* -3 or fast-factorize declined: fresh analyse on current values */
+    lu_fastrefac_extract(A,VecSize,laA);
+  }
+  printf("MA48 workspace growth did not converge after %d attempts\n",tries);
+  MPI_Abort(PETSC_COMM_WORLD,1);
+}
+
+void lu_fastrefac_free(void) {
+  free(fr_irn);
+  free(fr_jcn);
+  free(fr_values);
+  fr_irn=NULL;
+  fr_jcn=NULL;
+  fr_values=NULL;
+  fr_nz=-1;
+  fr_lasize=0;
+  fr_ready=0;
+  spec48_persist_free_();
+}
+
 bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt* dnnz,PetscInt onz,PetscInt* onnz,Mat B,PetscInt dnzB,PetscInt* dnnzB,PetscInt onzB,PetscInt* onnzB,Vec vecb,Vec vece,PetscInt rank,PetscInt rank_hsl,PetscInt mpisize,char* tabfile, char *commsyntax,set_def *sets,dim_t nset, set_element *set_elems, array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar, elem_value **elem_vals2,offset_t ncofvar,offset_t ncofele,offset_t nvarele,closure_entry **closure_vals2,offset_t alltimeset,offset_t allregset,offset_t nintraeq,dim_t matsol,PetscInt Istart,PetscInt Iend,  offset_t nreg, offset_t ntime, offset_t *eq_addr, offset_t ndblock, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laDi,dim_t laD,PetscReal cntl3,PetscReal cntl6,dim_t nesteddbbd,int localsize,PetscInt *ndbbddrank1,fortran_int* indata,dim_t mc66,fortran_int *ptx,struct timeval begintime,solve_real **xcf2){ //Johansen
   char tempfilenam[256],tempchar[256];
   PetscScalar value,*vals=NULL;
@@ -494,6 +579,10 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
      smoothing pass) and an h — not h^2 — truncation error series, so
      the Richardson weights below use the step ratios unsquared */
   bool euler=(solmethod==SM_EULER);
+  /* -fastrefac: sequential LU keeps the MA48 pivot sequence across
+     steps and refactorizes with JOB=2 (analyse runs once per solve) */
+  dim_t fastrefac=0;
+  PetscOptionsGetInt(NULL,NULL,"-fastrefac",&fastrefac,NULL);
               offset_t *counteqs= (offset_t *) calloc (ndblock+1,sizeof(offset_t));
               offset_t *counteqnoadds= (offset_t *) calloc (ndblock,sizeof(offset_t));
               offset_t *countvarintra1s= (offset_t *) calloc (ndblock+1,sizeof(offset_t));
@@ -895,6 +984,29 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
               free(ai1);
               free(b1);
               b1=NULL;
+            }
+            else if(fastrefac) {
+              x1=realloc (x1,VecSize*sizeof(solve_real));
+              ierr = PetscGetCPUTime(&time1);
+              CHKERRQ(ierr);
+              if(verbosity>=1){ierr = PetscPrintf(PETSC_COMM_WORLD,"Prepare time %f\n",time1-time0);}
+              CHKERRQ(ierr);
+              ierr = PetscGetCPUTime(&time0);
+              CHKERRQ(ierr);
+              if(rank==rank_hsl) {
+                VecGetArray(vecb,&vals);
+                lu_fastrefac_solve(A,VecSize,laA,vals,x1);
+              }
+              ierr = MatDestroy(&A);
+              CHKERRQ(ierr);
+              ierr = VecDestroy(&vecb);
+              CHKERRQ(ierr);
+              ierr = PetscGetCPUTime(&time1);
+              CHKERRQ(ierr);
+              if(verbosity>=1){ierr = PetscPrintf(PETSC_COMM_WORLD,"LU time %f\n",time1-time0);}
+              CHKERRQ(ierr);
+              ierr = PetscGetCPUTime(&time0);
+              CHKERRQ(ierr);
             }
             else {
               if(rank==rank_hsl) {
@@ -1510,6 +1622,29 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
             free(ai1);
             free(b1);
             b1=NULL;
+          }
+          else if(fastrefac) {
+            x1=realloc (x1,VecSize*sizeof(solve_real));
+            ierr = PetscGetCPUTime(&time1);
+            CHKERRQ(ierr);
+            if(verbosity>=1){ierr = PetscPrintf(PETSC_COMM_WORLD,"Prepare time %f\n",time1-time0);}
+            CHKERRQ(ierr);
+            ierr = PetscGetCPUTime(&time0);
+            CHKERRQ(ierr);
+            if(rank==rank_hsl) {
+              VecGetArray(vecb,&vals);
+              lu_fastrefac_solve(A,VecSize,laA,vals,x1);
+            }
+            ierr = MatDestroy(&A);
+            CHKERRQ(ierr);
+            ierr = VecDestroy(&vecb);
+            CHKERRQ(ierr);
+            ierr = PetscGetCPUTime(&time1);
+            CHKERRQ(ierr);
+            if(verbosity>=1){ierr = PetscPrintf(PETSC_COMM_WORLD,"LU time %f\n",time1-time0);}
+            CHKERRQ(ierr);
+            ierr = PetscGetCPUTime(&time0);
+            CHKERRQ(ierr);
           }
           else {
             if(rank==rank_hsl) {

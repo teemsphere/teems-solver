@@ -758,6 +758,137 @@ SUBROUTINE SPEC48_SSOL2LA(INSIZE,IRN,JCN,VA,B,X)
   deallocate(ICNTL,INFO,IW,KEEP)!IRN1,
 END SUBROUTINE SPEC48_SSOL2LA
 
+module ma48_persist
+  ! State for the persistent-factor sequential LU path (-fastrefac).
+  ! The caller keeps IRN/JCN/VA alive between calls; everything MA48
+  ! needs beyond those (pivot sequence in KEEP, controls, workspaces)
+  ! lives here so repeat steps can skip MA48A/AD entirely.
+  use constants
+  implicit none
+  real(kind=DPC), allocatable, save :: pCNTL(:),pRINFO(:),pW(:),pERROR1(:)
+  integer, allocatable, save :: pICNTL(:),pINFO(:),pIW(:),pKEEP(:)
+  logical, save :: pready=.false.
+end module ma48_persist
+
+SUBROUTINE SPEC48_SSOL2LA_P(INSIZE,IRN,JCN,VA,B,X)
+  ! Sequential LU solve with a persistent pivot sequence.
+  ! INSIZE: 1=M 2=N 3=NE 4=LA (absolute array length), 5 (inout): on
+  ! entry 0 = full analyse+factorize, 1 = reuse the pivot sequence
+  ! (MA48B/BD JOB=2); on exit 0 = solved, -3 = workspace too small
+  ! (INSIZE(6) holds MA48's suggested LA; caller reallocates, refills
+  ! and retries with 0), other <0 = fast factorize declined (MA48B/BD
+  ! INFO(1)); caller refills IRN/JCN/VA and retries with 0.
+  ! VA(1:NE) must be refilled by the caller each step in the same
+  ! order it was filled for the analyse call; IRN/JCN and VA beyond NE
+  ! are MA48 state and must not be touched between calls.
+  use ma48_persist
+  IMPLICIT NONE
+  integer(4) INSIZE(*),IRN(*),JCN(*)
+  real(kind=DPC) VA(*),B(*),X(*)
+  integer M,N,NE,LA,MAXN,T
+  LOGICAL TRANS
+  M=INSIZE(1)
+  N=INSIZE(2)
+  NE=INSIZE(3)
+  LA=INSIZE(4)
+  MAXN=N
+  IF (N.LT.M) THEN
+    MAXN=M
+  END IF
+  IF (INSIZE(5).EQ.0 .OR. .NOT.pready) THEN
+    if(allocated(pCNTL)) deallocate(pCNTL,pRINFO,pW,pERROR1,pICNTL,pINFO,pIW,pKEEP)
+    allocate(pCNTL(10),pRINFO(10),pW(4*MAXN),pERROR1(3))
+    allocate(pICNTL(20),pINFO(20),pIW(6*M+3*N))
+    IF (FSORD.EQ.1) THEN
+      CALL MA48ID(pCNTL,pICNTL)
+    else
+      CALL MA48I(pCNTL,pICNTL)
+    endif
+    ! errors only below debug verbosity (silences duplicate-entry notes)
+    if (teems_verbosity()<2) pICNTL(3)=1
+    ! any block whose entries turn unsuitable for the kept pivot
+    ! sequence is refactorized as on a JOB=1 call instead of failing
+    pICNTL(11)=1
+    T=M+5*N+4*N/pICNTL(6)+7
+    allocate(pKEEP(T))
+    IF (FSORD.EQ.1) THEN
+      CALL MA48AD(M,N,NE,1,LA,VA,IRN,JCN,pKEEP,pCNTL,pICNTL,pIW,pINFO,pRINFO)
+    else
+      CALL MA48A(M,N,NE,1,LA,VA,IRN,JCN,pKEEP,pCNTL,pICNTL,pIW,pINFO,pRINFO)
+    endif
+    IF (pINFO(1).EQ.-3) THEN
+      ! workspace too small: hand the suggested size back for a
+      ! caller-side reallocate-and-retry
+      INSIZE(5)=-3
+      INSIZE(6)=max(pINFO(3),pINFO(4))
+      pready=.false.
+      RETURN
+    END IF
+    IF (pINFO(1).LT.0) THEN
+      WRITE (6,'(A,I3)') 'Fatal STOP from MA48A/AD with INFO(1) =',pINFO(1)
+      STOP
+    END IF
+    IF (FSORD.EQ.1) THEN
+      CALL MA48BD(M,N,NE,1,LA,VA,IRN,JCN,pKEEP,pCNTL,pICNTL,pW,pIW,pINFO,&
+                  pRINFO)
+    else
+      CALL MA48B(M,N,NE,1,LA,VA,IRN,JCN,pKEEP,pCNTL,pICNTL,pW,pIW,pINFO,&
+                  pRINFO)
+    endif
+    IF (pINFO(1).EQ.-3) THEN
+      INSIZE(5)=-3
+      INSIZE(6)=pINFO(4)
+      pready=.false.
+      RETURN
+    END IF
+    IF (pINFO(1).NE.0) THEN
+      WRITE (6,FMT='(A,I3/A)') 'STOP from MA48B/BD with INFO(1) =',&
+      pINFO(1),'Solution not possible'
+      WRITE (6,FMT='(A,i10)') 'INFO(5) =',pINFO(5)
+      STOP
+    END IF
+    pready=.true.
+  ELSE
+    IF (FSORD.EQ.1) THEN
+      CALL MA48BD(M,N,NE,2,LA,VA,IRN,JCN,pKEEP,pCNTL,pICNTL,pW,pIW,pINFO,&
+                  pRINFO)
+    else
+      CALL MA48B(M,N,NE,2,LA,VA,IRN,JCN,pKEEP,pCNTL,pICNTL,pW,pIW,pINFO,&
+                  pRINFO)
+    endif
+    IF (pINFO(1).EQ.-3) THEN
+      INSIZE(5)=-3
+      INSIZE(6)=pINFO(4)
+      pready=.false.
+      RETURN
+    END IF
+    IF (pINFO(1).LT.0) THEN
+      ! fast factorize declined: caller refills the arrays and retries
+      ! with a fresh analyse
+      if (teems_verbosity()>=1) WRITE (6,'(A,I3)') &
+        'Note: fast refactorize declined, MA48B/BD INFO(1) =',pINFO(1)
+      INSIZE(5)=pINFO(1)
+      RETURN
+    END IF
+  END IF
+  TRANS = .FALSE.
+  IF (FSORD.EQ.1) THEN
+    CALL MA48CD(M,N,TRANS,1,LA,VA,IRN,pKEEP,pCNTL,pICNTL,&
+              B,X,pERROR1,pW,pIW,pINFO)
+  else
+    CALL MA48C(M,N,TRANS,1,LA,VA,IRN,pKEEP,pCNTL,pICNTL,&
+              B,X,pERROR1,pW,pIW,pINFO)
+  endif
+  INSIZE(5)=0
+END SUBROUTINE SPEC48_SSOL2LA_P
+
+SUBROUTINE SPEC48_PERSIST_FREE()
+  use ma48_persist
+  IMPLICIT NONE
+  if(allocated(pCNTL)) deallocate(pCNTL,pRINFO,pW,pERROR1,pICNTL,pINFO,pIW,pKEEP)
+  pready=.false.
+END SUBROUTINE SPEC48_PERSIST_FREE
+
 SUBROUTINE SPEC48M_SSOL2LA(INSIZE,IRN,JCN,VA,B,X)
   use constants
   IMPLICIT NONE

@@ -1870,6 +1870,7 @@ int main(int argc,char **args) {
 
   jacobian_cache_free();
   backsolve_cache_free();
+  lu_fastrefac_free();
   free(backsolves);
 
 

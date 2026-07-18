@@ -98,6 +98,13 @@ static void rk_stage_solve(PetscBool nohsl,PetscInt VecSize,PetscInt BSize,
   PetscScalar *vals=NULL;
   PetscInt count=0,nz01=0,*ai=NULL,*aj=NULL;
   fortran_int k=0,m=1;
+  /* -fastrefac: sequential LU keeps the MA48 pivot sequence across
+     stages and refactorizes with JOB=2; option read once per process */
+  static dim_t fastrefac=-1;
+  if(fastrefac<0) {
+    fastrefac=0;
+    PetscOptionsGetInt(NULL,NULL,"-fastrefac",&fastrefac,NULL);
+  }
   offset_t i,j,lasize;
   solve_real *b1=NULL;
   PetscBool presol;
@@ -269,6 +276,15 @@ static void rk_stage_solve(PetscBool nohsl,PetscInt VecSize,PetscInt BSize,
       free(ai1);
       free(b1);
       b1=NULL;
+    }
+    else if(fastrefac) {
+      /* -fastrefac: persistent pivot sequence, MA48B/BD JOB=2 per stage */
+      if(rank==rank_hsl) {
+        VecGetArray(vecb,&vals);
+        lu_fastrefac_solve(A,VecSize,laA,vals,x1);
+      }
+      ierr = MatDestroy(&A);CHKERRV(ierr);
+      ierr = VecDestroy(&vecb);CHKERRV(ierr);
     }
     else {
       if(rank==rank_hsl) {

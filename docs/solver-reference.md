@@ -452,6 +452,23 @@ Workspace sizing: `laA`, `laDi`, `laD` scale factor/workspace sizes as
 `ceil(la/100 × nnz)`; too small → factorization failure (increase and
 re-run). teems-R defaults 300/500/200.
 
+Persistent refactorize (`-fastrefac 1`, sequential LU only): the
+Jacobian's stored sparsity pattern is fixed across steps, so the MA48
+analyse (pivot-order search) runs once per solve and every later
+step/stage refactorizes with `MA48B/BD JOB=2` on the kept pivot
+sequence (`ICNTL(11)=1` refactorizes any block whose entries turn
+unsuitable; a declined fast factorize falls back to a fresh analyse).
+The extraction keeps explicitly stored zeros — an entry that is zero at
+the analyse state may become nonzero at a later step and must stay in
+the pattern. On this path `laA` is self-sizing: an MA48 `-3` (workspace
+too small) return grows the arrays to the size MA48 suggests (doubling
+floor, six-attempt cap) instead of aborting, and the grown size
+persists for the rest of the solve. Measured on the 1.35M-equation
+static bench (Gragg 2-4-8, 17 factorization cycles): −72% wall, +21%
+peak RSS. Off by default; results shift only within factorization
+rounding (the analyse-state pivot sequence applied at other step
+states), bounded by the usual cross-method noise floors.
+
 ## 7. Parallelism
 
 - **MPI** ranks via PETSc. With LU/SBBD (`nohsl == false`) only
@@ -615,6 +632,7 @@ method (basis of the golden-run verification, below).
 | `-step1/-step2/-step3` | 2/4/8 | Gragg step counts (all odd or all even) |
 | `-nsubints n` | 1 | shock subintervals |
 | `-laA/-laDi/-laD n` | 2 (teems-R: 300/500/200) | workspace sizing, % of nnz |
+| `-fastrefac {0,1}` | 0 | sequential LU: analyse once, MA48 JOB=2 refactorize per step; auto-grows `laA` (§6) |
 | `-cntl_3 x` | — | HSL iterative-refinement threshold |
 | `-cntl_6 x` | 0 | MA50 ordering control |
 | `-withmc66 {0,1}` | 0 | MC66 ordering for SBBD |
