@@ -596,7 +596,7 @@ bool solve_rk(PetscBool nohsl,PetscInt VecSize,PetscInt dnz,PetscInt* dnnz,Petsc
           if(rank==0)printf("Error: adaptive step size collapsed below 1e-8 without meeting epsTolerance %.3g (worst error metric %.3g); the problem may be too stiff for %s\n",epstol,metric,scheme.name);
           MPI_Abort(PETSC_COMM_WORLD,1);
         }
-        if(rank==0)logmsg(1,"Step %d rejected (error metric %.3g > %.3g), retrying with step size %.4g\n",stepno+1,metric,epstol,h);
+        if(rank==0)logmsg(1,"Step %d rejected (accuracy metric %.3g > %.3g), retrying with step size %.4g\n",stepno+1,metric,epstol,h);
         for(i=0; i<ncofele; i++)elem_vals[i].value=base_vals[i];
         for(tindx1=0; tindx1<nvarele; tindx1++)stagex[tindx1]=base_X[tindx1];
         continue;
@@ -673,7 +673,7 @@ bool solve_rk(PetscBool nohsl,PetscInt VecSize,PetscInt dnz,PetscInt* dnnz,Petsc
     int face=10-(int)floor(worst/0.02);
     if(face<1)face=1;
     if(face>10)face=10;
-    if(rank==0)printf("Accuracy face value %d of 10 (worst cumulative error metric %.3g)\n",face,worst);
+    if(rank==0)printf("Accuracy face value %d of 10 (worst accuracy metric %.3g)\n",face,worst);
   }
 
   /* final data pass: rebase the coefficients on the pre-simulation
