@@ -1873,6 +1873,7 @@ int main(int argc,char **args) {
   lu_fastrefac_free();
   sbbd_fastrefac_free();
   dbbd_fastrefac_free();
+  ndbbd_fastrefac_free();
   free(backsolves);
 
 

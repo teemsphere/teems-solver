@@ -11,6 +11,25 @@
 static int ndbbd_fac_n=0;
 static int **ndbbd_fac_irn=NULL,**ndbbd_fac_keep=NULL;
 static solve_real **ndbbd_fac_va=NULL;
+/* -fastrefac NDBBD extension: the regional (inner) blocks' factors
+   persist across steps in this store — repeat steps refill VA(1:NE)
+   and refactorize with MA48B/BD JOB=2 on the kept pivot sequence.
+   ndbbd_fac_jcn holds the MA48 JCN mapping (needed for JOB=2) and
+   ndbbd_fac_nz the staged pattern size; nz>=0 with a non-NULL jcn
+   marks a persistent slot.  Per-TIME interface blocks keep the
+   per-step flow (their pattern is assembled from value-dependent
+   merges) and never set nz.  The flag forces the resident store
+   regardless of -inmemory. */
+static int **ndbbd_fac_jcn=NULL;
+static PetscInt *ndbbd_fac_nz=NULL;
+static dim_t ndbbd_fastrefac=-1;
+static int nfr_flag(void) {
+  if(ndbbd_fastrefac<0) {
+    ndbbd_fastrefac=0;
+    PetscOptionsGetInt(NULL,NULL,"-fastrefac",&ndbbd_fastrefac,NULL);
+  }
+  return (int)ndbbd_fastrefac;
+}
 
 /* ==== DBBD per-block persistent factors (-fastrefac) ====
    The diagonal-block COO is a raw copy of the stored CSR (no zero
@@ -54,10 +73,14 @@ static void ndbbd_fac_init(int n) {
     ndbbd_fac_irn=realloc(ndbbd_fac_irn,n*sizeof(int*));
     ndbbd_fac_keep=realloc(ndbbd_fac_keep,n*sizeof(int*));
     ndbbd_fac_va=realloc(ndbbd_fac_va,n*sizeof(solve_real*));
+    ndbbd_fac_jcn=realloc(ndbbd_fac_jcn,n*sizeof(int*));
+    ndbbd_fac_nz=realloc(ndbbd_fac_nz,n*sizeof(PetscInt));
     for(i=ndbbd_fac_n; i<n; i++) {
       ndbbd_fac_irn[i]=NULL;
       ndbbd_fac_keep[i]=NULL;
       ndbbd_fac_va[i]=NULL;
+      ndbbd_fac_jcn[i]=NULL;
+      ndbbd_fac_nz[i]=-1;
     }
     ndbbd_fac_n=n;
   }
@@ -79,13 +102,34 @@ static void ndbbd_fac_drop(int idx) {
   ndbbd_fac_keep[idx]=NULL;
   free(ndbbd_fac_va[idx]);
   ndbbd_fac_va[idx]=NULL;
+  if(ndbbd_fac_jcn!=NULL) {
+    free(ndbbd_fac_jcn[idx]);
+    ndbbd_fac_jcn[idx]=NULL;
+    ndbbd_fac_nz[idx]=-1;
+  }
+}
+
+void ndbbd_fastrefac_free(void) {
+  int i;
+  for(i=0; i<ndbbd_fac_n; i++)ndbbd_fac_drop(i);
+  free(ndbbd_fac_irn);
+  free(ndbbd_fac_keep);
+  free(ndbbd_fac_va);
+  free(ndbbd_fac_jcn);
+  free(ndbbd_fac_nz);
+  ndbbd_fac_irn=NULL;
+  ndbbd_fac_keep=NULL;
+  ndbbd_fac_va=NULL;
+  ndbbd_fac_jcn=NULL;
+  ndbbd_fac_nz=NULL;
+  ndbbd_fac_n=0;
 }
 
 /* hand one block's factors off: resident copy under -inmemory,
    otherwise the legacy scratch files the Fortran writers used to
    produce (same names, same bytes) */
 static void ndbbd_fac_emit(int rank,int idx,int *irn,int *keep,solve_real *va,long la,int t) {
-  if(inmemory) {
+  if(inmemory||nfr_flag()) {
     ndbbd_fac_put(idx,irn,keep,va,la,t);
     return;
   }
@@ -1038,7 +1082,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
   for(i=0; i<mpisize; i++)if(rank+1<=ntime-mpisize*nmatint)nmatint++;
   nmatin=(nreg+1)*nmatint;
   nmatinplus=(nreg+1)*nmatinplust;
-  if(inmemory)ndbbd_fac_init(nmatin);
+  if(inmemory||nfr_flag())ndbbd_fac_init(nmatin);
   begblock[rank]=nmatin;
   logmsg(2,"rank %d nmatin %d nmatint %d nmplus %d\n",rank,nmatin,nmatint,nmatinplus);
   for(i=0; i<mpisize; i++) {
@@ -1435,12 +1479,33 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
       ncolc=submatCT->cmap->n;
       insize[j4*insizes+3]=nrowc;
       insize[j4*insizes+4]=ncolc;
-      memcpy (irn+nz,ai,(nrow+1)*sizeof(PetscInt));
-      memcpy (jcn,aj,nz*sizeof(PetscInt));
-      memcpy (values,vals,nz*sizeof(solve_real));
+      int nfr_redo=0;
+      if(nfr_flag()) {
+        if(ndbbd_fac_nz[j4]==nz&&ndbbd_fac_jcn[j4]!=NULL) {
+          /* pattern unchanged: refill values, keep the pivot sequence */
+          memcpy (ndbbd_fac_va[j4],vals,nz*sizeof(solve_real));
+          nfr_redo=1;
+        }
+        else {
+          ndbbd_fac_drop(j4);
+          ndbbd_fac_irn[j4]=(int *) calloc (lasize,sizeof(int));
+          ndbbd_fac_jcn[j4]=(int *) calloc (lasize,sizeof(int));
+          ndbbd_fac_va[j4]=(solve_real *) calloc (lasize,sizeof(solve_real));
+          ndbbd_fac_keep[j4]=(int *) calloc (nrow+9*ncol+7,sizeof(int));
+          memcpy (ndbbd_fac_irn[j4]+nz,ai,(nrow+1)*sizeof(PetscInt));
+          memcpy (ndbbd_fac_jcn[j4],aj,nz*sizeof(PetscInt));
+          memcpy (ndbbd_fac_va[j4],vals,nz*sizeof(solve_real));
+          ndbbd_fac_nz[j4]=nz;
+        }
+      }
+      else {
+        memcpy (irn+nz,ai,(nrow+1)*sizeof(PetscInt));
+        memcpy (jcn,aj,nz*sizeof(PetscInt));
+        memcpy (values,vals,nz*sizeof(solve_real));
+        MatDestroy(&submatAij[j4]);//1
+      }
       insize[j4*insizes+2]=nz;
       insize[j4*insizes+5]=nzc;
-      MatDestroy(&submatAij[j4]);//1
       insize[j4*insizes+9]=laA;
       insize[j4*insizes+16]=lasize;
       insize[j4*insizes+10]=rank;
@@ -1454,8 +1519,25 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
       insize[j4*insizes+6]=nrowb;//ncolb;
       insize[j4*insizes+7]=ncolb;//nrowb;
       insize[j4*insizes+8]=nz;
+      if(nfr_flag()) {
+        int redo_io=nfr_redo;
+        prep48m_msol_p_(insize+j4*insizes,ndbbd_fac_irn[j4],ndbbd_fac_jcn[j4],ndbbd_fac_va[j4],aic,ajc,valsc,ai,aj,vals,vecbivi,bivinzrow,bivinzcol,jcnb1,sol48,b48,w51,iw51,ndbbd_fac_keep[j4],&redo_io);
+        if(redo_io<0) {
+          /* fast refactorize declined: re-stage from the still-live
+             submatrix and redo the analyse */
+          Mat_SeqAIJ *aa2=(Mat_SeqAIJ*)submatAij[j4]->data;
+          memcpy (ndbbd_fac_irn[j4]+ndbbd_fac_nz[j4],aa2->i,(nrow+1)*sizeof(PetscInt));
+          memcpy (ndbbd_fac_jcn[j4],aa2->j,ndbbd_fac_nz[j4]*sizeof(PetscInt));
+          memcpy (ndbbd_fac_va[j4],aa2->a,ndbbd_fac_nz[j4]*sizeof(solve_real));
+          redo_io=0;
+          prep48m_msol_p_(insize+j4*insizes,ndbbd_fac_irn[j4],ndbbd_fac_jcn[j4],ndbbd_fac_va[j4],aic,ajc,valsc,ai,aj,vals,vecbivi,bivinzrow,bivinzcol,jcnb1,sol48,b48,w51,iw51,ndbbd_fac_keep[j4],&redo_io);
+        }
+        MatDestroy(&submatAij[j4]);//1
+      }
+      else {
       prep48m_msol_(insize+j4*insizes,irn,jcn,values,aic,ajc,valsc,ai,aj,vals,vecbivi,bivinzrow,bivinzcol,jcnb1,sol48,b48,w51,iw51,keep);
       ndbbd_fac_emit(rank,j4,irn,keep,values,insize[j4*insizes+16],insize[j4*insizes+12]);
+      }
       insize[j4*insizes+15]=0;
       MatDestroy(&submatCT);
       MatDestroy(&submatBij[j4][0]);//1
@@ -1836,7 +1918,7 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
   for(i=0; i<mpisize; i++)if(rank+1<=ntime-mpisize*nmatint)nmatint++;
   nmatin=(nreg+1)*nmatint;
   nmatinplus=(nreg+1)*nmatinplust;
-  if(inmemory)ndbbd_fac_init(nmatin);
+  if(inmemory||nfr_flag())ndbbd_fac_init(nmatin);
   begblock[rank]=nmatin;
   logmsg(2,"rank %d nmatin %d nmatint %d nmplus %d\n",rank,nmatin,nmatint,nmatinplus);
   for(i=0; i<mpisize; i++) {
@@ -2562,7 +2644,7 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
       insize[j2*insizes+15]=j2%90+7;
       if(i!=nreg&&(submatCij[j2][0]->rmap->n)>maxrowcij)maxrowcij=submatCij[j2][0]->rmap->n;
       la1=ceil((insize[j2*insizes+9]/100.0)*insize[j2*insizes+2]);
-      if(inmemory) {/* alias the resident factors; per-element frees are skipped below */
+      if(inmemory||nfr_flag()) {/* alias the resident factors; per-element frees are skipped below */
         irnereg[i]=ndbbd_fac_irn[j2];
         keepreg[i]=ndbbd_fac_keep[j2];
         valereg[i]=ndbbd_fac_va[j2];
@@ -2624,7 +2706,7 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
   free(w);
   free(iw);
   for(i=0; i<nreg+1; i++) {
-    if(inmemory)break;/* elements alias the resident store */
+    if(inmemory||nfr_flag())break;/* elements alias the resident store */
     free(irnereg[i]);//= (int*)calloc(1,sizeof(int));
     free(keepreg[i]);//= (int*)calloc(1,sizeof(int));
     free(valereg[i]);// = (ha_cgetype*)calloc(1,sizeof(ha_cgetype));
@@ -2926,7 +3008,7 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
     spar_mulnoadd_(xd,&nrow,&nz,ai,aj,vals,be0);
     MatDestroy(&submatC[j1]);
     ifremove=true;
-    if(inmemory) {
+    if(inmemory||nfr_flag()) {
       /* back-substitute from the resident store, then drop this
          window's factors (the ifremove equivalent) */
       int icntl2[20],info2[20],mrc=0;
@@ -2939,7 +3021,10 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
       free(b02);
       free(w2);
       free(iw2);
-      for(i=0; i<nreg+1; i++)ndbbd_fac_drop(j2+i);
+      for(i=0; i<nreg+1; i++) {
+        if(nfr_flag()&&i!=nreg)continue;/* regional factors persist across steps */
+        ndbbd_fac_drop(j2+i);
+      }
     }
     else ndbbd_block_solve(rank,j2,nreg,insize,insizes,submatCij,submatBij,be0,biui0,ifremove,fn01,fn02,fn03);
     for(i=0; i<nreg; i++) {

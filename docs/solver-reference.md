@@ -475,15 +475,16 @@ per-diagonal-block persistent factors: each block's COO is a raw copy
 of its stored CSR (pattern structurally stable), so the per-block
 analyse runs once and later steps refactorize with `MA48B/BD JOB=2`;
 the persistent arrays double as the within-step factor handoff to the
-back-solve (no scratch files under the flag). The interface problem is
-factorized fresh every step in all bordered methods — its pattern is
-assembled from value-dependent products and may legitimately change
-between steps. NDBBD keeps the per-step path (the same per-block
-pattern applies but is queued behind the bordered-methods audit:
-presolve/solve phase split and the disk-backed factor store interact).
-Off by default; results shift only within factorization rounding (the
-analyse-state pivot sequences applied at other step states), bounded by
-the usual cross-method noise floors.
+back-solve (no scratch files under the flag). NDBBD keeps its regional (inner) blocks' factors persistent the same
+way, extending the `ndbbd_fac` store with the MA48 column mapping; the
+flag forces the resident factor store even in NDBBD's default disk
+mode. The interface problems are factorized fresh every step in all
+bordered methods — their patterns are assembled from value-dependent
+products and may legitimately change between steps. Off by default;
+results shift only within factorization rounding (the analyse-state
+pivot sequences applied at other step states), bounded by the usual
+cross-method noise floors — on the DBBD and NDBBD acceptance rigs the
+flag-on solutions came out exactly identical.
 
 ## 7. Parallelism
 
@@ -648,7 +649,7 @@ method (basis of the golden-run verification, below).
 | `-step1/-step2/-step3` | 2/4/8 | Gragg step counts (all odd or all even) |
 | `-nsubints n` | 1 | shock subintervals |
 | `-laA/-laDi/-laD n` | 2 (teems-R: 300/500/200) | workspace sizing, % of nnz |
-| `-fastrefac {0,1}` | 0 | LU/SBBD/DBBD: analyse once, fast refactorize per step (MA48 JOB=2 / MP48 FACT_JOB=2); LU auto-grows `laA` (§6) |
+| `-fastrefac {0,1}` | 0 | all matrix methods: analyse once, fast refactorize per step (MA48 JOB=2 / MP48 FACT_JOB=2); LU auto-grows `laA` (§6) |
 | `-cntl_3 x` | — | HSL iterative-refinement threshold |
 | `-cntl_6 x` | 0 | MA50 ordering control |
 | `-withmc66 {0,1}` | 0 | MC66 ordering for SBBD |

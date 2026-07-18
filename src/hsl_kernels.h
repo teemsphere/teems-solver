@@ -21,6 +21,7 @@ extern void my_spar_add4l_(solve_real *vecbivi, long int *biviindx,int *irn, int
 extern void my_spar_compl_(long int *biviindx,long int *nz1,long int *biviindx0,long int *nz0,long int *nz2);
 extern void prep48_alu1_(int *INSIZE,int *IRN,int* JCN,solve_real *VA,solve_real *W,int *IW,int *KEEP);
 extern void prep48m_msol_(int *INSIZE,int *IRN, int *JCN, solve_real *VA, PetscInt *IRNC, PetscInt *JCNC, PetscScalar *VAC,int *IRNB,int *JCNB,PetscScalar *VALUESB,solve_real *VECBIVI,long int *bivinzrow0,int *bivinzcol0,int* jcnb1,solve_real *sol,solve_real *b,solve_real *w,int* iw,int* keep);
+extern void prep48m_msol_p_(int *INSIZE,int *IRN, int *JCN, solve_real *VA, PetscInt *IRNC, PetscInt *JCNC, PetscScalar *VAC,int *IRNB,int *JCNB,PetscScalar *VALUESB,solve_real *VECBIVI,long int *bivinzrow0,int *bivinzcol0,int* jcnb1,solve_real *sol,solve_real *b,solve_real *w,int* iw,int* keep,int *redo);/* persistent-factor variant (-fastrefac); redo inout: 0 full analyse, 1 MA48 JOB=2 on kept pivot sequence; out 0 ok, <0 declined before border work */
 extern void spar_mulmin_(solve_real* sol,int* nrow,int* nz,int* irn,int* jcn,solve_real* va,solve_real* res);
 extern void spar_mulnoadd_(solve_real* sol,int* nrow,int* nz,int* irn,int* jcn,solve_real* va,solve_real* res);
 extern void spar_vbiviadd_(solve_real* sol,int* bvcol,long int* bvrow,long int* bvsize,int* nrow,int *ncol,int* nz,int* irn,int* jcn,solve_real* va,solve_real* res);
