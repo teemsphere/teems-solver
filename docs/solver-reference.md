@@ -452,22 +452,31 @@ Workspace sizing: `laA`, `laDi`, `laD` scale factor/workspace sizes as
 `ceil(la/100 × nnz)`; too small → factorization failure (increase and
 re-run). teems-R defaults 300/500/200.
 
-Persistent refactorize (`-fastrefac 1`, sequential LU only): the
-Jacobian's stored sparsity pattern is fixed across steps, so the MA48
-analyse (pivot-order search) runs once per solve and every later
-step/stage refactorizes with `MA48B/BD JOB=2` on the kept pivot
-sequence (`ICNTL(11)=1` refactorizes any block whose entries turn
-unsuitable; a declined fast factorize falls back to a fresh analyse).
-The extraction keeps explicitly stored zeros — an entry that is zero at
-the analyse state may become nonzero at a later step and must stay in
-the pattern. On this path `laA` is self-sizing: an MA48 `-3` (workspace
-too small) return grows the arrays to the size MA48 suggests (doubling
-floor, six-attempt cap) instead of aborting, and the grown size
-persists for the rest of the solve. Measured on the 1.35M-equation
-static bench (Gragg 2-4-8, 17 factorization cycles): −72% wall, +21%
-peak RSS. Off by default; results shift only within factorization
-rounding (the analyse-state pivot sequence applied at other step
-states), bounded by the usual cross-method noise floors.
+Persistent refactorize (`-fastrefac 1`, sequential LU and SBBD): the
+Jacobian's stored sparsity pattern is fixed across steps, so the
+analyse work runs once per solve and every later step/stage
+refactorizes on the kept pivot sequences. Sequential LU keeps the MA48
+analyse (pivot-order search) and refactorizes with `MA48B/BD JOB=2`
+(`ICNTL(11)=1` refactorizes any block whose entries turn unsuitable; a
+declined fast factorize falls back to a fresh analyse). SBBD keeps the
+whole MP48 instance alive across steps — border-column lists, per-block
+pivot sequences and factors — and repeat steps refill `VALUES`/`B` on
+the host and refactorize with `FACT_JOB=2` (numerical pivoting
+retained; an MP48 error on the fast path rebuilds the instance). In
+both cases the extraction keeps explicitly stored zeros — an entry that
+is zero at the analyse state may become nonzero at a later step and
+must stay in the pattern. On the LU path `laA` is self-sizing: an MA48
+`-3` (workspace too small) return grows the arrays to the size MA48
+suggests (doubling floor, six-attempt cap) instead of aborting, and the
+grown size persists for the rest of the solve. Measured (Gragg 2-4-8,
+17 factorization cycles): 1.35M static LU −72% wall / +21% RSS; 4.36M
+intertemporal SBBD-2 −36% wall / +28% RSS; 202k SBBD-2 −25%. Off by
+default; results shift only within factorization rounding (the
+analyse-state pivot sequences applied at other step states), bounded by
+the usual cross-method noise floors. DBBD/NDBBD keep the per-step path
+(per-block persistence is queued with the bordered-methods audit — the
+interface problem's pattern there is value-dependent, so the
+pattern-stability precondition needs per-step verification).
 
 ## 7. Parallelism
 

@@ -326,6 +326,11 @@ void jacobian_cache_free(void); /* release the per-rank compiled-statement cache
    factorizations run MA48B/BD JOB=2 */
 void lu_fastrefac_solve(Mat A,PetscInt VecSize,dim_t laA,solve_real *rhs,solve_real *x);
 void lu_fastrefac_free(void); /* release persistent LU state after the solve dispatch */
+/* -fastrefac SBBD persistent MP48 instance (solve_drivers.c): border lists,
+   per-block pivot sequences and factors persist across steps; repeat steps
+   refactorize with FACT_JOB=2.  Collective — all ranks call both. */
+void sbbd_fastrefac_solve(Mat *A,Vec *vecb,PetscInt VecSize,PetscInt rank,PetscInt rank_hsl,fortran_int *indata,MPI_Fint fcomm,offset_t *counteq,offset_t *countvarintra1,solve_real *x);
+void sbbd_fastrefac_free(void);
 /* Recover the backsolved variables' per-step values from their retained
    defining equations (GEMPACK 14.1.3: after the condensed solve, before
    the data updates).  x = this step's solution vector; exo_z = per-element

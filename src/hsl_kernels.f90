@@ -259,6 +259,182 @@ SUBROUTINE SPEC48_NOMC66(indata,jcn1,b1,values1,x,neleperrow,fcomm,rowptrin,colp
 END SUBROUTINE SPEC48_NOMC66
 
 
+module mp48_persist
+  ! State for the persistent SBBD instance (-fastrefac): the MP48_DATA
+  ! structure (border lists, per-block pivot sequences, factors) lives
+  ! across steps so repeat steps refill VALUES/B and refactorize with
+  ! FACT_JOB=2 instead of rebuilding the whole instance.
+  USE HSL_MP48_DOUBLE
+  implicit none
+  TYPE (MP48_DATA), save :: pdata
+  logical, save :: pinit=.false.
+end module mp48_persist
+
+SUBROUTINE SPEC48_NOMC66_P(indata,jcn1,b1,values1,x,neleperrow,fcomm,rowptrin,colptrin,redo)
+  ! Persistent-instance variant of SPEC48_NOMC66 (structural partition).
+  ! redo(1) on entry: 0 = (re)build the instance (JOB 1,2,3 then 4 with
+  ! FACT_JOB=1, then 5); 1 = values-only step (host refills VALUES/B,
+  ! JOB=4 with FACT_JOB=2, JOB=5).  On exit: 0 = solved, <0 = MP48
+  ! error on the fast path (caller retries with redo=0).  All ranks
+  ! must call with the same redo.  Caller keeps jcn1/neleperrow
+  ! unchanged between redo=1 calls and refills values1/b1 per step.
+  use mp48_persist
+  use constants
+  IMPLICIT NONE
+  integer myid, numprocs
+  integer (8) :: i,j,o,h
+  integer (8) :: nblocks,maxsbcols,ncols
+  INTEGER ERCODE,ST
+  integer (4) fcomm(*),fcomm1
+  integer (4) redo(*)
+  integer(4) neleperrow(*),jcn1(*)
+  integer (8) indata(*),rowptrin(*),colptrin(*)
+  real (kind=DPC) b1(*),values1(*),x(*)
+  integer (8) :: nz
+  integer (8) :: m
+  fcomm1=fcomm(1)
+  IF (redo(1).EQ.1 .AND. pinit) THEN
+    ! values-only step: refactorize on the kept structure
+    IF (pdata%RANK.EQ.0) THEN
+      nz = indata(1)
+      m = indata(2)
+      do i = 1, nz
+        pdata%VALUES(i)=values1(i)
+      end do
+      do i = 1, m
+        pdata%B(i)=b1(i)
+      end do
+    END IF
+    pdata%FACT_JOB=2
+    pdata%JOB = 4
+    CALL MP48AD(pdata)
+    IF (pdata%ERROR.LT.0) THEN
+      if (teems_verbosity()>=1 .AND. pdata%RANK.EQ.0) WRITE (6,'(A,I4)') &
+        'Note: fast SBBD refactorize declined, MP48 code ',pdata%ERROR
+      redo(1)=pdata%ERROR
+      RETURN
+    END IF
+    pdata%JOB = 5
+    CALL MP48AD(pdata)
+    IF (pdata%ERROR.LT.0) THEN
+      redo(1)=pdata%ERROR
+      RETURN
+    END IF
+    IF (pdata%RANK.EQ.0) THEN
+      do o=1,indata(2)
+        x(o)=pdata%X(o)
+      end do
+    END IF
+    redo(1)=0
+    RETURN
+  END IF
+  ! full (re)build
+  IF (pinit) THEN
+    pdata%JOB = 6
+    CALL MP48AD(pdata)
+    pinit=.false.
+  END IF
+  pdata%COMM = fcomm1
+  pdata%JOB = 1
+  CALL MP48AD(pdata)
+  pdata%ICNTL(7) = 3
+  ! the instance persists across steps: own the solution vector so
+  ! repeated JOB=5 calls never re-allocate package-owned storage
+  pdata%ICNTL(13) = 1
+  IF (pdata%RANK.EQ.0) THEN
+    nz = indata(1)
+    m = indata(2)
+    nblocks = indata(4)
+    pdata%NEQ=indata(2)
+    pdata%NBLOCK=nblocks
+    pdata%NE=indata(1)
+    ! JOB=6 frees only package-allocated arrays; the user-supplied
+    ! components survive it and must be released before a rebuild
+    IF (ALLOCATED(pdata%NEQSB)) DEALLOCATE(pdata%NEQSB)
+    IF (ALLOCATED(pdata%EQPTR)) DEALLOCATE(pdata%EQPTR)
+    IF (ALLOCATED(pdata%EQVAR)) DEALLOCATE(pdata%EQVAR)
+    IF (ALLOCATED(pdata%VALUES)) DEALLOCATE(pdata%VALUES)
+    IF (ALLOCATED(pdata%B)) DEALLOCATE(pdata%B)
+    IF (ALLOCATED(pdata%X)) DEALLOCATE(pdata%X)
+    ALLOCATE(pdata%NEQSB(1:pdata%NBLOCK),STAT=ST )
+    ALLOCATE(pdata%EQPTR(1:pdata%NEQ+1),STAT=ST )
+    ALLOCATE(pdata%EQVAR(1:pdata%NE),STAT=ST )
+    ALLOCATE(pdata%VALUES(1:pdata%NE),STAT=ST )
+    ALLOCATE(pdata%B(1:pdata%NEQ),STAT=ST )
+    ALLOCATE(pdata%X(1:pdata%NEQ),STAT=ST )
+    maxsbcols=0
+    do i = 1, nblocks
+      pdata%NEQSB(i)=rowptrin(i+1)-rowptrin(i)
+      if (teems_verbosity()>=2) write(*,"('nomc block ',i4,' of dimension  ',i10,' X ',i10)") &
+      i,pdata%NEQSB(i),colptrin(i+1)-colptrin(i)
+      ncols=colptrin(i+1)-colptrin(i)
+      if(maxsbcols.LT.ncols)maxsbcols=ncols
+    end do
+    maxsbcols=maxsbcols+m-colptrin(nblocks+1)
+    if (teems_verbosity()>=2) print *, "row ", m,"nz ",nz,"maxcolsb ",maxsbcols
+    h=1
+    pdata%MAXSBCOLS=maxsbcols
+    do j = 1, m
+      pdata%EQPTR(j)=h
+      do i = 1,neleperrow(j)
+        pdata%EQVAR(h)=jcn1(h)
+        pdata%VALUES(h)=values1(h)
+        h=h+1
+      end do
+    end do
+    pdata%EQPTR(m+1)=h
+    do i = 1, m
+      pdata%B(i)=b1(i)
+    end do
+  END IF
+  CALL MPI_BARRIER(pdata%COMM,ERCODE)
+  pdata%JOB = 23
+  CALL MP48AD(pdata)
+  IF (pdata%ERROR.LT.0) THEN
+    WRITE (6,*) ' Unexpected MP48 analyse code on rank ',pdata%RANK
+    redo(1)=pdata%ERROR
+    RETURN
+  END IF
+  pdata%FACT_JOB=1
+  pdata%JOB = 4
+  CALL MP48AD(pdata)
+  IF (pdata%ERROR.LT.0) THEN
+    WRITE (6,*) ' Unexpected MP48 factorize code on rank ',pdata%RANK
+    redo(1)=pdata%ERROR
+    RETURN
+  END IF
+  pinit=.true.
+  pdata%JOB = 5
+  CALL MP48AD(pdata)
+  IF (pdata%ERROR.LT.0) THEN
+    redo(1)=pdata%ERROR
+    RETURN
+  END IF
+  IF (pdata%RANK.EQ.0) THEN
+    do o=1,indata(2)
+      x(o)=pdata%X(o)
+    end do
+  END IF
+  redo(1)=0
+END SUBROUTINE SPEC48_NOMC66_P
+
+SUBROUTINE SPEC48_NOMC66_PFREE()
+  use mp48_persist
+  IMPLICIT NONE
+  IF (pinit) THEN
+    pdata%JOB = 6
+    CALL MP48AD(pdata)
+    pinit=.false.
+  END IF
+  ! user-supplied components survive JOB=6
+  IF (ALLOCATED(pdata%NEQSB)) DEALLOCATE(pdata%NEQSB)
+  IF (ALLOCATED(pdata%EQPTR)) DEALLOCATE(pdata%EQPTR)
+  IF (ALLOCATED(pdata%EQVAR)) DEALLOCATE(pdata%EQVAR)
+  IF (ALLOCATED(pdata%VALUES)) DEALLOCATE(pdata%VALUES)
+  IF (ALLOCATED(pdata%B)) DEALLOCATE(pdata%B)
+  IF (ALLOCATED(pdata%X)) DEALLOCATE(pdata%X)
+END SUBROUTINE SPEC48_NOMC66_PFREE
+
 SUBROUTINE SPEC51M_RANK(INSIZE,CNTL6,IRN,JCN,VA,IRNA,JCNA,KEEP,W,IW)
   use constants
   IMPLICIT NONE

@@ -203,7 +203,11 @@ static void rk_stage_solve(PetscBool nohsl,PetscInt VecSize,PetscInt BSize,
     MPI_Barrier(PETSC_COMM_WORLD);
   }
   else {
-    if(matsol==MM_SBBD) {
+    if(matsol==MM_SBBD&&fastrefac) {
+      /* -fastrefac: persistent MP48 instance, FACT_JOB=2 per stage */
+      sbbd_fastrefac_solve(&A,&vecb,VecSize,rank,rank_hsl,indata,fcomm,counteq,countvarintra1,x1);
+    }
+    else if(matsol==MM_SBBD) {
       if(rank==rank_hsl) {
         Mat_SeqAIJ *aa=(Mat_SeqAIJ*)A->data;
         ai= aa->i;

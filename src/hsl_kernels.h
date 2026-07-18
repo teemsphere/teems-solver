@@ -13,6 +13,8 @@ extern void spec48m_esol_(int *INSIZE,int *IRN, solve_real *VA,int *KEEP, solve_
 extern void spec48m_rpesol_(int *INSIZE,int *IRN, solve_real *VA,int *KEEP, solve_real *B, solve_real *X,solve_real *cntl,solve_real *rinfo,solve_real *error1,int *icntl,int *info,solve_real *w,int *iw);
 extern void spec48_single_(fortran_int *indata,int *irn, int *jcn,solve_real *b1, solve_real *values,solve_real *x1, int *neleperrow,int *ai1, MPI_Fint *fcomm);
 extern void spec48_nomc66_(fortran_int *indata, int *jcn,solve_real *b1, solve_real *values,solve_real *x1, int *neleperrow, MPI_Fint *fcomm,fortran_int *rowptrin, fortran_int *colptrin);
+extern void spec48_nomc66_p_(fortran_int *indata, int *jcn,solve_real *b1, solve_real *values,solve_real *x1, int *neleperrow, MPI_Fint *fcomm,fortran_int *rowptrin, fortran_int *colptrin,int *redo);/* persistent MP48 instance (-fastrefac); redo inout: 0 build, 1 FACT_JOB=2 refactorize; out 0 ok, <0 declined (retry with 0). Collective on all ranks with the same redo */
+extern void spec48_nomc66_pfree_(void);/* JOB=6 teardown; collective, no-op if never built */
 extern void my_spar_add3l_(solve_real *vecbivi, long int *biviindx,long int *nz1,solve_real *vecbivi0,long int *biviindx0,long int *nz0,long int *nz2);
 extern void my_spar_add4l_(solve_real *vecbivi, long int *biviindx,int *irn, int *jcn,long int *nz1,solve_real *vecbivi0,long int *biviindx0,long int *nz0,long int *nz2,int *ncol);
 extern void my_spar_compl_(long int *biviindx,long int *nz1,long int *biviindx0,long int *nz0,long int *nz2);
