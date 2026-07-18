@@ -45,6 +45,47 @@ static solve_real **dfr_va=NULL;
 static PetscInt *dfr_nz=NULL;
 static int dfr_nblocks=0,dfr_ready=0;
 
+/* -fastrefac DBBD extraction persistence: the five submatrix arrays
+   and the per-block transposes survive across steps and are refilled
+   with MAT_REUSE_MATRIX (the extraction structure is fixed while the
+   orderings are; a row/col-ordering change triggers a full rebuild).
+   The per-step IS/index construction stays as-is — REUSE only needs
+   IS content, not object identity. */
+static Mat *xfr_submatA=NULL,*xfr_submatC=NULL,*xfr_submatB=NULL,*xfr_submatBB=NULL,*xfr_submatD=NULL,*xfr_submatCT=NULL;
+static int *xfr_order=NULL;
+static PetscInt xfr_ordlen=0,xfr_nmatin=0;
+static int xfr_proc1=0,xfr_ready=0;
+
+void dbbd_fastextract_free(void) {
+  PetscInt i;
+  for(i=0; i<xfr_nmatin; i++) {
+    if(xfr_submatA!=NULL)MatDestroy(&xfr_submatA[i]);
+    if(xfr_submatC!=NULL)MatDestroy(&xfr_submatC[i]);
+    if(xfr_submatB!=NULL)MatDestroy(&xfr_submatB[i]);
+    if(xfr_submatCT!=NULL)MatDestroy(&xfr_submatCT[i]);
+  }
+  if(xfr_submatBB!=NULL)MatDestroy(&xfr_submatBB[0]);
+  if(xfr_proc1&&xfr_submatD!=NULL)MatDestroy(&xfr_submatD[0]);
+  if(xfr_submatA!=NULL)PetscFree(xfr_submatA);
+  if(xfr_submatC!=NULL)PetscFree(xfr_submatC);
+  if(xfr_submatB!=NULL)PetscFree(xfr_submatB);
+  if(xfr_submatBB!=NULL)PetscFree(xfr_submatBB);
+  if(xfr_submatD!=NULL)PetscFree(xfr_submatD);
+  if(xfr_submatCT!=NULL)PetscFree(xfr_submatCT);
+  xfr_submatA=NULL;
+  xfr_submatC=NULL;
+  xfr_submatB=NULL;
+  xfr_submatBB=NULL;
+  xfr_submatD=NULL;
+  xfr_submatCT=NULL;
+  free(xfr_order);
+  xfr_order=NULL;
+  xfr_ordlen=0;
+  xfr_nmatin=0;
+  xfr_proc1=0;
+  xfr_ready=0;
+}
+
 void dbbd_fastrefac_free(void) {
   int i;
   for(i=0; i<dfr_nblocks; i++) {
@@ -195,6 +236,38 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
     begblock[i]=begblock[i-1]+j2;
     j2=j1;
   }
+  /* -fastrefac: per-block persistent factors + persistent extraction;
+     option read once */
+  static dim_t dbbd_fastrefac=-1;
+  if(dbbd_fastrefac<0) {
+    dbbd_fastrefac=0;
+    PetscOptionsGetInt(NULL,NULL,"-fastrefac",&dbbd_fastrefac,NULL);
+  }
+  if(dbbd_fastrefac&&dfr_nblocks!=nmatin) {
+    dbbd_fastrefac_free();
+    dfr_irn=(int**)calloc(nmatin,sizeof(int*));
+    dfr_jcn=(int**)calloc(nmatin,sizeof(int*));
+    dfr_keep=(int**)calloc(nmatin,sizeof(int*));
+    dfr_va=(solve_real**)calloc(nmatin,sizeof(solve_real*));
+    dfr_nz=(PetscInt*)calloc(nmatin,sizeof(PetscInt));
+    for(i=0; i<nmatin; i++)dfr_nz[i]=-1;
+    dfr_nblocks=nmatin;
+  }
+  /* the persisted extraction is valid only while the orderings are:
+     any row/col-ordering change forces a fresh MAT_INITIAL build */
+  int xfr_reuse=0;
+  if(dbbd_fastrefac) {
+    if(xfr_ready&&xfr_ordlen==2*(PetscInt)VecSize
+       &&!memcmp(xfr_order,row_order,VecSize*sizeof(int))
+       &&!memcmp(xfr_order+VecSize,col_order,VecSize*sizeof(int)))xfr_reuse=1;
+    else {
+      dbbd_fastextract_free();
+      xfr_order=realloc(xfr_order,2*VecSize*sizeof(int));
+      memcpy(xfr_order,row_order,VecSize*sizeof(int));
+      memcpy(xfr_order+VecSize,col_order,VecSize*sizeof(int));
+      xfr_ordlen=2*(PetscInt)VecSize;
+    }
+  }
   ierr = PetscMalloc(nmatin*sizeof(IS **),&rowindices);
   CHKERRQ(ierr);
   ierr = PetscMalloc(nmatin*sizeof(IS **),&colindices);
@@ -205,14 +278,13 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
   CHKERRQ(ierr);
   ierr = PetscMalloc(nmatinBB*sizeof(IS **),&BBindices);
   CHKERRQ(ierr);
-  ierr = PetscMalloc(nmatin*sizeof(Mat *),&submatA);
-  CHKERRQ(ierr);
-  ierr = PetscMalloc(nmatin*sizeof(Mat *),&submatC);
-  CHKERRQ(ierr);
-  ierr = PetscMalloc(nmatin*sizeof(Mat *),&submatB);
-  CHKERRQ(ierr);
-  ierr = PetscMalloc(nmatinBB*sizeof(Mat *),&submatBB);
-  CHKERRQ(ierr);
+  /* MatCreateSubMatrices(MAT_INITIAL_MATRIX) allocates the submatrix
+     arrays itself and overwrites the passed pointer — pre-allocating
+     them here leaked one small array per call site per step */
+  submatA=NULL;
+  submatC=NULL;
+  submatB=NULL;
+  submatBB=NULL;
   PetscScalar **yi1= (PetscScalar**)calloc(nmatin,sizeof(PetscScalar*));
   for (i=0; i<nmatin; i++) yi1[i] = (PetscScalar*)calloc(block_sizes[i+begblock[rank]],sizeof(PetscScalar));
   sumrowcolin=0;
@@ -339,15 +411,18 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
     MPI_Bcast(&j1,1, MPI_INT,i, PETSC_COMM_WORLD);
     MPI_Bcast(&indicesB[j],j1, MPI_INT,i, PETSC_COMM_WORLD);
   }
+  /* this rank's [Istart,Iend) slice of the border rows; a rank owning
+     no border rows must yield an empty range, not stale j/j1 */
+  j=VecSize-sumrowcolin;
   for(i=0; i<VecSize-sumrowcolin; i++)if(indicesB[i]>=Istart) {
       j=i;
       break;
     }
-  for(j2=i; j2<VecSize-sumrowcolin; j2++)if(indicesB[j2]>=Iend) {
+  j1=VecSize-sumrowcolin;
+  for(j2=j; j2<VecSize-sumrowcolin; j2++)if(indicesB[j2]>=Iend) {
       j1=j2;
       break;
     }
-  if(j2==VecSize-sumrowcolin)j1=VecSize-sumrowcolin;
   logmsg(2,"rank %d j %d j1 %d istart %d iend %d\n",rank,j,j1,Istart,Iend);
   VecGetValues(b,j1-j,&indicesB[j],&vecbiui[j]);//implicite yd save mem
   ierr = VecDestroy(&b);
@@ -370,9 +445,26 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
   for(i=0; i<VecSize; i++)indexBB[i]=i;
   ISCreateGeneral(PETSC_COMM_SELF,VecSize,indexBB,PETSC_COPY_VALUES,BBindices);
   logmsg(2,"Begin partitioning rank %d\n",rank);
-  ierr = MatCreateSubMatrices(A,nmatin,rowindices,colindices,MAT_INITIAL_MATRIX,&submatA);
-  ierr = MatCreateSubMatrices(A,nmatin,rowindices,Cindices,MAT_INITIAL_MATRIX,&submatC);
-  ierr = MatCreateSubMatrices(A,nmatinBB,Bindices,BBindices,MAT_INITIAL_MATRIX,&submatBB);
+  if(dbbd_fastrefac&&xfr_reuse) {
+    ierr = MatCreateSubMatrices(A,nmatin,rowindices,colindices,MAT_REUSE_MATRIX,&xfr_submatA);
+    ierr = MatCreateSubMatrices(A,nmatin,rowindices,Cindices,MAT_REUSE_MATRIX,&xfr_submatC);
+    ierr = MatCreateSubMatrices(A,nmatinBB,Bindices,BBindices,MAT_REUSE_MATRIX,&xfr_submatBB);
+  }
+  else {
+    ierr = MatCreateSubMatrices(A,nmatin,rowindices,colindices,MAT_INITIAL_MATRIX,&submatA);
+    ierr = MatCreateSubMatrices(A,nmatin,rowindices,Cindices,MAT_INITIAL_MATRIX,&submatC);
+    ierr = MatCreateSubMatrices(A,nmatinBB,Bindices,BBindices,MAT_INITIAL_MATRIX,&submatBB);
+    if(dbbd_fastrefac) {
+      xfr_submatA=submatA;
+      xfr_submatC=submatC;
+      xfr_submatBB=submatBB;
+    }
+  }
+  if(dbbd_fastrefac) {
+    submatA=xfr_submatA;
+    submatC=xfr_submatC;
+    submatBB=xfr_submatBB;
+  }
   ierr = MatDestroy(&A);
   CHKERRQ(ierr);
   PetscInt BBrow,BBcol,CCrow,CCcol;
@@ -389,11 +481,26 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
     CHKERRQ(ierr);
     ISCreateGeneral(PETSC_COMM_SELF,BBrow,indexBBi,PETSC_COPY_VALUES,Bindices+i);
   }
-  ierr = MatCreateSubMatrices(submatBB[0],nmatin,Bindices,colindices,MAT_INITIAL_MATRIX,&submatB);
   if(rank==mpisize-1)proc1=1;
-  ierr = PetscMalloc(proc1*sizeof(Mat *),&submatD);
-  CHKERRQ(ierr);
-  MatCreateSubMatrices(submatBB[0],proc1,Bindices,Cindices,MAT_INITIAL_MATRIX,&submatD);
+  if(dbbd_fastrefac&&xfr_reuse) {
+    ierr = MatCreateSubMatrices(submatBB[0],nmatin,Bindices,colindices,MAT_REUSE_MATRIX,&xfr_submatB);
+    MatCreateSubMatrices(submatBB[0],proc1,Bindices,Cindices,MAT_REUSE_MATRIX,&xfr_submatD);
+  }
+  else {
+    ierr = MatCreateSubMatrices(submatBB[0],nmatin,Bindices,colindices,MAT_INITIAL_MATRIX,&submatB);
+    submatD=NULL;
+    MatCreateSubMatrices(submatBB[0],proc1,Bindices,Cindices,MAT_INITIAL_MATRIX,&submatD);
+    if(dbbd_fastrefac) {
+      xfr_submatB=submatB;
+      xfr_submatD=submatD;
+      xfr_nmatin=nmatin;
+      xfr_proc1=proc1;
+    }
+  }
+  if(dbbd_fastrefac) {
+    submatB=xfr_submatB;
+    submatD=xfr_submatD;
+  }
   logmsg(2,"End partitioning rank %d time %f\n",rank,((double)clock()-timestr)/CLOCKS_PER_SEC);
   for (i=0; i<nmatin; i++) {
     ierr = ISDestroy(&rowindices[i]);
@@ -410,8 +517,10 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
   PetscFree(BBindices);
   PetscFree(indexBB);
   PetscFree(indexBBi);
+  if(!dbbd_fastrefac) {
   ierr = MatDestroy(&submatBB[0]);
   PetscFree(submatBB);
+  }
   CHKERRQ(ierr);
   solve_real *xi1 = (solve_real*)calloc(sumrowcolin,sizeof(solve_real));
   int insizes=17;
@@ -466,22 +575,6 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
   solve_real *vecbivi= (solve_real *) calloc (vecbivisize,sizeof(solve_real));
   logmsg(2,"vecbivisize %ld rank %d\n",vecbivisize,rank);
 
-  /* -fastrefac: per-block persistent factors; option read once */
-  static dim_t dbbd_fastrefac=-1;
-  if(dbbd_fastrefac<0) {
-    dbbd_fastrefac=0;
-    PetscOptionsGetInt(NULL,NULL,"-fastrefac",&dbbd_fastrefac,NULL);
-  }
-  if(dbbd_fastrefac&&dfr_nblocks!=nmatin) {
-    dbbd_fastrefac_free();
-    dfr_irn=(int**)calloc(nmatin,sizeof(int*));
-    dfr_jcn=(int**)calloc(nmatin,sizeof(int*));
-    dfr_keep=(int**)calloc(nmatin,sizeof(int*));
-    dfr_va=(solve_real**)calloc(nmatin,sizeof(solve_real*));
-    dfr_nz=(PetscInt*)calloc(nmatin,sizeof(PetscInt));
-    for(i=0; i<nmatin; i++)dfr_nz[i]=-1;
-    dfr_nblocks=nmatin;
-  }
   solve_real *xi1point;
   offset_t xi1indx=0;
   int jthrd,nthrd=1;
@@ -606,7 +699,6 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
           redo_io=0;
           spec48m_msol_p_(insize+j1*insizes,dfr_irn[j1],dfr_jcn[j1],dfr_va[j1],yi1[j1],xi1point,aic,ajc,valsc,ai,aj,vals,vecbivi,bivinzrow,bivinzcol,dfr_keep[j1],&redo_io);
         }
-        MatDestroy(&submatA[j1]);
       }
       else {
       keep=(int *) calloc (nrow+9*ncol+7,sizeof(int));/* KEEP bound, ICNTL(6)=1; live length returned in insize[12] */
@@ -648,20 +740,25 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
         #pragma omp atomic
         vecbiui[i]-=vals[j]*xi1point[aj[j]];//xi[i];
       }
-      MatDestroy(&submatB[j1]);//submatBT);
+      if(!dbbd_fastrefac)MatDestroy(&submatB[j1]);//submatBT);
       xi1indx+=block_sizes[j1+begblock[rank]];
       time(&timeend);
       logmsg(2,"Submatrix %d rank %d thrd %d calculation time %f\n",j1,rank,jthrd,difftime(timeend,timestr));
     }
   }
   }
-  if(dbbd_fastrefac)dfr_ready=1;
+  if(dbbd_fastrefac) {
+    dfr_ready=1;
+    xfr_ready=1;
+  }
   free(nthrds);
   free(nthrds1);
   free(bivinzcol);
   free(bivinzrow);
+  if(!dbbd_fastrefac) {
   ierr = PetscFree(submatA);
   ierr = PetscFree(submatB);
+  }
   CHKERRQ(ierr);
   free(yi1);
   logmsg(2,"Completed calculation of partitioned matrices, rank %d\n",rank);
@@ -890,7 +987,7 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
 
 
 
-    MatDestroy(&submatD[0]);
+    if(!dbbd_fastrefac)MatDestroy(&submatD[0]);
     lnz=nz1;
     free(obiviindx1);
     obiviindx1=NULL;
@@ -930,7 +1027,7 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
     xd=(solve_real *) calloc (vecbiuisize,sizeof(solve_real));//realloc (xd,vecbiuisize*sizeof(ha_cgetype));
     x0=(solve_real *) calloc (VecSize,sizeof(solve_real));//realloc (x0,*sizeof(ha_cgetype));
   }
-  PetscFree(submatD);
+  if(!dbbd_fastrefac)PetscFree(submatD);
   MPI_Barrier(PETSC_COMM_WORLD);
   if(SORD==1)MPI_Bcast(xd, vecbiuisize, MPI_DOUBLE,mpisize-1, PETSC_COMM_WORLD);
   else MPI_Bcast(xd, vecbiuisize, MPI_FLOAT,mpisize-1, PETSC_COMM_WORLD);
@@ -989,7 +1086,7 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
       for(j=ai[i]; j<nz; j++) {
         be0[i]+=vals[j]*xd[aj[j]];
       }
-      MatDestroy(&submatC[j1]);
+      if(!dbbd_fastrefac)MatDestroy(&submatC[j1]);
       if(insize[j1*insizes+16]!=la1)insize[j1*insizes+16]=la1;
       spec48m_esol_(insize+j1*insizes,irne,vale,keep,be0,biui0);
       if(!dbbd_fastrefac) {
@@ -1015,7 +1112,7 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
   }
   free(xi1);
   free(insize);
-  ierr = PetscFree(submatC);
+  if(!dbbd_fastrefac)ierr = PetscFree(submatC);
   free(begblock);
   logmsg(2,"Solution calculation rank %d time %f\n",rank,((double)clock()-timestr)/CLOCKS_PER_SEC);
   MPI_Barrier(PETSC_COMM_WORLD);
@@ -2148,15 +2245,18 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
     indicesB[j1]=i;
     j1++;
   }
+  /* this rank's [Istart,Iend) slice of the border rows; a rank owning
+     no border rows must yield an empty range, not stale j/j1 */
+  j=VecSize-sumrowcolin;
   for(i=0; i<VecSize-sumrowcolin; i++)if(indicesB[i]>=Istart) {
       j=i;
       break;
     }
-  for(j2=i; j2<VecSize-sumrowcolin; j2++)if(indicesB[j2]>=Iend) {
+  j1=VecSize-sumrowcolin;
+  for(j2=j; j2<VecSize-sumrowcolin; j2++)if(indicesB[j2]>=Iend) {
       j1=j2;
       break;
     }
-  if(j2==VecSize-sumrowcolin)j1=VecSize-sumrowcolin;
   logmsg(2,"rank %d j %d j1 %d istart %d iend %d\n",rank,j,j1,Istart,Iend);
   solve_real *vecbiui= (solve_real *) calloc (VecSize-sumrowcolin,sizeof(solve_real));
   VecGetValues(b,j1-j,&indicesB[j],&vecbiui[j]);//implicite yd save mem

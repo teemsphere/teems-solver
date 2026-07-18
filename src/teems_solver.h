@@ -334,6 +334,7 @@ void sbbd_fastrefac_free(void);
 /* -fastrefac DBBD per-block persistent factors (block_solve.c): the flag is
    read inside dbbd_solve, so all drivers inherit it */
 void dbbd_fastrefac_free(void);
+void dbbd_fastextract_free(void); /* persistent DBBD submatrix extraction (-fastrefac) */
 /* -fastrefac NDBBD regional-block persistent factors (block_solve.c):
    flag read inside the ndbbd paths; frees the whole ndbbd_fac store */
 void ndbbd_fastrefac_free(void);
