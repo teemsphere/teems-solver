@@ -752,6 +752,211 @@ SUBROUTINE SPEC48M_MSOL(INSIZE,IRN,JCN,VA,B,X,IRNC,JCNC,VAC,IRNB,JCNB,VALUESB,VE
 END SUBROUTINE SPEC48M_MSOL
 
 
+SUBROUTINE SPEC48M_MSOL_P(INSIZE,IRN,JCN,VA,B,X,IRNC,JCNC,VAC,IRNB,JCNB,VALUESB,VECBIVI,BIVINZROW0,BIVINZCOL0,KEEP,REDO)
+  ! Persistent-factor variant of SPEC48M_MSOL for the DBBD diagonal
+  ! blocks (-fastrefac).  REDO(1) on entry: 0 = full analyse+factorize
+  ! (IRN/JCN conversions + MA48A/AD + MA48B/BD JOB=1, as SPEC48M_MSOL);
+  ! 1 = VA(1:NE) refilled by the caller in CSR order, IRN/JCN/KEEP are
+  ! the persisted MA48 state, factorize with MA48B/BD JOB=2.  On exit:
+  ! 0 = factorized and border solves done, <0 = fast factorize declined
+  ! (MA48B/BD INFO(1)) BEFORE any border work — caller re-stages the
+  ! block and retries with 0.
+  use constants
+  IMPLICIT NONE
+
+  integer NEFAC,JOB
+  integer(4) JCN(*),IRN(*),INSIZE(*),BIVINZROW0(*),BIVINZCOL0(*),KEEP(*),REDO(*)
+  integer(4)IRNB(*),JCNB(*)
+  integer(4) JCNC(*),IRNC(*)
+  integer M,N,NE,T,NC,MC,NEC,RANK,J1
+  real(kind=DPC) VA(*),VAC(*),B(*),X(*),VALUESB(*),VECBIVI(*)
+  integer LA, MAXN,NBIVI,MBIVI
+  integer(4) I,J,L,L1,L2,L3,L4,L5,M0,M1,M2,M3,M4,M5,MB,NB,NEB,J2,J3
+  LOGICAL TRANS,checksol
+  real(kind=DPC), pointer :: CNTL(:),RINFO(:),W(:),ERROR1(:),SOL(:)
+  integer, pointer :: ICNTL(:),INFO(:),IW(:),JCNB1(:)
+  M=INSIZE(1)
+  N=INSIZE(2)
+  NE=INSIZE(3)
+  MC=INSIZE(4)
+  NC=INSIZE(5)
+  NEC=INSIZE(6)
+  MB=INSIZE(7)
+  NB=INSIZE(8)
+  NEB=INSIZE(9)
+  NEFAC=INSIZE(10)
+  RANK=INSIZE(11)
+  J1=INSIZE(12)
+  MBIVI=INSIZE(14)
+  NBIVI=INSIZE(15)
+  allocate(JCNB1(NEB))
+  JCNB1(1:NEB)=JCNB(1:NEB)+1
+  if(NEFAC.EQ.0) then
+    LA=2*NE
+  else
+    LA=ceiling((NEFAC/100.0)*NE)
+  endif
+  if(LA.NE.INSIZE(17)) then
+    LA=INSIZE(17)
+  end if
+  MAXN=N
+  IF (N.LT.M) THEN
+    MAXN=M
+  END IF
+  allocate(CNTL(10),RINFO(10),ERROR1(3),SOL(M))
+  allocate(ICNTL(20),INFO(20),IW(6*M+3*N))
+  IF (FSORD.EQ.1) THEN
+    CALL MA48ID(CNTL,ICNTL)
+  ELSE
+    CALL MA48I(CNTL,ICNTL)
+  ENDIF
+  ! errors only below debug verbosity (silences duplicate-entry notes)
+  if (teems_verbosity()<2) ICNTL(3)=1
+  ! blocks whose entries turn unsuitable for the kept pivot sequence
+  ! are refactorized as on a JOB=1 call
+  ICNTL(11)=1
+  T=M+5*N+4*N/ICNTL(6)+7
+  INSIZE(13)=T
+  IF (REDO(1).EQ.0) THEN
+    JCN(1:NE)=JCN(1:NE)+1
+    do J=1,M
+      L=J+NE
+      IRN((IRN(L)+1):IRN(L+1))=J
+    end do
+    IF (FSORD.EQ.1) THEN
+      CALL MA48AD(M,N,NE,1,LA,VA,IRN,JCN,KEEP,CNTL,ICNTL,IW,INFO,RINFO)
+    ELSE
+      CALL MA48A(M,N,NE,1,LA,VA,IRN,JCN,KEEP,CNTL,ICNTL,IW,INFO,RINFO)
+    ENDIF
+    IF (INFO(1).LT.0) THEN
+    WRITE (6,'(A,I3)') 'Error STOP from MA48A/AD with INFO(1) =',INFO(1)
+    STOP
+    END IF
+    deallocate(IW)
+    allocate(W(M),IW(2*M+2*N))
+    IF (FSORD.EQ.1) THEN
+      CALL MA48BD(M,N,NE,1,LA,VA,IRN,JCN,KEEP,CNTL,ICNTL,W,IW,INFO,RINFO)
+    else
+      CALL MA48B(M,N,NE,1,LA,VA,IRN,JCN,KEEP,CNTL,ICNTL,W,IW,INFO,RINFO)
+    ENDIF
+    IF (INFO(1).NE.0) THEN
+      WRITE (6,FMT='(A,I3/A)') 'STOP from MA48B/BD with INFO(1) =',&
+      INFO(1),'Solution not possible'
+      write(*,"(A,i5)") 'RANK',INFO(5)
+      STOP
+    END IF
+  ELSE
+    deallocate(IW)
+    allocate(W(M),IW(2*M+2*N))
+    IF (FSORD.EQ.1) THEN
+      CALL MA48BD(M,N,NE,2,LA,VA,IRN,JCN,KEEP,CNTL,ICNTL,W,IW,INFO,RINFO)
+    else
+      CALL MA48B(M,N,NE,2,LA,VA,IRN,JCN,KEEP,CNTL,ICNTL,W,IW,INFO,RINFO)
+    ENDIF
+    IF (INFO(1).LT.0) THEN
+      if (teems_verbosity()>=1) WRITE (6,'(A,I3)') &
+        'Note: fast block refactorize declined, MA48B/BD INFO(1) =',INFO(1)
+      REDO(1)=INFO(1)
+      deallocate(CNTL,RINFO,W,ERROR1,SOL,JCNB1)
+      deallocate(ICNTL,INFO,IW)
+      RETURN
+    END IF
+  END IF
+
+  JOB=1
+  deallocate(W,IW)
+  IF (JOB.EQ.1) THEN
+    allocate(W(2*MAXN))
+  else
+    allocate(W(4*MAXN))
+  END IF
+  allocate(IW(MAXN))
+  TRANS = .FALSE.
+  if(sum(abs(B(1:N))).GT.0) then
+    IF (FSORD.EQ.1) THEN
+      CALL MA48CD(N,N,TRANS,JOB,LA,VA,IRN,KEEP,CNTL,ICNTL,&
+              B,X,ERROR1,W,IW,INFO)
+    ELSE
+      CALL MA48C(N,N,TRANS,JOB,LA,VA,IRN,KEEP,CNTL,ICNTL,&
+              B,X,ERROR1,W,IW,INFO)
+    ENDIF
+  end if
+  L=0
+  TRANS = .FALSE.
+  do J=1,MC-1
+      J3=IRNC(J+1)-IRNC(J)
+    if(J3.GT.0) then
+      B(1:M)=0
+      do I=1,J3
+        L2=I+L
+        B(JCNC(L2)+1)=VAC(L2)
+      end do
+      L=L+J3
+      IF (FSORD.EQ.1) THEN
+        CALL MA48CD(N,N,TRANS,JOB,LA,VA,IRN,KEEP,CNTL,ICNTL,&
+                  B,SOL,ERROR1,W,IW,INFO)
+      else
+        CALL MA48C(N,N,TRANS,JOB,LA,VA,IRN,KEEP,CNTL,ICNTL,&
+                  B,SOL,ERROR1,W,IW,INFO)
+      ENDIF
+      do I=1,MB-1
+        if(IRNB(I).NE.IRNB(I+1)) then
+              L3=BIVINZCOL0(J)+BIVINZROW0(I)
+              DO j2=IRNB(I)+1,IRNB(I+1)
+                !$OMP ATOMIC
+                VECBIVI(L3)=VECBIVI(L3)-SOL(JCNB1(j2))*VALUESB(j2)
+              end do
+        end if
+      end do
+        if(IRNB(MB).NE.NEB) then
+              L3=BIVINZCOL0(J)+BIVINZROW0(MB)
+              do j2=IRNB(MB)+1,NEB
+                !$OMP ATOMIC
+                VECBIVI(L3)=VECBIVI(L3)-SOL(JCNB1(j2))*VALUESB(j2)
+              end do
+        end if
+    end if
+  end do
+
+  J=MC
+      J3=NEC-IRNC(J)
+    if(J3.GT.0) then
+      B(1:M)=0
+      do I=1,J3
+        L2=I+L
+        B(JCNC(L2)+1)=VAC(L2)
+      end do
+      L=L+J3
+      IF (FSORD.EQ.1) THEN
+        CALL MA48CD(N,N,TRANS,JOB,LA,VA,IRN,KEEP,CNTL,ICNTL,&
+                  B,SOL,ERROR1,W,IW,INFO)
+      ELSE
+        CALL MA48C(N,N,TRANS,JOB,LA,VA,IRN,KEEP,CNTL,ICNTL,&
+                  B,SOL,ERROR1,W,IW,INFO)
+      ENDIF
+      do I=1,MB-1
+        if(IRNB(I).NE.IRNB(I+1)) then
+              L3=BIVINZCOL0(J)+BIVINZROW0(I)
+              DO j2=IRNB(I)+1,IRNB(I+1)
+                !$OMP ATOMIC
+                VECBIVI(L3)=VECBIVI(L3)-SOL(JCNB1(j2))*VALUESB(j2)
+              end do
+        end if
+      end do
+        if(IRNB(MB).NE.NEB) then
+              L3=BIVINZCOL0(J)+BIVINZROW0(MB)
+              do j2=IRNB(MB)+1,NEB
+                !$OMP ATOMIC
+                VECBIVI(L3)=VECBIVI(L3)-SOL(JCNB1(j2))*VALUESB(j2)
+              end do
+        end if
+    end if
+  REDO(1)=0
+  deallocate(CNTL,RINFO,W,ERROR1,SOL,JCNB1)
+  deallocate(ICNTL,INFO,IW)
+END SUBROUTINE SPEC48M_MSOL_P
+
+
 SUBROUTINE SPEC48M_ESOL(INSIZE,IRN,VA,KEEP,B,SOL)
   use constants
   IMPLICIT NONE

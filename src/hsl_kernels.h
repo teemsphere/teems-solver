@@ -9,6 +9,7 @@ extern void spec48_ssol2la_p_(int *INSIZE,int *IRN, int *JCN, solve_real *VA, so
 extern void spec48_persist_free_(void);
 extern void spec48m_ssol2la_(int *INSIZE,int *IRN, int *JCN, solve_real *VA, solve_real *B, solve_real *X);
 extern void spec48m_msol_(int *INSIZE,int *IRN, int *JCN, solve_real *VA, solve_real *B, solve_real *X, PetscInt *IRNC, PetscInt *JCNC, PetscScalar *VAC,int *IRNB,int *JCNB,PetscScalar *VALUESB,solve_real *VECBIVI,int *bivinzrow0,int *bivinzcol0,int *KEEP);/* KEEP caller-allocated (bound M+9N+7, live length INSIZE[12]); factors VA/IRN/KEEP returned in place, no scratch files */
+extern void spec48m_msol_p_(int *INSIZE,int *IRN, int *JCN, solve_real *VA, solve_real *B, solve_real *X, PetscInt *IRNC, PetscInt *JCNC, PetscScalar *VAC,int *IRNB,int *JCNB,PetscScalar *VALUESB,solve_real *VECBIVI,int *bivinzrow0,int *bivinzcol0,int *KEEP,int *redo);/* persistent-factor variant (-fastrefac); redo inout: 0 full analyse, 1 MA48 JOB=2 on kept pivot sequence; out 0 ok, <0 declined before border work (re-stage and retry with 0) */
 extern void spec48m_esol_(int *INSIZE,int *IRN, solve_real *VA,int *KEEP, solve_real *B, solve_real *X);
 extern void spec48m_rpesol_(int *INSIZE,int *IRN, solve_real *VA,int *KEEP, solve_real *B, solve_real *X,solve_real *cntl,solve_real *rinfo,solve_real *error1,int *icntl,int *info,solve_real *w,int *iw);
 extern void spec48_single_(fortran_int *indata,int *irn, int *jcn,solve_real *b1, solve_real *values,solve_real *x1, int *neleperrow,int *ai1, MPI_Fint *fcomm);

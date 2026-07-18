@@ -12,6 +12,42 @@ static int ndbbd_fac_n=0;
 static int **ndbbd_fac_irn=NULL,**ndbbd_fac_keep=NULL;
 static solve_real **ndbbd_fac_va=NULL;
 
+/* ==== DBBD per-block persistent factors (-fastrefac) ====
+   The diagonal-block COO is a raw copy of the stored CSR (no zero
+   filter), so the pattern is structurally stable across steps: the
+   MA48 analyse runs once per block per solve and later steps
+   refactorize with MA48B/BD JOB=2 on the kept pivot sequence.
+   IRN/JCN/VA/KEEP persist here (they double as the within-step
+   factor handoff to the back-solve, replacing fac_* / scratch
+   files).  Slots are indexed by the rank-local block id; the OMP
+   factorization loop touches distinct slots. */
+static int **dfr_irn=NULL,**dfr_jcn=NULL,**dfr_keep=NULL;
+static solve_real **dfr_va=NULL;
+static PetscInt *dfr_nz=NULL;
+static int dfr_nblocks=0,dfr_ready=0;
+
+void dbbd_fastrefac_free(void) {
+  int i;
+  for(i=0; i<dfr_nblocks; i++) {
+    free(dfr_irn[i]);
+    free(dfr_jcn[i]);
+    free(dfr_keep[i]);
+    free(dfr_va[i]);
+  }
+  free(dfr_irn);
+  free(dfr_jcn);
+  free(dfr_keep);
+  free(dfr_va);
+  free(dfr_nz);
+  dfr_irn=NULL;
+  dfr_jcn=NULL;
+  dfr_keep=NULL;
+  dfr_va=NULL;
+  dfr_nz=NULL;
+  dfr_nblocks=0;
+  dfr_ready=0;
+}
+
 static void ndbbd_fac_init(int n) {
   int i;
   if(ndbbd_fac_n<n) {
@@ -302,6 +338,11 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
   PetscInt *indexBBi= (PetscInt *) calloc (BBrow,sizeof(PetscInt));
   for(i=0; i<BBrow; i++)indexBBi[i]=i;
   for(i=0; i<nmatin; i++) {
+    /* re-created with new handles below; the first-generation IS was
+       leaking here every step (only the second generation reached the
+       destroy loop) */
+    ierr = ISDestroy(&Bindices[i]);
+    CHKERRQ(ierr);
     ISCreateGeneral(PETSC_COMM_SELF,BBrow,indexBBi,PETSC_COPY_VALUES,Bindices+i);
   }
   ierr = MatCreateSubMatrices(submatBB[0],nmatin,Bindices,colindices,MAT_INITIAL_MATRIX,&submatB);
@@ -381,6 +422,22 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
   solve_real *vecbivi= (solve_real *) calloc (vecbivisize,sizeof(solve_real));
   logmsg(2,"vecbivisize %ld rank %d\n",vecbivisize,rank);
 
+  /* -fastrefac: per-block persistent factors; option read once */
+  static dim_t dbbd_fastrefac=-1;
+  if(dbbd_fastrefac<0) {
+    dbbd_fastrefac=0;
+    PetscOptionsGetInt(NULL,NULL,"-fastrefac",&dbbd_fastrefac,NULL);
+  }
+  if(dbbd_fastrefac&&dfr_nblocks!=nmatin) {
+    dbbd_fastrefac_free();
+    dfr_irn=(int**)calloc(nmatin,sizeof(int*));
+    dfr_jcn=(int**)calloc(nmatin,sizeof(int*));
+    dfr_keep=(int**)calloc(nmatin,sizeof(int*));
+    dfr_va=(solve_real**)calloc(nmatin,sizeof(solve_real*));
+    dfr_nz=(PetscInt*)calloc(nmatin,sizeof(PetscInt));
+    for(i=0; i<nmatin; i++)dfr_nz[i]=-1;
+    dfr_nblocks=nmatin;
+  }
   solve_real *xi1point;
   offset_t xi1indx=0;
   int jthrd,nthrd=1;
@@ -423,9 +480,35 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
       nrow=submatA[j1]->rmap->n;
       ncol=submatA[j1]->cmap->n;
       lasize=ceil((laA/100.0)*nz);
-      int *irn=(int *) calloc (lasize,sizeof(int));
-      int *jcn=(int *) calloc (lasize,sizeof(int));
-      solve_real *values= (solve_real *) calloc (lasize,sizeof(solve_real));
+      int *irn=NULL,*jcn=NULL;
+      solve_real *values=NULL;
+      int dfr_redo=0;
+      if(dbbd_fastrefac) {
+        if(dfr_ready&&dfr_nz[j1]==nz) {
+          /* pattern unchanged: refill values, keep the pivot sequence */
+          memcpy (dfr_va[j1],vals,nz*sizeof(solve_real));
+          dfr_redo=1;
+        }
+        else {
+          free(dfr_irn[j1]);
+          free(dfr_jcn[j1]);
+          free(dfr_keep[j1]);
+          free(dfr_va[j1]);
+          dfr_nz[j1]=nz;
+          dfr_irn[j1]=(int *) calloc (lasize,sizeof(int));
+          dfr_jcn[j1]=(int *) calloc (lasize,sizeof(int));
+          dfr_va[j1]=(solve_real *) calloc (lasize,sizeof(solve_real));
+          dfr_keep[j1]=(int *) calloc (nrow+9*ncol+7,sizeof(int));
+          memcpy (dfr_irn[j1]+nz,ai,(nrow+1)*sizeof(PetscInt));
+          memcpy (dfr_jcn[j1],aj,nz*sizeof(PetscInt));
+          memcpy (dfr_va[j1],vals,nz*sizeof(solve_real));
+        }
+      }
+      else {
+        irn=(int *) calloc (lasize,sizeof(int));
+        jcn=(int *) calloc (lasize,sizeof(int));
+        values= (solve_real *) calloc (lasize,sizeof(solve_real));
+      }
       insize[j1*insizes+13]=bivirowsize;
       insize[j1*insizes+14]=bivicolsize;
       insize[j1*insizes]=nrow;
@@ -439,12 +522,14 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
       ncolc=submatCT->cmap->n;
       insize[j1*insizes+3]=nrowc;
       insize[j1*insizes+4]=ncolc;
-      memcpy (irn+nz,ai,(nrow+1)*sizeof(PetscInt));
-      memcpy (jcn,aj,nz*sizeof(PetscInt));
-      memcpy (values,vals,nz*sizeof(solve_real));
+      if(!dbbd_fastrefac) {
+        memcpy (irn+nz,ai,(nrow+1)*sizeof(PetscInt));
+        memcpy (jcn,aj,nz*sizeof(PetscInt));
+        memcpy (values,vals,nz*sizeof(solve_real));
+        MatDestroy(&submatA[j1]);
+      }
       insize[j1*insizes+2]=nz;
       insize[j1*insizes+5]=nzc;
-      MatDestroy(&submatA[j1]);
       insize[j1*insizes+9]=laA;
       insize[j1*insizes+16]=lasize;
       insize[j1*insizes+10]=rank;
@@ -463,10 +548,29 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
       windx++;
       if(windx==eindx)windx=bindx;
       xi1point=xi1+xi1indx;
-      int *keep=(int *) calloc (nrow+9*ncol+7,sizeof(int));/* KEEP bound, ICNTL(6)=1; live length returned in insize[12] */
+      int *keep=NULL;
+      if(dbbd_fastrefac) {
+        int redo_io=dfr_redo;
+        spec48m_msol_p_(insize+j1*insizes,dfr_irn[j1],dfr_jcn[j1],dfr_va[j1],yi1[j1],xi1point,aic,ajc,valsc,ai,aj,vals,vecbivi,bivinzrow,bivinzcol,dfr_keep[j1],&redo_io);
+        if(redo_io<0) {
+          /* fast refactorize declined: re-stage the block from the
+             still-live submatrix and redo the analyse */
+          Mat_SeqAIJ *aa2=(Mat_SeqAIJ*)submatA[j1]->data;
+          memcpy (dfr_irn[j1]+dfr_nz[j1],aa2->i,(nrow+1)*sizeof(PetscInt));
+          memcpy (dfr_jcn[j1],aa2->j,dfr_nz[j1]*sizeof(PetscInt));
+          memcpy (dfr_va[j1],aa2->a,dfr_nz[j1]*sizeof(solve_real));
+          redo_io=0;
+          spec48m_msol_p_(insize+j1*insizes,dfr_irn[j1],dfr_jcn[j1],dfr_va[j1],yi1[j1],xi1point,aic,ajc,valsc,ai,aj,vals,vecbivi,bivinzrow,bivinzcol,dfr_keep[j1],&redo_io);
+        }
+        MatDestroy(&submatA[j1]);
+      }
+      else {
+      keep=(int *) calloc (nrow+9*ncol+7,sizeof(int));/* KEEP bound, ICNTL(6)=1; live length returned in insize[12] */
       spec48m_msol_(insize+j1*insizes,irn,jcn,values,yi1[j1],xi1point,aic,ajc,valsc,ai,aj,vals,vecbivi,bivinzrow,bivinzcol,keep);
+      }
       MatDestroy(&submatCT);
       free(yi1[j1]);
+      if(!dbbd_fastrefac) {
       free(jcn);
       if(inmemory) {
         fac_irn[j1]=irn;
@@ -488,6 +592,7 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
         free(keep);
         free(values);
       }
+      }
       //Multiply Bi by ui:
       for(i=0; i<nrowb-1; i++) {
         for(j=ai[i]; j<ai[i+1]; j++) {
@@ -506,6 +611,7 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
     }
   }
   }
+  if(dbbd_fastrefac)dfr_ready=1;
   free(nthrds);
   free(nthrds1);
   free(bivinzcol);
@@ -525,7 +631,10 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
     if(vecbivi[li]!=0)lj++;
   }
   }
-  long int *obiviindx1,*biviindx1,*obiviindx0,*biviindx0;
+  /* first touch of these is realloc: they must start NULL (the NDBBD
+     copy of this block already had the fix; an indeterminate pointer
+     here is a latent glibc invalid-pointer abort) */
+  long int *obiviindx1=NULL,*biviindx1=NULL,*obiviindx0=NULL,*biviindx0=NULL;
   obiviindx1=realloc(obiviindx1,(lj+1)*sizeof(long int));
   obiviindx1[0]=-1;
   biviindx1=obiviindx1;
@@ -790,7 +899,12 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
       int *irne,*keep;
       solve_real *vale;
       la1=ceil((insize[j1*insizes+9]/100.0)*insize[j1*insizes+2]);
-      if(inmemory) {
+      if(dbbd_fastrefac) {
+        irne=dfr_irn[j1];
+        keep=dfr_keep[j1];
+        vale=dfr_va[j1];
+      }
+      else if(inmemory) {
         irne=fac_irn[j1];
         keep=fac_keep[j1];
         vale=fac_va[j1];
@@ -834,6 +948,7 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
       MatDestroy(&submatC[j1]);
       if(insize[j1*insizes+16]!=la1)insize[j1*insizes+16]=la1;
       spec48m_esol_(insize+j1*insizes,irne,vale,keep,be0,biui0);
+      if(!dbbd_fastrefac) {
       free(irne);
       free(keep);
       free(vale);
@@ -841,6 +956,7 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
         fac_irn[j1]=NULL;
         fac_keep[j1]=NULL;
         fac_va[j1]=NULL;
+      }
       }
       free(be0);
       ISGetIndices(colindices[j1],&nindices);

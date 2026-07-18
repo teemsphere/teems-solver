@@ -1872,6 +1872,7 @@ int main(int argc,char **args) {
   backsolve_cache_free();
   lu_fastrefac_free();
   sbbd_fastrefac_free();
+  dbbd_fastrefac_free();
   free(backsolves);
 
 

@@ -452,7 +452,7 @@ Workspace sizing: `laA`, `laDi`, `laD` scale factor/workspace sizes as
 `ceil(la/100 × nnz)`; too small → factorization failure (increase and
 re-run). teems-R defaults 300/500/200.
 
-Persistent refactorize (`-fastrefac 1`, sequential LU and SBBD): the
+Persistent refactorize (`-fastrefac 1`; sequential LU, SBBD and DBBD): the
 Jacobian's stored sparsity pattern is fixed across steps, so the
 analyse work runs once per solve and every later step/stage
 refactorizes on the kept pivot sequences. Sequential LU keeps the MA48
@@ -470,13 +470,20 @@ must stay in the pattern. On the LU path `laA` is self-sizing: an MA48
 suggests (doubling floor, six-attempt cap) instead of aborting, and the
 grown size persists for the rest of the solve. Measured (Gragg 2-4-8,
 17 factorization cycles): 1.35M static LU −72% wall / +21% RSS; 4.36M
-intertemporal SBBD-2 −36% wall / +28% RSS; 202k SBBD-2 −25%. Off by
-default; results shift only within factorization rounding (the
+intertemporal SBBD-2 −36% wall / +28% RSS; 202k SBBD-2 −25%. DBBD keeps
+per-diagonal-block persistent factors: each block's COO is a raw copy
+of its stored CSR (pattern structurally stable), so the per-block
+analyse runs once and later steps refactorize with `MA48B/BD JOB=2`;
+the persistent arrays double as the within-step factor handoff to the
+back-solve (no scratch files under the flag). The interface problem is
+factorized fresh every step in all bordered methods — its pattern is
+assembled from value-dependent products and may legitimately change
+between steps. NDBBD keeps the per-step path (the same per-block
+pattern applies but is queued behind the bordered-methods audit:
+presolve/solve phase split and the disk-backed factor store interact).
+Off by default; results shift only within factorization rounding (the
 analyse-state pivot sequences applied at other step states), bounded by
-the usual cross-method noise floors. DBBD/NDBBD keep the per-step path
-(per-block persistence is queued with the bordered-methods audit — the
-interface problem's pattern there is value-dependent, so the
-pattern-stability precondition needs per-step verification).
+the usual cross-method noise floors.
 
 ## 7. Parallelism
 
@@ -641,7 +648,7 @@ method (basis of the golden-run verification, below).
 | `-step1/-step2/-step3` | 2/4/8 | Gragg step counts (all odd or all even) |
 | `-nsubints n` | 1 | shock subintervals |
 | `-laA/-laDi/-laD n` | 2 (teems-R: 300/500/200) | workspace sizing, % of nnz |
-| `-fastrefac {0,1}` | 0 | sequential LU: analyse once, MA48 JOB=2 refactorize per step; auto-grows `laA` (§6) |
+| `-fastrefac {0,1}` | 0 | LU/SBBD/DBBD: analyse once, fast refactorize per step (MA48 JOB=2 / MP48 FACT_JOB=2); LU auto-grows `laA` (§6) |
 | `-cntl_3 x` | — | HSL iterative-refinement threshold |
 | `-cntl_6 x` | 0 | MA50 ordering control |
 | `-withmc66 {0,1}` | 0 | MC66 ordering for SBBD |

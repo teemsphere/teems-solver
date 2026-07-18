@@ -331,6 +331,9 @@ void lu_fastrefac_free(void); /* release persistent LU state after the solve dis
    refactorize with FACT_JOB=2.  Collective — all ranks call both. */
 void sbbd_fastrefac_solve(Mat *A,Vec *vecb,PetscInt VecSize,PetscInt rank,PetscInt rank_hsl,fortran_int *indata,MPI_Fint fcomm,offset_t *counteq,offset_t *countvarintra1,solve_real *x);
 void sbbd_fastrefac_free(void);
+/* -fastrefac DBBD per-block persistent factors (block_solve.c): the flag is
+   read inside dbbd_solve, so all drivers inherit it */
+void dbbd_fastrefac_free(void);
 /* Recover the backsolved variables' per-step values from their retained
    defining equations (GEMPACK 14.1.3: after the condensed solve, before
    the data updates).  x = this step's solution vector; exo_z = per-element
