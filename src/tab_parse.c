@@ -2862,7 +2862,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
 
 int sets_read(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,dim_t nset) {
   FILE * filehandle;//, *fileout;
-  char line[TABREADLINE]="\0",linecopy[TABREADLINE],line1[TABREADLINE];
+  char line[TABREADLINE]="\0",linecopy[TABREADLINE],line1[TABREADLINE],line2[TABREADLINE];
   char longname[TABREADLINE],tempvar[256];
   char *commsyntax="set";
   dim_t j=0,vsize,dim1,i;
@@ -2894,10 +2894,14 @@ int sets_read(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,
     } else {
       if (strchr(line,'=')!=NULL) {
         str_replace_all(line,"union", "^");
+        /* tokenize line2, not line1: the strtok(NULL,...) tokens below
+           stay live inside the buffer while line1 is rebuilt in place —
+           tokenizing line1 made those strcat(line1,readitem) calls
+           overlapping copies */
         readitem = &line[4];
-        strcpy(line1,readitem);
-        while (str_replace_all(line1," ", ""));
-        readitem = strtok(line1,"=");
+        strcpy(line2,readitem);
+        while (str_replace_all(line2," ", ""));
+        readitem = strtok(line2,"=");
         strcpy(record[j].setname,readitem);
         /* GEMPACK set expressions (manual 10.1.1.1): UNION, INTERSECT,
            '+', '-' and '\' over already-declared sets and quoted
@@ -3091,7 +3095,7 @@ int sets_read(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,
 }
 
 dim_t set_union_named(set_element *set_elems, set_def *sets,dim_t nset,dim_t i) {
-  dim_t j,l,n,m,dim1=0,dim2=0,j1,sup1,sup2;
+  dim_t j,l,n,m,dim1=0,dim2=0,j1,sup1=MAXSUPSET,sup2=MAXSUPSET;
   char line[TABREADLINE],*readitem;
   strcpy(line,sets[i].readele);
   readitem = strtok(line,",");
@@ -3106,6 +3110,7 @@ dim_t set_union_named(set_element *set_elems, set_def *sets,dim_t nset,dim_t i) 
       break;
     }
   }
+  if(sup1>=MAXSUPSET){printf("Error: superset size exceeded; increase MAXSUPSET in teems_solver.h\n");return 0;}
   m=0;
   for (n=0; n<dim1; n++) {
     strcpy(set_elems[sets[i].offset+m].setele,set_elems[sets[l].offset+n].setele);
@@ -3124,6 +3129,7 @@ dim_t set_union_named(set_element *set_elems, set_def *sets,dim_t nset,dim_t i) 
       break;
     }
   }
+  if(sup2>=MAXSUPSET){printf("Error: superset size exceeded; increase MAXSUPSET in teems_solver.h\n");return 0;}
   for (n=0; n<dim2; n++) {
     for (j1=0; j1<dim1; j1++) if(strcmp(set_elems[sets[l].offset+j1].setele,set_elems[sets[j].offset+n].setele)==0) break;
     if(j1==dim1) {
@@ -3139,7 +3145,7 @@ dim_t set_union_named(set_element *set_elems, set_def *sets,dim_t nset,dim_t i) 
   return m;
 }
 dim_t set_union_op(set_element *set_elems, set_def *sets,dim_t nset,dim_t i) {
-  dim_t j,l,n,m,dim1=0,dim2=0,j1,sup1,sup2;
+  dim_t j,l,n,m,dim1=0,dim2=0,j1,sup1=MAXSUPSET,sup2=MAXSUPSET;
   char line[TABREADLINE],*readitem;
   strcpy(line,sets[i].readele);
   readitem = strtok(line,",");
@@ -3154,6 +3160,7 @@ dim_t set_union_op(set_element *set_elems, set_def *sets,dim_t nset,dim_t i) {
       break;
     }
   }
+  if(sup1>=MAXSUPSET){printf("Error: superset size exceeded; increase MAXSUPSET in teems_solver.h\n");return 0;}
   m=0;
   for (n=0; n<dim1; n++) {
     strcpy(set_elems[sets[i].offset+m].setele,set_elems[sets[l].offset+n].setele);
@@ -3172,6 +3179,7 @@ dim_t set_union_op(set_element *set_elems, set_def *sets,dim_t nset,dim_t i) {
       break;
     }
   }
+  if(sup2>=MAXSUPSET){printf("Error: superset size exceeded; increase MAXSUPSET in teems_solver.h\n");return 0;}
   for (n=0; n<dim2; n++) {
     strcpy(set_elems[sets[i].offset+m].setele,set_elems[sets[j].offset+n].setele);
     set_elems[sets[i].offset+m].superset_pos[0]=m;

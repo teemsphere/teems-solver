@@ -167,9 +167,9 @@ static void sum_prog_eval(sum_prog *sp, set_def *sets, set_element *set_elems, e
   #pragma omp parallel private(l,l1,l2,dcount,superset_pos,vval,arSet2,ops1) shared(elem_vals,sum_vals,sp)
   {
   if(omp_get_thread_num()!=0){
-    arSet2=realloc(arSet2,(sp->nouter+1)*sizeof(quantifier));
+    arSet2=malloc((sp->nouter+1)*sizeof(quantifier));
     memcpy(arSet2,sp->arSet,(sp->nouter+1)*sizeof(quantifier));
-    ops1=realloc(ops1,sp->nops*sizeof(formula_op));
+    ops1=malloc(sp->nops*sizeof(formula_op));
     memcpy(ops1,sp->ops,sp->nops*sizeof(formula_op));
   }else{
     ops1=sp->ops;
@@ -266,9 +266,9 @@ static void stmt_prog_execute(stmt_prog *st, offset_t matrow, offset_t *eq_addr,
     #pragma omp parallel private(lj,Jindx,i3,sj,i5,l2,dcount,l1,li3,Iindx,arSet1,ops1,vval) shared(elem_vals,st,lv,closure_vals,vars,eq_addr)
     {
     if(omp_get_thread_num()!=0){
-      arSet1=realloc(arSet1,lv->fdimlin*sizeof(quantifier));
+      arSet1=malloc(lv->fdimlin*sizeof(quantifier));
       memcpy(arSet1,lv->arSet,lv->fdimlin*sizeof(quantifier));
-      ops1=realloc(ops1,lv->nops*sizeof(formula_op));
+      ops1=malloc(lv->nops*sizeof(formula_op));
       memcpy(ops1,lv->ops,lv->nops*sizeof(formula_op));
     }else{
       ops1=lv->ops;
@@ -941,9 +941,9 @@ static void bs_prog_execute(bs_prog *bp, set_def *sets, set_element *set_elems,
     #pragma omp parallel private(lj,i5,l2,dcount,l1,li3,gidx,arSet1,ops1,vval) shared(elem_vals,st,lv,closure_vals,vars,acc,piv,pivelem,x,exo_z,bp,bd,pivbad)
     {
     if(omp_get_thread_num()!=0){
-      arSet1=realloc(arSet1,lv->fdimlin*sizeof(quantifier));
+      arSet1=malloc(lv->fdimlin*sizeof(quantifier));
       memcpy(arSet1,lv->arSet,lv->fdimlin*sizeof(quantifier));
-      ops1=realloc(ops1,lv->nops*sizeof(formula_op));
+      ops1=malloc(lv->nops*sizeof(formula_op));
       memcpy(ops1,lv->ops,lv->nops*sizeof(formula_op));
     }else{
       ops1=lv->ops;
@@ -2094,7 +2094,7 @@ int equation_order_read(char *fname, char *commsyntax,set_def *sets,dim_t nset,s
               linvarrcount[i4]=true;
               continue;
             }
-            if(strcmp(LinVars[i4].dimnames[orderreg[LinVars[i4].LinVarIndx]],arSet[eq_orderreg[eqindx]].index_name)!=0&&!var_inter[LinVars[i4].LinVarIndx]) {
+            if((orderreg[LinVars[i4].LinVarIndx]<0||strcmp(LinVars[i4].dimnames[orderreg[LinVars[i4].LinVarIndx]],arSet[eq_orderreg[eqindx]].index_name)!=0)&&!var_inter[LinVars[i4].LinVarIndx]) {
               nelem+=vars[LinVars[i4].LinVarIndx].nelem;
               l01=0;
               for(j01=0; j01<vars[LinVars[i4].LinVarIndx].nelem; j01++)if(closure_vals[vars[LinVars[i4].LinVarIndx].offset+j01].is_exogenous)l01++;
@@ -2106,7 +2106,7 @@ int equation_order_read(char *fname, char *commsyntax,set_def *sets,dim_t nset,s
           if(nelem>=eq_defs[eqindx].nelem)eq_intertemp[eqindx]=true;
           else {
             for(i4=0; i4<nlinvars; i4++)
-              if(strcmp(LinVars[i4].dimnames[orderreg[LinVars[i4].LinVarIndx]],arSet[eq_orderreg[eqindx]].index_name)!=0&&!var_inter[LinVars[i4].LinVarIndx]) {
+              if((orderreg[LinVars[i4].LinVarIndx]<0||strcmp(LinVars[i4].dimnames[orderreg[LinVars[i4].LinVarIndx]],arSet[eq_orderreg[eqindx]].index_name)!=0)&&!var_inter[LinVars[i4].LinVarIndx]) {
                 var_inter[LinVars[i4].LinVarIndx]=true;
               }
           }
@@ -2461,7 +2461,7 @@ int equation_order_read_nested(char *fname, char *commsyntax,set_def *sets,dim_t
             linvarrcount[i4]=true;
             continue;
           }
-          if(strcmp(LinVars[i4].dimnames[orderreg[LinVars[i4].LinVarIndx]],arSet[eq_orderreg[eqindx]].index_name)!=0&&orderreg[LinVars[i4].LinVarIndx]!=-1) {
+          if(orderreg[LinVars[i4].LinVarIndx]!=-1&&strcmp(LinVars[i4].dimnames[orderreg[LinVars[i4].LinVarIndx]],arSet[eq_orderreg[eqindx]].index_name)!=0) {
             l01=0;
             for(j01=0; j01<vars[LinVars[i4].LinVarIndx].nelem; j01++)if(closure_vals[vars[LinVars[i4].LinVarIndx].offset+j01].is_exogenous)l01++;
             nelem+=vars[LinVars[i4].LinVarIndx].nelem-l01;
@@ -2472,7 +2472,7 @@ int equation_order_read_nested(char *fname, char *commsyntax,set_def *sets,dim_t
         if(nelem>=eq_defs[eqindx].nelem)eq_orderreg[eqindx]=-1;//printf("OOOOOOOOOOOOOOOOO\n");}
         else {
           for(i4=0; i4<nlinvars; i4++)
-            if(strcmp(LinVars[i4].dimnames[orderreg[LinVars[i4].LinVarIndx]],arSet[eq_orderreg[eqindx]].index_name)!=0&&orderreg[LinVars[i4].LinVarIndx]!=-1) {
+            if(orderreg[LinVars[i4].LinVarIndx]!=-1&&strcmp(LinVars[i4].dimnames[orderreg[LinVars[i4].LinVarIndx]],arSet[eq_orderreg[eqindx]].index_name)!=0) {
               orderreg[LinVars[i4].LinVarIndx]=-1;//orderintra[LinVars[i4].LinVarIndx]=-1;
             }
         }
@@ -2754,7 +2754,9 @@ int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,
           for (dcount=eq_time[eqindx]-1; dcount>-1; dcount--) {
             dcountdim3[dcount]=dcountdim1[dcount]/sets[arSet[eq_time[eqindx]].setid].size;
           }
-          for (dcount=fdim-1; dcount>eq_time[eqindx]-1; dcount--) {
+          /* dcount>-1: eq_time==-1 ran one extra iteration writing
+             dcountdim3[-1] (stack scribble) */
+          for (dcount=fdim-1; dcount>eq_time[eqindx]-1&&dcount>-1; dcount--) {
             dcountdim3[dcount]=dcountdim1[dcount];
           }
         }
@@ -2762,7 +2764,9 @@ int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,
           for (dcount=eq_reg[eqindx]-1; dcount>-1; dcount--) {
             dcountdim4[dcount]=dcountdim1[dcount]/sets[arSet[eq_reg[eqindx]].setid].size;
           }
-          for (dcount=fdim-1; dcount>eq_reg[eqindx]-1; dcount--) {
+          /* dcount>-1: eq_reg==-1 ran one extra iteration writing
+             dcountdim4[-1] (stack scribble; ASan-confirmed on nsub-dbbd) */
+          for (dcount=fdim-1; dcount>eq_reg[eqindx]-1&&dcount>-1; dcount--) {
             dcountdim4[dcount]=dcountdim1[dcount];
           }
         }
@@ -2904,7 +2908,7 @@ int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,
                 if(arSet[eq_time[eqindx]].setid==alltimeset)
                   Jindx=counteq1[(set_elems[sets[arSet[eq_time[eqindx]].setid].offset+ltime].superset_pos[0])*sets[arSet[eq_reg[eqindx]].setid].size+set_elems[sets[arSet[eq_reg[eqindx]].setid].offset+lreg].superset_pos[0]]+rowindx;
                 else {
-                  for(i4=1; i4<MAXSUPSET; i4++)if(sets[arSet[eq_time[eqindx]].setid].subsetid[i4]=alltimeset)break;
+                  for(i4=1; i4<MAXSUPSET; i4++)if(sets[arSet[eq_time[eqindx]].setid].subsetid[i4]==alltimeset)break;
                   Jindx=counteq1[(set_elems[sets[arSet[eq_time[eqindx]].setid].offset+ltime].superset_pos[i4])*sets[arSet[eq_reg[eqindx]].setid].size+set_elems[sets[arSet[eq_reg[eqindx]].setid].offset+lreg].superset_pos[0]]+rowindx;
                 }
               }
@@ -2913,7 +2917,7 @@ int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,
               if(arSet[eq_time[eqindx]].setid==alltimeset)
                 Jindx=counteq1[set_elems[sets[arSet[eq_time[eqindx]].setid].offset+ltime].superset_pos[0]]+rowindx;
               else {
-                for(i4=1; i4<MAXSUPSET; i4++)if(sets[arSet[eq_time[eqindx]].setid].subsetid[i4]=alltimeset)break;
+                for(i4=1; i4<MAXSUPSET; i4++)if(sets[arSet[eq_time[eqindx]].setid].subsetid[i4]==alltimeset)break;
                 Jindx=counteq1[set_elems[sets[arSet[eq_time[eqindx]].setid].offset+ltime].superset_pos[i4]]+rowindx;
               }
             }
@@ -2959,7 +2963,7 @@ int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,
                   counteq1[set_elems[sets[arSet[eq_time[eqindx]].setid].offset+lj].superset_pos[0]*sets[arSet[eq_reg[eqindx]].setid].size+set_elems[sets[arSet[eq_reg[eqindx]].setid].offset+l2].superset_pos[0]]+=nloops/sets[arSet[eq_time[eqindx]].setid].size/sets[arSet[eq_reg[eqindx]].setid].size;
             else {
               for(lj=0; lj<sets[arSet[eq_time[eqindx]].setid].size; lj++)for(l2=0; l2<sets[arSet[eq_reg[eqindx]].setid].size; l2++) {
-                  for(i4=1; i4<MAXSUPSET; i4++)if(sets[arSet[eq_time[eqindx]].setid].subsetid[i4]=alltimeset)break;
+                  for(i4=1; i4<MAXSUPSET; i4++)if(sets[arSet[eq_time[eqindx]].setid].subsetid[i4]==alltimeset)break;
                   counteq1[set_elems[sets[arSet[eq_time[eqindx]].setid].offset+lj].superset_pos[i4]*sets[arSet[eq_reg[eqindx]].setid].size+set_elems[sets[arSet[eq_reg[eqindx]].setid].offset+l2].superset_pos[0]]+=nloops/sets[arSet[eq_time[eqindx]].setid].size/sets[arSet[eq_reg[eqindx]].setid].size;
                 }
             }
@@ -2969,7 +2973,7 @@ int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,
           if(arSet[eq_time[eqindx]].setid==alltimeset)
             for(lj=0; lj<sets[arSet[eq_time[eqindx]].setid].size; lj++)counteq1[set_elems[sets[arSet[eq_time[eqindx]].setid].offset+lj].superset_pos[0]]+=nloops/sets[arSet[eq_time[eqindx]].setid].size;
           else {
-            for(i4=1; i4<MAXSUPSET; i4++)if(sets[arSet[eq_time[eqindx]].setid].subsetid[i4]=alltimeset)break;
+            for(i4=1; i4<MAXSUPSET; i4++)if(sets[arSet[eq_time[eqindx]].setid].subsetid[i4]==alltimeset)break;
             for(lj=0; lj<sets[arSet[eq_time[eqindx]].setid].size; lj++)counteq1[set_elems[sets[arSet[eq_time[eqindx]].setid].offset+lj].superset_pos[i4]]+=nloops/sets[arSet[eq_time[eqindx]].setid].size;
           }
         }

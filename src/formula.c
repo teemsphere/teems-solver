@@ -1698,9 +1698,9 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
         #pragma omp parallel private(l,l2,i4,dcount,i3,i1,arSet1,logi,index,eval,ops1) shared(elem_vals,arSet)
         {
         if(omp_get_thread_num()!=0){
-          arSet1=realloc(arSet1,(fdim+1)*sizeof(quantifier));
+          arSet1=malloc((fdim+1)*sizeof(quantifier));
           memcpy (arSet1,arSet,(fdim+1)*sizeof(quantifier));
-          ops1=realloc(ops1,(npow+nmul+nplu+2*(npar+2))*sizeof(formula_op));
+          ops1=malloc((npow+nmul+nplu+2*(npar+2))*sizeof(formula_op));
           memcpy (ops1,ops,(npow+nmul+nplu+2*(npar+2))*sizeof(formula_op));
         }else{
           ops1=ops;
@@ -1770,9 +1770,9 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
         #pragma omp parallel private(l,l2,i4,dcount,i3,i1,arSet1,ops1) shared(elem_vals,arSet)
         {
         if(omp_get_thread_num()!=0){
-          arSet1=realloc(arSet1,(fdim+1)*sizeof(quantifier));
+          arSet1=malloc((fdim+1)*sizeof(quantifier));
           memcpy (arSet1,arSet,(fdim+1)*sizeof(quantifier));
-          ops1=realloc(ops1,(npow+nmul+nplu+2*(npar+2))*sizeof(formula_op));
+          ops1=malloc((npow+nmul+nplu+2*(npar+2))*sizeof(formula_op));
           memcpy (ops1,ops,(npow+nmul+nplu+2*(npar+2))*sizeof(formula_op));
         }else{
           ops1=ops;
@@ -1980,7 +1980,8 @@ offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_el
     totalsum=sum_count(readitem,sumsyntax);
     sum_def *sum_cof= (sum_def *) calloc (totalsum,sizeof(sum_def));
     sumcount=0;
-    strcpy(line1,readitem);
+    /* readitem aliases line1 on the non-explicit branches above */
+    if (readitem!=line1) strcpy(line1,readitem);
     strcpy(line2,line1);
     readitem=line2;
     while (sum_parse(readitem,sumsyntax,sum_cof,arSet,sets,nset,fdim,sumcount)==1) {
@@ -2072,9 +2073,9 @@ offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_el
         #pragma omp parallel private(l,l2,i4,dcount,i3,i1,temp1,temp2,arSet1,ops1) shared(elem_vals,arSet)
         {
         if(omp_get_thread_num()!=0){
-          arSet1=realloc(arSet1,(fdim+1)*sizeof(quantifier));
+          arSet1=malloc((fdim+1)*sizeof(quantifier));
           memcpy (arSet1,arSet,(fdim+1)*sizeof(quantifier));
-          ops1=realloc(ops1,nops*sizeof(formula_op));
+          ops1=malloc(nops*sizeof(formula_op));
           memcpy (ops1,ops,nops*sizeof(formula_op));
         }else{
           ops1=ops;
@@ -2285,7 +2286,8 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
     totalsum=sum_count(readitem,sumsyntax);
     sum_def *sum_cof= (sum_def *) calloc (totalsum,sizeof(sum_def));
     sumcount=0;
-    strcpy(line1,readitem);
+    /* readitem aliases line1 on the non-explicit branches above */
+    if (readitem!=line1) strcpy(line1,readitem);
     strcpy(line2,line1);
     readitem=line2;
     while (sum_parse(readitem,sumsyntax,sum_cof,arSet,sets,nset,fdim,sumcount)==1) {
@@ -2377,9 +2379,9 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
         #pragma omp parallel private(l,l2,i4,dcount,i3,i1,temp1,arSet1,ops1) shared(elem_vals,arSet)
         {
         if(omp_get_thread_num()!=0){
-          arSet1=realloc(arSet1,(fdim+1)*sizeof(quantifier));
+          arSet1=malloc((fdim+1)*sizeof(quantifier));
           memcpy (arSet1,arSet,(fdim+1)*sizeof(quantifier));
-          ops1=realloc(ops1,nops*sizeof(formula_op));
+          ops1=malloc(nops*sizeof(formula_op));
           memcpy (ops1,ops,nops*sizeof(formula_op));
         }else{
           ops1=ops;
@@ -2537,9 +2539,9 @@ int sum_eval(char *formulain, char *commsyntax,set_def *sets,dim_t nset, set_ele
         #pragma omp parallel private(l,l1,l2,dcount,superset_pos,vval,arSet2,ops1) shared(elem_vals,arSet,sum_vals)
         {
         if(omp_get_thread_num()!=0){
-          arSet2=realloc(arSet2,arsetsize*sizeof(quantifier));
+          arSet2=malloc(arsetsize*sizeof(quantifier));
           memcpy(arSet2,arSet,arsetsize*sizeof(quantifier));
-          ops1=realloc(ops1,nops*sizeof(formula_op));
+          ops1=malloc(nops*sizeof(formula_op));
           memcpy(ops1,ops,nops*sizeof(formula_op));
         }else{
           ops1=ops;
@@ -2628,9 +2630,9 @@ int sum_eval(char *formulain, char *commsyntax,set_def *sets,dim_t nset, set_ele
         #pragma omp parallel private(l,l1,l2,dcount,superset_pos,vval,arSet2,ops1) shared(elem_vals,arSet,sum_vals)
         {
         if(omp_get_thread_num()!=0){
-          arSet2=realloc(arSet2,arsetsize*sizeof(quantifier));
+          arSet2=malloc(arsetsize*sizeof(quantifier));
           memcpy(arSet2,arSet,arsetsize*sizeof(quantifier));
-          ops1=realloc(ops1,nops*sizeof(formula_op));
+          ops1=malloc(nops*sizeof(formula_op));
           memcpy(ops1,ops,nops*sizeof(formula_op));
         }else{
           ops1=ops;

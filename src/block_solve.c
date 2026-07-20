@@ -764,6 +764,7 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
   logmsg(2,"Completed calculation of partitioned matrices, rank %d\n",rank);
   timestr=clock();
 
+  lj=0; /* reduction adds thread sums to the ORIGINAL lj - must not be stack garbage */
   #pragma omp parallel private(li) reduction(+:lj)
   {
   lj=0;
@@ -2717,7 +2718,8 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
       memcpy(&aj12[ai12[i]],&a1j[a1i[i]],(a1i[i+1]-a1i[i])*sizeof(PetscInt));
       memcpy(&vals12[ai12[i]],&val1s[a1i[i]],(a1i[i+1]-a1i[i])*sizeof(PetscScalar));
       j2=ai12[i]+a1i[i+1]-a1i[i];
-      memcpy(&vals12[j2],&val2s[a2i[i]],(a2i[i+1]-a2i[i])*sizeof(PetscScalar));
+      /* val2s is NULL when the B2 block is empty (zero-length copy) */
+      if(a2i[i+1]>a2i[i])memcpy(&vals12[j2],&val2s[a2i[i]],(a2i[i+1]-a2i[i])*sizeof(PetscScalar));
       for(j=a2i[i]; j<a2i[i+1]; j++)aj12[j2+j-a2i[i]]=a2j[j]+ncolb;
     }
     ai12[i]=a1i[i]+a2i[i];
@@ -2727,7 +2729,7 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
     memcpy(&vals12[ai12[i]],&val1s[a1i[i]],(nz-a1i[i])*sizeof(PetscScalar));
     j2=ai12[i]+nz-a1i[i];
     nz=a2b->nz;
-    memcpy(&vals12[j2],&val2s[a2i[i]],(nz-a2i[i])*sizeof(PetscScalar));
+    if(nz>a2i[i])memcpy(&vals12[j2],&val2s[a2i[i]],(nz-a2i[i])*sizeof(PetscScalar));
     for(j=a2i[i]; j<nz; j++)aj12[j2+j-a2i[i]]=a2j[j]+ncolb;
     nz=nz+a1b->nz;
     ncolb=ncolb+submatB2[j1][0]->cmap->n;
@@ -2831,6 +2833,7 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
   logmsg(2,"Completed calculation of partitioned matrices, rank %d\n",rank);
   timestr=clock();
 
+  lj=0; /* reduction adds thread sums to the ORIGINAL lj - must not be stack garbage */
   #pragma omp parallel private(li) reduction(+:lj)
   {
   lj=0;

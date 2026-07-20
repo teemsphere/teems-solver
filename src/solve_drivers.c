@@ -171,7 +171,7 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
   char tempfilenam[256],tempchar[256];
   PetscScalar value,*vals=NULL;
   PetscErrorCode ierr;
-  PetscInt count,nz01,*ai=NULL,*aj=NULL;
+  PetscInt count=0,nz01=0,*ai=NULL,*aj=NULL; /* stay 0 on ranks != rank_hsl */
   fortran_int k=0,m=1;
   offset_t i,j,lasize;
   solve_real *b1=NULL,*x0=NULL;
@@ -619,7 +619,7 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
   char tempfilenam[256],tempchar[256],solchar[255];
   PetscScalar value,*vals;
   PetscErrorCode ierr;
-  PetscInt count,nz01,*ai,*aj;
+  PetscInt count=0,nz01=0,*ai=NULL,*aj=NULL; /* stay 0 on ranks != rank_hsl */
   fortran_int k=0,m=1;
   fortran_int tindx1;//,tindx2;
   solve_real temp1,temp2;
@@ -2278,7 +2278,7 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
             printf("Error: cannot open %s for writing\n",solchar);
             return 1;
           }
-          fwrite(xcf, sizeof(solve_real),nvarele, solution);
+          if(xcf!=NULL)fwrite(xcf, sizeof(solve_real),nvarele, solution);
           fclose(solution);
           }
         }
@@ -2333,5 +2333,6 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
               free(countvarintra1s);
               elem_vals1=NULL;
               if(x1!=NULL)free(x1);
-  }
+    return true;
+}
 

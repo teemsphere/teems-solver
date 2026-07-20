@@ -1554,7 +1554,8 @@ int main(int argc,char **args) {
     for(i=0; i<neq; i++) {
       j3=1;
       if(eq_time[i]>-1)eq_time_offsets[i]=sets[eq_defs[i].setid[eq_time[i]]].offset;
-      eq_defs[i].strides[eq_defs[i].size-1]=1;
+      /* scalar equations (size 0) wrote strides[-1] = setid[9] */
+      if(eq_defs[i].size>0)eq_defs[i].strides[eq_defs[i].size-1]=1;
       if(eq_defs[i].size>1) {
         for (j2=eq_defs[i].size-2; j2>-1; j2--) {
           eq_defs[i].strides[j2]=eq_defs[i].strides[j2+1]*sets[eq_defs[i].setid[j2+1]].size;
@@ -1572,7 +1573,7 @@ int main(int argc,char **args) {
           }
           if(eq_time[i]>-1)if(eq_defs[i].setid[eq_time[i]]==alltimeset)counteq[set_elems[eq_time_offsets[i]+j2].superset_pos[0]]++;
             else {
-              for(j3=1; j3<MAXSUPSET; j3++)if(sets[eq_defs[i].setid[eq_time[i]]].subsetid[j3]=alltimeset)break;
+              for(j3=1; j3<MAXSUPSET; j3++)if(sets[eq_defs[i].setid[eq_time[i]]].subsetid[j3]==alltimeset)break;
               counteq[set_elems[eq_time_offsets[i]+j2].superset_pos[j3]]++;
             }
         }
@@ -1600,7 +1601,8 @@ int main(int argc,char **args) {
     for(i=0; i<neq; i++) {
       j3=1;
       if(eq_reg[i]>-1)eq_time_offsets[i]=sets[eq_defs[i].setid[eq_reg[i]]].offset;
-      eq_defs[i].strides[eq_defs[i].size-1]=1;
+      /* scalar equations (size 0) wrote strides[-1] = setid[9] */
+      if(eq_defs[i].size>0)eq_defs[i].strides[eq_defs[i].size-1]=1;
       if(eq_defs[i].size>1) {
         for (j2=eq_defs[i].size-2; j2>-1; j2--) {
           eq_defs[i].strides[j2]=eq_defs[i].strides[j2+1]*sets[eq_defs[i].setid[j2+1]].size;
@@ -1683,7 +1685,7 @@ int main(int argc,char **args) {
               for(j1=0; j1<sets[eq_defs[i].setid[eq_reg[i]]].size; j1++)
                 counteq[set_elems[eq_time_offsets[i]+j].superset_pos[0]*sets[eq_defs[i].setid[eq_reg[i]]].size+set_elems[eq_reg_offsets[i]+j1].superset_pos[0]]+=eq_defs[i].nelem/sets[eq_defs[i].setid[eq_time[i]]].size/sets[eq_defs[i].setid[eq_reg[i]]].size;
             else {
-              for(j3=1; j3<MAXSUPSET; j3++)if(sets[eq_defs[i].setid[eq_time[i]]].subsetid[j3]=alltimeset)break;
+              for(j3=1; j3<MAXSUPSET; j3++)if(sets[eq_defs[i].setid[eq_time[i]]].subsetid[j3]==alltimeset)break;
               for(j1=0; j1<sets[eq_defs[i].setid[eq_reg[i]]].size; j1++)
                 counteq[set_elems[eq_time_offsets[i]+j].superset_pos[j3]*sets[eq_defs[i].setid[eq_reg[i]]].size+set_elems[eq_reg_offsets[i]+j1].superset_pos[0]]+=eq_defs[i].nelem/sets[eq_defs[i].setid[eq_time[i]]].size/sets[eq_defs[i].setid[eq_reg[i]]].size;
             }
