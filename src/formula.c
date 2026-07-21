@@ -1695,7 +1695,9 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
               } while (index--);
             }
           }
-        #pragma omp parallel private(l,l2,i4,dcount,i3,i1,arSet1,logi,index,eval,ops1) shared(elem_vals,arSet)
+        /* i: inner condition loop's counter — was shared-by-omission,
+           a result-corrupting write-write race at maxthreads>1 */
+        #pragma omp parallel private(l,l2,i,i4,dcount,i3,i1,arSet1,logi,index,eval,ops1) shared(elem_vals,arSet)
         {
         if(omp_get_thread_num()!=0){
           arSet1=malloc((fdim+1)*sizeof(quantifier));
@@ -1706,6 +1708,9 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
           ops1=ops;
           arSet1=arSet;
         }
+    /* workers must finish copying the shared scratch (master aliases it)
+       before the master starts mutating per-iteration state */
+    #pragma omp barrier
         #pragma omp for
           for (l=0; l<nloops; l++) {
             l2=0;
@@ -1778,6 +1783,9 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
           ops1=ops;
           arSet1=arSet;
         }
+    /* workers must finish copying the shared scratch (master aliases it)
+       before the master starts mutating per-iteration state */
+    #pragma omp barrier
         #pragma omp for
           for (l=0; l<nloops; l++) {
             l2=0;
@@ -2081,6 +2089,9 @@ offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_el
           ops1=ops;
           arSet1=arSet;
         }
+    /* workers must finish copying the shared scratch (master aliases it)
+       before the master starts mutating per-iteration state */
+    #pragma omp barrier
         #pragma omp for
     for (l=0; l<nloops; l++) {
       l2=0;
@@ -2387,6 +2398,9 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
           ops1=ops;
           arSet1=arSet;
         }
+    /* workers must finish copying the shared scratch (master aliases it)
+       before the master starts mutating per-iteration state */
+    #pragma omp barrier
         #pragma omp for
     for (l=0; l<nloops; l++) {
       l2=0;
@@ -2547,6 +2561,9 @@ int sum_eval(char *formulain, char *commsyntax,set_def *sets,dim_t nset, set_ele
           ops1=ops;
           arSet2=arSet;
         }
+    /* workers must finish copying the shared scratch (master aliases it)
+       before the master starts mutating per-iteration state */
+    #pragma omp barrier
         #pragma omp for
         for (l=0; l<nloops; l++) {
           l2=l;
@@ -2638,6 +2655,9 @@ int sum_eval(char *formulain, char *commsyntax,set_def *sets,dim_t nset, set_ele
           ops1=ops;
           arSet2=arSet;
         }
+    /* workers must finish copying the shared scratch (master aliases it)
+       before the master starts mutating per-iteration state */
+    #pragma omp barrier
         #pragma omp for
         for (l=0; l<nloops; l++) {
           l2=l;

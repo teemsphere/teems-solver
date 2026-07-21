@@ -175,6 +175,9 @@ static void sum_prog_eval(sum_prog *sp, set_def *sets, set_element *set_elems, e
     ops1=sp->ops;
     arSet2=sp->arSet;
   }
+    /* workers must finish copying the shared scratch (master aliases it)
+       before the master starts mutating per-iteration state */
+    #pragma omp barrier
   #pragma omp for
   for (l=0; l<sp->nloops; l++) {
     l2=l;
@@ -274,6 +277,9 @@ static void stmt_prog_execute(stmt_prog *st, offset_t matrow, offset_t *eq_addr,
       ops1=lv->ops;
       arSet1=lv->arSet;
     }
+    /* workers must finish copying the shared scratch (master aliases it)
+       before the master starts mutating per-iteration state */
+    #pragma omp barrier
       solve_real *value= (solve_real *) calloc (lv->nloopsfac,sizeof(solve_real));
       PetscInt *jcn= (PetscInt *) calloc (lv->nloopsfac,sizeof(PetscInt));
       solve_real *valueb= (solve_real *) calloc (lv->nloopsfac,sizeof(solve_real));
@@ -949,6 +955,9 @@ static void bs_prog_execute(bs_prog *bp, set_def *sets, set_element *set_elems,
       ops1=lv->ops;
       arSet1=lv->arSet;
     }
+    /* workers must finish copying the shared scratch (master aliases it)
+       before the master starts mutating per-iteration state */
+    #pragma omp barrier
     #pragma omp for
       for (i5=0; i5<st->nloops; i5++) {
         for (lj=i5*lv->nloopsfac; lj<(i5+1)*lv->nloopsfac; lj++) {
