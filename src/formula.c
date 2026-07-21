@@ -1324,6 +1324,14 @@ int formula_compile_if(char *fomulain, set_def *sets,int nif,int ipar,array_def 
   int i,j1,j2,j3,l;//,varindex;
   p1=fomulain;
   p=strpbrk(p1,"=<>");
+  if(p==NULL){
+    printf("Error: malformed if() in formula (no comparison operator): %s\n",fomulain);
+    return 0;
+  }
+  if(p-p1>=NAMESIZE){
+    printf("Error: if() condition operand too long in formula: %s\n",fomulain);
+    return 0;
+  }
   strncpy(var1,p1,p-p1);
   var1[p-p1]='\0';
   p3=p+1;
@@ -1350,6 +1358,14 @@ int formula_compile_if(char *fomulain, set_def *sets,int nif,int ipar,array_def 
     if(*(p+i)=='{')j3=i;
     if(j3>-1)if(j1>-1&&j1>j2)break;
     else if(j1>-1)break;
+  }
+  if(j1<0){
+    printf("Error: malformed if() in formula (missing comma before value): %s\n",fomulain);
+    return 0;
+  }
+  if(j1>=NAMESIZE||strlen(p+j1+1)>=NAMESIZE){
+    printf("Error: if() value operand too long in formula: %s\n",fomulain);
+    return 0;
   }
   strncpy(var2,p,j1);
   var2[j1]='\0';
