@@ -2,7 +2,7 @@
 
 int formula_normalize(char *fomulain) {
   int index,i,i1,j;
-  char fpart1[TABREADLINE],*p=NULL;//,*p1=NULL;
+  char fpart1[TABREADLINE],*p=NULL,*p1=NULL;
   while (str_replace_all(fomulain, " ", ""));
   p=strchr(fomulain,')');
   if (p==NULL) {
@@ -12,7 +12,12 @@ int formula_normalize(char *fomulain) {
   }
   strncpy(fpart1, fomulain, p-fomulain);
   fpart1[p-fomulain] = '\0';
-  index=strrchr(fpart1,'(')-fpart1;//ha_cgerevfind(fpart1,"(");
+  p1=strrchr(fpart1,'(');
+  if (p1==NULL) {
+    printf("Error: unbalanced parentheses in formula: %s\n",fomulain);
+    return -1;
+  }
+  index=p1-fpart1;//ha_cgerevfind(fpart1,"(");
   fpart1[index]='\0';
   for(i=index-1; i>-1; i--) {
     if(fpart1[i]=='+'||fpart1[i]=='-'||fpart1[i]=='*'||fpart1[i]=='/'||fpart1[i]=='['||fpart1[i]=='('||fpart1[i]==','||fpart1[i]=='^') {
@@ -1886,6 +1891,7 @@ offset_t variables_read(char *fname, char *commsyntax, array_def *record, offset
       record[j].gltype=BT_GE;
       strcpy(linecopy,line);
       tpnt=strstr(readitem, ")");
+      if(tpnt==NULL){printf("Error: unbalanced parentheses in bound qualifier: %s\n",line);return -1;}
       tpnt+=1;
       memmove(readitem,tpnt,strlen(tpnt)+1);
       readitem=strstr(linecopy, "(ge ");
@@ -1898,6 +1904,7 @@ offset_t variables_read(char *fname, char *commsyntax, array_def *record, offset
       record[j].gltype=BT_GT;
       strcpy(linecopy,line);
       tpnt=strstr(readitem, ")");
+      if(tpnt==NULL){printf("Error: unbalanced parentheses in bound qualifier: %s\n",line);return -1;}
       tpnt+=1;
       memmove(readitem,tpnt,strlen(tpnt)+1);
       readitem=strstr(linecopy, "(gt ");
@@ -1910,6 +1917,7 @@ offset_t variables_read(char *fname, char *commsyntax, array_def *record, offset
       record[j].gltype=BT_LE;
       strcpy(linecopy,line);
       tpnt=strstr(readitem, ")");
+      if(tpnt==NULL){printf("Error: unbalanced parentheses in bound qualifier: %s\n",line);return -1;}
       tpnt+=1;
       memmove(readitem,tpnt,strlen(tpnt)+1);
       readitem=strstr(linecopy, "(le ");
@@ -1922,6 +1930,7 @@ offset_t variables_read(char *fname, char *commsyntax, array_def *record, offset
       record[j].gltype=BT_LT;
       strcpy(linecopy,line);
       tpnt=strstr(readitem, ")");
+      if(tpnt==NULL){printf("Error: unbalanced parentheses in bound qualifier: %s\n",line);return -1;}
       tpnt+=1;
       memmove(readitem,tpnt,strlen(tpnt)+1);
       readitem=strstr(linecopy, "(lt ");
@@ -1935,6 +1944,7 @@ offset_t variables_read(char *fname, char *commsyntax, array_def *record, offset
       record[j].gltype=BT_GE;
       strcpy(linecopy,line);
       tpnt=strstr(readitem, ")");
+      if(tpnt==NULL){printf("Error: unbalanced parentheses in bound qualifier: %s\n",line);return -1;}
       memmove(readitem,tpnt,strlen(tpnt)+1);
       readitem=strstr(linecopy, ",ge ");
       readitem+=3;
@@ -1948,6 +1958,7 @@ offset_t variables_read(char *fname, char *commsyntax, array_def *record, offset
       record[j].gltype=BT_GT;
       strcpy(linecopy,line);
       tpnt=strstr(readitem, ")");
+      if(tpnt==NULL){printf("Error: unbalanced parentheses in bound qualifier: %s\n",line);return -1;}
       memmove(readitem,tpnt,strlen(tpnt)+1);
       readitem=strstr(linecopy, ",gt ");
       readitem+=3;
@@ -1959,6 +1970,7 @@ offset_t variables_read(char *fname, char *commsyntax, array_def *record, offset
       record[j].gltype=BT_LE;
       strcpy(linecopy,line);
       tpnt=strstr(readitem, ")");
+      if(tpnt==NULL){printf("Error: unbalanced parentheses in bound qualifier: %s\n",line);return -1;}
       memmove(readitem,tpnt,strlen(tpnt)+1);
       readitem=strstr(linecopy, ",le ");
       readitem+=3;
@@ -1970,6 +1982,7 @@ offset_t variables_read(char *fname, char *commsyntax, array_def *record, offset
       record[j].gltype=BT_LT;
       strcpy(linecopy,line);
       tpnt=strstr(readitem, ")");
+      if(tpnt==NULL){printf("Error: unbalanced parentheses in bound qualifier: %s\n",line);return -1;}
       memmove(readitem,tpnt,strlen(tpnt)+1);
       readitem=strstr(linecopy, ",lt ");
       readitem+=3;
@@ -2173,6 +2186,7 @@ offset_t coefficients_read(char *fname, char *commsyntax, array_def *record, off
       record[j].gltype=BT_GE;
       strcpy(linecopy,line);
       tpnt=strstr(readitem, ")");
+      if(tpnt==NULL){printf("Error: unbalanced parentheses in bound qualifier: %s\n",line);return -1;}
       tpnt+=1;
       memmove(readitem,tpnt,strlen(tpnt)+1);
       readitem=strstr(linecopy, "(ge ");
@@ -2185,6 +2199,7 @@ offset_t coefficients_read(char *fname, char *commsyntax, array_def *record, off
       record[j].gltype=BT_GT;
       strcpy(linecopy,line);
       tpnt=strstr(readitem, ")");
+      if(tpnt==NULL){printf("Error: unbalanced parentheses in bound qualifier: %s\n",line);return -1;}
       tpnt+=1;
       memmove(readitem,tpnt,strlen(tpnt)+1);
       readitem=strstr(linecopy, "(gt ");
@@ -2197,6 +2212,7 @@ offset_t coefficients_read(char *fname, char *commsyntax, array_def *record, off
       record[j].gltype=BT_LE;
       strcpy(linecopy,line);
       tpnt=strstr(readitem, ")");
+      if(tpnt==NULL){printf("Error: unbalanced parentheses in bound qualifier: %s\n",line);return -1;}
       tpnt+=1;
       memmove(readitem,tpnt,strlen(tpnt)+1);
       readitem=strstr(linecopy, "(le ");
@@ -2209,6 +2225,7 @@ offset_t coefficients_read(char *fname, char *commsyntax, array_def *record, off
       record[j].gltype=BT_LT;
       strcpy(linecopy,line);
       tpnt=strstr(readitem, ")");
+      if(tpnt==NULL){printf("Error: unbalanced parentheses in bound qualifier: %s\n",line);return -1;}
       tpnt+=1;
       memmove(readitem,tpnt,strlen(tpnt)+1);
       readitem=strstr(linecopy, "(lt ");
@@ -2222,6 +2239,7 @@ offset_t coefficients_read(char *fname, char *commsyntax, array_def *record, off
       record[j].gltype=BT_GE;
       strcpy(linecopy,line);
       tpnt=strstr(readitem, ")");
+      if(tpnt==NULL){printf("Error: unbalanced parentheses in bound qualifier: %s\n",line);return -1;}
       memmove(readitem,tpnt,strlen(tpnt)+1);
       readitem=strstr(linecopy, ",ge ");
       readitem+=3;
@@ -2233,6 +2251,7 @@ offset_t coefficients_read(char *fname, char *commsyntax, array_def *record, off
       record[j].gltype=BT_GT;
       strcpy(linecopy,line);
       tpnt=strstr(readitem, ")");
+      if(tpnt==NULL){printf("Error: unbalanced parentheses in bound qualifier: %s\n",line);return -1;}
       memmove(readitem,tpnt,strlen(tpnt)+1);
       readitem=strstr(linecopy, ",gt ");
       readitem+=3;
@@ -2244,6 +2263,7 @@ offset_t coefficients_read(char *fname, char *commsyntax, array_def *record, off
       record[j].gltype=BT_LE;
       strcpy(linecopy,line);
       tpnt=strstr(readitem, ")");
+      if(tpnt==NULL){printf("Error: unbalanced parentheses in bound qualifier: %s\n",line);return -1;}
       memmove(readitem,tpnt,strlen(tpnt)+1);
       readitem=strstr(linecopy, ",le ");
       readitem+=3;
@@ -2255,6 +2275,7 @@ offset_t coefficients_read(char *fname, char *commsyntax, array_def *record, off
       record[j].gltype=BT_LT;
       strcpy(linecopy,line);
       tpnt=strstr(readitem, ")");
+      if(tpnt==NULL){printf("Error: unbalanced parentheses in bound qualifier: %s\n",line);return -1;}
       memmove(readitem,tpnt,strlen(tpnt)+1);
       readitem=strstr(linecopy, ",lt ");
       readitem+=3;

@@ -394,6 +394,7 @@ int leadlag_encode(char *line) {
   p1=strchr(line,'{');
   while (p1!=NULL) {
     p3=strchr(p1,'}');
+    if(p3==NULL)break;
     p2=strchr(p1,'+');
     if(p2!=NULL) {
       while(p3-p2>0) {
