@@ -553,6 +553,10 @@ int formula_compile(char *fomulain, set_def *sets,array_def *coefs, offset_t nco
           fpart1[j-2]='\0';
         }
     *nops=*nops+1;
+    if(strlen(fpart1)+strlen(interchar)+strlen(fpart3)>=TABREADLINE){
+      printf("Error: formula too long to compile (exceeds %d chars): %s\n",TABREADLINE,fomulain);
+      return 0;
+    }
     strcat(fpart1, interchar);
     strcat(fpart1, fpart3);
     strcpy(fomulain,fpart1);
@@ -1112,6 +1116,10 @@ int formula_compile_pow(char *fomulain, set_def *sets,int npow,int ipar,array_de
     strcpy(ops[*nops].TmpVarName,interchar);
     ops[*nops].Oper=OP_POW;
     *nops=*nops+1;
+    if(strlen(fpart1)+strlen(interchar)+strlen(fpart2)>=TABREADLINE){
+      printf("Error: formula too long to compile (exceeds %d chars): %s\n",TABREADLINE,fomulain);
+      return 0;
+    }
     strcat(fpart1, interchar);
     strcat(fpart1, fpart2);
     strcpy(fomulain,fpart1);
@@ -1207,6 +1215,10 @@ int formula_compile_muldiv(char *fomulain, set_def *sets,int nmul,int ipar,array
     strcat(interchar,interchar1);
     strcpy(ops[*nops].TmpVarName,interchar);
     *nops=*nops+1;
+    if(strlen(fpart1)+strlen(interchar)+strlen(fpart2)>=TABREADLINE){
+      printf("Error: formula too long to compile (exceeds %d chars): %s\n",TABREADLINE,fomulain);
+      return 0;
+    }
     strcat(fpart1, interchar);
     strcat(fpart1, fpart2);
     strcpy(fomulain,fpart1);
@@ -1311,6 +1323,10 @@ int formula_compile_addsub(char *fomulain, set_def *sets,int nplu,int ipar,array
     strcat(interchar,interchar1);
     strcpy(ops[*nops].TmpVarName,interchar);
     *nops=*nops+1;
+    if(strlen(fpart1)+strlen(interchar)+strlen(fpart2)>=TABREADLINE){
+      printf("Error: formula too long to compile (exceeds %d chars): %s\n",TABREADLINE,fomulain);
+      return 0;
+    }
     strcat(fpart1, interchar);
     strcat(fpart1, fpart2);
     strcpy(fomulain,fpart1);
