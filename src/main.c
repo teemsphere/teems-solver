@@ -914,7 +914,7 @@ int main(int argc,char **args) {
     for(j=0; j<MAXSUPSET; j++)sets[i].subsetid[j]=-1;
   }
   if(rank==0) {
-    sets_read(tabfile,niodata,iodata, sets,nset);
+    if(sets_read(tabfile,niodata,iodata, sets,nset)==-1)MPI_Abort(PETSC_COMM_WORLD,1);
     sets_read_intertemporal(tabfile,niodata,iodata, sets,nset);
     for (i=0; i<nset; i++) {
       sets[i].offset=nsetspace;
@@ -1059,6 +1059,7 @@ int main(int argc,char **args) {
   if(rank==0) {
     variables_read_defaults(tabfile,vars,nvar);
     nvarele=variables_read(tabfile,commsyntax,vars,nvar,sets,nset);
+    if(nvarele==-1)MPI_Abort(PETSC_COMM_WORLD,1);
     nvarele1=nvarele;
   }
   logmsg(2,"nvarele %ld\n",nvarele);

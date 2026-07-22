@@ -2016,6 +2016,10 @@ offset_t variables_read(char *fname, char *commsyntax, array_def *record, offset
             readitem = strtok(NULL,",");
           }
           readitem = strtok(NULL,",");
+          if (readitem==NULL||strlen(readitem)+3>sizeof(finditem)) {
+            printf("Error: malformed %s declaration in TAB file: %s\n",commsyntax,linecopy);
+            return -1;
+          }
           finditem[0]='(';
           finditem[1]='\0';
           finditem1[0]=',';
@@ -2031,6 +2035,10 @@ offset_t variables_read(char *fname, char *commsyntax, array_def *record, offset
           strcat(finditem2,")");
           strcat(finditem3,")");
           readitem = strtok(NULL,")");
+          if (readitem==NULL||strlen(readitem)+3>sizeof(setname)) {
+            printf("Error: malformed %s declaration in TAB file: %s\n",commsyntax,linecopy);
+            return -1;
+          }
           setname[0]='(';
           setname[1]='\0';
           setname1[0]=',';
@@ -2058,9 +2066,17 @@ offset_t variables_read(char *fname, char *commsyntax, array_def *record, offset
           }
         }
         readitem = strtok(NULL,";");
-        readitem = strtok(readitem,"(");
+        if (readitem!=NULL) readitem = strtok(readitem,"(");
+        if (readitem==NULL||strlen(readitem)>=sizeof(record[j].cofname)) {
+          printf("Error: malformed %s declaration in TAB file\n",commsyntax);
+          return -1;
+        }
         strcpy(record[j].cofname,readitem);
         readitem = strtok(NULL,")");
+        if (readitem==NULL||strlen(readitem)+2>sizeof(vname)) {
+          printf("Error: malformed %s declaration in TAB file\n",commsyntax);
+          return -1;
+        }
         strcpy(vname,readitem);
         strcat(vname,",");
         dcount=str_count_char(vname,',');
@@ -2070,6 +2086,10 @@ offset_t variables_read(char *fname, char *commsyntax, array_def *record, offset
             readitem = strtok(vname,",");
           } else {
             readitem = strtok(NULL,",");
+          }
+          if (readitem==NULL) {
+            printf("Error: malformed %s declaration in TAB file\n",commsyntax);
+            return -1;
           }
           for (l=0; l<nset; l++) {
             if (strcmp(sets[l].setname,readitem)==0) {
@@ -2259,6 +2279,10 @@ offset_t coefficients_read(char *fname, char *commsyntax, array_def *record, off
             readitem = strtok(NULL,",");
           }
           readitem = strtok(NULL,",");
+          if (readitem==NULL||strlen(readitem)+3>sizeof(finditem)) {
+            printf("Error: malformed %s declaration in TAB file: %s\n",commsyntax,linecopy);
+            return -1;
+          }
           finditem[0]='(';
           finditem[1]='\0';
           finditem1[0]=',';
@@ -2274,6 +2298,10 @@ offset_t coefficients_read(char *fname, char *commsyntax, array_def *record, off
           strcat(finditem2,")");
           strcat(finditem3,")");
           readitem = strtok(NULL,")");
+          if (readitem==NULL||strlen(readitem)+3>sizeof(setname)) {
+            printf("Error: malformed %s declaration in TAB file: %s\n",commsyntax,linecopy);
+            return -1;
+          }
           setname[0]='(';
           setname[1]='\0';
           setname1[0]=',';
@@ -2301,13 +2329,21 @@ offset_t coefficients_read(char *fname, char *commsyntax, array_def *record, off
           }
         }
         readitem = strtok(NULL,";");
-        readitem = strtok(readitem,"(");
+        if (readitem!=NULL) readitem = strtok(readitem,"(");
+        if (readitem==NULL||strlen(readitem)>=sizeof(record[j].cofname)) {
+          printf("Error: malformed %s declaration in TAB file\n",commsyntax);
+          return -1;
+        }
         strcpy(record[j].cofname,readitem);
         if(record[j].cofname[0]=='c'&&record[j].cofname[1]=='_'){
           printf("Error: the c_/C_ prefix is reserved for change variables; rename coefficient %s\n",record[j].cofname);
           return -1;
         }
         readitem = strtok(NULL,")");
+        if (readitem==NULL||strlen(readitem)+2>sizeof(vname)) {
+          printf("Error: malformed %s declaration in TAB file\n",commsyntax);
+          return -1;
+        }
         strcpy(vname,readitem);
         strcat(vname,",");
         dcount=str_count_char(vname,',');
@@ -2317,6 +2353,10 @@ offset_t coefficients_read(char *fname, char *commsyntax, array_def *record, off
             readitem = strtok(vname,",");
           } else {
             readitem = strtok(NULL,",");
+          }
+          if (readitem==NULL) {
+            printf("Error: malformed %s declaration in TAB file\n",commsyntax);
+            return -1;
           }
           for (l=0; l<nset; l++) {
             if (strcmp(sets[l].setname,readitem)==0) {
@@ -3081,7 +3121,11 @@ int sets_read(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,
         } else {
           record[j].header[0]='\0';
           readitem = strtok(linecopy,"(");
-          readitem = strtok(NULL,")");
+          if (readitem!=NULL) readitem = strtok(NULL,")");
+          if (readitem==NULL) {
+            printf("Error: malformed set declaration in TAB file\n");
+            return -1;
+          }
           strcpy(record[j].readele,readitem);
           dim1=str_count_char(readitem, ',');
           record[j].size=dim1+1;

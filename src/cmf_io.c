@@ -508,6 +508,10 @@ int tab_preprocess(char *filename, char *newtabfile) {
     str_replace_all(line,"\v"," ");
     str_replace_all(line,"![[!","\v");
     str_replace_all(line,"!]]!","\v");
+    if (strlen(readline)+strlen(line)>=sizeof(readline)) {
+      printf("Error: TAB statement too long (exceeds %d chars)\n",TABREADLINE);
+      return -1;
+    }
     strcat(readline,line);
     n=strrchr(line,';');
     i1=str_count_char(readline,'!');
