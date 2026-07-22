@@ -121,7 +121,7 @@ static int sum_prog_build(char *formulain, char *commsyntax, bool skip_linvar_su
         strcpy(out->arSet[sum_cof[j].size].index_name,sum_cof[j].sumindx);
         out->sumset_size=sets[sum_cof[j].sumsetid].size;
         nops=0;
-        formula_compile(p,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,&nops,out->arSet,(dim_t)(sum_cof[j].size+1));
+        if(!formula_compile(p,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,&nops,out->arSet,(dim_t)(sum_cof[j].size+1)))MPI_Abort(PETSC_COMM_WORLD,1);
         out->ops= (formula_op *) malloc (nops*sizeof(formula_op));
         memcpy(out->ops,ops,nops*sizeof(formula_op));
         out->nops=nops;
@@ -763,7 +763,7 @@ static void stmt_prog_build_one(char *line, stmt_prog *stp, char *commsyntax,
             stp->lv[i].nsums++;
           }
           nops=0;
-          formula_compile(readitem,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,&nops,arSet,fdimlin);
+          if(!formula_compile(readitem,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,&nops,arSet,fdimlin))MPI_Abort(PETSC_COMM_WORLD,1);
           for (dcount=0; dcount<vars[LinVars[i].LinVarIndx].size; dcount++) {
             for (i4=0; i4<fdimlin; i4++) {
               if (strcmp(LinVars[i].dimnames[dcount],arSet[i4].index_name)==0) {

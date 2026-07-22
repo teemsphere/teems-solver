@@ -437,19 +437,19 @@ int formula_compile(char *fomulain, set_def *sets,array_def *coefs, offset_t nco
   if (npar==0) {
     npow=str_count_char(fomulain, '^');
     if (npow>0) {
-      formula_compile_pow(fomulain,sets,npow,0,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,nops,arSet,fdim);
+      if(!formula_compile_pow(fomulain,sets,npow,0,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,nops,arSet,fdim))return 0;
     }
     nmul=str_count_char(fomulain, '*');
     ndiv=str_count_char(fomulain, '/');
     nmul=nmul+ndiv;
     if (nmul>0) {
-      formula_compile_muldiv(fomulain,sets,nmul,0,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,nops,arSet,fdim);
+      if(!formula_compile_muldiv(fomulain,sets,nmul,0,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,nops,arSet,fdim))return 0;
     }
     nplu=str_count_char(fomulain, '+');
     nmin=str_count_char(fomulain, '-');
     nplu=nplu+nmin;
     if (nplu>0) {
-      formula_compile_addsub(fomulain,sets,nplu,0,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,nops,arSet,fdim);
+      if(!formula_compile_addsub(fomulain,sets,nplu,0,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,nops,arSet,fdim))return 0;
     }
       formula_bind_operand(fomulain,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,*nops,arSet,fdim,1);
       ops[*nops].Oper=OP_LOAD;
@@ -484,19 +484,19 @@ int formula_compile(char *fomulain, set_def *sets,array_def *coefs, offset_t nco
     }
     npow=str_count_char(fpart2, '^');
     if (npow>0) {
-      formula_compile_pow(fpart2,sets,npow,i,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,nops,arSet,fdim);
+      if(!formula_compile_pow(fpart2,sets,npow,i,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,nops,arSet,fdim))return 0;
     }
     nmul=str_count_char(fpart2, '*');
     ndiv=str_count_char(fpart2, '/');
     nmul=nmul+ndiv;
     if (nmul>0) {
-      formula_compile_muldiv(fpart2,sets,nmul,i,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,nops,arSet,fdim);
+      if(!formula_compile_muldiv(fpart2,sets,nmul,i,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,nops,arSet,fdim))return 0;
     }
     nplu=str_count_char(fpart2, '+');
     nmin=str_count_char(fpart2, '-');
     nplu=nplu+nmin;
     if (nplu>0) {
-      formula_compile_addsub(fpart2,sets,nplu,i,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,nops,arSet,fdim);
+      if(!formula_compile_addsub(fpart2,sets,nplu,i,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,nops,arSet,fdim))return 0;
     }
       if(strpbrk(fpart2,"=<>")==NULL){
       formula_bind_operand(fpart2,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,*nops,arSet,fdim,1);
@@ -545,11 +545,11 @@ int formula_compile(char *fomulain, set_def *sets,array_def *coefs, offset_t nco
           fpart1[j-3]='\0';
         }
     if (j==2) if (fpart1[j-1]=='f'&&fpart1[j-2]=='i') {
-        formula_compile_if(fpart2,sets,2,i,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,nops,arSet,fdim);
+        if(!formula_compile_if(fpart2,sets,2,i,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,nops,arSet,fdim))return 0;
         fpart1[j-2]='\0';
       }
     if (j>2) if (fpart1[j-1]=='f'&&fpart1[j-2]=='i') if(j==2||fpart1[j-3]==' '||fpart1[j-3]=='('||fpart1[j-3]=='+'||fpart1[j-3]=='-'||fpart1[j-3]=='*'||fpart1[j-3]=='/'||fpart1[j-3]=='^'||fpart1[j-3]==',') {
-          formula_compile_if(fpart2,sets,2,i,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,nops,arSet,fdim);
+          if(!formula_compile_if(fpart2,sets,2,i,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,nops,arSet,fdim))return 0;
           fpart1[j-2]='\0';
         }
     *nops=*nops+1;
@@ -1667,7 +1667,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
                 }
             }
         }
-        formula_compile(line1,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,&nops,arSet,fdim-1);
+        if(!formula_compile(line1,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,&nops,arSet,fdim-1))MPI_Abort(PETSC_COMM_WORLD,1);
         if(ncond>0) {
           for(i=0; i<MAXVARDIM; i++)for(j=0; j<MAXVARDIM; j++){
             logiantidim[i][j]=0;
@@ -2109,7 +2109,7 @@ offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_el
                 }
             }
         }
-    formula_compile(line1,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,&nops,arSet,fdim-1);
+    if(!formula_compile(line1,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,&nops,arSet,fdim-1))MPI_Abort(PETSC_COMM_WORLD,1);
         #pragma omp parallel private(l,l2,i4,dcount,i3,i1,temp1,temp2,arSet1,ops1) shared(elem_vals,arSet)
         {
         if(omp_get_thread_num()!=0){
@@ -2418,7 +2418,7 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
                 }
             }
         }
-    formula_compile(line1,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,&nops,arSet,fdim-1);
+    if(!formula_compile(line1,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,&nops,arSet,fdim-1))MPI_Abort(PETSC_COMM_WORLD,1);
         #pragma omp parallel private(l,l2,i4,dcount,i3,i1,temp1,arSet1,ops1) shared(elem_vals,arSet)
         {
         if(omp_get_thread_num()!=0){
@@ -2581,7 +2581,7 @@ int sum_eval(char *formulain, char *commsyntax,set_def *sets,dim_t nset, set_ele
         strcpy(arSet[sum_cof[j].size].index_name,sum_cof[j].sumindx);
         fdimsumcof=sum_cof[j].size+1;
         nops=0;
-        formula_compile(p,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,&nops,arSet,fdimsumcof);
+        if(!formula_compile(p,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,&nops,arSet,fdimsumcof))MPI_Abort(PETSC_COMM_WORLD,1);
         #pragma omp parallel private(l,l1,l2,dcount,superset_pos,vval,arSet2,ops1) shared(elem_vals,arSet,sum_vals)
         {
         if(omp_get_thread_num()!=0){
@@ -2675,7 +2675,7 @@ int sum_eval(char *formulain, char *commsyntax,set_def *sets,dim_t nset, set_ele
         strcpy(arSet[sum_cof[j].size].index_name,sum_cof[j].sumindx);
         fdimsumcof=sum_cof[j].size+1;
         nops=0;
-        formula_compile(p,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,&nops,arSet,fdimsumcof);
+        if(!formula_compile(p,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,&nops,arSet,fdimsumcof))MPI_Abort(PETSC_COMM_WORLD,1);
         #pragma omp parallel private(l,l1,l2,dcount,superset_pos,vval,arSet2,ops1) shared(elem_vals,arSet,sum_vals)
         {
         if(omp_get_thread_num()!=0){
