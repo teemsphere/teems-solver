@@ -3484,6 +3484,7 @@ dim_t set_difference(set_element *set_elems, set_def *sets,dim_t nset,dim_t i) {
   strcpy(line,sets[i].readele);
   readitem = strtok(line,",");
   readitem = strtok(NULL,",");
+  if (readitem==NULL) return 0;
   for (l=0; l<nset; l++) {
     if (strcmp(readitem,sets[l].setname)==0) {
       dim1=sets[l].size;
@@ -3495,6 +3496,7 @@ dim_t set_difference(set_element *set_elems, set_def *sets,dim_t nset,dim_t i) {
     }
   }
   readitem = strtok(NULL,",");
+  if (readitem==NULL) return 0;
   for (j=0; j<nset; j++) {
     if (strcmp(readitem,sets[j].setname)==0) {
       dim2=sets[j].size;

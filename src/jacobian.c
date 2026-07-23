@@ -1761,6 +1761,7 @@ int equation_order_read(char *fname, char *commsyntax,set_def *sets,dim_t nset,s
   solve_real dimmat[4*MAXVARDIM];
 
   filehandle = fopen(fname,"r");
+  if (filehandle==NULL) return 0;
   matrow=0;
 
   while (tab_next_statement_resolved(commsyntax,filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
@@ -1776,12 +1777,27 @@ int equation_order_read(char *fname, char *commsyntax,set_def *sets,dim_t nset,s
       fdim=str_count_ci(line, "(all,");
       if (fdim==0) {
         readitem = strtok(line+1," ");
+        if (readitem==NULL||strlen(readitem)>=sizeof(eq_defs[eqindx].cofname)) {
+          printf("Error: malformed %s statement in TAB file: %s\n",commsyntax,linecopy);
+          fclose(filehandle);
+          return 0;
+        }
         strcpy(eq_defs[eqindx].cofname,readitem);
         readitem = strtok(NULL,"=");
+        if (readitem==NULL) {
+          printf("Error: malformed %s statement in TAB file: %s\n",commsyntax,linecopy);
+          fclose(filehandle);
+          return 0;
+        }
         strcpy(vname,readitem);
         strcpy(line,linecopy);
         readitem = strtok(line,"=");
         readitem = strtok(NULL,";");
+        if (readitem==NULL||(readitem-line)+strlen(readitem)+strlen(vname)+4>=sizeof(line)) {
+          printf("Error: malformed %s statement in TAB file: %s\n",commsyntax,linecopy);
+          fclose(filehandle);
+          return 0;
+        }
         strcat(readitem,"-");
         strcat(readitem,"(");
         strcat(readitem,vname);
@@ -1789,16 +1805,31 @@ int equation_order_read(char *fname, char *commsyntax,set_def *sets,dim_t nset,s
       }
       else {
         readitem = strtok(line+1,"(");
+        if (readitem==NULL||strlen(readitem)>=sizeof(eq_defs[eqindx].cofname)) {
+          printf("Error: malformed %s statement in TAB file: %s\n",commsyntax,linecopy);
+          fclose(filehandle);
+          return 0;
+        }
         strcpy(eq_defs[eqindx].cofname,readitem);
         strcpy(line,linecopy);
         i=str_rfind_ci(line, "(all,");
         readitem=line+i;
         readitem = strtok(readitem,")");
         readitem = strtok(NULL,"=");
+        if (readitem==NULL) {
+          printf("Error: malformed %s statement in TAB file: %s\n",commsyntax,linecopy);
+          fclose(filehandle);
+          return 0;
+        }
         strcpy(vname,readitem);
         strcpy(line,linecopy);
         readitem = strtok(line,"=");
         readitem = strtok(NULL,";");
+        if (readitem==NULL||(readitem-line)+strlen(readitem)+strlen(vname)+4>=sizeof(line)) {
+          printf("Error: malformed %s statement in TAB file: %s\n",commsyntax,linecopy);
+          fclose(filehandle);
+          return 0;
+        }
         strcat(readitem,"-");
         strcat(readitem,"(");
         strcat(readitem,vname);
@@ -2144,6 +2175,7 @@ int equation_order_read_nested(char *fname, char *commsyntax,set_def *sets,dim_t
   solve_real dimmat[4*MAXVARDIM];
 
   filehandle = fopen(fname,"r");
+  if (filehandle==NULL) return 0;
   matrow=0;
 
   while (tab_next_statement_resolved(commsyntax,filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
@@ -2159,12 +2191,27 @@ int equation_order_read_nested(char *fname, char *commsyntax,set_def *sets,dim_t
       fdim=str_count_ci(line, "(all,");
       if (fdim==0) {
         readitem = strtok(line+1," ");
+        if (readitem==NULL||strlen(readitem)>=sizeof(eq_defs[eqindx].cofname)) {
+          printf("Error: malformed %s statement in TAB file: %s\n",commsyntax,linecopy);
+          fclose(filehandle);
+          return 0;
+        }
         strcpy(eq_defs[eqindx].cofname,readitem);
         readitem = strtok(NULL,"=");
+        if (readitem==NULL) {
+          printf("Error: malformed %s statement in TAB file: %s\n",commsyntax,linecopy);
+          fclose(filehandle);
+          return 0;
+        }
         strcpy(vname,readitem);
         strcpy(line,linecopy);
         readitem = strtok(line,"=");
         readitem = strtok(NULL,";");
+        if (readitem==NULL||(readitem-line)+strlen(readitem)+strlen(vname)+4>=sizeof(line)) {
+          printf("Error: malformed %s statement in TAB file: %s\n",commsyntax,linecopy);
+          fclose(filehandle);
+          return 0;
+        }
         strcat(readitem,"-");
         strcat(readitem,"(");
         strcat(readitem,vname);
@@ -2172,16 +2219,31 @@ int equation_order_read_nested(char *fname, char *commsyntax,set_def *sets,dim_t
       }
       else {
         readitem = strtok(line+1,"(");
+        if (readitem==NULL||strlen(readitem)>=sizeof(eq_defs[eqindx].cofname)) {
+          printf("Error: malformed %s statement in TAB file: %s\n",commsyntax,linecopy);
+          fclose(filehandle);
+          return 0;
+        }
         strcpy(eq_defs[eqindx].cofname,readitem);
         strcpy(line,linecopy);
         i=str_rfind_ci(line, "(all,");
         readitem=line+i;
         readitem = strtok(readitem,")");
         readitem = strtok(NULL,"=");
+        if (readitem==NULL) {
+          printf("Error: malformed %s statement in TAB file: %s\n",commsyntax,linecopy);
+          fclose(filehandle);
+          return 0;
+        }
         strcpy(vname,readitem);
         strcpy(line,linecopy);
         readitem = strtok(line,"=");
         readitem = strtok(NULL,";");
+        if (readitem==NULL||(readitem-line)+strlen(readitem)+strlen(vname)+4>=sizeof(line)) {
+          printf("Error: malformed %s statement in TAB file: %s\n",commsyntax,linecopy);
+          fclose(filehandle);
+          return 0;
+        }
         strcat(readitem,"-");
         strcat(readitem,"(");
         strcat(readitem,vname);
