@@ -1,5 +1,24 @@
 #include <teems_solver.h>
 
+/* bounded append/copy for tab_preprocess's growable line buffers: the
+   auto-index transform accumulates one subset-declaration block per
+   quoted set element into readline/readline1 and rebuilds the statement
+   in line2, which can grow past the fixed buffers on a pathological
+   statement (many quoted elements). These return -1 (caller aborts)
+   instead of overflowing; a no-op for valid models, which stay under
+   the buffer. */
+static int cmf_strcat_bounded(char *dst, const char *src, size_t cap) {
+  size_t dl = strlen(dst), sl = strlen(src);
+  if (dl + sl + 1 > cap) return -1;
+  memcpy(dst + dl, src, sl + 1);
+  return 0;
+}
+static int cmf_strcpy_bounded(char *dst, const char *src, size_t cap) {
+  size_t sl = strlen(src);
+  if (sl + 1 > cap) return -1;
+  memcpy(dst, src, sl + 1);
+  return 0;
+}
 
 int cmf_count_files(char *fname,char *comsyntax) {
   FILE * filehandle;
@@ -700,8 +719,15 @@ int tab_preprocess(char *filename, char *newtabfile) {
           if (n1!=NULL&&(n1-line2)>varindx) varindx=n1-line2;
           n1=strrchr(line2,'=');
           if (n1!=NULL&&(n1-line2)>varindx) varindx=n1-line2;
-          strcpy(varname,&line2[varindx+1]);
+          if (cmf_strcpy_bounded(varname,&line2[varindx+1],sizeof(varname))) {
+            printf("Error: TAB statement too complex in tab_preprocess: %s\n",line);
+            return -1;
+          }
           n1=strrchr(varname,'(');
+          if (n1==NULL) {
+            printf("Error: malformed indexed expression in TAB file: %s\n",line);
+            return -1;
+          }
           varname[n1-varname+1]='\0';
            j1=0;
            j2=0;
@@ -729,57 +755,93 @@ int tab_preprocess(char *filename, char *newtabfile) {
           strcat(newset,indx);
           i1=n-line1;
           readitem=strtok(n,"\"");
-          strcpy(setelement,readitem);
+          if (readitem==NULL||cmf_strcpy_bounded(setelement,readitem,sizeof(setelement))) {
+            printf("Error: malformed indexed expression in TAB file: %s\n",line);
+            return -1;
+          }
           k1=0;
           while(setelement[k1]!='\0') {
             setelement[k1]=tolower((int)setelement[k1]);
             k1++;
           }
-          strcpy(indx1,"\"");
-          strcat(indx1,readitem);
-          strcat(indx1,"\"");
-          strcat(readline,"set ");
-          strcat(readline,newset);
-          strcat(readline," (");
-          strcat(readline,setelement);
-          strcat(readline,");\n");
-          strcat(readline1,"subset sub_");
-          strcat(readline1,indx);
-          strcat(readline1," is subset of ");
-          strcat(readline1,setname);
-          strcat(readline1," ;\n");
+          if (cmf_strcpy_bounded(indx1,"\"",sizeof(indx1)) ||
+              cmf_strcat_bounded(indx1,readitem,sizeof(indx1)) ||
+              cmf_strcat_bounded(indx1,"\"",sizeof(indx1))) {
+            printf("Error: TAB statement too complex in tab_preprocess: %s\n",line);
+            return -1;
+          }
+          if (cmf_strcat_bounded(readline,"set ",sizeof(readline)) ||
+              cmf_strcat_bounded(readline,newset,sizeof(readline)) ||
+              cmf_strcat_bounded(readline," (",sizeof(readline)) ||
+              cmf_strcat_bounded(readline,setelement,sizeof(readline)) ||
+              cmf_strcat_bounded(readline,");\n",sizeof(readline)) ||
+              cmf_strcat_bounded(readline1,"subset sub_",sizeof(readline1)) ||
+              cmf_strcat_bounded(readline1,indx,sizeof(readline1)) ||
+              cmf_strcat_bounded(readline1," is subset of ",sizeof(readline1)) ||
+              cmf_strcat_bounded(readline1,setname,sizeof(readline1)) ||
+              cmf_strcat_bounded(readline1," ;\n",sizeof(readline1))) {
+            printf("Error: TAB statement too complex in tab_preprocess: %s\n",line);
+            return -1;
+          }
           str_replace_all(line,indx1,indx);
           readitem1=strtok(line," ");
-          strcpy(line2,readitem1);
-          strcat(line2," ");
+          if (readitem1==NULL||
+              cmf_strcpy_bounded(line2,readitem1,sizeof(line2)) ||
+              cmf_strcat_bounded(line2," ",sizeof(line2))) {
+            printf("Error: malformed indexed expression in TAB file: %s\n",line);
+            return -1;
+          }
           readitem1=strtok(NULL," ");
+          if (readitem1==NULL) {
+            printf("Error: malformed indexed expression in TAB file: %s\n",line);
+            return -1;
+          }
           strcpy(indx2,indx);
           strcat(indx2,",");
           if(strstr(readitem1,indx2)==NULL) {
             if(l1==0){//if(l1==0&&strchr(line2,'(')!=NULL) {
-              strcat(line2,readitem1);
-              strcat(line2," ");
+              if (cmf_strcat_bounded(line2,readitem1,sizeof(line2)) ||
+                  cmf_strcat_bounded(line2," ",sizeof(line2))) {
+                printf("Error: TAB statement too complex in tab_preprocess: %s\n",line);
+                return -1;
+              }
               readitem1=strtok(NULL," ");
+              if (readitem1==NULL) {
+                printf("Error: malformed indexed expression in TAB file: %s\n",line);
+                return -1;
+              }
             }
-            strcat(line2," (all,");
-            strcat(line2,indx);
-            strcat(line2,",");
-            strcat(line2,newset);
-            strcat(line2,")");
-            strcat(line2,readitem1);
-            strcat(line2," ");
+            if (cmf_strcat_bounded(line2," (all,",sizeof(line2)) ||
+                cmf_strcat_bounded(line2,indx,sizeof(line2)) ||
+                cmf_strcat_bounded(line2,",",sizeof(line2)) ||
+                cmf_strcat_bounded(line2,newset,sizeof(line2)) ||
+                cmf_strcat_bounded(line2,")",sizeof(line2)) ||
+                cmf_strcat_bounded(line2,readitem1,sizeof(line2)) ||
+                cmf_strcat_bounded(line2," ",sizeof(line2))) {
+              printf("Error: TAB statement too complex in tab_preprocess: %s\n",line);
+              return -1;
+            }
           } else {
-            strcat(line2," (all,");
-            strcat(line2,indx);
-            strcat(line2,",");
-            strcat(line2,newset);
-            strcat(line2,")");
-            strcat(line2," ");
-            strcat(line2,readitem1);
+            if (cmf_strcat_bounded(line2," (all,",sizeof(line2)) ||
+                cmf_strcat_bounded(line2,indx,sizeof(line2)) ||
+                cmf_strcat_bounded(line2,",",sizeof(line2)) ||
+                cmf_strcat_bounded(line2,newset,sizeof(line2)) ||
+                cmf_strcat_bounded(line2,")",sizeof(line2)) ||
+                cmf_strcat_bounded(line2," ",sizeof(line2)) ||
+                cmf_strcat_bounded(line2,readitem1,sizeof(line2))) {
+              printf("Error: TAB statement too complex in tab_preprocess: %s\n",line);
+              return -1;
+            }
           }
           readitem1=strtok(NULL,"\n");
-          if(readitem1!=NULL)strcat(line2,readitem1);
-          strcat(line2,"\n");
+          if(readitem1!=NULL&&cmf_strcat_bounded(line2,readitem1,sizeof(line2))) {
+            printf("Error: TAB statement too complex in tab_preprocess: %s\n",line);
+            return -1;
+          }
+          if (cmf_strcat_bounded(line2,"\n",sizeof(line2))) {
+            printf("Error: TAB statement too complex in tab_preprocess: %s\n",line);
+            return -1;
+          }
           strcpy(line,line2);
           strcpy(line1,line);
           n=strchr(line1,'\"');

@@ -1,5 +1,9 @@
 #include <teems_solver.h>
 
+/* bounded in-place replace-all used by the declaration parsers' set-symbol
+   substitution: see the definition below str_replace_all. */
+static int str_subst_all_bounded(char *line, const char *finditem, const char *replitem, size_t linesz);
+
 int formula_normalize(char *fomulain) {
   int index,i,i1,j;
   char fpart1[TABREADLINE],*p=NULL,*p1=NULL;
@@ -2066,10 +2070,13 @@ offset_t variables_read(char *fname, char *commsyntax, array_def *record, offset
           strcat(setname1,",");
           strcat(setname2,")");
           strcat(setname3,")");
-          while (str_replace_all(linecopy, finditem, setname));
-          while (str_replace_all(linecopy, finditem1, setname1));
-          while (str_replace_all(linecopy, finditem2, setname2));
-          while (str_replace_all(linecopy, finditem3, setname3));
+          if (str_subst_all_bounded(linecopy, finditem,  setname,  sizeof(linecopy)) ||
+              str_subst_all_bounded(linecopy, finditem1, setname1, sizeof(linecopy)) ||
+              str_subst_all_bounded(linecopy, finditem2, setname2, sizeof(linecopy)) ||
+              str_subst_all_bounded(linecopy, finditem3, setname3, sizeof(linecopy))) {
+            printf("Error: malformed %s declaration in TAB file: %s\n",commsyntax,linecopy);
+            return -1;
+          }
         }
         for (i=1; i<n; i++) {
           if (i==1) {
@@ -2345,10 +2352,13 @@ offset_t coefficients_read(char *fname, char *commsyntax, array_def *record, off
           strcat(setname1,",");
           strcat(setname2,")");
           strcat(setname3,")");
-          while (str_replace_all(linecopy, finditem, setname));
-          while (str_replace_all(linecopy, finditem1, setname1));
-          while (str_replace_all(linecopy, finditem2, setname2));
-          while (str_replace_all(linecopy, finditem3, setname3));
+          if (str_subst_all_bounded(linecopy, finditem,  setname,  sizeof(linecopy)) ||
+              str_subst_all_bounded(linecopy, finditem1, setname1, sizeof(linecopy)) ||
+              str_subst_all_bounded(linecopy, finditem2, setname2, sizeof(linecopy)) ||
+              str_subst_all_bounded(linecopy, finditem3, setname3, sizeof(linecopy))) {
+            printf("Error: malformed %s declaration in TAB file: %s\n",commsyntax,linecopy);
+            return -1;
+          }
         }
         for (i=1; i<n; i++) {
           if (i==1) {
@@ -2489,9 +2499,17 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
             sign[0]=2;
           }
           readitem = strtok(readitem,"-+");
+          if(readitem==NULL) {
+            printf("Error: malformed intertemporal set declaration in TAB file\n");
+            return -1;
+          }
           if(readitem[0]>='0'&&readitem[0]<='9') {
             intindx[0]=atoi(readitem);
           } else {
+            if (strlen(readitem)>=sizeof(varname)) {
+              printf("Error: malformed intertemporal set declaration in TAB file\n");
+              return -1;
+            }
             strcpy(varname,readitem);
             strcpy(commsyntax,"read ");
             strcat(commsyntax,readitem);
@@ -2502,9 +2520,19 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               readitem = strtok(NULL," ");
               readitem = strtok(NULL," ");
               readitem = strtok(NULL," ");
+              if (readitem==NULL||strlen(readitem)>=sizeof(floginame)) {
+                printf("Error: malformed intertemporal set declaration in TAB file\n");
+                fclose(filehandle);
+                return -1;
+              }
               strcpy(floginame,readitem);
               readitem = strtok(NULL,"\"");
               readitem = strtok(NULL,"\"");
+              if (readitem==NULL||strlen(readitem)>=sizeof(header)) {
+                printf("Error: malformed intertemporal set declaration in TAB file\n");
+                fclose(filehandle);
+                return -1;
+              }
               strcpy(header,readitem);
               for (k1=0; k1<niodata; k1++) if (strcmp(floginame,iodata[k1].logname)==0) {
                   break;
@@ -2533,9 +2561,17 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
           readitem = strtok(line,",");
           readitem = strtok(NULL,"-+");
           readitem = strtok(NULL,"\0");
+          if(readitem==NULL) {
+            printf("Error: malformed intertemporal set declaration in TAB file\n");
+            return -1;
+          }
           if(readitem[0]>='0'&&readitem[0]<='9') {
             intindx[1]=atoi(readitem);
           } else {
+            if (strlen(readitem)>=sizeof(varname)) {
+              printf("Error: malformed intertemporal set declaration in TAB file\n");
+              return -1;
+            }
             strcpy(varname,readitem);
             strcpy(commsyntax,"read ");
             strcat(commsyntax,readitem);
@@ -2546,9 +2582,19 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               readitem = strtok(NULL," ");
               readitem = strtok(NULL," ");
               readitem = strtok(NULL," ");
+              if (readitem==NULL||strlen(readitem)>=sizeof(floginame)) {
+                printf("Error: malformed intertemporal set declaration in TAB file\n");
+                fclose(filehandle);
+                return -1;
+              }
               strcpy(floginame,readitem);
               readitem = strtok(NULL,"\"");
               readitem = strtok(NULL,"\"");
+              if (readitem==NULL||strlen(readitem)>=sizeof(header)) {
+                printf("Error: malformed intertemporal set declaration in TAB file\n");
+                fclose(filehandle);
+                return -1;
+              }
               strcpy(header,readitem);
               for (k1=0; k1<niodata; k1++) if (strcmp(floginame,iodata[k1].logname)==0) {
                   break;
@@ -2574,9 +2620,17 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
             fclose(filehandle);
           }
         } else {
+          if(readitem==NULL) {
+            printf("Error: malformed intertemporal set declaration in TAB file\n");
+            return -1;
+          }
           if(readitem[0]>='0'&&readitem[0]<='9') {
             intindx[0]=atoi(readitem);
           } else {
+            if (strlen(readitem)>=sizeof(varname)) {
+              printf("Error: malformed intertemporal set declaration in TAB file\n");
+              return -1;
+            }
             strcpy(varname,readitem);
             strcpy(commsyntax,"read ");
             strcat(commsyntax,readitem);
@@ -2587,9 +2641,19 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               readitem = strtok(NULL," ");
               readitem = strtok(NULL," ");
               readitem = strtok(NULL," ");
+              if (readitem==NULL||strlen(readitem)>=sizeof(floginame)) {
+                printf("Error: malformed intertemporal set declaration in TAB file\n");
+                fclose(filehandle);
+                return -1;
+              }
               strcpy(floginame,readitem);
               readitem = strtok(NULL,"\"");
               readitem = strtok(NULL,"\"");
+              if (readitem==NULL||strlen(readitem)>=sizeof(header)) {
+                printf("Error: malformed intertemporal set declaration in TAB file\n");
+                fclose(filehandle);
+                return -1;
+              }
               strcpy(header,readitem);
               for (k1=0; k1<niodata; k1++) if (strcmp(floginame,iodata[k1].logname)==0) {
                   break;
@@ -2638,9 +2702,17 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
             sign[0]=2;
           }
           readitem = strtok(readitem,"-+");
+          if(readitem==NULL) {
+            printf("Error: malformed intertemporal set declaration in TAB file\n");
+            return -1;
+          }
           if(readitem[0]>='0'&&readitem[0]<='9') {
             intindx[0]=atoi(readitem);
           } else {
+            if (strlen(readitem)>=sizeof(varname)) {
+              printf("Error: malformed intertemporal set declaration in TAB file\n");
+              return -1;
+            }
             strcpy(varname,readitem);
             strcpy(commsyntax,"read ");
             strcat(commsyntax,readitem);
@@ -2651,9 +2723,19 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               readitem = strtok(NULL," ");
               readitem = strtok(NULL," ");
               readitem = strtok(NULL," ");
+              if (readitem==NULL||strlen(readitem)>=sizeof(floginame)) {
+                printf("Error: malformed intertemporal set declaration in TAB file\n");
+                fclose(filehandle);
+                return -1;
+              }
               strcpy(floginame,readitem);
               readitem = strtok(NULL,"\"");
               readitem = strtok(NULL,"\"");
+              if (readitem==NULL||strlen(readitem)>=sizeof(header)) {
+                printf("Error: malformed intertemporal set declaration in TAB file\n");
+                fclose(filehandle);
+                return -1;
+              }
               strcpy(header,readitem);
               for (k1=0; k1<niodata; k1++) if (strcmp(floginame,iodata[k1].logname)==0) {
                   break;
@@ -2682,9 +2764,17 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
           readitem = strtok(line,",");
           readitem = strtok(NULL,"-+");
           readitem = strtok(NULL,",");
+          if(readitem==NULL) {
+            printf("Error: malformed intertemporal set declaration in TAB file\n");
+            return -1;
+          }
           if(readitem[0]>='0'&&readitem[0]<='9') {
             intindx[1]=atoi(readitem);
           } else {
+            if (strlen(readitem)>=sizeof(varname)) {
+              printf("Error: malformed intertemporal set declaration in TAB file\n");
+              return -1;
+            }
             strcpy(varname,readitem);
             strcpy(commsyntax,"read ");
             strcat(commsyntax,readitem);
@@ -2695,9 +2785,19 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               readitem = strtok(NULL," ");
               readitem = strtok(NULL," ");
               readitem = strtok(NULL," ");
+              if (readitem==NULL||strlen(readitem)>=sizeof(floginame)) {
+                printf("Error: malformed intertemporal set declaration in TAB file\n");
+                fclose(filehandle);
+                return -1;
+              }
               strcpy(floginame,readitem);
               readitem = strtok(NULL,"\"");
               readitem = strtok(NULL,"\"");
+              if (readitem==NULL||strlen(readitem)>=sizeof(header)) {
+                printf("Error: malformed intertemporal set declaration in TAB file\n");
+                fclose(filehandle);
+                return -1;
+              }
               strcpy(header,readitem);
               for (k1=0; k1<niodata; k1++) if (strcmp(floginame,iodata[k1].logname)==0) {
                   break;
@@ -2723,9 +2823,17 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
             fclose(filehandle);
           }
         } else {
+          if(readitem==NULL) {
+            printf("Error: malformed intertemporal set declaration in TAB file\n");
+            return -1;
+          }
           if(readitem[0]>='0'&&readitem[0]<='9') {
             intindx[0]=atoi(readitem);
           } else {
+            if (strlen(readitem)>=sizeof(varname)) {
+              printf("Error: malformed intertemporal set declaration in TAB file\n");
+              return -1;
+            }
             strcpy(varname,readitem);
             strcpy(commsyntax,"read ");
             strcat(commsyntax,readitem);
@@ -2736,9 +2844,19 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               readitem = strtok(NULL," ");
               readitem = strtok(NULL," ");
               readitem = strtok(NULL," ");
+              if (readitem==NULL||strlen(readitem)>=sizeof(floginame)) {
+                printf("Error: malformed intertemporal set declaration in TAB file\n");
+                fclose(filehandle);
+                return -1;
+              }
               strcpy(floginame,readitem);
               readitem = strtok(NULL,"\"");
               readitem = strtok(NULL,"\"");
+              if (readitem==NULL||strlen(readitem)>=sizeof(header)) {
+                printf("Error: malformed intertemporal set declaration in TAB file\n");
+                fclose(filehandle);
+                return -1;
+              }
               strcpy(header,readitem);
               for (k1=0; k1<niodata; k1++) if (strcmp(floginame,iodata[k1].logname)==0) {
                   break;
@@ -2784,9 +2902,17 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
             sign[1]=2;
           }
           readitem = strtok(readitem,"-+");
+          if(readitem==NULL) {
+            printf("Error: malformed intertemporal set declaration in TAB file\n");
+            return -1;
+          }
           if(readitem[0]>='0'&&readitem[0]<='9') {
             intindx[2]=atoi(readitem);
           } else {
+            if (strlen(readitem)>=sizeof(varname)) {
+              printf("Error: malformed intertemporal set declaration in TAB file\n");
+              return -1;
+            }
             strcpy(varname,readitem);
             strcpy(commsyntax,"read ");
             strcat(commsyntax,readitem);
@@ -2797,9 +2923,19 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               readitem = strtok(NULL," ");
               readitem = strtok(NULL," ");
               readitem = strtok(NULL," ");
+              if (readitem==NULL||strlen(readitem)>=sizeof(floginame)) {
+                printf("Error: malformed intertemporal set declaration in TAB file\n");
+                fclose(filehandle);
+                return -1;
+              }
               strcpy(floginame,readitem);
               readitem = strtok(NULL,"\"");
               readitem = strtok(NULL,"\"");
+              if (readitem==NULL||strlen(readitem)>=sizeof(header)) {
+                printf("Error: malformed intertemporal set declaration in TAB file\n");
+                fclose(filehandle);
+                return -1;
+              }
               strcpy(header,readitem);
               for (k1=0; k1<niodata; k1++) if (strcmp(floginame,iodata[k1].logname)==0) {
                   break;
@@ -2829,9 +2965,17 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
           readitem = strtok(NULL,",");
           readitem = strtok(NULL,"-+");
           readitem = strtok(NULL,"\0");
+          if(readitem==NULL) {
+            printf("Error: malformed intertemporal set declaration in TAB file\n");
+            return -1;
+          }
           if(readitem[0]>='0'&&readitem[0]<='9') {
             intindx[3]=atoi(readitem);
           } else {
+            if (strlen(readitem)>=sizeof(varname)) {
+              printf("Error: malformed intertemporal set declaration in TAB file\n");
+              return -1;
+            }
             strcpy(varname,readitem);
             strcpy(commsyntax,"read ");
             strcat(commsyntax,readitem);
@@ -2842,9 +2986,19 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               readitem = strtok(NULL," ");
               readitem = strtok(NULL," ");
               readitem = strtok(NULL," ");
+              if (readitem==NULL||strlen(readitem)>=sizeof(floginame)) {
+                printf("Error: malformed intertemporal set declaration in TAB file\n");
+                fclose(filehandle);
+                return -1;
+              }
               strcpy(floginame,readitem);
               readitem = strtok(NULL,"\"");
               readitem = strtok(NULL,"\"");
+              if (readitem==NULL||strlen(readitem)>=sizeof(header)) {
+                printf("Error: malformed intertemporal set declaration in TAB file\n");
+                fclose(filehandle);
+                return -1;
+              }
               strcpy(header,readitem);
               for (k1=0; k1<niodata; k1++) if (strcmp(floginame,iodata[k1].logname)==0) {
                   break;
@@ -2870,9 +3024,17 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
             fclose(filehandle);
           }
         } else {
+          if(readitem==NULL) {
+            printf("Error: malformed intertemporal set declaration in TAB file\n");
+            return -1;
+          }
           if(readitem[0]>='0'&&readitem[0]<='9') {
             intindx[2]=atoi(readitem);
           } else {
+            if (strlen(readitem)>=sizeof(varname)) {
+              printf("Error: malformed intertemporal set declaration in TAB file\n");
+              return -1;
+            }
             strcpy(varname,readitem);
             strcpy(commsyntax,"read ");
             strcat(commsyntax,readitem);
@@ -2883,9 +3045,19 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               readitem = strtok(NULL," ");
               readitem = strtok(NULL," ");
               readitem = strtok(NULL," ");
+              if (readitem==NULL||strlen(readitem)>=sizeof(floginame)) {
+                printf("Error: malformed intertemporal set declaration in TAB file\n");
+                fclose(filehandle);
+                return -1;
+              }
               strcpy(floginame,readitem);
               readitem = strtok(NULL,"\"");
               readitem = strtok(NULL,"\"");
+              if (readitem==NULL||strlen(readitem)>=sizeof(header)) {
+                printf("Error: malformed intertemporal set declaration in TAB file\n");
+                fclose(filehandle);
+                return -1;
+              }
               strcpy(header,readitem);
               for (k1=0; k1<niodata; k1++) if (strcmp(floginame,iodata[k1].logname)==0) {
                   break;
@@ -4175,6 +4347,28 @@ char *str_replace_all(char *line, char *finditem, char *replitem) {
   strcat(buffer, (line+index+count2));
   strcpy(line,buffer);
   return line;
+}
+
+/* Replace every occurrence of finditem with replitem in `line` (buffer
+   capacity `linesz`), in place. For the parsers' set-symbol substitution
+   this is behaviourally identical to `while (str_replace_all(line,
+   finditem, replitem));` — replitem never contains finditem, so the
+   left-to-right restart terminates — but it refuses to grow the result
+   past linesz-1 rather than overflowing `line` via str_replace_all's
+   unbounded strcpy-back. Returns 0 on success, -1 if the result would
+   not fit (valid models stay well under the buffer, so this fires only
+   on the malformed/pathological input the old code overflowed on). */
+static int str_subst_all_bounded(char *line, const char *finditem, const char *replitem, size_t linesz) {
+  size_t flen = strlen(finditem), rlen = strlen(replitem);
+  char *p;
+  if (flen == 0) return 0;
+  while ((p = strstr(line, finditem)) != NULL) {
+    size_t taillen = strlen(p + flen);
+    if (strlen(line) - flen + rlen + 1 > linesz) return -1;
+    memmove(p + rlen, p + flen, taillen + 1);
+    memcpy(p, replitem, rlen);
+  }
+  return 0;
 }
 
 char *str_replace_all_bounded(char *line, char *finditem, char *replitem,dim_t nbuffer) {
