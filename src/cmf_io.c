@@ -668,6 +668,7 @@ int tab_preprocess(char *filename, char *newtabfile) {
   fclose(filehandle);
   fclose(fout);
   filehandle = fopen(newtabfile1,"r");
+  if (filehandle==NULL) return -1;
   fout = fopen(newtabfile,"w");
   i=0;
   while (fgets(line,TABREADLINE,filehandle)) {
@@ -1052,6 +1053,7 @@ int tab_read_set_name(char *filename, char *varname, int indx, char *setname) {
   strcpy(varname1,")");
   strcat(varname1,varname);
   filehandle = fopen(filename,"r");
+  if (filehandle==NULL) return -1;
   strcpy(commsyntax,"variable");
   while (tab_next_statement(commsyntax,filehandle,line,lsize)) {
     while (str_replace_all(line," ", ""));
@@ -1089,6 +1091,7 @@ int tab_read_set_name(char *filename, char *varname, int indx, char *setname) {
   }
   fclose(filehandle);
   filehandle = fopen(filename,"r");
+  if (filehandle==NULL) return -1;
   strcpy(commsyntax,"coefficient");
   while (tab_next_statement(commsyntax,filehandle,line,lsize)) {
     while (str_replace_all(line," ", ""));
