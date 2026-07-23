@@ -1010,12 +1010,14 @@ int tab_write_variables(char *filename, char *newtabfile,array_def *vars,offset_
   filehandle = fopen(filename,"r");
   offset_t i,n,j,l,l1,linelght;
   int lvar;
+  if (filehandle==NULL) return -1;
   fout = fopen(newtabfile,"w");
   while (fgets(line,TABREADLINE,filehandle)) {
     if(str_find_ci(line,"equation ")>-1||str_find_ci(line,"update ")>-1) {
       linelght=strlen(line);
       for (i=0; i<nvar; i++) {
         p=strchr(line,';');
+        if(p==NULL) break;
         line[p-line+1]='\n';
         line[p-line+2]='\0';
         n=str_count_ci(line,vars[i].cofname);

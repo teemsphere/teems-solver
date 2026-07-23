@@ -1453,6 +1453,7 @@ offset_t tab_count_statements(char *fname, char *commsyntax) {
   char line[TABREADLINE]="\0";
   offset_t j=0;
   filehandle = fopen(fname,"r");
+  if (filehandle==NULL) return 0;
   while (tab_next_statement(commsyntax,filehandle,line,TABREADLINE)) {
     if (strstr(line,"(default")==NULL) {
       j++;
