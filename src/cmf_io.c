@@ -41,15 +41,18 @@ int datafile_read_header_info(char *varname, char *filename,dim_t *vsize, char *
       if (nlength1==nlength&&strncmp(readitem,varname,nlength) == 0) {
         succ=1;
         readitem = strtok(line," ");
+        if (readitem==NULL) { fclose(filehandle); return -1; }
         din1=atoi(readitem);//strtol(readitem,NULL,10);//sscanf(readitem, "%d", &din1);
         readitem = strtok(NULL," ");
         readitem = strtok(NULL," ");
         readitem = strtok(NULL," ");
+        if (readitem==NULL) { fclose(filehandle); return -1; }
         vsizein=atoi(readitem);//sscanf(readitem, "%d", &vsizein);
         readitem = strtok(linecopy,"\"");
         readitem = strtok(NULL,"\"");
         readitem = strtok(NULL,"\"");
         readitem = strtok(NULL,"\"");
+        if (readitem==NULL) { fclose(filehandle); return -1; }
         strcpy(longname,readitem);
       }
     }
@@ -674,6 +677,10 @@ int tab_preprocess(char *filename, char *newtabfile) {
           strncpy(line2,line1,n-line1);
           line2[n-line1]='\0';
           n1=strrchr(line2,'(');
+          if (n1==NULL) {
+            printf("Error: malformed indexed expression in TAB file: %s\n",line);
+            return -1;
+          }
           setindx=str_count_ci(n1,",");
           varindx=n1-line2+1;
           line2[varindx]='\0';
@@ -996,18 +1003,24 @@ int tab_read_set_name(char *filename, char *varname, int indx, char *setname) {
     if (n>-1) {
       p=strtok(line+n,"(");
       p=strtok(NULL,")");
+      if (p==NULL||strlen(p)+1>=sizeof(tmp)) { fclose(filehandle); return -1; }
       strcpy(tmp,p);
       strcat(tmp,",");
+      p=NULL;
       for (i=0; i<indx+1; i++) {
         if(i==0) p=strtok(tmp,",");
         else p=strtok(NULL,",");
+        if (p==NULL) { fclose(filehandle); return -1; }
       }
+      if (strlen(p)+1>=sizeof(indxname)) { fclose(filehandle); return -1; }
       strcpy(indxname,",");
       strcat(indxname,p);
       strcpy(line,line1);
       n=str_find_ci(line,indxname);
+      if (n<0) { fclose(filehandle); return -1; }
       p=strtok(line+n,",");
       p=strtok(NULL,")");
+      if (p==NULL||strlen(p)>=NAMESIZE) { fclose(filehandle); return -1; }
       strcpy(setname,p);
       return 1;
     }
@@ -1027,19 +1040,25 @@ int tab_read_set_name(char *filename, char *varname, int indx, char *setname) {
     if (n>-1) {
       p=strtok(line+n,"(");
       p=strtok(NULL,")");
+      if (p==NULL||strlen(p)+1>=sizeof(tmp)) { fclose(filehandle); return -1; }
       strcpy(tmp,p);
       strcat(tmp,",");
+      p=NULL;
       for (i=0; i<indx+1; i++) {
         if(i==0) p=strtok(tmp,",");
         else p=strtok(NULL,",");
+        if (p==NULL) { fclose(filehandle); return -1; }
       }
+      if (strlen(p)+2>=sizeof(indxname)) { fclose(filehandle); return -1; }
       strcpy(indxname,",");
       strcat(indxname,p);
       strcat(indxname,",");
       strcpy(line,line1);
       n=str_find_ci(line,indxname);
+      if (n<0) { fclose(filehandle); return -1; }
       p=strtok(line+n,",");
       p=strtok(NULL,")");
+      if (p==NULL||strlen(p)>=NAMESIZE) { fclose(filehandle); return -1; }
       strcpy(setname,p);
       return 1;
     }

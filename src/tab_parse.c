@@ -2129,6 +2129,10 @@ offset_t variables_read(char *fname, char *commsyntax, array_def *record, offset
             str_replace_all(setname,";", "");
             str_replace_all(setname,"\n", "");
             readitem=strchr(setname,')');
+            if (readitem==NULL||strlen(readitem+1)>=sizeof(record[j].cofname)) {
+              printf("Error: malformed %s declaration in TAB file\n",commsyntax);
+              return -1;
+            }
             readitem++;
             strcpy(record[j].cofname,readitem);
             record[j].offset=addi;
@@ -2139,6 +2143,10 @@ offset_t variables_read(char *fname, char *commsyntax, array_def *record, offset
             strcpy(setname,line+ncommsyntax);
             str_replace_all(setname,";", "");
             str_replace_all(setname,"\n", "");
+            if (strlen(setname)>=sizeof(record[j].cofname)) {
+              printf("Error: malformed %s declaration in TAB file\n",commsyntax);
+              return -1;
+            }
             strcpy(record[j].cofname,setname);
             record[j].offset=addi;
             record[j].size=0;
@@ -2402,6 +2410,10 @@ offset_t coefficients_read(char *fname, char *commsyntax, array_def *record, off
           strcpy(setname,line+ncommsyntax);
           str_replace_all(setname,";", "");
           str_replace_all(setname,"\n", "");
+          if (strlen(setname)>=sizeof(record[j].cofname)) {
+            printf("Error: malformed %s declaration in TAB file\n",commsyntax);
+            return -1;
+          }
           strcpy(record[j].cofname,setname);
           record[j].offset=addi;
           record[j].size=0;
@@ -2938,16 +2950,28 @@ int sets_read(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,
     if(k2>-1) {
       readitem = strtok(line+k2," ");
       readitem = strtok(NULL," ");
+      if (readitem==NULL||strlen(readitem)>=sizeof(record[j].setname)) {
+        printf("Error: malformed set declaration in TAB file\n");
+        return -1;
+      }
       strcpy(record[j].setname,readitem);
       strcpy(line1,"intertemporal,");
       readitem = strtok(NULL,"[");
       readitem = strtok(NULL,"]");
+      if (readitem==NULL) {
+        printf("Error: malformed set declaration in TAB file\n");
+        return -1;
+      }
       strcat(line1,readitem);
       readitem = strtok(NULL,";");
-      if (strchr(readitem,'[')!=NULL) {
+      if (readitem!=NULL&&strchr(readitem,'[')!=NULL) {
         strcat(line1,",");
         readitem = strtok(readitem,"[");
         readitem = strtok(NULL,"]");
+        if (readitem==NULL) {
+          printf("Error: malformed set declaration in TAB file\n");
+          return -1;
+        }
         strcat(line1,readitem);
       }
       strcpy(record[j].readele,line1);
@@ -3038,6 +3062,7 @@ int sets_read(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,
           line1[1]=',';
           line1[2]='\0';
           readitem = strtok(NULL,"-");
+          if (readitem==NULL) { printf("Error: malformed set declaration in TAB file\n"); return -1; }
           for (i=0; i<nset; i++) {
             if (strcmp(readitem,record[i].setname)==0) {
               dim1=record[i].size;
@@ -3047,6 +3072,7 @@ int sets_read(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,
             }
           }
           readitem = strtok(NULL,";");
+          if (readitem==NULL) { printf("Error: malformed set declaration in TAB file\n"); return -1; }
           for (i=0; i<nset; i++) {
             if (strcmp(readitem,record[i].setname)==0) {
               record[j].size=dim1-record[i].size;
@@ -3061,6 +3087,7 @@ int sets_read(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,
             line1[1]=',';
             line1[2]='\0';
             readitem = strtok(NULL,"+");
+            if (readitem==NULL) { printf("Error: malformed set declaration in TAB file\n"); return -1; }
             for (i=0; i<nset; i++) {
               if (strcmp(readitem,record[i].setname)==0) {
                 dim1=record[i].size;
@@ -3070,6 +3097,7 @@ int sets_read(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,
               }
             }
             readitem = strtok(NULL,";");
+            if (readitem==NULL) { printf("Error: malformed set declaration in TAB file\n"); return -1; }
             for (i=0; i<nset; i++) {
               if (strcmp(readitem,record[i].setname)==0) {
                 record[j].size=dim1+record[i].size;
@@ -3084,6 +3112,7 @@ int sets_read(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,
               line1[1]=',';
               line1[2]='\0';
               readitem = strtok(NULL,"^");
+              if (readitem==NULL) { printf("Error: malformed set declaration in TAB file\n"); return -1; }
               for (i=0; i<nset; i++) {
                 if (strcmp(readitem,record[i].setname)==0) {
                   dim1=record[i].size;
@@ -3093,6 +3122,7 @@ int sets_read(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,
                 }
               }
               readitem = strtok(NULL,";");
+              if (readitem==NULL) { printf("Error: malformed set declaration in TAB file\n"); return -1; }
               for (i=0; i<nset; i++) {
                 if (strcmp(readitem,record[i].setname)==0) {
                   record[j].size=dim1+record[i].size;
@@ -3105,6 +3135,7 @@ int sets_read(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,
               line1[0]='=';
               line1[1]='\0';
               readitem = strtok(NULL,";");
+              if (readitem==NULL) { printf("Error: malformed set declaration in TAB file\n"); return -1; }
               for (i=0; i<nset; i++) {
                 if (strcmp(readitem,record[i].setname)==0) {
                   record[j].size=record[i].size;
@@ -3131,10 +3162,18 @@ int sets_read(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,
         }
         readitem = strtok(line," ");
         readitem = strtok(NULL," ");
+        if (readitem==NULL||strlen(readitem)>=sizeof(record[j].setname)) {
+          printf("Error: malformed set declaration in TAB file\n");
+          return -1;
+        }
         strcpy(record[j].setname,readitem);
         readitem = strtok(NULL,"\"");
         readitem = strtok(NULL,"\"");
         if (readitem!=NULL) {
+          if (strlen(readitem)>=sizeof(record[j].header)) {
+            printf("Error: header too long in set declaration in TAB file: %s\n",readitem);
+            return -1;
+          }
           strcpy(record[j].header,readitem);
           record[j].readele[0]='\0';
           datafile_read_header_info(readitem,iodata[record[j].fileid].filname,&vsize,longname,&dim1);
