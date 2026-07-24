@@ -3616,7 +3616,8 @@ static dim_t set_expr_term(char **pp, set_element *se, set_def *sets, dim_t nset
       return 0;
     }
     for (k=0; (dim_t)k<sets[l].size&&(dim_t)k<cap; k++) strcpy(out[k],se[sets[l].offset+k].setele);
-    return sets[l].size;
+    if ((dim_t)k<sets[l].size) printf("Error: set %s has more elements than the declared size of %s\n",sets[l].setname,owner);
+    return k;
   }
 }
 
