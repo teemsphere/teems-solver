@@ -3350,6 +3350,10 @@ int sets_read(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,
         k0=str_find_ci(line,"read elements from file");
         if(k0>-1) {
           k1=str_find_ci(line+k0+24," ");
+          if (k1<0||k1>=(int)sizeof(line1)) {
+            printf("Error: malformed 'read elements from file' clause in set declaration in TAB file\n");
+            return -1;
+          }
           strncpy(line1,line+k0+24,k1);
           line1[k1]='\0';
           for (k0=0; k0<niodata; k0++) if (strcmp(line1,iodata[k0].logname)==0) {
