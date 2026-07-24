@@ -457,6 +457,7 @@ static void stmt_prog_build_one(char *line, stmt_prog *stp, char *commsyntax,
             p = strtok(tline,"{");
             p = strtok(NULL,"}");
             leadlag=0;
+            if(p==NULL)p="";
             parse_index_leadlag(p,&leadlag);
             strcpy(LinVars[i3].dimnames[0],p);
             LinVars[i3].dimleadlag[0]=leadlag;
@@ -493,6 +494,7 @@ static void stmt_prog_build_one(char *line, stmt_prog *stp, char *commsyntax,
             for (i4=0; i4<vars[l].size-1; i4++) {
               p = strtok(NULL,",");
               leadlag=0;
+              if(p==NULL)p="";
               parse_index_leadlag(p,&leadlag);
               strcpy(LinVars[i3].dimnames[i4],p);
               LinVars[i3].dimleadlag[i4]=leadlag;
@@ -526,6 +528,7 @@ static void stmt_prog_build_one(char *line, stmt_prog *stp, char *commsyntax,
             }
             p = strtok(NULL,"}");
             leadlag=0;
+            if(p==NULL)p="";
             parse_index_leadlag(p,&leadlag);
             strcpy(LinVars[i3].dimnames[i4],p);
             LinVars[i3].dimleadlag[i4]=leadlag;
@@ -1880,6 +1883,7 @@ int equation_order_read(char *fname, char *commsyntax,set_def *sets,dim_t nset,s
             p = strtok(tline,"{");
             p = strtok(NULL,"}");
             leadlag=0;
+            if(p==NULL)p="";
             parse_index_leadlag(p,&leadlag);
             LinVars[i3].dimleadlag[0]=leadlag;
             strcpy(LinVars[i3].dimnames[0],p);
@@ -1916,6 +1920,7 @@ int equation_order_read(char *fname, char *commsyntax,set_def *sets,dim_t nset,s
             for (i4=0; i4<vars[l].size-1; i4++) {
               p = strtok(NULL,",");
               leadlag=0;
+              if(p==NULL)p="";
               parse_index_leadlag(p,&leadlag);
               LinVars[i3].dimleadlag[i4]=leadlag;
               strcpy(LinVars[i3].dimnames[i4],p);
@@ -1949,6 +1954,7 @@ int equation_order_read(char *fname, char *commsyntax,set_def *sets,dim_t nset,s
             }
             p = strtok(NULL,"}");
             leadlag=0;
+            if(p==NULL)p="";
             parse_index_leadlag(p,&leadlag);
             LinVars[i3].dimleadlag[i4]=leadlag;
             strcpy(LinVars[i3].dimnames[i4],p);
@@ -2294,6 +2300,7 @@ int equation_order_read_nested(char *fname, char *commsyntax,set_def *sets,dim_t
             p = strtok(tline,"{");
             p = strtok(NULL,"}");
             leadlag=0;
+            if(p==NULL)p="";
             parse_index_leadlag(p,&leadlag);
             LinVars[i3].dimleadlag[0]=leadlag;
             strcpy(LinVars[i3].dimnames[0],p);
@@ -2330,6 +2337,7 @@ int equation_order_read_nested(char *fname, char *commsyntax,set_def *sets,dim_t
             for (i4=0; i4<vars[l].size-1; i4++) {
               p = strtok(NULL,",");
               leadlag=0;
+              if(p==NULL)p="";
               parse_index_leadlag(p,&leadlag);
               LinVars[i3].dimleadlag[i4]=leadlag;
               strcpy(LinVars[i3].dimnames[i4],p);
@@ -2363,6 +2371,7 @@ int equation_order_read_nested(char *fname, char *commsyntax,set_def *sets,dim_t
             }
             p = strtok(NULL,"}");
             leadlag=0;
+            if(p==NULL)p="";
             parse_index_leadlag(p,&leadlag);
             LinVars[i3].dimleadlag[i4]=leadlag;
             strcpy(LinVars[i3].dimnames[i4],p);
@@ -2676,6 +2685,7 @@ int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,
             p = strtok(tline,"{");
             p = strtok(NULL,"}");
             leadlag=0;
+            if(p==NULL)p="";
             parse_index_leadlag(p,&leadlag);
             strcpy(LinVars[i3].dimnames[0],p);
             LinVars[i3].dimleadlag[0]=leadlag;
@@ -2712,6 +2722,7 @@ int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,
             for (i4=0; i4<vars[l].size-1; i4++) {
               p = strtok(NULL,",");
               leadlag=0;
+              if(p==NULL)p="";
               parse_index_leadlag(p,&leadlag);
               strcpy(LinVars[i3].dimnames[i4],p);
               LinVars[i3].dimleadlag[i4]=leadlag;
@@ -2745,6 +2756,7 @@ int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,
             }
             p = strtok(NULL,"}");
             leadlag=0;
+            if(p==NULL)p="";
             parse_index_leadlag(p,&leadlag);
             strcpy(LinVars[i3].dimnames[i4],p);
             LinVars[i3].dimleadlag[i4]=leadlag;

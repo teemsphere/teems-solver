@@ -3265,6 +3265,10 @@ int sets_read(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,
               break;
             }
           }
+          if (record[j].size<0) {
+            printf("Error: set difference subtracts a larger set in TAB file\n");
+            return -1;
+          }
           strcpy(record[j].readele,line1);
         } else {
           if(strchr(line,'+')!=NULL) {

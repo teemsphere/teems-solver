@@ -418,6 +418,7 @@ int leadlag_encode(char *line) {
 
 int parse_index_leadlag(char *p,int *leadlag) {
   char *plussign,*minsign;
+  if(p==NULL) return 0;
   plussign=strchr(p,'#');
   minsign=strchr(p,'!');
   if(plussign!=NULL) {
