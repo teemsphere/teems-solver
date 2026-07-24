@@ -3104,6 +3104,10 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
         else {
           intvar[1]=intindx[2];
         }
+        if (intvar[1]+1-intvar[0]<=0) {
+          printf("Error: intertemporal set has an empty or inverted time range in TAB file\n");
+          return -1;
+        }
         record[j].readele[0]='\0';
         for (i=intvar[0]; i<intvar[1]+1; i++) {
           sprintf(line, "%d",i);
@@ -3410,7 +3414,7 @@ dim_t set_union_named(set_element *set_elems, set_def *sets,dim_t nset,dim_t i) 
   m=0;
   for (n=0; n<dim1; n++) {
     if (m>=bound) {printf("Error: set expression produces more elements than declared for set %s\n",sets[i].setname);return 0;}
-    strcpy(set_elems[sets[i].offset+m].setele,set_elems[sets[l].offset+n].setele);
+    if(sets[i].offset+m!=sets[l].offset+n)strcpy(set_elems[sets[i].offset+m].setele,set_elems[sets[l].offset+n].setele);
     set_elems[sets[i].offset+m].superset_pos[0]=n;
     set_elems[sets[l].offset+m].superset_pos[sup1]=n;
     m++;
@@ -3433,7 +3437,7 @@ dim_t set_union_named(set_element *set_elems, set_def *sets,dim_t nset,dim_t i) 
     for (j1=0; j1<dim1; j1++) if(strcmp(set_elems[sets[l].offset+j1].setele,set_elems[sets[j].offset+n].setele)==0) break;
     if(j1==dim1) {
       if (m>=bound) {printf("Error: set expression produces more elements than declared for set %s\n",sets[i].setname);return 0;}
-      strcpy(set_elems[sets[i].offset+m].setele,set_elems[sets[j].offset+n].setele);
+      if(sets[i].offset+m!=sets[j].offset+n)strcpy(set_elems[sets[i].offset+m].setele,set_elems[sets[j].offset+n].setele);
       set_elems[sets[i].offset+m].superset_pos[0]=m;
       set_elems[sets[j].offset+n].superset_pos[sup2]=m;
       m++;
@@ -3467,7 +3471,7 @@ dim_t set_union_op(set_element *set_elems, set_def *sets,dim_t nset,dim_t i) {
   m=0;
   for (n=0; n<dim1; n++) {
     if (m>=bound) {printf("Error: set expression produces more elements than declared for set %s\n",sets[i].setname);return 0;}
-    strcpy(set_elems[sets[i].offset+m].setele,set_elems[sets[l].offset+n].setele);
+    if(sets[i].offset+m!=sets[l].offset+n)strcpy(set_elems[sets[i].offset+m].setele,set_elems[sets[l].offset+n].setele);
     set_elems[sets[i].offset+m].superset_pos[0]=n;
     set_elems[sets[l].offset+m].superset_pos[sup1]=n;
     m++;
@@ -3488,7 +3492,7 @@ dim_t set_union_op(set_element *set_elems, set_def *sets,dim_t nset,dim_t i) {
   if (dim2>0&&j==i) {printf("Error: set %s references itself in a set expression\n",sets[i].setname);return 0;}
   for (n=0; n<dim2; n++) {
     if (m>=bound) {printf("Error: set expression produces more elements than declared for set %s\n",sets[i].setname);return 0;}
-    strcpy(set_elems[sets[i].offset+m].setele,set_elems[sets[j].offset+n].setele);
+    if(sets[i].offset+m!=sets[j].offset+n)strcpy(set_elems[sets[i].offset+m].setele,set_elems[sets[j].offset+n].setele);
     set_elems[sets[i].offset+m].superset_pos[0]=m;
     set_elems[sets[j].offset+n].superset_pos[sup2]=m;
     m++;
@@ -3536,7 +3540,7 @@ dim_t set_difference(set_element *set_elems, set_def *sets,dim_t nset,dim_t i) {
     }
     if(indi==0) {
       if (m>=bound) {printf("Error: set expression produces more elements than declared for set %s\n",sets[i].setname);return 0;}
-      strcpy(set_elems[sets[i].offset+m].setele,set_elems[sets[l].offset+n].setele);
+      if(sets[i].offset+m!=sets[l].offset+n)strcpy(set_elems[sets[i].offset+m].setele,set_elems[sets[l].offset+n].setele);
       set_elems[sets[i].offset+m].superset_pos[sup1]=n;
       set_elems[sets[i].offset+m].superset_pos[0]=m;
       m++;

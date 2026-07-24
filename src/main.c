@@ -917,8 +917,12 @@ int main(int argc,char **args) {
   }
   if(rank==0) {
     if(sets_read(tabfile,niodata,iodata, sets,nset)==-1)MPI_Abort(PETSC_COMM_WORLD,1);
-    sets_read_intertemporal(tabfile,niodata,iodata, sets,nset);
+    if(sets_read_intertemporal(tabfile,niodata,iodata, sets,nset)==-1)MPI_Abort(PETSC_COMM_WORLD,1);
     for (i=0; i<nset; i++) {
+      if(sets[i].size<0){
+        printf("Error: set %s has a negative size in TAB file\n",sets[i].setname);
+        MPI_Abort(PETSC_COMM_WORLD,1);
+      }
       sets[i].offset=nsetspace;
       nsetspace=nsetspace+sets[i].size;
     }
