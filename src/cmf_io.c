@@ -1025,8 +1025,9 @@ int tab_write_variables(char *filename, char *newtabfile,array_def *vars,offset_
         l=0;
         for (j=0; j<n; j++) {
           l1=str_find_ci(&line[l],vars[i].cofname);
+          if(l1<0) break;
           l=l+l1;
-          if(strncmp(vars[i].cofname,"p_",2)!=0&&vars[i].level_par==false) if(line[l+lvar]==' '||line[l+lvar]=='('||line[l+lvar]=='+'||line[l+lvar]=='-'||line[l+lvar]=='*'||line[l+lvar]=='/'||line[l+lvar]=='^'||line[l+lvar]==']'||line[l+lvar]==','||line[l+lvar]==';'||line[l+lvar]=='=')if(line[l-1]==' '||line[l-1]=='+'||line[l-1]=='-'||line[l-1]=='*'||line[l-1]=='/'||line[l-1]=='^'||line[l-1]=='['||line[l-1]=='('||line[l-1]==','||line[l-1]=='=') {
+          if(strncmp(vars[i].cofname,"p_",2)!=0&&vars[i].level_par==false) if(line[l+lvar]==' '||line[l+lvar]=='('||line[l+lvar]=='+'||line[l+lvar]=='-'||line[l+lvar]=='*'||line[l+lvar]=='/'||line[l+lvar]=='^'||line[l+lvar]==']'||line[l+lvar]==','||line[l+lvar]==';'||line[l+lvar]=='=')if(l==0||line[l-1]==' '||line[l-1]=='+'||line[l-1]=='-'||line[l-1]=='*'||line[l-1]=='/'||line[l-1]=='^'||line[l-1]=='['||line[l-1]=='('||line[l-1]==','||line[l-1]=='=') {
                 memmove(&line[l+2],&line[l],linelght-l);
                 line[l]='p';
                 line[l+1]='_';
