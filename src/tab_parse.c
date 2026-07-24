@@ -3331,6 +3331,10 @@ int sets_read(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,
               if (readitem==NULL) { printf("Error: malformed set declaration in TAB file\n"); return -1; }
               for (i=0; i<nset; i++) {
                 if (strcmp(readitem,record[i].setname)==0) {
+                  if (i==j) {
+                    printf("Error: set %s is defined as equal to itself in TAB file\n",record[j].setname);
+                    return -1;
+                  }
                   record[j].size=record[i].size;
                   strcpy(record[j].header,record[i].header);
                   sprintf(tempvar, "%d",i);
