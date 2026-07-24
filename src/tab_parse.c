@@ -4396,6 +4396,7 @@ char *str_replace_all(char *line, char *finditem, char *replitem) {
   char buffer[DATREADLINE];
   char *p;
   unsigned short int count2 = 0,index;
+  if (line==NULL) return NULL;
   while (finditem[count2] != '\0') {
     count2++;
   }

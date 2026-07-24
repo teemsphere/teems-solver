@@ -18,6 +18,7 @@ static void warn_no_values(const char *name, offset_t idx, int which) {
 
 solve_real formula_subst_scalar(char *var2, elem_value *record, array_def *coefs,offset_t ncof) {
   offset_t index;
+  if (var2==NULL) return 0;
   while (str_replace_all(var2," ", ""));
   solve_real eval=0;
   if (var2[0]>='0'&&var2[0]<='9') {

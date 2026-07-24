@@ -444,7 +444,9 @@ static void stmt_prog_build_one(char *line, stmt_prog *stp, char *commsyntax,
               break;
             }
           }
+          if (l>=nvar) break;
           p=strpbrk(readitem,"}+*-/^)");
+          if (p==NULL) break;
           if (*p=='}') {
             p++;
           }
@@ -1870,7 +1872,9 @@ int equation_order_read(char *fname, char *commsyntax,set_def *sets,dim_t nset,s
               break;
             }
           }
+          if (l>=nvar) break;
           p=strpbrk(readitem,"}+*-/^)");
+          if (p==NULL) break;
           if (*p=='}') {
             p++;
           }
@@ -2287,7 +2291,9 @@ int equation_order_read_nested(char *fname, char *commsyntax,set_def *sets,dim_t
               break;
             }
           }
+          if (l>=nvar) break;
           p=strpbrk(readitem,"}+*-/^)");
+          if (p==NULL) break;
           if (*p=='}') {
             p++;
           }
@@ -2672,7 +2678,9 @@ int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,
               break;
             }
           }
+          if (l>=nvar) break;
           p=strpbrk(readitem,"}+*-/^)");
+          if (p==NULL) break;
           if (*p=='}') {
             p++;
           }
