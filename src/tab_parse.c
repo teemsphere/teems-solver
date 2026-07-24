@@ -4425,13 +4425,15 @@ char *str_replace_all(char *line, char *finditem, char *replitem) {
    on the malformed/pathological input the old code overflowed on). */
 static int str_subst_all_bounded(char *line, const char *finditem, const char *replitem, size_t linesz) {
   size_t flen = strlen(finditem), rlen = strlen(replitem);
-  char *p;
+  char *p, *start = line;
   if (flen == 0) return 0;
-  while ((p = strstr(line, finditem)) != NULL) {
+  while ((p = strstr(start, finditem)) != NULL) {
     size_t taillen = strlen(p + flen);
     if (strlen(line) - flen + rlen + 1 > linesz) return -1;
     memmove(p + rlen, p + flen, taillen + 1);
     memcpy(p, replitem, rlen);
+    start = p + rlen; /* resume past the replacement so a replitem containing
+                         finditem cannot re-match and loop forever */
   }
   return 0;
 }
