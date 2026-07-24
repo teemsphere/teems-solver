@@ -3386,9 +3386,11 @@ int sets_read(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,
 dim_t set_union_named(set_element *set_elems, set_def *sets,dim_t nset,dim_t i) {
   dim_t j,l,n,m,dim1=0,dim2=0,j1,sup1=MAXSUPSET,sup2=MAXSUPSET;
   char line[TABREADLINE],*readitem;
+  dim_t bound=sets[i].size; /* parse-time upper bound = allocated element slots */
   strcpy(line,sets[i].readele);
   readitem = strtok(line,",");
   readitem = strtok(NULL,",");
+  if (readitem==NULL) return 0;
   for (l=0; l<nset; l++) {
     if (strcmp(readitem,sets[l].setname)==0) {
       dim1=sets[l].size;
@@ -3400,14 +3402,17 @@ dim_t set_union_named(set_element *set_elems, set_def *sets,dim_t nset,dim_t i) 
     }
   }
   if(sup1>=MAXSUPSET){printf("Error: superset size exceeded; increase MAXSUPSET in teems_solver.h\n");return 0;}
+  if (dim1>0&&l==i) {printf("Error: set %s references itself in a set expression\n",sets[i].setname);return 0;}
   m=0;
   for (n=0; n<dim1; n++) {
+    if (m>=bound) {printf("Error: set expression produces more elements than declared for set %s\n",sets[i].setname);return 0;}
     strcpy(set_elems[sets[i].offset+m].setele,set_elems[sets[l].offset+n].setele);
     set_elems[sets[i].offset+m].superset_pos[0]=n;
     set_elems[sets[l].offset+m].superset_pos[sup1]=n;
     m++;
   }
   readitem = strtok(NULL,",");
+  if (readitem==NULL) return 0;
   for (j=0; j<nset; j++) {
     if (strcmp(readitem,sets[j].setname)==0) {
       dim2=sets[j].size;
@@ -3419,9 +3424,11 @@ dim_t set_union_named(set_element *set_elems, set_def *sets,dim_t nset,dim_t i) 
     }
   }
   if(sup2>=MAXSUPSET){printf("Error: superset size exceeded; increase MAXSUPSET in teems_solver.h\n");return 0;}
+  if (dim2>0&&j==i) {printf("Error: set %s references itself in a set expression\n",sets[i].setname);return 0;}
   for (n=0; n<dim2; n++) {
     for (j1=0; j1<dim1; j1++) if(strcmp(set_elems[sets[l].offset+j1].setele,set_elems[sets[j].offset+n].setele)==0) break;
     if(j1==dim1) {
+      if (m>=bound) {printf("Error: set expression produces more elements than declared for set %s\n",sets[i].setname);return 0;}
       strcpy(set_elems[sets[i].offset+m].setele,set_elems[sets[j].offset+n].setele);
       set_elems[sets[i].offset+m].superset_pos[0]=m;
       set_elems[sets[j].offset+n].superset_pos[sup2]=m;
@@ -3436,9 +3443,11 @@ dim_t set_union_named(set_element *set_elems, set_def *sets,dim_t nset,dim_t i) 
 dim_t set_union_op(set_element *set_elems, set_def *sets,dim_t nset,dim_t i) {
   dim_t j,l,n,m,dim1=0,dim2=0,j1,sup1=MAXSUPSET,sup2=MAXSUPSET;
   char line[TABREADLINE],*readitem;
+  dim_t bound=sets[i].size; /* parse-time upper bound = allocated element slots */
   strcpy(line,sets[i].readele);
   readitem = strtok(line,",");
   readitem = strtok(NULL,",");
+  if (readitem==NULL) return 0;
   for (l=0; l<nset; l++) {
     if (strcmp(readitem,sets[l].setname)==0) {
       dim1=sets[l].size;
@@ -3450,14 +3459,17 @@ dim_t set_union_op(set_element *set_elems, set_def *sets,dim_t nset,dim_t i) {
     }
   }
   if(sup1>=MAXSUPSET){printf("Error: superset size exceeded; increase MAXSUPSET in teems_solver.h\n");return 0;}
+  if (dim1>0&&l==i) {printf("Error: set %s references itself in a set expression\n",sets[i].setname);return 0;}
   m=0;
   for (n=0; n<dim1; n++) {
+    if (m>=bound) {printf("Error: set expression produces more elements than declared for set %s\n",sets[i].setname);return 0;}
     strcpy(set_elems[sets[i].offset+m].setele,set_elems[sets[l].offset+n].setele);
     set_elems[sets[i].offset+m].superset_pos[0]=n;
     set_elems[sets[l].offset+m].superset_pos[sup1]=n;
     m++;
   }
   readitem = strtok(NULL,",");
+  if (readitem==NULL) return 0;
   for (j=0; j<nset; j++) {
     if (strcmp(readitem,sets[j].setname)==0) {
       dim2=sets[j].size;
@@ -3469,7 +3481,9 @@ dim_t set_union_op(set_element *set_elems, set_def *sets,dim_t nset,dim_t i) {
     }
   }
   if(sup2>=MAXSUPSET){printf("Error: superset size exceeded; increase MAXSUPSET in teems_solver.h\n");return 0;}
+  if (dim2>0&&j==i) {printf("Error: set %s references itself in a set expression\n",sets[i].setname);return 0;}
   for (n=0; n<dim2; n++) {
+    if (m>=bound) {printf("Error: set expression produces more elements than declared for set %s\n",sets[i].setname);return 0;}
     strcpy(set_elems[sets[i].offset+m].setele,set_elems[sets[j].offset+n].setele);
     set_elems[sets[i].offset+m].superset_pos[0]=m;
     set_elems[sets[j].offset+n].superset_pos[sup2]=m;
@@ -3479,8 +3493,9 @@ dim_t set_union_op(set_element *set_elems, set_def *sets,dim_t nset,dim_t i) {
   return m;
 }
 dim_t set_difference(set_element *set_elems, set_def *sets,dim_t nset,dim_t i) {
-  dim_t j,l,n,m,v,indi,dim1=0,dim2=0,sup1;
+  dim_t j,l,n,m,v,indi,dim1=0,dim2=0,sup1=MAXSUPSET;
   char line[TABREADLINE],*readitem;
+  dim_t bound=sets[i].size; /* parse-time upper bound = allocated element slots */
   strcpy(line,sets[i].readele);
   readitem = strtok(line,",");
   readitem = strtok(NULL,",");
@@ -3495,6 +3510,8 @@ dim_t set_difference(set_element *set_elems, set_def *sets,dim_t nset,dim_t i) {
       break;
     }
   }
+  if(dim1>0&&sup1>=MAXSUPSET){printf("Error: superset size exceeded; increase MAXSUPSET in teems_solver.h\n");return 0;}
+  if (dim1>0&&l==i) {printf("Error: set %s references itself in a set expression\n",sets[i].setname);return 0;}
   readitem = strtok(NULL,",");
   if (readitem==NULL) return 0;
   for (j=0; j<nset; j++) {
@@ -3503,6 +3520,7 @@ dim_t set_difference(set_element *set_elems, set_def *sets,dim_t nset,dim_t i) {
       break;
     }
   }
+  if (dim2>0&&j==i) {printf("Error: set %s references itself in a set expression\n",sets[i].setname);return 0;}
   m=0;
   for (n=0; n<dim1; n++) {
     indi=0;
@@ -3513,6 +3531,7 @@ dim_t set_difference(set_element *set_elems, set_def *sets,dim_t nset,dim_t i) {
       }
     }
     if(indi==0) {
+      if (m>=bound) {printf("Error: set expression produces more elements than declared for set %s\n",sets[i].setname);return 0;}
       strcpy(set_elems[sets[i].offset+m].setele,set_elems[sets[l].offset+n].setele);
       set_elems[sets[i].offset+m].superset_pos[sup1]=n;
       set_elems[sets[i].offset+m].superset_pos[0]=m;
@@ -3759,16 +3778,27 @@ offset_t subsets_read(char *fname, set_element *set_elems, set_def *sets,dim_t n
   char *readitem=NULL;
 
   filehandle = fopen(fname,"r");
+  if (filehandle==NULL) return -1;
 
   while (tab_next_statement(commsyntax,filehandle,line,TABREADLINE)) {
     while (str_replace_all(line," ;", ";"));
     readitem = strtok(line," ");
     readitem = strtok(NULL," ");
+    if (readitem==NULL||strlen(readitem)>=sizeof(subset)) {
+      printf("Error: malformed %s statement in TAB file\n",commsyntax);
+      fclose(filehandle);
+      return -1;
+    }
     strcpy(subset,readitem);
     readitem = strtok(NULL," ");
     readitem = strtok(NULL," ");
     readitem = strtok(NULL," ");
     readitem = strtok(NULL,";");
+    if (readitem==NULL||strlen(readitem)>=sizeof(set)) {
+      printf("Error: malformed %s statement in TAB file\n",commsyntax);
+      fclose(filehandle);
+      return -1;
+    }
     strcpy(set,readitem);
     succ=0;
     for (i=0; i<nset; i++) {
@@ -3780,7 +3810,11 @@ offset_t subsets_read(char *fname, set_element *set_elems, set_def *sets,dim_t n
                 sets[i].subsetid[sup1]=j;
                 break;
               }
-            if(sup1==MAXSUPSET)printf("Error: superset count exceeds MAXSUPSET; increase MAXSUPSET in teems_solver.h\n");
+            if(sup1==MAXSUPSET) {
+              printf("Error: superset count exceeds MAXSUPSET; increase MAXSUPSET in teems_solver.h\n");
+              fclose(filehandle);
+              return -1;
+            }
             for (jj=sets[j].offset; jj<sets[j].offset+sets[j].size; jj++) {
               for (jjj=sets[i].offset; jjj<sets[i].offset+sets[i].size; jjj++) {
                 if (strcmp(set_elems[jj].setele,set_elems[jjj].setele)==0) {
@@ -3799,7 +3833,7 @@ offset_t subsets_read(char *fname, set_element *set_elems, set_def *sets,dim_t n
       j++;
     }
     if(i==nset)printf("Error: set %s is not declared\n",subset);
-    if(succ-sets[i].size!=0)printf("Error: some elements of set %s are not in set %s\n",subset,set);
+    else if(succ-sets[i].size!=0)printf("Error: some elements of set %s are not in set %s\n",subset,set);
   }
   fclose(filehandle);
   return j;

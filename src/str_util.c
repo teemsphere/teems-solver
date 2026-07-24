@@ -64,6 +64,7 @@ int str_count_ci(char *line, char *finditem)
   char *t1,*t2;
   while (line[count1] != '\0') count1++;
   while (finditem[l] != '\0') l++;
+  if (l==0) return 0; /* empty pattern would never advance q below */
   q=0;
 aabb:
   for (i=q; i<count1; i++)

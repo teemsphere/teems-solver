@@ -973,14 +973,23 @@ int main(int argc,char **args) {
               }
               else {
                 dim1=sets[i].size;
+                if (dim1<=0) continue; /* nothing allocated to populate; last-set offset==nsetspace */
                 strcpy(copyline,sets[i].readele);
                 strcat(copyline,",");
                 while (str_replace_all(copyline," ", ""));
                 readitem = strtok(copyline,",");
+                if (readitem==NULL||strlen(readitem)>=NAMESIZE) {
+                  printf("Error: malformed element list for set %s\n",sets[i].setname);
+                  MPI_Abort(PETSC_COMM_WORLD,1);
+                }
                 strcpy(set_elems[sets[i].offset].setele,readitem);
                 set_elems[sets[i].offset].superset_pos[0]=0;
                 for (j=1; j<dim1; j++) {
                   readitem = strtok(NULL,",");
+                  if (readitem==NULL||strlen(readitem)>=NAMESIZE) {
+                    printf("Error: malformed element list for set %s\n",sets[i].setname);
+                    MPI_Abort(PETSC_COMM_WORLD,1);
+                  }
                   strcpy(set_elems[j+sets[i].offset].setele,readitem);
                   set_elems[j+sets[i].offset].superset_pos[0]=j;
                 }
