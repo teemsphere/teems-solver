@@ -3111,6 +3111,10 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
         record[j].readele[0]='\0';
         for (i=intvar[0]; i<intvar[1]+1; i++) {
           sprintf(line, "%d",i);
+          if (strlen(record[j].readele)+strlen(line)+2>=sizeof(record[j].readele)) {
+            printf("Error: intertemporal set time range is too large in TAB file\n");
+            return -1;
+          }
           strcat(record[j].readele,line);
           strcat(record[j].readele,",");
         }
