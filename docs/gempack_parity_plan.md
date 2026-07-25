@@ -28,7 +28,19 @@ semantics, POSTSIM, others").
   identity assertion post-solve — the same section evaluated
   pre-solve (and failed) on the pre-Tier-0 build; wrong identity
   fails rc=1 with the %% report; `PostSim = no` skips; a forbidden
-  Update in a section dies cleanly at split. REMAINING for full
+  Update in a section dies cleanly at split. **teems-R side landed same day** (teems-R
+  506c269): Postsim is a supported statement; the pipeline tags section
+  contents (declarations by name from a raw-text scan, executables by
+  marker region), validates 12.2.1 (forbidden kinds abort), re-wraps
+  executables in a trailing section at finalize, routes PostSim
+  coefficients to `out/postsim/` outdata entries, and `ems_compose`
+  surfaces them with type `postsim`. E2e-validated: GTAPv7 + section →
+  deploy → solve (teems:dev) → compose row matching R's own sum to
+  storage precision. FINDING recorded: coefficient/variable name
+  collisions (GTAP `POP` coefficient vs `pop` variable, case-collapsed
+  by preprocessing) resolve to the VARIABLE in PostSim formulas after
+  solution exposure — use distinct names in PostSim expressions; a
+  spec pass on GEMPACK's resolution order (12.2.2) is queued. REMAINING for full
   Tier 0: PostSim Read (fatal-with-remedy today), PS Formula
   LHS-must-be-PS-coefficient validation (single namespace accepts
   ordinary LHS — GEMPACK-illegal, currently permitted), scope
