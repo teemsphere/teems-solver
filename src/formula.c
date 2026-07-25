@@ -547,6 +547,26 @@ int formula_compile(char *fomulain, set_def *sets,array_def *coefs, offset_t nco
           ops[*nops].Var1Type=OT_TEMP_ABS;
           fpart1[j-3]='\0';
         }
+    /* intrinsic functions EXP/SQRT/LOG10/ROUND (manual 11.5, parity
+       plan 3.1) -- same reversed-name recognition as loge/abs/id01,
+       with the delimiter boundary check so names merely ending in a
+       function word cannot trigger */
+    if (j>=3) if (fpart1[j-1]=='p'&&fpart1[j-2]=='x'&&fpart1[j-3]=='e') if(j==3||fpart1[j-4]==' '||fpart1[j-4]=='('||fpart1[j-4]=='+'||fpart1[j-4]=='-'||fpart1[j-4]=='*'||fpart1[j-4]=='/'||fpart1[j-4]=='^'||fpart1[j-4]==',') {
+          ops[*nops].Var1Type=OT_TEMP_EXP;
+          fpart1[j-3]='\0';
+        }
+    if (j>=4) if (fpart1[j-1]=='t'&&fpart1[j-2]=='r'&&fpart1[j-3]=='q'&&fpart1[j-4]=='s') if(j==4||fpart1[j-5]==' '||fpart1[j-5]=='('||fpart1[j-5]=='+'||fpart1[j-5]=='-'||fpart1[j-5]=='*'||fpart1[j-5]=='/'||fpart1[j-5]=='^'||fpart1[j-5]==',') {
+          ops[*nops].Var1Type=OT_TEMP_SQRT;
+          fpart1[j-4]='\0';
+        }
+    if (j>=5) if (fpart1[j-1]=='0'&&fpart1[j-2]=='1'&&fpart1[j-3]=='g'&&fpart1[j-4]=='o'&&fpart1[j-5]=='l') if(j==5||fpart1[j-6]==' '||fpart1[j-6]=='('||fpart1[j-6]=='+'||fpart1[j-6]=='-'||fpart1[j-6]=='*'||fpart1[j-6]=='/'||fpart1[j-6]=='^'||fpart1[j-6]==',') {
+          ops[*nops].Var1Type=OT_TEMP_LOG10;
+          fpart1[j-5]='\0';
+        }
+    if (j>=5) if (fpart1[j-1]=='d'&&fpart1[j-2]=='n'&&fpart1[j-3]=='u'&&fpart1[j-4]=='o'&&fpart1[j-5]=='r') if(j==5||fpart1[j-6]==' '||fpart1[j-6]=='('||fpart1[j-6]=='+'||fpart1[j-6]=='-'||fpart1[j-6]=='*'||fpart1[j-6]=='/'||fpart1[j-6]=='^'||fpart1[j-6]==',') {
+          ops[*nops].Var1Type=OT_TEMP_ROUND;
+          fpart1[j-5]='\0';
+        }
     if (j==2) if (fpart1[j-1]=='f'&&fpart1[j-2]=='i') {
         if(!formula_compile_if(fpart2,sets,2,i,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,nops,arSet,fdim))return 0;
         fpart1[j-2]='\0';
@@ -611,6 +631,22 @@ solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,
       }
       if (ops[i].Var1Type==OT_TEMP_LOG) {
         ops[i].TmpVarVal=log(ops[ops[i].Var1BegAdd].TmpVarVal);
+        break;
+      }
+      if (ops[i].Var1Type==OT_TEMP_EXP) {
+        ops[i].TmpVarVal=exp(ops[ops[i].Var1BegAdd].TmpVarVal);
+        break;
+      }
+      if (ops[i].Var1Type==OT_TEMP_SQRT) {
+        ops[i].TmpVarVal=sqrt(ops[ops[i].Var1BegAdd].TmpVarVal);
+        break;
+      }
+      if (ops[i].Var1Type==OT_TEMP_LOG10) {
+        ops[i].TmpVarVal=log10(ops[ops[i].Var1BegAdd].TmpVarVal);
+        break;
+      }
+      if (ops[i].Var1Type==OT_TEMP_ROUND) {
+        ops[i].TmpVarVal=round(ops[ops[i].Var1BegAdd].TmpVarVal);
         break;
       }
       if (ops[i].Var1Type==OT_CONST) {

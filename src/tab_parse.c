@@ -5,7 +5,7 @@
 static int str_subst_all_bounded(char *line, const char *finditem, const char *replitem, size_t linesz);
 
 int formula_normalize(char *fomulain) {
-  int index,i,i1,j;
+  int index,i,i1,i2,j;
   char fpart1[TABREADLINE],*p=NULL,*p1=NULL;
   while (str_replace_all(fomulain, " ", ""));
   p=strchr(fomulain,')');
@@ -74,7 +74,18 @@ int formula_normalize(char *fomulain) {
       if(fpart1[j+3]=='s') {
         i1++;
       }
-      if (i==3||i1==3) {
+      /* exp( -- intrinsic (parity plan 3.1) */
+      i2=0;
+      if(fpart1[j+1]=='e') {
+        i2++;
+      }
+      if(fpart1[j+2]=='x') {
+        i2++;
+      }
+      if(fpart1[j+3]=='p') {
+        i2++;
+      }
+      if (i==3||i1==3||i2==3) {
         fomulain[p-fomulain]=']';
         fomulain[index]='[';
       } else {
@@ -110,7 +121,36 @@ int formula_normalize(char *fomulain) {
       if(fpart1[j+4]=='e') {
         i1++;
       }
-      if (i==4||i1==4) {
+      /* sqrt( -- intrinsic (parity plan 3.1) */
+      i2=0;
+      if(fpart1[j+1]=='s') {
+        i2++;
+      }
+      if(fpart1[j+2]=='q') {
+        i2++;
+      }
+      if(fpart1[j+3]=='r') {
+        i2++;
+      }
+      if(fpart1[j+4]=='t') {
+        i2++;
+      }
+      if (i==4||i1==4||i2==4) {
+        fomulain[p-fomulain]=']';
+        fomulain[index]='[';
+      } else {
+        fomulain[p-fomulain]='}';
+        fomulain[index]='{';
+      }
+      break;
+    case 6:
+      /* log10( / round( -- intrinsics (parity plan 3.1) */
+      j=index-i;
+      i=0;
+      if(fpart1[j+1]=='l'&&fpart1[j+2]=='o'&&fpart1[j+3]=='g'&&fpart1[j+4]=='1'&&fpart1[j+5]=='0')i=5;
+      i1=0;
+      if(fpart1[j+1]=='r'&&fpart1[j+2]=='o'&&fpart1[j+3]=='u'&&fpart1[j+4]=='n'&&fpart1[j+5]=='d')i1=5;
+      if (i==5||i1==5) {
         fomulain[p-fomulain]=']';
         fomulain[index]='[';
       } else {
@@ -167,7 +207,18 @@ int formula_normalize(char *fomulain) {
       if(fpart1[2]=='s') {
         i1++;
       }
-      if (i==3||i1==3) {
+      /* exp( -- intrinsic (parity plan 3.1) */
+      i2=0;
+      if(fpart1[0]=='e') {
+        i2++;
+      }
+      if(fpart1[1]=='x') {
+        i2++;
+      }
+      if(fpart1[2]=='p') {
+        i2++;
+      }
+      if (i==3||i1==3||i2==3) {
         fomulain[p-fomulain]=']';
         fomulain[index]='[';
       } else {
@@ -189,7 +240,27 @@ int formula_normalize(char *fomulain) {
       if(fpart1[3]=='1') {
         i++;
       }
-      if (i==4) {
+      /* loge( at expression start was missing (asymmetry with the
+         operator-preceded switch); sqrt( is new (parity plan 3.1) */
+      i1=0;
+      if(fpart1[0]=='l'&&fpart1[1]=='o'&&fpart1[2]=='g'&&fpart1[3]=='e')i1=4;
+      i2=0;
+      if(fpart1[0]=='s'&&fpart1[1]=='q'&&fpart1[2]=='r'&&fpart1[3]=='t')i2=4;
+      if (i==4||i1==4||i2==4) {
+        fomulain[p-fomulain]=']';
+        fomulain[index]='[';
+      } else {
+        fomulain[p-fomulain]='}';
+        fomulain[index]='{';
+      }
+      break;
+    case 6:
+      /* log10( / round( -- intrinsics (parity plan 3.1) */
+      i=0;
+      if(fpart1[0]=='l'&&fpart1[1]=='o'&&fpart1[2]=='g'&&fpart1[3]=='1'&&fpart1[4]=='0')i=5;
+      i1=0;
+      if(fpart1[0]=='r'&&fpart1[1]=='o'&&fpart1[2]=='u'&&fpart1[3]=='n'&&fpart1[4]=='d')i1=5;
+      if (i==5||i1==5) {
         fomulain[p-fomulain]=']';
         fomulain[index]='[';
       } else {

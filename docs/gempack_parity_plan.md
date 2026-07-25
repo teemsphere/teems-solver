@@ -47,6 +47,66 @@ spec; model semantics live solver-side (single-source-of-truth), the R side
 only pre-flight-validates and may do declarative rewrites (as it already does
 for IF and netcut).
 
+## Declaration-surface audit (2026-07-25, user-requested)
+
+Full manual-vs-parser-vs-corpus audit of the ALREADY-implemented
+statements (SET/SUBSET/COEFFICIENT/VARIABLE/FILE/READ/FORMULA/EQUATION/
+UPDATE/ZERODIVIDE). Conclusion: everything the 54-file corpus actually
+exercises is implemented consistently with the manual; the genuinely
+wrong-results-today exposure is concentrated in ZERODIVIDE. Ranked
+findings (A# = audit item; corpus-use counts in brackets):
+
+- **A1 ZERODIVIDE qualifier conflation** — one shared default serves
+  both `(ZERO_BY_ZERO)` and `(NONZERO_BY_ZERO)` [116 stmts]; unqualified
+  `Zerodivide off;` [18] is a silent no-op (stale default persists);
+  qualified `off` resets the default to 0 instead of restoring
+  divide-is-an-error; equations/updates silently use the formula
+  default where GEMPACK always errors. REAL numeric divergence in
+  shipped TABs. Fix: two tracked defaults + off/error state per
+  qualifier. ⚠ fixing may shift results of models that relied on the
+  conflation — gate carefully, possible re-anchor-class change.
+- **A2 `SET B = A;` broken for read-from-file sources** — `header`
+  copied without `fileid`, so elements re-read from `iodata[0]` and
+  `set_equality_build` (incl. the two implied SUBSETs) never runs [0
+  uses today]. Fix: don't copy the header; let the equality path run.
+- **A3 silent set forms** — set product `= A x B` and data-dependent
+  `= (all,i,S: cond)` produce empty/garbage sets while the run
+  CONTINUES [0 uses, but standard GTAP uses data-dependent ENDWS_COMM].
+  Fix: fatal unsupported-statement errors.
+- **A4 Variable qualifier combos enumerated, not parsed** — only
+  `(linear,change)`/`(change,linear)` handled; `(levels,change)`,
+  `(percent_change,…)`, `LINEAR_NAME=`, `NO_SPLIT`, `VPQTYPE=` corrupt
+  the quantifier walk [0 uses]. Fix: tokenized qualifier parsing
+  (also closes the batch-1 bare-word-strip residual).
+- **A5 legal no-op qualifiers hard-error** — `Coefficient (REAL)`;
+  `Set (NON_INTERTEMPORAL)` substring-matches `intertemporal` and dies
+  in the intertemporal branch [0 uses]. Fix: strip/boundary-match.
+- **A6 Default statements unreliable ×3** — spaced `(default = x)`
+  not matched; `variables_read_defaults` applies position-wrong
+  (affects variables declared BEFORE the statement); coefficient/
+  equation defaults skipped entirely [0 uses].
+- **A7 `FORMULA & EQUATION` silently drops the equation half** and
+  runs the formula as ALWAYS [0 uses]. Fix: fatal until 2.2 lands.
+- **A8 READ minor forms crash** — `FROM TERMINAL`, headerless text
+  `FROM FILE`, `(IfHeaderExists)` reach strcpy(NULL)/misroute [0
+  uses]. Fix: NULL-guards + clean unsupported errors.
+- **A9 double bound `(GE 0, LE 10)` silently drops the LE** [1 use:
+  GDYNv3.6.tab:1771] — single gltype slot. Fix: second bound slot.
+- **A10 element range `(c1-c5)` not expanded** — becomes ONE element,
+  silently [0 uses]. Fix: fatal or implement expansion.
+- Error-path robustness (printf-and-continue in subsets_read/sets_read
+  expression route; `read elements` with unknown logname indexes
+  iodata[niodata]) — fold into the fail-fast convention.
+
+Also corrected by the audit: this plan's Tier-3.1 premise — the
+formula engine ALREADY had ABS/LOGE/ID01 (operand-transform types
+41-43); 3.1 therefore extends that mechanism (EXP/SQRT/LOG10/ROUND
+landed 2026-07-25 — including fixing normalize's whitelist so
+function calls with paren-free arguments work, and the missing
+loge-at-expression-start case) rather than building from scratch.
+Remaining 3.1 candidates: ID0V, MAX/MIN, TRUNC0/TRUNCB, $POS [all 0
+corpus uses — implement with PostSim if its report formulas need them].
+
 ## Legend
 - Status: ✅ full · ◐ partial/inert · ✗ absent
 - Call: **PARITY** (implement) · **FIX** (bug/inert) · **QUESTION** (scrutinize scope/obsolescence) · **SKIP** (obsolete — parse-and-ignore at most)
