@@ -642,7 +642,8 @@ SUBROUTINE SPEC48M_MSOL(INSIZE,IRN,JCN,VA,B,X,IRNC,JCNC,VAC,IRNB,JCNB,VALUESB,VE
   ENDIF
   IF (INFO(1).LT.0) THEN
   WRITE (6,'(A,I3)') 'Error STOP from MA48A/AD with INFO(1) =',INFO(1)
-  STOP
+  CALL TEEMS_ONFAIL_DIAG()
+  CALL TEEMS_ONFAIL_ABORT()
   END IF
   deallocate(IW)
   allocate(W(M),IW(2*M+2*N))
@@ -655,7 +656,8 @@ SUBROUTINE SPEC48M_MSOL(INSIZE,IRN,JCN,VA,B,X,IRNC,JCNC,VAC,IRNB,JCNB,VALUESB,VE
     WRITE (6,FMT='(A,I3/A)') 'STOP from MA48B/BD with INFO(1) =',&
     INFO(1),'Solution not possible'
     write(*,"(A,i5)") 'RANK',INFO(5)
-    STOP
+    CALL TEEMS_ONFAIL_DIAG()
+    CALL TEEMS_ONFAIL_ABORT()
   END IF
 !     Compute the determinant
 
@@ -830,7 +832,8 @@ SUBROUTINE SPEC48M_MSOL_P(INSIZE,IRN,JCN,VA,B,X,IRNC,JCNC,VAC,IRNB,JCNB,VALUESB,
     ENDIF
     IF (INFO(1).LT.0) THEN
     WRITE (6,'(A,I3)') 'Error STOP from MA48A/AD with INFO(1) =',INFO(1)
-    STOP
+    CALL TEEMS_ONFAIL_DIAG()
+    CALL TEEMS_ONFAIL_ABORT()
     END IF
     deallocate(IW)
     allocate(W(M),IW(2*M+2*N))
@@ -843,7 +846,8 @@ SUBROUTINE SPEC48M_MSOL_P(INSIZE,IRN,JCN,VA,B,X,IRNC,JCNC,VAC,IRNB,JCNB,VALUESB,
       WRITE (6,FMT='(A,I3/A)') 'STOP from MA48B/BD with INFO(1) =',&
       INFO(1),'Solution not possible'
       write(*,"(A,i5)") 'RANK',INFO(5)
-      STOP
+      CALL TEEMS_ONFAIL_DIAG()
+      CALL TEEMS_ONFAIL_ABORT()
     END IF
   ELSE
     deallocate(IW)
@@ -1099,6 +1103,13 @@ SUBROUTINE SPEC48_SSOL2LA(INSIZE,IRN,JCN,VA,B,X)
   else
     CALL MA48A(M,N,NE,JOB,LA,VA,IRN,JCN,KEEP,CNTL,ICNTL,IW,INFO,RINFO)
   endif
+  ! the analyse itself fails on structural singularity (INFO(1)=-5);
+  ! previously unchecked, which corrupted the follow-on factorize
+  IF (INFO(1).LT.0) THEN
+    WRITE (6,'(A,I3)') 'Error STOP from MA48A/AD with INFO(1) =',INFO(1)
+    CALL TEEMS_ONFAIL_DIAG()
+    CALL TEEMS_ONFAIL_ABORT()
+  END IF
   if (teems_verbosity()>=2) WRITE (6,FMT='(A,I3/A)') 'INFO(3) =',INFO(3)/NE
   deallocate(IW)
   allocate(W(M),IW(2*M+2*N))
@@ -1115,7 +1126,8 @@ SUBROUTINE SPEC48_SSOL2LA(INSIZE,IRN,JCN,VA,B,X)
     WRITE (6,FMT='(A,I3/A)') 'STOP from MA48B/BD with INFO(1) =',&
     INFO(1),'Solution not possible'
     WRITE (6,FMT='(A,i10)') 'INFO(5) =',INFO(5)
-    STOP
+    CALL TEEMS_ONFAIL_DIAG()
+    CALL TEEMS_ONFAIL_ABORT()
   END IF
 
   JOB=1
@@ -1207,7 +1219,8 @@ SUBROUTINE SPEC48_SSOL2LA_P(INSIZE,IRN,JCN,VA,B,X)
     END IF
     IF (pINFO(1).LT.0) THEN
       WRITE (6,'(A,I3)') 'Fatal STOP from MA48A/AD with INFO(1) =',pINFO(1)
-      STOP
+      CALL TEEMS_ONFAIL_DIAG()
+      CALL TEEMS_ONFAIL_ABORT()
     END IF
     IF (FSORD.EQ.1) THEN
       CALL MA48BD(M,N,NE,1,LA,VA,IRN,JCN,pKEEP,pCNTL,pICNTL,pW,pIW,pINFO,&
@@ -1226,7 +1239,8 @@ SUBROUTINE SPEC48_SSOL2LA_P(INSIZE,IRN,JCN,VA,B,X)
       WRITE (6,FMT='(A,I3/A)') 'STOP from MA48B/BD with INFO(1) =',&
       pINFO(1),'Solution not possible'
       WRITE (6,FMT='(A,i10)') 'INFO(5) =',pINFO(5)
-      STOP
+      CALL TEEMS_ONFAIL_DIAG()
+      CALL TEEMS_ONFAIL_ABORT()
     END IF
     pready=.true.
   ELSE
@@ -1318,6 +1332,13 @@ SUBROUTINE SPEC48M_SSOL2LA(INSIZE,IRN,JCN,VA,B,X)
   else
     CALL MA48A(M,N,NE,JOB,LA,VA,IRN,JCN,KEEP,CNTL,ICNTL,IW,INFO,RINFO)
   endif
+  ! the analyse itself fails on structural singularity (INFO(1)=-5);
+  ! previously unchecked, which corrupted the follow-on factorize
+  IF (INFO(1).LT.0) THEN
+    WRITE (6,'(A,I3)') 'Error STOP from MA48A/AD with INFO(1) =',INFO(1)
+    CALL TEEMS_ONFAIL_DIAG()
+    CALL TEEMS_ONFAIL_ABORT()
+  END IF
   if (teems_verbosity()>=2) WRITE (6,FMT='(A,I3/A)') 'INFO(3) =',INFO(3)/NE
   deallocate(IW)
   allocate(W(M),IW(2*M+2*N))
@@ -1334,7 +1355,8 @@ SUBROUTINE SPEC48M_SSOL2LA(INSIZE,IRN,JCN,VA,B,X)
     WRITE (6,FMT='(A,I3/A)') 'STOP from MA48B/BD with INFO(1) =',&
     INFO(1),'Solution not possible'
     WRITE (6,FMT='(A,i10)') 'INFO(5) =',INFO(5)
-    STOP
+    CALL TEEMS_ONFAIL_DIAG()
+    CALL TEEMS_ONFAIL_ABORT()
   END IF
 
   JOB=1
@@ -1576,7 +1598,8 @@ SUBROUTINE PREP48_ALU1(INSIZE,IRN,JCN,VA,W,IW,KEEP)
   endif
   IF (INFO(1).LT.0) THEN
   WRITE (6,'(A,I3)') 'Error STOP from MA48A/AD with INFO(1) =',INFO(1)
-  STOP
+  CALL TEEMS_ONFAIL_DIAG()
+  CALL TEEMS_ONFAIL_ABORT()
   END IF
   IF (FSORD.EQ.1) THEN
     CALL MA48BD(M,N,NE,1,LA,VA,IRN,JCN,KEEP,CNTL,ICNTL,W,IW,INFO,&
@@ -1589,7 +1612,8 @@ SUBROUTINE PREP48_ALU1(INSIZE,IRN,JCN,VA,W,IW,KEEP)
     WRITE (6,FMT='(A,I3/A)') 'STOP from MA48B/BD with INFO(1) =',&
     INFO(1),'Solution not possible'
     write(*,"(A,i5)") 'RANK',INFO(5)
-    STOP
+    CALL TEEMS_ONFAIL_DIAG()
+    CALL TEEMS_ONFAIL_ABORT()
   END IF
   ! factors (VA/IRN/KEEP, extents LA and T=INSIZE(13)) return to the
   ! caller in place -- C decides between resident handoff and the
@@ -1669,7 +1693,8 @@ SUBROUTINE PREP48M_MSOL(INSIZE,IRN,JCN,VA,IRNC,JCNC,VAC,IRNB,JCNB,VALUESB,VECBIV
   endif
   IF (INFO(1).LT.0) THEN
   WRITE (6,'(A,I3)') 'Error STOP from MA48A/AD with INFO(1) =',INFO(1)
-  STOP
+  CALL TEEMS_ONFAIL_DIAG()
+  CALL TEEMS_ONFAIL_ABORT()
   END IF
   IF (FSORD.EQ.1) THEN
     CALL MA48BD(M,N,NE,1,LA,VA,IRN,JCN,KEEP,CNTL,ICNTL,W,IW,INFO,&
@@ -1682,7 +1707,8 @@ SUBROUTINE PREP48M_MSOL(INSIZE,IRN,JCN,VA,IRNC,JCNC,VAC,IRNB,JCNB,VALUESB,VECBIV
     WRITE (6,FMT='(A,I3/A)') 'STOP from MA48B/BD with INFO(1) =',&
     INFO(1),'Solution not possible'
     write(*,"(A,i5)") 'RANK',INFO(5)
-    STOP
+    CALL TEEMS_ONFAIL_DIAG()
+    CALL TEEMS_ONFAIL_ABORT()
   END IF
   JOB=1
   L=0
@@ -1834,7 +1860,8 @@ SUBROUTINE PREP48M_MSOL_P(INSIZE,IRN,JCN,VA,IRNC,JCNC,VAC,IRNB,JCNB,VALUESB,VECB
     endif
     IF (INFO(1).LT.0) THEN
     WRITE (6,'(A,I3)') 'Error STOP from MA48A/AD with INFO(1) =',INFO(1)
-    STOP
+    CALL TEEMS_ONFAIL_DIAG()
+    CALL TEEMS_ONFAIL_ABORT()
     END IF
     IF (FSORD.EQ.1) THEN
       CALL MA48BD(M,N,NE,1,LA,VA,IRN,JCN,KEEP,CNTL,ICNTL,W,IW,INFO,&
@@ -1847,7 +1874,8 @@ SUBROUTINE PREP48M_MSOL_P(INSIZE,IRN,JCN,VA,IRNC,JCNC,VAC,IRNB,JCNB,VALUESB,VECB
       WRITE (6,FMT='(A,I3/A)') 'STOP from MA48B/BD with INFO(1) =',&
       INFO(1),'Solution not possible'
       write(*,"(A,i5)") 'RANK',INFO(5)
-      STOP
+      CALL TEEMS_ONFAIL_DIAG()
+      CALL TEEMS_ONFAIL_ABORT()
     END IF
   ELSE
     IF (FSORD.EQ.1) THEN

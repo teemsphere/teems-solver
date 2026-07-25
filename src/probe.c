@@ -243,6 +243,183 @@ static void probe_defect_report(FILE *fp,const char *jsonkey,const char *logline
   fprintf(fp,"],\n");
 }
 
+/* ---- on-failure diagnosis (adoption-shape part 3) ---------------------
+   The factorization kernels hard-STOP on MA48B/BD failure; just before
+   the STOP they call teems_onfail_diag_() (the Fortran-visible entry
+   below).  The C solve paths register the system they are about to
+   factorize -- the live PETSc matrix plus how its local rows/columns
+   map back to condensed-system positions -- so the diagnosis can run
+   the MC79 matching at the failure point, on the failing (sub)system
+   and its current values, and name the defective elements.  When both
+   patterns still have full structural rank the failure is numerical
+   (near-singularity), which is reported as such -- the recorded MC79
+   limitation.  Everything here is failure-path-only: registration is
+   a few pointer stores per factorization. */
+
+static struct {
+  set_def *sets;
+  set_element *set_elems;
+  array_def *vars;
+  offset_t nvar;
+  eq_probe_meta *eqmeta;
+  offset_t neqmeta;
+  PetscInt VecSize;
+  /* condensed position -> element, built eagerly at registration:
+     closure_vals is spilled and freed mid-solve in disk mode, so it
+     cannot be consulted at failure time */
+  int *col2ele;
+  int *row2leq;
+  int set;
+} onfail_ctx;
+
+typedef struct {
+  Mat A;                        /* live matrix (NULL = label-only note) */
+  PetscInt m,n;
+  const char *label;
+  int block_id;                 /* >=0: printed with the label */
+  int *row_order,*col_order;    /* NULL = identity map */
+  offset_t row_base,col_base;   /* index offset into the order arrays */
+  offset_t row_add,col_add;     /* added to the order-array value
+                                   (DBBD: the base again; NDBBD: 0) */
+  int set;
+} probe_onfail_scope_t;
+static __thread probe_onfail_scope_t onfail_scope;
+
+void probe_onfail_context(set_def *sets,set_element *set_elems,array_def *vars,offset_t nvar,closure_entry *closure_vals,offset_t nvarele,offset_t *eq_addr,eq_probe_meta *eqmeta,offset_t neqmeta,PetscInt VecSize) {
+  PetscInt i;
+  offset_t j5;
+  onfail_ctx.sets=sets;
+  onfail_ctx.set_elems=set_elems;
+  onfail_ctx.vars=vars;
+  onfail_ctx.nvar=nvar;
+  onfail_ctx.eqmeta=eqmeta;
+  onfail_ctx.neqmeta=neqmeta;
+  onfail_ctx.VecSize=VecSize;
+  onfail_ctx.col2ele= (int *) malloc (VecSize*sizeof(int));
+  onfail_ctx.row2leq= (int *) malloc (VecSize*sizeof(int));
+  for(i=0; i<VecSize; i++) {
+    onfail_ctx.col2ele[i]=-1;
+    onfail_ctx.row2leq[i]=-1;
+  }
+  for(j5=0; j5<nvarele; j5++)if(!closure_vals[j5].is_exogenous&&!closure_vals[j5].is_backsolved) {
+      if(closure_vals[j5].exo_index>=0&&closure_vals[j5].exo_index<VecSize)onfail_ctx.col2ele[closure_vals[j5].exo_index]=(int)j5;
+    }
+  for(j5=0; j5<VecSize; j5++)if(eq_addr[j5]>=0&&eq_addr[j5]<VecSize)onfail_ctx.row2leq[eq_addr[j5]]=(int)j5;
+  onfail_ctx.set=1;
+}
+
+void probe_onfail_scope_set(Mat A,PetscInt m,PetscInt n,const char *label,int block_id,int *row_order,int *col_order,offset_t row_base,offset_t col_base,offset_t row_add,offset_t col_add) {
+  onfail_scope.A=A;
+  onfail_scope.m=m;
+  onfail_scope.n=n;
+  onfail_scope.label=label;
+  onfail_scope.block_id=block_id;
+  onfail_scope.row_order=row_order;
+  onfail_scope.col_order=col_order;
+  onfail_scope.row_base=row_base;
+  onfail_scope.col_base=col_base;
+  onfail_scope.row_add=row_add;
+  onfail_scope.col_add=col_add;
+  onfail_scope.set=1;
+}
+
+void probe_onfail_scope_clear(void) {
+  onfail_scope.set=0;
+  onfail_scope.A=NULL;
+}
+
+/* Fortran entry: collective abort after a diagnosed failure — a plain
+   STOP on one rank leaves the others waiting in the next collective */
+void teems_onfail_abort_(void) {
+  MPI_Abort(PETSC_COMM_WORLD,1);
+}
+
+/* Fortran entry: CALL TEEMS_ONFAIL_DIAG() before the failure STOPs */
+void teems_onfail_diag_(void) {
+  #pragma omp critical(teems_onfail)
+  {
+    probe_onfail_scope_t *s=&onfail_scope;
+    PetscInt i,nz,pass;
+    offset_t g;
+    int *ptr=NULL,*row=NULL;
+    struct mc79_control_i control;
+    struct mc79_info_i info;
+    if(!s->set||!onfail_ctx.set) {
+      printf("probe: factorization failed in an unregistered context — no structural diagnosis available\n");
+    }
+    else {
+      if(s->block_id>=0)printf("probe: diagnosing the failed factorization: %s %d (%ld x %ld)\n",s->label,s->block_id,(long)s->m,(long)s->n);
+      else printf("probe: diagnosing the failed factorization: %s (%ld x %ld)\n",s->label,(long)s->m,(long)s->n);
+      if(s->A==NULL) {
+        printf("probe: structural diagnosis is not wired for this system yet; run -solmed probe for the deploy-level diagnosis\n");
+      }
+      else if(s->m!=s->n) {
+        printf("probe: non-square scope (%ld x %ld), diagnosis skipped\n",(long)s->m,(long)s->n);
+      }
+      else {
+        /* local matrix position -> condensed position -> element */
+        offset_t *col2ele_l= (offset_t *) malloc (s->n*sizeof(offset_t));
+        offset_t *row2leq_l= (offset_t *) malloc (s->m*sizeof(offset_t));
+        for(i=0; i<s->n; i++) {
+          g=(s->col_order!=NULL)?(offset_t)s->col_order[s->col_base+i]+s->col_add:(offset_t)i;
+          col2ele_l[i]=(g>=0&&g<onfail_ctx.VecSize)?(offset_t)onfail_ctx.col2ele[g]:-1;
+        }
+        for(i=0; i<s->m; i++) {
+          g=(s->row_order!=NULL)?(offset_t)s->row_order[s->row_base+i]+s->row_add:(offset_t)i;
+          row2leq_l[i]=(g>=0&&g<onfail_ctx.VecSize)?(offset_t)onfail_ctx.row2leq[g]:-1;
+        }
+        int *rowmatch= (int *) malloc (s->m*sizeof(int));
+        int *colmatch= (int *) malloc (s->n*sizeof(int));
+        PetscInt *items= (PetscInt *) malloc (s->n*sizeof(PetscInt));
+        PetscInt nitems;
+        mc79_default_control_i(&control);
+        control.f_arrays=1;
+        int defect=0;
+        for(pass=0; pass<2; pass++) {
+          const char *pname=(pass==0)?"stored pattern":"currently nonzero pattern";
+          nz=probe_csc_build(s->A,s->n,pass,&ptr,&row);
+          mc79_matching_i(s->m,s->n,ptr,row,rowmatch,colmatch,&control,&info);
+          if(info.flag<0) {
+            printf("probe: MC79 matching failed (%s, flag %d)\n",pname,info.flag);
+          }
+          else if(info.mbar==0&&info.nbar==0) {
+            printf("probe: %s: full structural rank %ld of %ld\n",pname,(long)s->n,(long)s->n);
+          }
+          else {
+            defect=1;
+            printf("probe: %s: structurally singular — rank %ld of %ld (%d unmatched equations, %d unmatched variables)\n",pname,(long)(s->n-info.nbar),(long)s->n,info.mbar,info.nbar);
+            probe_defect_report(NULL,"","under-determined variable elements",colmatch,s->n,0,col2ele_l,row2leq_l,onfail_ctx.vars,onfail_ctx.nvar,onfail_ctx.eqmeta,onfail_ctx.neqmeta,onfail_ctx.sets,onfail_ctx.set_elems);
+            probe_defect_report(NULL,"","over-constrained equation elements",rowmatch,s->m,1,col2ele_l,row2leq_l,onfail_ctx.vars,onfail_ctx.nvar,onfail_ctx.eqmeta,onfail_ctx.neqmeta,onfail_ctx.sets,onfail_ctx.set_elems);
+            nitems=0;
+            for(i=0; i<s->n; i++)if(colmatch[i]==0)items[nitems++]=i;
+            probe_agg_report(NULL,"","under-determined by variable",items,nitems,0,col2ele_l,row2leq_l,onfail_ctx.vars,onfail_ctx.nvar,onfail_ctx.eqmeta,onfail_ctx.neqmeta);
+            nitems=0;
+            for(i=0; i<s->m; i++)if(rowmatch[i]==0)items[nitems++]=i;
+            probe_agg_report(NULL,"","over-constrained by equation",items,nitems,1,col2ele_l,row2leq_l,onfail_ctx.vars,onfail_ctx.nvar,onfail_ctx.eqmeta,onfail_ctx.neqmeta);
+            mc79_coarse_i(s->m,s->n,ptr,row,rowmatch,colmatch,&control,&info);
+            if(info.flag>=0)printf("probe:   DM localization: under %d x %d, well %d x %d, over %d x %d\n",info.m1,info.n1,info.m2,info.n2,info.m3,info.n3);
+            free(ptr);
+            free(row);
+            ptr=NULL;
+            row=NULL;
+            break; /* structural verdict found; no need for the second pass */
+          }
+          free(ptr);
+          free(row);
+          ptr=NULL;
+          row=NULL;
+        }
+        if(!defect)printf("probe: both patterns have full structural rank at the failure state — the failure is numerical (near-singular values / ill-conditioning), not structural; the MA48 rank output above is the primary evidence\n");
+        free(rowmatch);
+        free(colmatch);
+        free(items);
+        free(col2ele_l);
+        free(row2leq_l);
+      }
+    }
+  }
+}
+
 int probe_structural(PetscInt VecSize,offset_t nvarele,offset_t ncofele,PetscInt dnz,PetscInt *dnnz,PetscInt dnzB,PetscInt *dnnzB,char *tabfile,char *commsyntax,set_def *sets,dim_t nset,set_element *set_elems,array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar,elem_value *elem_vals,closure_entry *closure_vals,offset_t ndblock,offset_t alltimeset,offset_t allregset,offset_t *eq_addr,offset_t *counteq,offset_t nintraeq,eq_probe_meta *eqmeta,offset_t neqmeta,cmf_file_entry *iodata,int niodata,int noutdata,int nsoldata,int probefine,PetscInt mpisize,PetscInt rank) {
   Mat A,B;
   struct timeval t0,t1;

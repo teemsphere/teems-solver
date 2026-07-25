@@ -663,7 +663,8 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
         memcpy (irn+nz,ai,(nrow+1)*sizeof(PetscInt));
         memcpy (jcn,aj,nz*sizeof(PetscInt));
         memcpy (values,vals,nz*sizeof(solve_real));
-        MatDestroy(&submatA[j1]);
+        /* destroy moved below the factorize: the submatrix stays live
+           so the on-failure diagnosis can read the block pattern */
       }
       insize[j1*insizes+2]=nz;
       insize[j1*insizes+5]=nzc;
@@ -686,6 +687,7 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
       if(windx==eindx)windx=bindx;
       xi1point=xi1+xi1indx;
       int *keep=NULL;
+      probe_onfail_scope_set(submatA[j1],nrow,ncol,"DBBD diagonal block",(int)(j1+begblock[rank]),row_order,col_order,counteq[j1+begblock[rank]],countvarintra1[j1+begblock[rank]],counteq[j1+begblock[rank]],countvarintra1[j1+begblock[rank]]);
       if(dbbd_fastrefac) {
         int redo_io=dfr_redo;
         spec48m_msol_p_(insize+j1*insizes,dfr_irn[j1],dfr_jcn[j1],dfr_va[j1],yi1[j1],xi1point,aic,ajc,valsc,ai,aj,vals,vecbivi,bivinzrow,bivinzcol,dfr_keep[j1],&redo_io);
@@ -703,7 +705,9 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
       else {
       keep=(int *) calloc (nrow+9*ncol+7,sizeof(int));/* KEEP bound, ICNTL(6)=1; live length returned in insize[12] */
       spec48m_msol_(insize+j1*insizes,irn,jcn,values,yi1[j1],xi1point,aic,ajc,valsc,ai,aj,vals,vecbivi,bivinzrow,bivinzcol,keep);
+      MatDestroy(&submatA[j1]);
       }
+      probe_onfail_scope_clear();
       MatDestroy(&submatCT);
       free(yi1[j1]);
       if(!dbbd_fastrefac) {
@@ -1002,7 +1006,9 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
     insizeD[3]=laD;
     insizeD[5]=ldsize;
     xd=(solve_real *) calloc (vecbiuisize,sizeof(solve_real));//realloc (xd,vecbiuisize*sizeof(ha_cgetype));
+    probe_onfail_scope_set(NULL,nrow,ncol,"DBBD interface (border Schur) system",-1,NULL,NULL,0,0,0,0);
     spec48_ssol2la_(insizeD,irn1,jcn,vecbivi,vecbiui,xd);
+    probe_onfail_scope_clear();
     free(vecbivi);
     vecbivi=NULL;
     free(vecbiui);
@@ -1371,6 +1377,9 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
   submatBBij=NULL;
   ierr = ISDestroy(&rowBBij[0]);
   }
+  /* begblock is freed here but the solve loop's on-failure scope
+     registration still needs this rank's block offset */
+  int begblock0=begblock[rank];
   free(begblock);
   free(indicesbbij);
   PetscFree(rowBBij);
@@ -1600,7 +1609,8 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
         memcpy (irn+nz,ai,(nrow+1)*sizeof(PetscInt));
         memcpy (jcn,aj,nz*sizeof(PetscInt));
         memcpy (values,vals,nz*sizeof(solve_real));
-        MatDestroy(&submatAij[j4]);//1
+        /* destroy moved below the factorize: the submatrix stays live
+           so the on-failure diagnosis can read the block pattern */
       }
       insize[j4*insizes+2]=nz;
       insize[j4*insizes+5]=nzc;
@@ -1617,6 +1627,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
       insize[j4*insizes+6]=nrowb;//ncolb;
       insize[j4*insizes+7]=ncolb;//nrowb;
       insize[j4*insizes+8]=nz;
+      probe_onfail_scope_set(submatAij[j4],nrow,ncol,"NDBBD diagonal block",(int)(j4+begblock0),row_order,col_order,counteq[j4+begblock0],countvarintra1[j4+begblock0],0,0);
       if(nfr_flag()) {
         int redo_io=nfr_redo;
         prep48m_msol_p_(insize+j4*insizes,ndbbd_fac_irn[j4],ndbbd_fac_jcn[j4],ndbbd_fac_va[j4],aic,ajc,valsc,ai,aj,vals,vecbivi,bivinzrow,bivinzcol,jcnb1,sol48,b48,w51,iw51,ndbbd_fac_keep[j4],&redo_io);
@@ -1630,12 +1641,13 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
           redo_io=0;
           prep48m_msol_p_(insize+j4*insizes,ndbbd_fac_irn[j4],ndbbd_fac_jcn[j4],ndbbd_fac_va[j4],aic,ajc,valsc,ai,aj,vals,vecbivi,bivinzrow,bivinzcol,jcnb1,sol48,b48,w51,iw51,ndbbd_fac_keep[j4],&redo_io);
         }
-        MatDestroy(&submatAij[j4]);//1
       }
       else {
       prep48m_msol_(insize+j4*insizes,irn,jcn,values,aic,ajc,valsc,ai,aj,vals,vecbivi,bivinzrow,bivinzcol,jcnb1,sol48,b48,w51,iw51,keep);
       ndbbd_fac_emit(rank,j4,irn,keep,values,insize[j4*insizes+16],insize[j4*insizes+12]);
       }
+      probe_onfail_scope_clear();
+      MatDestroy(&submatAij[j4]);//1
       insize[j4*insizes+15]=0;
       MatDestroy(&submatCT);
       MatDestroy(&submatBij[j4][0]);//1
@@ -3059,7 +3071,9 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
     insizeD[3]=laD;
     insizeD[5]=ldsize;
     xd=(solve_real *) calloc (vecbiuisize,sizeof(solve_real));//realloc (xd,vecbiuisize*sizeof(ha_cgetype));
+    probe_onfail_scope_set(NULL,nrow,ncol,"NDBBD interface (border Schur) system",-1,NULL,NULL,0,0,0,0);
     spec48m_ssol2la_(insizeD,irn1,jcn,vecbivi,vecbiui,xd);
+    probe_onfail_scope_clear();
     free(vecbivi);
     vecbivi=NULL;
     free(vecbiui);

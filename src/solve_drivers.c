@@ -45,6 +45,7 @@ void lu_fastrefac_solve(Mat A,PetscInt VecSize,dim_t laA,solve_real *rhs,solve_r
   else {
     for(i=0; i<fr_nz; i++)fr_values[i]=aa->a[i];
   }
+  probe_onfail_scope_set(A,VecSize,VecSize,"condensed system",-1,NULL,NULL,0,0,0,0);
   for(tries=0; tries<6; tries++) {
     insize[0]=VecSize;
     insize[1]=VecSize;
@@ -55,6 +56,7 @@ void lu_fastrefac_solve(Mat A,PetscInt VecSize,dim_t laA,solve_real *rhs,solve_r
     spec48_ssol2la_p_(insize,fr_irn,fr_jcn,fr_values,rhs,x);
     if(insize[4]==0) {
       fr_ready=1;
+      probe_onfail_scope_clear();
       return;
     }
     if(insize[4]==-3) {
@@ -502,15 +504,22 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
         PetscViewerDrawOpen(PETSC_COMM_WORLD,0,"",0,0,500,500,&viewer);
         ierr = MatView(A,viewer);
         PetscViewerDestroy(&viewer);
-        ierr = MatDestroy(&A);
-        CHKERRQ(ierr);
 
         int *insize=(int *) calloc (4,sizeof(int));
         insize[0]=VecSize;
         insize[1]=VecSize;
         insize[2]=count;
         insize[3]=laA;
-        if(rank==rank_hsl)spec48_ssol2la_(insize,irn,jcn,values,vals,x0);
+        /* A stays live through the factorize so the on-failure
+           diagnosis can read the pattern (the staged COO is MA48
+           workspace and is clobbered) */
+        if(rank==rank_hsl) {
+          probe_onfail_scope_set(A,VecSize,VecSize,"condensed system",-1,NULL,NULL,0,0,0,0);
+          spec48_ssol2la_(insize,irn,jcn,values,vals,x0);
+          probe_onfail_scope_clear();
+        }
+        ierr = MatDestroy(&A);
+        CHKERRQ(ierr);
         free(insize);
         free(irn);
         free(jcn);
@@ -1127,8 +1136,6 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
                   }
                 VecGetArray(vecb,&vals);
               }
-              ierr = MatDestroy(&A);
-              CHKERRQ(ierr);
               free(irn1);
               x1=realloc (x1,VecSize*sizeof(solve_real));
               ierr = PetscGetCPUTime(&time1);
@@ -1142,7 +1149,15 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
               insize[1]=VecSize;
               insize[2]=count;
               insize[3]=laA;
-              if(rank==rank_hsl)spec48_ssol2la_(insize,irn,jcn,values,vals,x1);
+              /* A stays live through the factorize for the on-failure
+                 diagnosis (staged COO is MA48 workspace) */
+              if(rank==rank_hsl) {
+                probe_onfail_scope_set(A,VecSize,VecSize,"condensed system",-1,NULL,NULL,0,0,0,0);
+                spec48_ssol2la_(insize,irn,jcn,values,vals,x1);
+                probe_onfail_scope_clear();
+              }
+              ierr = MatDestroy(&A);
+              CHKERRQ(ierr);
               ierr = VecDestroy(&vecb);
               CHKERRQ(ierr);
               free(insize);
@@ -1768,8 +1783,6 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
                 }
               VecGetArray(vecb,&vals);
             }
-            ierr = MatDestroy(&A);
-            CHKERRQ(ierr);
             free(irn1);
             x1=realloc (x1,VecSize*sizeof(solve_real));
             ierr = PetscGetCPUTime(&time1);
@@ -1783,7 +1796,15 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
             insize[1]=VecSize;
             insize[2]=count;
             insize[3]=laA;
-            if(rank==rank_hsl)spec48_ssol2la_(insize,irn,jcn,values,vals,x1);
+            /* A stays live through the factorize for the on-failure
+               diagnosis (staged COO is MA48 workspace) */
+            if(rank==rank_hsl) {
+              probe_onfail_scope_set(A,VecSize,VecSize,"condensed system",-1,NULL,NULL,0,0,0,0);
+              spec48_ssol2la_(insize,irn,jcn,values,vals,x1);
+              probe_onfail_scope_clear();
+            }
+            ierr = MatDestroy(&A);
+            CHKERRQ(ierr);
             free(insize);
             ierr = PetscGetCPUTime(&time1);
             CHKERRQ(ierr);

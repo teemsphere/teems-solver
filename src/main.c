@@ -1804,13 +1804,15 @@ int main(int argc,char **args) {
     }
   }
   logmsg(2,"rank11 %d Istart %d I end %d\n",rank, Istart,Iend);
-  /* -solmed probe: capture per-statement row-addressing metadata so the
-     structural diagnosis can name defective equation elements */
+  /* capture per-statement row-addressing metadata (side table, a few
+     hundred KB) so the probe AND the on-failure diagnosis can name
+     defective equation elements */
   eq_probe_meta *eqmeta=NULL;
   offset_t neqmeta=0;
-  if(solmethod==SM_PROBE&&rank==rank_hsl&&mpisize==1)eqmeta= (eq_probe_meta *) calloc (neq+1,sizeof(eq_probe_meta));
+  if(rank==rank_hsl)eqmeta= (eq_probe_meta *) calloc (neq+1,sizeof(eq_probe_meta));
   if(rank==rank_hsl) {
     jacobian_preallocate(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,nexo,closure_vals,ndblock,alltimeset,allregset,eq_intertemp,eq_addr,eq_time,eq_reg,counteq,nintraeq,&sbbd_overrid,Istart,Iend,&dnz,dnnz,&onz,onnz,&dnzB,dnnzB,&onzB,onnzB,nesteddbbd,eqmeta,&neqmeta);
+    probe_onfail_context(sets,set_elems,vars,nvar,closure_vals,nvarele,eq_addr,eqmeta,neqmeta,VecSize);
   }
   if(rank==0&&sbbd_overrid&&alltimeset<0) {
     printf("Warning: the equations reference intertemporal sets but this run's ordering ignores that structure; a bordered matrix method (-matsol 1/2/3) would detect and exploit it\n");
