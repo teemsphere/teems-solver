@@ -220,6 +220,10 @@ offset_t assertions_execute(char *fname,set_def *sets,dim_t nset,set_element *se
    coefficients (manual ch.12) */
 void postsim_expose_results(elem_value *elem_vals,offset_t ncofele,offset_t nvarele,solve_real *xcf);
 int tab_has_postsim_assertions(char *fname);
+/* Tier 0: split POSTSIM sections out of the preprocessed TAB (returns
+   PostSim executable count; -1 on error) and the CMF run-time switch */
+int tab_postsim_split(char *newtabfile, char *psfile);
+int cmf_postsim_on(char *filename);
 offset_t backsolve_read(char *fname, array_def *vars, offset_t nvar, closure_entry *closure_vals);
 int backsolve_validate_refs(char *fname, array_def *vars);
 int tab_equation_name(char *stmt, char *eqname);

@@ -627,6 +627,8 @@ int main(int argc,char **args) {
   //****************************** READ SET ELEMENT***************************************
   //**************************************************************************************
   char tabfile[TABREADLINE],newtabfile[TABREADLINE]="_temp_tab_file",newtabfile1[TABREADLINE]="_temp_tab_new_file",closure[TABREADLINE],shock[TABREADLINE],filename[TABREADLINE],longname[TABREADLINE],vname[NAMESIZE],copyline[TABREADLINE];
+  char psfile[TABREADLINE]="\0";
+  int npostsim=0,postsim_on=1;
   char tempfilenam[255],tempchar[255],solmed[NAMESIZE],solchar[255];
   int niodata=0,nj,mem_fac=0,noutdata=0,nsoldata=0,nowrites=0;
   offset_t nsetspace=0,dcount,ndblock=0,netcut=0,ndblock1,nreg=0,ntime=0;
@@ -907,8 +909,15 @@ int main(int argc,char **args) {
   if(rank==rank_hsl) {
     cmf_read(filename,niodata,iodata,tabfile,closure,shock);
     teems_assertions_mode=cmf_assertions_mode(filename);
+    postsim_on=cmf_postsim_on(filename);
     for (nj=0; nj<niodata+noutdata+nsoldata; nj++) logmsg(2,"rank %d logname %s fname %s\n",rank,iodata[nj].logname,iodata[nj].filname);
     if(tab_preprocess(tabfile,newtabfile)==-1)return 0;
+    /* Tier 0: route POSTSIM sections to the _ps companion, consumed
+       once after the solve */
+    strcpy(psfile,newtabfile);
+    strcat(psfile,"_ps");
+    npostsim=tab_postsim_split(newtabfile,psfile);
+    if(npostsim<0)return 0;
   }
 
   strcpy(tabfile,newtabfile);
@@ -2000,8 +2009,14 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
      slots hold post-simulation (updated) values and xcf holds the
      composed solution; expose the solution to the formula engine and
      evaluate (postsim) assertions. Zero cost when the TAB has none. */
-  if(rank==0&&xcf!=NULL&&elem_vals!=NULL&&tab_has_postsim_assertions(tabfile)) {
+  if(rank==0&&postsim_on&&xcf!=NULL&&elem_vals!=NULL&&(npostsim>0||tab_has_postsim_assertions(tabfile))) {
     postsim_expose_results(elem_vals,ncofele,nvarele,xcf);
+    if(npostsim>0) {
+      logmsg(1,"postsim: running %d statement(s)\n",npostsim);
+      strcpy(commsyntax,"formula");
+      formulas_execute(psfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,true);
+      assertions_execute(psfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,true,teems_assertions_mode,0);
+    }
     assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,true,teems_assertions_mode,1);
   }
   if(nowrites==0&&rank==0)for(i=0; i<noutdata; i++){

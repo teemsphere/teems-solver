@@ -7,6 +7,37 @@ semantics, POSTSIM, others").
 
 ## Progress log
 
+- **2026-07-25 — Tier 0 POSTSIM engine (first cut) landed**:
+  `POSTSIM (BEGIN)/(END)` sections work end-to-end. Mechanism: the
+  phase-1 preprocessor recognizes `postsim` as a statement keyword (so
+  the sticky-keyword mechanism cannot mangle the markers into
+  `write postsim (begin);`), and a post-preprocess splitter
+  (`tab_postsim_split`) routes section contents — declarations
+  (Set/Subset/Coefficient/File) STAY in the ordinary file (single
+  namespace: TEEMS separates PostSim by EXECUTION, not by symbol
+  table), executables (Formula/Assertion/ZeroDivide) move to a `_ps`
+  companion consumed once after the solve with the F3 exposure in
+  effect (IsIni=true so initial/always are both honored-as-ignored per
+  12.2.4; per-pass zerodivide state gives the separate PostSim
+  defaults for free), Write/Display in sections are dropped (outputs
+  ride the write-all dump), PostSim Read and the twelve forbidden
+  statement kinds are fatal at split time. CMF `PostSim = no;`
+  honored. Zero cost without sections (one marker scan). Validated on
+  golden-shk2d: a PS section computing a PostSim coefficient from the
+  exposed solution (`sum of aoall shocks` = 3.6102) passes its
+  identity assertion post-solve — the same section evaluated
+  pre-solve (and failed) on the pre-Tier-0 build; wrong identity
+  fails rc=1 with the %% report; `PostSim = no` skips; a forbidden
+  Update in a section dies cleanly at split. REMAINING for full
+  Tier 0: PostSim Read (fatal-with-remedy today), PS Formula
+  LHS-must-be-PS-coefficient validation (single namespace accepts
+  ordinary LHS — GEMPACK-illegal, currently permitted), scope
+  isolation (ordinary→PS references not rejected), teems-R side
+  (pass sections through instead of `ignored_state`, generate
+  Write+outdata pairs for PostSim coefficients so they land in
+  `ems_compose`), and `(postsim)` Write/Display qualifiers outside
+  sections (dropped by R today anyway).
+
 - **2026-07-25 — PostSim foundation (F2+F3) landed**: general WRITE
   reconsidered OFF the critical path (see the 2.1 entry — TEEMS writes
   all coefficients via R-generated Write+outdata pairs; PostSim outputs

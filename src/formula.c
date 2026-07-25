@@ -2816,6 +2816,7 @@ offset_t assertions_execute(char *fname,set_def *sets,dim_t nset,set_element *se
   char sumsyntax[NAMESIZE],tempset[NAMESIZE];
   char *p=NULL,*q=NULL,*right=NULL;
   static offset_t nassert=-1;
+  static char *nassert_fname=NULL;
   offset_t i,l,i3,i4,nloops,len,dcountdim1[4*MAXVARDIM],total_fail=0;
   dim_t nq,dcount;
   int nops,npow,nmul,nplu,npar,relop,fails,shown,totalsum,sumcount,sumindx,depth;
@@ -2823,7 +2824,12 @@ offset_t assertions_execute(char *fname,set_def *sets,dim_t nset,set_element *se
   solve_real zerodivide=0,r;
   bool IsAssIni,ok,skip;
   if(mode==0)return 0;
-  if(nassert<0)nassert=tab_count_statements(fname,"assertion");
+  /* count cached per file buffer: the PostSim pass runs this on the
+     _ps companion with its own count */
+  if(nassert<0||fname!=nassert_fname) {
+    nassert=tab_count_statements(fname,"assertion");
+    nassert_fname=fname;
+  }
   if(nassert==0)return 0;
   filehandle=fopen(fname,"r");
   if(filehandle==NULL)return 0;

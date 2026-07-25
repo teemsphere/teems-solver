@@ -652,6 +652,13 @@ int tab_preprocess(char *filename, char *newtabfile) {
         strcpy(commsyntax,"substitute");
         check=1;
       }
+      /* POSTSIM section markers (manual 10.18): recognized so the
+         sticky-keyword mechanism cannot mangle them; the post-
+         preprocess splitter routes the section contents */
+      if(str_find_ci(readline,"postsim ")==1||str_find_ci(readline,"postsim ")==0||str_find_ci(readline,"postsim(")==1||str_find_ci(readline,"postsim(")==0) {
+        strcpy(commsyntax,"postsim");
+        check=1;
+      }
       if (strchr(readline,';')!=NULL) {
         if (check==1) {
           if (readline[0]==' ') fprintf(fout,"%s\n",readline+1);
@@ -1158,4 +1165,120 @@ int cmf_assertions_mode(char *filename) {
   }
   fclose(f);
   return mode;
+}
+
+/* Split the preprocessed TAB around POSTSIM (BEGIN)/(END) sections
+   (manual 10.18, 12.2.1). Declarations (set/subset/coefficient/file)
+   stay in the ordinary file -- a single namespace; what separates
+   PostSim is EXECUTION order -- while executables (formula/assertion/
+   zerodivide) move to the _ps companion consumed once after the solve.
+   Write/Display in sections are dropped (outputs ride the write-all
+   dump); PostSim Read and the forbidden statements are fatal.
+   Returns the PostSim executable count (0 = no sections), -1 on
+   error. */
+int tab_postsim_split(char *newtabfile, char *psfile) {
+  FILE *fin,*fmain,*fps;
+  char line[TABREADLINE],tmpname[TABREADLINE];
+  int inps=0,nps=0,found=0;
+  fin=fopen(newtabfile,"r");
+  if(fin==NULL)return 0;
+  while (fgets(line,TABREADLINE,fin)) {
+    if(strncmp(line,"postsim (begin)",15)==0||strncmp(line,"postsim(begin)",14)==0) {
+      found=1;
+      break;
+    }
+  }
+  if(!found) {
+    fclose(fin);
+    return 0;
+  }
+  rewind(fin);
+  strcpy(tmpname,newtabfile);
+  strcat(tmpname,"_o");
+  fmain=fopen(tmpname,"w");
+  fps=fopen(psfile,"w");
+  if(fmain==NULL||fps==NULL) {
+    printf("Error: cannot open PostSim split scratch files\n");
+    fclose(fin);
+    if(fmain!=NULL)fclose(fmain);
+    if(fps!=NULL)fclose(fps);
+    return -1;
+  }
+  while (fgets(line,TABREADLINE,fin)) {
+    if(strncmp(line,"postsim (begin)",15)==0||strncmp(line,"postsim(begin)",14)==0) {
+      inps=1;
+      continue;
+    }
+    if(strncmp(line,"postsim (end)",13)==0||strncmp(line,"postsim(end)",12)==0) {
+      inps=0;
+      continue;
+    }
+    if(!inps) {
+      fputs(line,fmain);
+      continue;
+    }
+    if(strncmp(line,"variable ",9)==0||strncmp(line,"equation ",9)==0||strncmp(line,"update ",7)==0||strncmp(line,"transfer ",9)==0||strncmp(line,"omit ",5)==0||strncmp(line,"substitute ",11)==0||strncmp(line,"backsolve ",10)==0||strncmp(line,"complementarity",15)==0||strstr(line,"(default")!=NULL) {
+      printf("Error: statement not allowed in a PostSim section (manual 12.2.1): %s",line);
+      fclose(fin);
+      fclose(fmain);
+      fclose(fps);
+      return -1;
+    }
+    if(strncmp(line,"read ",5)==0) {
+      printf("Error: PostSim Read is not supported yet; read the data in the ordinary part into a (parameter) coefficient instead\n");
+      fclose(fin);
+      fclose(fmain);
+      fclose(fps);
+      return -1;
+    }
+    if(strncmp(line,"set ",4)==0||strncmp(line,"subset ",7)==0||strncmp(line,"coefficient ",12)==0||strncmp(line,"file ",5)==0) {
+      fputs(line,fmain);
+      continue;
+    }
+    if(strncmp(line,"write ",6)==0||strncmp(line,"display ",8)==0) {
+      /* outputs ride the write-all coefficient dump */
+      continue;
+    }
+    if(strncmp(line,"formula ",8)==0||strncmp(line,"assertion ",10)==0||strncmp(line,"zerodivide",10)==0) {
+      fputs(line,fps);
+      nps++;
+      continue;
+    }
+    printf("Error: unrecognized statement in a PostSim section: %s",line);
+    fclose(fin);
+    fclose(fmain);
+    fclose(fps);
+    return -1;
+  }
+  fclose(fin);
+  fclose(fmain);
+  fclose(fps);
+  if(rename(tmpname,newtabfile)!=0) {
+    printf("Error: cannot finalize the PostSim split\n");
+    return -1;
+  }
+  return nps;
+}
+
+/* CMF "PostSim = yes|no ;" run-time switch (manual ch.12); default yes */
+int cmf_postsim_on(char *filename) {
+  FILE *f;
+  char l[TABREADLINE];
+  char *p;
+  int k,on=1;
+  f=fopen(filename,"r");
+  if(f==NULL)return 1;
+  while(fgets(l,TABREADLINE,f)!=NULL) {
+    k=str_find_ci(l,"postsim");
+    if(k<0)continue;
+    if(str_find_ci(l,"xpostsim")>-1)continue;
+    p=strchr(l+k,'=');
+    if(p==NULL)continue;
+    p++;
+    while(*p==' '||*p=='\t')p++;
+    if(str_find_ci(p,"no")==0)on=0;
+    else if(str_find_ci(p,"yes")==0)on=1;
+  }
+  fclose(f);
+  return on;
 }
