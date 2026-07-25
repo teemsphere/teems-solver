@@ -1466,6 +1466,14 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
 
   filehandle = fopen(fname,"r");
   while (tab_next_statement_resolved(commsyntax,filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
+    /* audit A7: the combined FORMULA & EQUATION statement would run
+       its formula half (as ALWAYS, not INITIAL) while the equation
+       half silently vanishes from the system -- fail loudly until the
+       combined form is implemented (plan 2.2) */
+    if (strstr(line,"& equation")!=NULL||strstr(line,"&equation")!=NULL) {
+      printf("Error: 'Formula & Equation' statements are not supported yet; write the Formula (initial) and Equation (levels) separately\n");
+      MPI_Abort(PETSC_COMM_WORLD,1);
+    }
     if (strstr(line,"(default=initial)")!=NULL) IsDefFomIni=true;
     if (strstr(line,"(default")==NULL) {
       IsFomIni=IsDefFomIni;

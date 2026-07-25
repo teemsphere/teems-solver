@@ -470,6 +470,14 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
 
   while (tab_next_statement(commsyntax,filehandle,line,DATREADLINE)) {
     strcpy(linecopy,line);
+    if (str_find_ci(line,"(ifheaderexists)")>-1) {
+      printf("Error: Read (IfHeaderExists) is not supported\n");
+      return -1;
+    }
+    if (str_find_ci(line,"from terminal")>-1) {
+      printf("Error: Read ... from terminal is not supported (read from a file instead)\n");
+      return -1;
+    }
     k0=str_find_ci(line,"from file ");
     if(k0>-1) {
       k1=str_find_ci(line+k0+10," ");
@@ -486,9 +494,17 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
     if (strchr(line,'(')==NULL) {
       readitem = strtok(line," ");
       readitem = strtok(NULL," ");
+      if (readitem==NULL) {
+        printf("Error: malformed Read statement: %s\n",linecopy);
+        return -1;
+      }
       strcpy(vname,readitem);
       readitem = strtok(NULL,"\"");
       readitem = strtok(NULL,"\"");
+      if (readitem==NULL) {
+        printf("Error: Read without a header is not supported (use 'Read X from file <log> header \"H\"'): %s\n",linecopy);
+        return -1;
+      }
       strcpy(header,readitem);
       n1=0;
       while (header[n1]!='\0'){
@@ -810,10 +826,18 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
       strcpy(vname,readitem);
       str_replace_all(vname," ","");
       readitem = strtok(NULL,")");
+      if (readitem==NULL) {
+        printf("Error: malformed partial Read statement in TAB file\n");
+        return -1;
+      }
       strcpy(argu,readitem);
       strcat(argu,",");
       readitem = strtok(NULL,"\"");
       readitem = strtok(NULL,"\"");
+      if (readitem==NULL) {
+        printf("Error: Read without a header is not supported (use 'Read X(...) from file <log> header \"H\"')\n");
+        return -1;
+      }
       strcpy(header,readitem);
       n1=0;
       while (header[n1]!='\0'){
@@ -2376,6 +2400,7 @@ offset_t coefficients_read(char *fname, char *commsyntax, array_def *record, off
        1.2a). The bare-word fallbacks below still risk mangling
        lowercase names containing these words -- recorded residual. */
     str_replace_first(line,"non_parameter", "");
+    str_replace_first(line,"(real)", ""); /* audit A5: explicit default */
     str_replace_first(line,"parameter", "");
     str_replace_first(line,"change", "");
     str_replace_first(line,"integer", "");
@@ -3232,6 +3257,9 @@ int sets_read(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,
 
   while (tab_next_statement(commsyntax,filehandle,line,TABREADLINE)) {
     set_maxsize_excise(line);
+    /* audit A5: the explicit default qualifier must not substring-match
+       the intertemporal route */
+    str_replace_first(line,"(non_intertemporal)","");
     strcpy(linecopy,line);
     k2=str_find_ci(line,"intertemporal");
     if(k2>-1) {
@@ -3324,7 +3352,10 @@ int sets_read(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,
                     nm[ni]='\0';
                     ni=0;
                     for (i=0; i<nset; i++) if (strcmp(nm,record[i].setname)==0) break;
-                    if (i==nset) printf("Error: set %s in the definition of %s is not declared before use\n",nm,record[j].setname);
+                    if (i==nset) {
+                      printf("Error: set %s in the definition of %s is not declared before use\n",nm,record[j].setname);
+                      return -1;
+                    }
                     else sz+=record[i].size;
                   }
                   if (*p=='"') { sz++; inq=1; }
@@ -3434,11 +3465,19 @@ int sets_read(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,
                     return -1;
                   }
                   record[j].size=record[i].size;
-                  strcpy(record[j].header,record[i].header);
+                  /* audit A2: do NOT copy the header -- a copied header
+                     sent main down the read-from-file path with a stale
+                     fileid and skipped set_equality_build (elements +
+                     the two implied SUBSETs); the '=' readele drives
+                     the equality path for every source kind */
                   sprintf(tempvar, "%d",i);
                   strcat(line1,tempvar);
                   break;
                 }
+              }
+              if (i>=nset) {
+                printf("Error: the right-hand side of 'Set %s = %s' is not a declared set (set products 'A x B' and data-dependent sets are not supported)\n",record[j].setname,readitem);
+                return -1;
               }
               strcpy(record[j].readele,line1);
             }
@@ -3483,6 +3522,10 @@ int sets_read(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,
           if (readitem!=NULL) readitem = strtok(NULL,")");
           if (readitem==NULL) {
             printf("Error: malformed set declaration in TAB file\n");
+            return -1;
+          }
+          if (strchr(readitem,'-')!=NULL) {
+            printf("Error: element range abbreviation '(first - last)' in set %s is not supported; list the elements explicitly\n",record[j].setname);
             return -1;
           }
           strcpy(record[j].readele,readitem);

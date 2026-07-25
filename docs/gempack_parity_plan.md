@@ -7,6 +7,30 @@ semantics, POSTSIM, others").
 
 ## Progress log
 
+- **2026-07-25 — audit findings batch (safe subset) landed**: A2 (set
+  equality no longer copies the source header — the `=` readele drives
+  `set_equality_build` for every source kind; validated end-to-end with
+  an equality copy of a read-from-file set, size-asserted), A3 (unknown
+  equality RHS — incl. set products — and undeclared sets in the
+  expression route are now FATAL instead of silently producing empty
+  sets), A5 (`Coefficient (real)` stripped; `(non_intertemporal)` no
+  longer substring-routes into the intertemporal branch), A7
+  (`Formula & Equation` fails loudly until plan 2.2), A8 (READ
+  `(IfHeaderExists)` / `from terminal` / headerless forms get clean
+  errors instead of strcpy(NULL) crashes), A10 (element range
+  abbreviation in explicit lists is a fatal error — legal element names
+  cannot contain `-`; the intertemporal `p[a]-p[b]` branch is
+  unaffected). DEFERRED with design notes: A1 ZERODIVIDE (correct
+  semantics change results the goldens rely on — flag-gated machinery
+  as its own follow-up, adoption at a re-anchor slot), A4 (tokenized
+  variable-qualifier parsing), A6 (Default-statement rework), A9
+  (second bound slot). NOTE: the headerless-READ error path exits 0 on
+  some callers (the known return-0 fail-fast wart — covered by the
+  standing fail-fast sweep item).
+- **2026-07-25 — 3.1 intrinsics tranche landed** (see commit c7ea3a5):
+  EXP/SQRT/LOG10/ROUND + the paren-free-argument and
+  loge-at-expression-start whitelist fixes.
+
 - **2026-07-25 — batch 1 (quick correctness wins) landed**: 1.1 ASSERTION
   evaluation (`assertions_execute` in formula.c: residual `lhs-(rhs)`
   through the ordinary formula engine per quantifier tuple; `(initial)`/
