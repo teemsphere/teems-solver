@@ -1951,6 +1951,9 @@ offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_el
       IsExplicit=true;
       str_replace_first(line, "(explicit)", "");
     }
+    /* (product) is GEMPACK's explicit spelling of the default update
+       form (parity plan 3.4) -- accept and ignore */
+    if(strstr(line, "(product)")!=NULL)str_replace_first(line, "(product)", "");
     str_replace_first(line, commsyntax, "");
     while (str_replace_all(line," ", ""));
     while (str_replace_char(line, '[', '('));
@@ -2259,6 +2262,9 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
       IsExplicit=true;
       str_replace_first(line, "(explicit)", "");
     }
+    /* (product) is GEMPACK's explicit spelling of the default update
+       form (parity plan 3.4) -- accept and ignore */
+    if(strstr(line, "(product)")!=NULL)str_replace_first(line, "(product)", "");
     str_replace_first(line, commsyntax, "");
     while (str_replace_all(line," ", ""));
     while (str_replace_char(line, '[', '('));
@@ -2744,4 +2750,274 @@ int sum_eval(char *formulain, char *commsyntax,set_def *sets,dim_t nset, set_ele
     }
   }
   return 0;
+}
+
+/* ASSERTION evaluation (GEMPACK manual 10.14 / 25.3; parity plan 1.1).
+   The condition "lhs RELOP rhs" is evaluated as the residual lhs-(rhs)
+   through the ordinary formula engine, per quantifier tuple, against
+   the current coefficient values -- so an (always) assertion rides
+   every formulas_execute pass and an (initial) one only the first.
+   mode (CMF "Assertions = yes|no|warn", default yes): 0 = skip,
+   1 = warn and continue, 2 = report failing elements and abort.
+   Unsupported condition forms (conditional quantifiers, functions the
+   compiler lacks) warn and skip the assertion rather than turning a
+   previously-running model into an abort. */
+offset_t assertions_execute(char *fname,set_def *sets,dim_t nset,set_element *set_elems,array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar,elem_value *elem_vals,offset_t ncofvar,offset_t ncofele,bool IsIni,int mode) {
+  FILE *filehandle;
+  char line[TABREADLINE],linecopy[TABREADLINE],resid[TABREADLINE],msg[TABREADLINE];
+  char sumsyntax[NAMESIZE],tempset[NAMESIZE];
+  char *p=NULL,*q=NULL,*right=NULL;
+  static offset_t nassert=-1;
+  offset_t i,l,i3,i4,nloops,len,dcountdim1[4*MAXVARDIM],total_fail=0;
+  dim_t nq,dcount;
+  int nops,npow,nmul,nplu,npar,relop,fails,shown,totalsum,sumcount,sumindx,depth;
+  offset_t nsumele;
+  solve_real zerodivide=0,r;
+  bool IsAssIni,ok,skip;
+  if(mode==0)return 0;
+  if(nassert<0)nassert=tab_count_statements(fname,"assertion");
+  if(nassert==0)return 0;
+  filehandle=fopen(fname,"r");
+  if(filehandle==NULL)return 0;
+  strcpy(sumsyntax,"sum(");
+  while (tab_next_statement_resolved("assertion",filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
+    IsAssIni=false;
+    if(strstr(line,"(initial)")!=NULL) {
+      str_replace_first(line,"(initial)","");
+      IsAssIni=true;
+    }
+    if(strstr(line,"(always)")!=NULL)str_replace_first(line,"(always)","");
+    if(IsAssIni&&!IsIni)continue;
+    /* optional # message #, captured before whitespace stripping */
+    msg[0]='\0';
+    p=strchr(line,'#');
+    if(p!=NULL) {
+      q=strchr(p+1,'#');
+      if(q!=NULL) {
+        len=q-p-1;
+        if(len>=TABREADLINE)len=TABREADLINE-1;
+        strncpy(msg,p+1,len);
+        msg[len]='\0';
+        while(len>0&&msg[len-1]==' ') msg[--len]='\0';
+        memmove(p,q+1,strlen(q+1)+1);
+      }
+    }
+    /* word comparison operators need their delimiting spaces */
+    while((p=strstr(line," ge "))!=NULL) {
+      p[0]='>';
+      p[1]='=';
+      memmove(p+2,p+4,strlen(p+4)+1);
+    }
+    while((p=strstr(line," le "))!=NULL) {
+      p[0]='<';
+      p[1]='=';
+      memmove(p+2,p+4,strlen(p+4)+1);
+    }
+    while((p=strstr(line," gt "))!=NULL) {
+      p[0]='>';
+      memmove(p+1,p+4,strlen(p+4)+1);
+    }
+    while((p=strstr(line," lt "))!=NULL) {
+      p[0]='<';
+      memmove(p+1,p+4,strlen(p+4)+1);
+    }
+    while((p=strstr(line," ne "))!=NULL) {
+      p[0]='<';
+      p[1]='>';
+      memmove(p+2,p+4,strlen(p+4)+1);
+    }
+    while((p=strstr(line," eq "))!=NULL) {
+      p[0]='=';
+      memmove(p+1,p+4,strlen(p+4)+1);
+    }
+    str_replace_first(line,"assertion","");
+    while (str_replace_all(line," ", ""));
+    while (str_replace_char(line, '[', '('));
+    while (str_replace_char(line, ']', ')'));
+    while (str_replace_char(line, '{', '('));
+    while (str_replace_char(line, '}', ')'));
+    strcpy(linecopy,line);
+    /* leading (all,index,SET) quantifiers */
+    quantifier *arSet= (quantifier *) calloc (4*MAXVARDIM+1,sizeof(quantifier));
+    nq=0;
+    nloops=1;
+    skip=false;
+    p=linecopy;
+    while(strncmp(p,"(all,",5)==0&&nq<4*MAXVARDIM) {
+      p+=5;
+      q=strchr(p,',');
+      if(q==NULL) {
+        skip=true;
+        break;
+      }
+      len=q-p;
+      if(len>=NAMESIZE)len=NAMESIZE-1;
+      strncpy(arSet[nq].index_name,p,len);
+      arSet[nq].index_name[len]='\0';
+      p=q+1;
+      q=strchr(p,')');
+      if(q==NULL) {
+        skip=true;
+        break;
+      }
+      len=q-p;
+      if(len>=NAMESIZE)len=NAMESIZE-1;
+      strncpy(tempset,p,len);
+      tempset[len]='\0';
+      if(strchr(tempset,':')!=NULL) {
+        printf("Warning: conditional quantifiers in assertions are not supported -- assertion skipped: %s\n",linecopy);
+        skip=true;
+        break;
+      }
+      for(i=0; i<nset; i++)if(strcmp(sets[i].setname,tempset)==0)break;
+      if(i>=nset) {
+        printf("Warning: assertion references unknown set '%s' -- assertion skipped\n",tempset);
+        skip=true;
+        break;
+      }
+      arSet[nq].setid=i;
+      nloops=nloops*sets[i].size;
+      nq++;
+      p=q+1;
+    }
+    if(skip) {
+      free(arSet);
+      continue;
+    }
+    q=strchr(p,';');
+    if(q!=NULL)*q='\0';
+    /* top-level comparison operator: 1 = 2 <> 3 >= 4 <= 5 > 6 < */
+    relop=0;
+    depth=0;
+    for(q=p; *q!='\0'; q++) {
+      if(*q=='(')depth++;
+      else if(*q==')')depth--;
+      else if(depth==0) {
+        if(*q=='<'&&*(q+1)=='>') {
+          relop=2;
+          break;
+        }
+        if(*q=='>'&&*(q+1)=='=') {
+          relop=3;
+          break;
+        }
+        if(*q=='<'&&*(q+1)=='=') {
+          relop=4;
+          break;
+        }
+        if(*q=='>') {
+          relop=5;
+          break;
+        }
+        if(*q=='<') {
+          relop=6;
+          break;
+        }
+        if(*q=='=') {
+          relop=1;
+          break;
+        }
+      }
+    }
+    if(relop==0) {
+      printf("Warning: assertion has no comparison operator -- skipped: %s\n",linecopy);
+      free(arSet);
+      continue;
+    }
+    right=q+((relop==1||relop==5||relop==6)?1:2);
+    *q='\0';
+    if(strlen(p)+strlen(right)+4>=TABREADLINE) {
+      printf("Warning: assertion condition too long -- skipped\n");
+      free(arSet);
+      continue;
+    }
+    sprintf(resid,"%s-(%s)",p,right);
+    while (formula_normalize(resid)==1);
+    leadlag_encode(resid);
+    npow=str_count_char(resid,'^');
+    nmul=str_count_char(resid,'*')+str_count_char(resid,'/');
+    nplu=str_count_char(resid,'+')+str_count_char(resid,'-');
+    npar=str_count_char(resid,'(');
+    totalsum=sum_count(resid,sumsyntax);
+    sum_def *sum_cof= (sum_def *) calloc (totalsum+1,sizeof(sum_def));
+    sumcount=0;
+    strcpy(line,resid);
+    p=line;
+    while (sum_parse(p,sumsyntax,sum_cof,arSet,sets,nset,nq+1,sumcount)==1)sumcount++;
+    totalsum=sumcount;
+    i3=0;
+    for(i=0; i<totalsum; i++) {
+      i4=1;
+      for(l=0; l<sum_cof[i].size; l++)i4=i4*sets[sum_cof[i].setid[l]].size;
+      sum_cof[i].offset=i3;
+      sum_cof[i].summatsize=i4;
+      i3=i3+i4;
+      sum_cof[i].strides[sum_cof[i].size-1]=1;
+      for(l=sum_cof[i].size-2; l>-1; l--)sum_cof[i].strides[l]=sum_cof[i].strides[l+1]*sets[sum_cof[i].setid[l+1]].size;
+    }
+    nsumele=i3;
+    formula_op *ops= (formula_op *) calloc (npow+nmul+nplu+2*(npar+2),sizeof(formula_op));
+    sum_value *sum_vals= (sum_value *) calloc (nsumele+1,sizeof(sum_value));
+    sumcount=0;
+    sumindx=0;
+    strcpy(line,resid);
+    p=line;
+    while (sum_eval(p,sumsyntax,sets,nset,set_elems,elem_vals,ncofvar,ncofele,coefs,ncof,vars,nvar,sum_cof,totalsum,sum_vals,nsumele,ops,arSet,nq+1,&sumindx,sumcount,zerodivide)==1)sumcount++;
+    nops=0;
+    if(!formula_compile(p,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,&nops,arSet,nq)) {
+      printf("Warning: assertion condition could not be compiled -- assertion skipped: %s\n",linecopy);
+      free(arSet);
+      free(sum_cof);
+      free(sum_vals);
+      free(ops);
+      continue;
+    }
+    if(nq>0) {
+      dcountdim1[nq-1]=1;
+      for(i=nq-2; i>-1; i--)dcountdim1[i]=sets[arSet[i+1].setid].size*dcountdim1[i+1];
+    }
+    fails=0;
+    shown=0;
+    for(l=0; l<nloops; l++) {
+      i4=l;
+      for(dcount=0; dcount<nq; dcount++) {
+        i3=(offset_t) i4/dcountdim1[dcount];
+        arSet[dcount].indx=i3;
+        i4=i4-i3*dcountdim1[dcount];
+      }
+      r=formula_eval(elem_vals,sets,set_elems,sum_vals,ops,nops,arSet,nq,zerodivide);
+      ok=true;
+      if(relop==1)ok=(r==0);
+      if(relop==2)ok=(r!=0);
+      if(relop==3)ok=(r>=0);
+      if(relop==4)ok=(r<=0);
+      if(relop==5)ok=(r>0);
+      if(relop==6)ok=(r<0);
+      if(!ok) {
+        fails++;
+        if(shown<10) {
+          printf("%%%% Assertion '%s' does not hold",(msg[0]!='\0')?msg:linecopy);
+          for(dcount=0; dcount<nq; dcount++)printf(" (quantifier number %d is '%s')",(int)(dcount+1),set_elems[sets[arSet[dcount].setid].offset+arSet[dcount].indx].setele);
+          printf("\n");
+          shown++;
+        }
+      }
+    }
+    if(fails>0) {
+      if(fails>shown)printf("%%%% (%d further failing elements not listed)\n",fails-shown);
+      printf("Assertion '%s' does not hold.\n",(msg[0]!='\0')?msg:linecopy);
+      total_fail+=fails;
+      if(mode==2) {
+        printf("Error: assertion failed (Assertions = warn/no in the CMF file suppresses/downgrades this abort)\n");
+        MPI_Abort(PETSC_COMM_WORLD,1);
+      }
+    }
+    free(arSet);
+    free(sum_cof);
+    free(sum_vals);
+    free(ops);
+  }
+  fclose(filehandle);
+  if(mode==1&&total_fail>0)printf("Warning: %ld assertion failure%s in this pass (Assertions = warn)\n",(long)total_fail,(total_fail==1)?"":"s");
+  return total_fail;
 }

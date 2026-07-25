@@ -2300,6 +2300,11 @@ offset_t coefficients_read(char *fname, char *commsyntax, array_def *record, off
     }
     
     while (str_replace_all(line," ", ""));
+    /* strip non_parameter BEFORE parameter: the bare substring strip
+       used to corrupt "(non_parameter)" into "(non_)" (parity plan
+       1.2a). The bare-word fallbacks below still risk mangling
+       lowercase names containing these words -- recorded residual. */
+    str_replace_first(line,"non_parameter", "");
     str_replace_first(line,"parameter", "");
     str_replace_first(line,"change", "");
     str_replace_first(line,"integer", "");
@@ -2468,6 +2473,23 @@ dim_t sets_count(char *fname) {
   }
   fclose(filehandle);
   return j;
+}
+
+
+/* "maximum size <n>" on a Set declaration is silently ignored by
+   modern GEMPACK (manual 11.7.2); excise it so legacy TABs parse
+   (parity plan 3.3) */
+static void set_maxsize_excise(char *line) {
+  int k;
+  char *p,*q;
+  k=str_find_ci(line,"maximum size");
+  if(k<0)return;
+  p=line+k;
+  q=p+12;
+  while(*q==' '||*q=='\t')q++;
+  while(*q>='0'&&*q<='9')q++;
+  while(*q==' '||*q=='\t')q++;
+  memmove(p,q,strlen(q)+1);
 }
 
 int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,dim_t nset) {
@@ -3138,6 +3160,7 @@ int sets_read(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,
   filehandle = fopen(fname,"r");
 
   while (tab_next_statement(commsyntax,filehandle,line,TABREADLINE)) {
+    set_maxsize_excise(line);
     strcpy(linecopy,line);
     k2=str_find_ci(line,"intertemporal");
     if(k2>-1) {

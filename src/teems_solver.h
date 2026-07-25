@@ -200,6 +200,13 @@ extern offset_t nbselems;         /* total backsolved variable elements */
    ONLY inverts the filter for the recovery-program build. */
 enum bs_scan_mode { BS_SCAN_SKIP=0, BS_SCAN_ONLY=1 };
 extern int backsolve_scan_mode;
+/* CMF "Assertions = yes|no|warn" (0/1/2, default 2 = abort on failure) */
+extern int teems_assertions_mode;
+int cmf_assertions_mode(char *filename);
+/* evaluate ASSERTION statements against the current values (manual
+   10.14/25.3): rides each formulas_execute pass; (initial) assertions
+   only when IsIni. Returns the failure count (mode 1). */
+offset_t assertions_execute(char *fname,set_def *sets,dim_t nset,set_element *set_elems,array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar,elem_value *elem_vals,offset_t ncofvar,offset_t ncofele,bool IsIni,int mode);
 offset_t backsolve_read(char *fname, array_def *vars, offset_t nvar, closure_entry *closure_vals);
 int backsolve_validate_refs(char *fname, array_def *vars);
 int tab_equation_name(char *stmt, char *eqname);

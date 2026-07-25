@@ -14,3 +14,7 @@ backsolve_def *backsolves = NULL;
 int nbacksolve = 0;
 offset_t nbselems = 0;
 int backsolve_scan_mode = BS_SCAN_SKIP;
+
+/* CMF "Assertions = yes|no|warn" (manual 25.3): 0 = no, 1 = warn,
+   2 = yes (default) -- consumed by assertions_execute */
+int teems_assertions_mode = 2;

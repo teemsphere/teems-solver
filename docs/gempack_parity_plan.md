@@ -1,8 +1,38 @@
 # GEMPACK TABLO Feature-Parity Plan
 
-Status: DRAFT (2026-07-24). Companion to ROADMAP Phase 6 ("GEMPACK parity
-program — performance-vetoed"). Refines/expands ROADMAP item 6.4 ("Statement
-completion … full IF semantics, POSTSIM, others"). Not yet committed.
+Status: ACTIVE (committed 2026-07-25; drafted 2026-07-24). Companion to
+ROADMAP Phase 6 ("GEMPACK parity program — performance-vetoed").
+Refines/expands ROADMAP item 6.4 ("Statement completion … full IF
+semantics, POSTSIM, others").
+
+## Progress log
+
+- **2026-07-25 — batch 1 (quick correctness wins) landed**: 1.1 ASSERTION
+  evaluation (`assertions_execute` in formula.c: residual `lhs-(rhs)`
+  through the ordinary formula engine per quantifier tuple; `(initial)`/
+  `(always)` honoured; word and symbol relops; per-element failure report
+  in the manual's `%%` format capped at 10 details; CMF
+  `Assertions = yes|no|warn` via `cmf_assertions_mode`, abort =
+  MPI_Abort; rides every `formulas_execute` site incl. per-step; zero
+  cost when no assertions — one `tab_count_statements` scan). 1.2a
+  `non_parameter` strip-order fix. 3.3 `maximum size <n>` excision in
+  the set readers. 3.4 `Update (product)` accepted at both scans.
+  3.5 trimmed from the batch: the corpus shows ZERO `(default=…)` uses,
+  so the remaining Default forms move with their features (e.g.
+  `default=parameter` with 1.2b). RESIDUALS RECORDED: (a) assertion
+  `# message #` text is stripped by `tab_preprocess` before the
+  evaluator, so failure reports label with the condition text instead —
+  message preservation is a follow-up; (b) the bare-word qualifier
+  strips (`parameter`/`change`/`integer`) can still corrupt lowercase
+  coefficient names containing those words — proper qualifier-token
+  parsing is the fix, deferred; (c) unsupported assertion condition
+  forms (conditional quantifiers, uncompilable functions) warn-and-skip
+  rather than abort, so pre-batch models keep running; the warning
+  closes once 3.1 intrinsics land. Validated: golden-re's 10 live
+  `ge`/`lt` assertions pass on golden data across all verify configs;
+  inverted-assertion negative test aborts rc=1 with named elements;
+  warn/no modes behave; `maximum size`+`(product)`+`(non_parameter)`
+  insertions parse and reproduce bit-identical outputs.
 
 Spec source: `teems-docs/solver_optimization/GEMPACK User Manual.html`
 (Release 12.2+). Ground truth: solver parser (`teems-solver/src/*.c`) + R

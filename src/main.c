@@ -906,6 +906,7 @@ int main(int argc,char **args) {
   cmf_file_entry *iodata= (cmf_file_entry *) calloc (niodata+noutdata+nsoldata,sizeof(cmf_file_entry));
   if(rank==rank_hsl) {
     cmf_read(filename,niodata,iodata,tabfile,closure,shock);
+    teems_assertions_mode=cmf_assertions_mode(filename);
     for (nj=0; nj<niodata+noutdata+nsoldata; nj++) logmsg(2,"rank %d logname %s fname %s\n",rank,iodata[nj].logname,iodata[nj].filname);
     if(tab_preprocess(tabfile,newtabfile)==-1)return 0;
   }
@@ -1207,6 +1208,7 @@ int main(int argc,char **args) {
   bool IsIni=true;
   if(rank==0) {
     formulas_execute(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,IsIni);
+assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,IsIni,teems_assertions_mode);
   }
   gettimeofday(&endtime, NULL);
   if(rank==0)logmsg(1,"Variable calculation time %.2f s\n",(endtime.tv_sec - begintime.tv_sec)+((double)(endtime.tv_usec - begintime.tv_usec))/ 1000000);

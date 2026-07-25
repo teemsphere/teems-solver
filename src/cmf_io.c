@@ -1135,3 +1135,27 @@ int tab_read_set_name(char *filename, char *varname, int indx, char *setname) {
   return -1;
 }
 
+
+/* CMF "Assertions = yes|no|warn ;" (GEMPACK manual 25.3).
+   Returns 0/1/2 (no/warn/yes); default yes. */
+int cmf_assertions_mode(char *filename) {
+  FILE *f;
+  char l[TABREADLINE];
+  char *p;
+  int k,mode=2;
+  f=fopen(filename,"r");
+  if(f==NULL)return 2;
+  while(fgets(l,TABREADLINE,f)!=NULL) {
+    k=str_find_ci(l,"assertions");
+    if(k<0)continue;
+    p=strchr(l+k,'=');
+    if(p==NULL)continue;
+    p++;
+    while(*p==' '||*p=='\t')p++;
+    if(str_find_ci(p,"no")==0)mode=0;
+    else if(str_find_ci(p,"warn")==0)mode=1;
+    else if(str_find_ci(p,"yes")==0)mode=2;
+  }
+  fclose(f);
+  return mode;
+}
