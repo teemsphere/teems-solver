@@ -7,6 +7,34 @@ semantics, POSTSIM, others").
 
 ## Progress log
 
+- **2026-07-25 — PostSim foundation (F2+F3) landed**: general WRITE
+  reconsidered OFF the critical path (see the 2.1 entry — TEEMS writes
+  all coefficients via R-generated Write+outdata pairs; PostSim outputs
+  ride the same dump). **F2 `(parameter)` tracking**: parallel
+  `teems_coef_is_param` array captured in `coefficients_read`
+  (`array_def` itself is binary-locked to the R-side sol.var parser);
+  Formula (always) assignment to a parameter WARNS once per run (not
+  fatal — TEEMS never enforced the distinction; escalation with 1.2b
+  full semantics). Update-of-parameter validation deferred to the same.
+  **F3 post-sim value exposure**: after the solve, coefficient slots
+  already hold post-simulation values (the updated-data writes read
+  them); `postsim_expose_results` copies the composed solution `xcf`
+  into the variables' elem_vals slots so post-solve statements read
+  simulation results as if variables were coefficients (manual ch.12).
+  First consumer landed with it: **`(postsim)`-qualified ASSERTIONS**
+  (legal inside PostSim per 12.2.4) — skipped during ordinary passes,
+  evaluated once post-solve with initial/always ignored; zero cost when
+  absent (one statement scan). Validated on golden-shk2d: a
+  sum-of-shocks assertion that would fail pre-solve passes only because
+  it is skipped there, holds post-solve at `gt 3.6` and fails at
+  `gt 3.7` (rc=1 with the %% report) — proving skip, exposure and
+  evaluation against genuine solution values. Remaining for Tier 0:
+  POSTSIM section scoping (BEGIN/END, isolated namespace), the
+  ordinary-Reads+Formulas replay decision (likely unnecessary — values
+  are already post-sim at the hook), PostSim Formula/Coefficient
+  statements, and the R-side Write+outdata generation for PostSim
+  coefficients.
+
 - **2026-07-25 — audit findings batch (safe subset) landed**: A2 (set
   equality no longer copies the source header — the `=` readele drives
   `set_equality_build` for every source kind; validated end-to-end with
@@ -224,7 +252,7 @@ Read-into-coefficient to a second pass.
 
 | # | Statement | Status | Manual role | Call | Notes / scrutiny |
 |---|---|---|---|---|---|
-|2.1|**WRITE (general)**|◐ solver handles only `Write X to file <log> header "…"` bound to a CMF outdata logname; R **drops** Write entirely (`tablo_process.R:162`)|CORE — HAR/text/terminal, `(SET)`/`(ALLSETS)`, LONGNAME, BY_ELEMENTS, `(POSTSIM)`|**PARITY**|Prerequisite for PostSim. Implement HAR + text + terminal targets and the set-writing forms. R must stop dropping it.|
+|2.1|**WRITE (general)**|◐ solver handles only `Write X to file <log> header "…"` bound to a CMF outdata logname; R **drops** Write entirely (`tablo_process.R:162`)|CORE — HAR/text/terminal, `(SET)`/`(ALLSETS)`, LONGNAME, BY_ELEMENTS, `(POSTSIM)`|**RECONSIDERED 2026-07-25 (user)**|TEEMS handles writes by **writing all coefficients**: teems-R generates a `Write X to file <log> header` line per coefficient plus a matching CMF `outdata` entry (288 in the golden-re CMF), and `outputs_write_csv` dumps every one as a CSV that `ems_compose` surfaces. User-authored Write statements are architecturally superseded — R decides what is written (currently: everything). Therefore general WRITE is NOT a PostSim prerequisite: PostSim coefficients ride the same dump (R generates the Write+outdata pairs for the PostSim section exactly as for the ordinary section). GEMPACK file-targeting forms (HAR/text/terminal, `(SET)`, LONGNAME routing) stay unimplemented; user Writes in imported TABs are replaced by the write-everything scheme. Resolves scrutiny-register items 2 and 9. Residual niceties (implement only on demand): `Write ... to terminal` as a log print; a compose-side flag marking which outputs the TAB's own Writes selected.|
 |2.2|**FORMULA & EQUATION (combined)**|✗|COMMON shorthand = FORMULA(INITIAL)+EQUATION(LEVELS)|**PARITY (cheap)**|Pure sugar over two already-supported statements. 🔍 could be an **R-side declarative rewrite** (like the existing IF/netcut rewrites), keeping the solver unchanged — preferred if it fits single-source-of-truth.|
 |2.3|**DISPLAY**|✗ (R hard-aborts)|Manual calls it "old-fashioned"; SLC/CVL preferred, but used with PostSim|**QUESTION**|Implement the **`Display (postsim)`** path minimally for PostSim; treat standalone Display as low-priority legacy. 🔍|
 |2.4|**MAPPING … FROM … TO**|✗ (R hard-aborts)|COMMON/ADVANCED; used in index expressions; `(ONTO)`/`(PROJECT)`|**QUESTION**|🔍 Assess prevalence in the target corpus (GTAP standard uses little/no mapping). Real cost (index-expression evaluation). Defer unless a corpus TAB needs it.|

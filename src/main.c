@@ -1208,7 +1208,7 @@ int main(int argc,char **args) {
   bool IsIni=true;
   if(rank==0) {
     formulas_execute(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,IsIni);
-assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,IsIni,teems_assertions_mode);
+assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,IsIni,teems_assertions_mode,0);
   }
   gettimeofday(&endtime, NULL);
   if(rank==0)logmsg(1,"Variable calculation time %.2f s\n",(endtime.tv_sec - begintime.tv_sec)+((double)(endtime.tv_usec - begintime.tv_usec))/ 1000000);
@@ -1996,6 +1996,14 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
     fclose(solution);
   }
   MPI_Barrier(PETSC_COMM_WORLD);
+  /* PostSim foundation F3 (early Tier 0): after the solve, coefficient
+     slots hold post-simulation (updated) values and xcf holds the
+     composed solution; expose the solution to the formula engine and
+     evaluate (postsim) assertions. Zero cost when the TAB has none. */
+  if(rank==0&&xcf!=NULL&&elem_vals!=NULL&&tab_has_postsim_assertions(tabfile)) {
+    postsim_expose_results(elem_vals,ncofele,nvarele,xcf);
+    assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,true,teems_assertions_mode,1);
+  }
   if(nowrites==0&&rank==0)for(i=0; i<noutdata; i++){
     outputs_write_csv(tabfile,iodata[i+niodata].logname,iodata[i+niodata].filname,sets,nset,set_elems,coefs,ncof,ncofele,vars,nvar,nvarele,elem_vals);
     logmsg(1,"Wrote %s\n",iodata[i+niodata].logname);

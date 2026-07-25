@@ -205,10 +205,21 @@ extern int backsolve_scan_mode;
 /* CMF "Assertions = yes|no|warn" (0/1/2, default 2 = abort on failure) */
 extern int teems_assertions_mode;
 int cmf_assertions_mode(char *filename);
+/* (parameter)-qualified coefficients, parallel to coefs[] (F2) */
+extern bool *teems_coef_is_param;
 /* evaluate ASSERTION statements against the current values (manual
    10.14/25.3): rides each formulas_execute pass; (initial) assertions
-   only when IsIni. Returns the failure count (mode 1). */
-offset_t assertions_execute(char *fname,set_def *sets,dim_t nset,set_element *set_elems,array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar,elem_value *elem_vals,offset_t ncofvar,offset_t ncofele,bool IsIni,int mode);
+   only when IsIni. postsim_pass: 0 = ordinary passes ((postsim)
+   assertions skipped), 1 = the post-solve pass (only (postsim)
+   assertions, initial/always ignored per manual 12.2.4). Returns the
+   failure count (mode 1). */
+offset_t assertions_execute(char *fname,set_def *sets,dim_t nset,set_element *set_elems,array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar,elem_value *elem_vals,offset_t ncofvar,offset_t ncofele,bool IsIni,int mode,int postsim_pass);
+/* PostSim foundation F3: copy the composed solution (xcf, per
+   variable element) into the variables' elem_vals slots so post-solve
+   statements read simulation results as if variables were
+   coefficients (manual ch.12) */
+void postsim_expose_results(elem_value *elem_vals,offset_t ncofele,offset_t nvarele,solve_real *xcf);
+int tab_has_postsim_assertions(char *fname);
 offset_t backsolve_read(char *fname, array_def *vars, offset_t nvar, closure_entry *closure_vals);
 int backsolve_validate_refs(char *fname, array_def *vars);
 int tab_equation_name(char *stmt, char *eqname);

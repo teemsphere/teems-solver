@@ -2290,8 +2290,13 @@ offset_t coefficients_read(char *fname, char *commsyntax, array_def *record, off
     ncommsyntax++;
   }
   filehandle = fopen(fname,"r");
+  /* PostSim foundation F2: (parameter) tracked in a parallel array --
+     array_def is binary-locked to the R-side sol.var parser */
+  free(teems_coef_is_param);
+  teems_coef_is_param= (bool *) calloc (ncof+1,sizeof(bool));
 
   while (tab_next_statement(commsyntax,filehandle,line,TABREADLINE)) {
+    if(strstr(line,"parameter")!=NULL&&strstr(line,"non_parameter")==NULL&&j<ncof)teems_coef_is_param[j]=true;
     readitem=strstr(line, "(ge ");
     if(readitem!=NULL){
       record[j].gltype=BT_GE;

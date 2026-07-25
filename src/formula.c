@@ -1664,6 +1664,10 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
         p=strtok(vname,"(");
         do {
           if (strcmp(coefs[index].cofname,p)==0) {
+            /* F2: parameters may only be set by Read or Formula
+               (Initial) -- warn once (first pass) rather than abort,
+               since TEEMS never enforced the distinction */
+            if(IsIni&&!IsFomIni&&teems_coef_is_param!=NULL&&teems_coef_is_param[index])printf("Warning: Formula (always) assigns (parameter) coefficient %s; GEMPACK only allows Read or Formula (Initial) for parameters\n",coefs[index].cofname);
             coefs[index].suplval=true;
             offset=coefs[index].offset;
             varsize=coefs[index].size;
@@ -2806,7 +2810,7 @@ int sum_eval(char *formulain, char *commsyntax,set_def *sets,dim_t nset, set_ele
    Unsupported condition forms (conditional quantifiers, functions the
    compiler lacks) warn and skip the assertion rather than turning a
    previously-running model into an abort. */
-offset_t assertions_execute(char *fname,set_def *sets,dim_t nset,set_element *set_elems,array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar,elem_value *elem_vals,offset_t ncofvar,offset_t ncofele,bool IsIni,int mode) {
+offset_t assertions_execute(char *fname,set_def *sets,dim_t nset,set_element *set_elems,array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar,elem_value *elem_vals,offset_t ncofvar,offset_t ncofele,bool IsIni,int mode,int postsim_pass) {
   FILE *filehandle;
   char line[TABREADLINE],linecopy[TABREADLINE],resid[TABREADLINE],msg[TABREADLINE];
   char sumsyntax[NAMESIZE],tempset[NAMESIZE];
@@ -2825,13 +2829,20 @@ offset_t assertions_execute(char *fname,set_def *sets,dim_t nset,set_element *se
   if(filehandle==NULL)return 0;
   strcpy(sumsyntax,"sum(");
   while (tab_next_statement_resolved("assertion",filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
+    /* (postsim) assertions run only in the post-solve pass, where the
+       initial/always qualifiers are ignored (manual 12.2.4) */
+    if(strstr(line,"(postsim)")!=NULL) {
+      if(postsim_pass==0)continue;
+      str_replace_first(line,"(postsim)","");
+    }
+    else if(postsim_pass==1)continue;
     IsAssIni=false;
     if(strstr(line,"(initial)")!=NULL) {
       str_replace_first(line,"(initial)","");
       IsAssIni=true;
     }
     if(strstr(line,"(always)")!=NULL)str_replace_first(line,"(always)","");
-    if(IsAssIni&&!IsIni)continue;
+    if(postsim_pass==0&&IsAssIni&&!IsIni)continue;
     /* optional # message #, captured before whitespace stripping */
     msg[0]='\0';
     p=strchr(line,'#');
@@ -3064,4 +3075,31 @@ offset_t assertions_execute(char *fname,set_def *sets,dim_t nset,set_element *se
   fclose(filehandle);
   if(mode==1&&total_fail>0)printf("Warning: %ld assertion failure%s in this pass (Assertions = warn)\n",(long)total_fail,(total_fail==1)?"":"s");
   return total_fail;
+}
+
+/* PostSim foundation F3: expose the composed solution to the formula
+   engine -- copy xcf (per variable element: the %-change / change
+   results, exogenous shocks included) into the variables' elem_vals
+   slots, so post-solve statements read simulation results as if the
+   variables were coefficients (manual ch.12). */
+void postsim_expose_results(elem_value *elem_vals,offset_t ncofele,offset_t nvarele,solve_real *xcf) {
+  offset_t j5;
+  for(j5=0; j5<nvarele; j5++)elem_vals[ncofele+j5].value=(store_real)xcf[j5];
+}
+
+/* does the TAB carry any (postsim) assertions? (one scan, post-solve) */
+int tab_has_postsim_assertions(char *fname) {
+  FILE *filehandle;
+  char line[TABREADLINE];
+  int found=0;
+  filehandle=fopen(fname,"r");
+  if(filehandle==NULL)return 0;
+  while (tab_next_statement("assertion",filehandle,line,TABREADLINE)) {
+    if(strstr(line,"(postsim)")!=NULL) {
+      found=1;
+      break;
+    }
+  }
+  fclose(filehandle);
+  return found;
 }

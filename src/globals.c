@@ -18,3 +18,7 @@ int backsolve_scan_mode = BS_SCAN_SKIP;
 /* CMF "Assertions = yes|no|warn" (manual 25.3): 0 = no, 1 = warn,
    2 = yes (default) -- consumed by assertions_execute */
 int teems_assertions_mode = 2;
+
+/* (parameter)-qualified coefficients (PostSim foundation F2): parallel
+   to coefs[] -- array_def itself is binary-locked to sol.var */
+bool *teems_coef_is_param = NULL;
