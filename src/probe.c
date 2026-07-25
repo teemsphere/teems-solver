@@ -334,11 +334,21 @@ void teems_onfail_abort_(void) {
   MPI_Abort(PETSC_COMM_WORLD,1);
 }
 
-/* Fortran entry: CALL TEEMS_ONFAIL_DIAG() before the failure STOPs */
-void teems_onfail_diag_(void) {
+/* Fortran entry: CALL TEEMS_ONFAIL_DIAG(INFO(1)) before the failure
+   aborts.  info1 is MA48's error code: only singularity-class failures
+   get the (potentially expensive) matching — a workspace failure
+   (INFO(1) = -3, LA too small) is not a structural question and at
+   large scale the matching would add minutes to a failure whose remedy
+   is just a bigger -laA. */
+void teems_onfail_diag_(int *info1) {
   #pragma omp critical(teems_onfail)
   {
     probe_onfail_scope_t *s=&onfail_scope;
+    int code=(info1!=NULL)?*info1:0;
+    if(code==-3) {
+      printf("probe: MA48 workspace failure (INFO(1) = -3): not a singularity — increase -laA (no structural diagnosis run)\n");
+      goto onfail_done;
+    }
     PetscInt i,nz,pass;
     offset_t g;
     int *ptr=NULL,*row=NULL;
@@ -417,6 +427,7 @@ void teems_onfail_diag_(void) {
         free(row2leq_l);
       }
     }
+    onfail_done: ;
   }
 }
 
