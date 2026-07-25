@@ -1939,6 +1939,119 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
   return l;
 }
 
+/* Tokenized qualifier-list parsing for VARIABLE and COEFFICIENT
+   declarations (manual 10.3/10.4; audit A4, closes batch-1 residual
+   (b)). Strips every LEADING (qualifier,...) group from the statement
+   -- the first (all,...) quantifier ends the qualifier region -- and
+   applies the recognized semantics to the record. The old enumerated
+   substring matching let any unlisted qualifier or combination fall
+   through into the quantifier walk and silently corrupt the
+   declaration; unknown tokens are fatal instead. Semantics-bearing
+   qualifiers we do not implement (LINEAR_NAME=/LINEAR_VAR= renames the
+   generated linear variable, NO_SPLIT changes multi-step shock
+   treatment) are fatal until their features land; reporting/metadata
+   qualifiers (ORIG_LEVEL=, VPQTYPE=) parse and are ignored. Caller
+   gates Default statements out (legacy sticky handling, audit A6).
+   is_variable selects the legal token set; is_param (coefficients
+   only) receives PARAMETER/NON_PARAMETER with the manual's INTEGER->
+   PARAMETER default. Returns 1 on success, -1 on error. */
+static int tab_qualifiers_parse(char *line, offset_t ncommsyntax, array_def *rec, bool *is_param, int is_variable) {
+  char group[TABREADLINE],tok[TABREADLINE],*p,*q,*t,*s;
+  offset_t len;
+  int k,nbtype;
+  bool isint=false,parset=false;
+  p=line+ncommsyntax;
+  while(*p==' ')p++;
+  while(*p=='(') {
+    if(strncmp(p+1,"all,",4)==0||strncmp(p+1,"all ",4)==0)break;
+    q=strchr(p,')');
+    if(q==NULL) {
+      printf("Error: unbalanced parentheses in %s qualifier list: %s\n",is_variable?"variable":"coefficient",line);
+      return -1;
+    }
+    len=q-p-1;
+    if(len>=(offset_t)sizeof(group))len=sizeof(group)-1;
+    strncpy(group,p+1,len);
+    group[len]='\0';
+    /* excise the group and any blanks that followed it */
+    t=q+1;
+    while(*t==' ')t++;
+    memmove(p,t,strlen(t)+1);
+    for(t=strtok(group,","); t!=NULL; t=strtok(NULL,",")) {
+      k=0;
+      for(s=t; *s!='\0'; s++)if(*s!=' ')tok[k++]=*s;
+      tok[k]='\0';
+      if(k==0) {
+        printf("Error: empty qualifier in %s declaration\n",is_variable?"variable":"coefficient");
+        return -1;
+      }
+      if(is_variable) {
+        if(strcmp(tok,"change")==0) {
+          rec->change_real=true;
+          continue;
+        }
+        if(strcmp(tok,"percent_change")==0) {
+          rec->change_real=false;
+          continue;
+        }
+        if(strcmp(tok,"linear")==0) {
+          rec->level_par=false;
+          continue;
+        }
+        if(strcmp(tok,"levels")==0) {
+          rec->level_par=true;
+          continue;
+        }
+        /* reporting-only: levels values of a linear variable (11.6.5) */
+        if(strncmp(tok,"orig_level=",11)==0)continue;
+        /* homogeneity-test metadata only (ch.57): no solution impact */
+        if(strncmp(tok,"vpqtype=",8)==0)continue;
+        if(strcmp(tok,"no_split")==0) {
+          printf("Error: variable qualifier NO_SPLIT (full shock at every step) is not supported\n");
+          return -1;
+        }
+        if(strncmp(tok,"linear_name=",12)==0||strncmp(tok,"linear_var=",11)==0) {
+          printf("Error: variable qualifier LINEAR_NAME=/LINEAR_VAR= is not supported yet; use the default p_/c_ linear name\n");
+          return -1;
+        }
+      } else {
+        if(strcmp(tok,"real")==0)continue;
+        if(strcmp(tok,"integer")==0) {
+          isint=true;
+          continue;
+        }
+        if(strcmp(tok,"parameter")==0) {
+          *is_param=true;
+          parset=true;
+          continue;
+        }
+        if(strcmp(tok,"non_parameter")==0) {
+          *is_param=false;
+          parset=true;
+          continue;
+        }
+      }
+      nbtype=0;
+      if(tok[0]=='g'&&tok[1]=='e')nbtype=BT_GE;
+      if(tok[0]=='g'&&tok[1]=='t')nbtype=BT_GT;
+      if(tok[0]=='l'&&tok[1]=='e')nbtype=BT_LE;
+      if(tok[0]=='l'&&tok[1]=='t')nbtype=BT_LT;
+      if(nbtype>0&&(isdigit((int)tok[2])||tok[2]=='-'||tok[2]=='+'||tok[2]=='.')) {
+        if(rec->gltype>0)printf("Warning: multiple range bounds on a %s declaration; only the last is enforced (single bound slot, audit A9)\n",is_variable?"variable":"coefficient");
+        rec->gltype=nbtype;
+        rec->glval=atof(tok+2);
+        continue;
+      }
+      printf("Error: unknown %s qualifier '%s'\n",is_variable?"variable":"coefficient",tok);
+      return -1;
+    }
+    while(*p==' ')p++;
+  }
+  /* 10.3: PARAMETER is the default for INTEGER coefficients */
+  if(!is_variable&&isint&&!parset)*is_param=true;
+  return 1;
+}
+
 int variables_read_defaults(char *fname, array_def *record, offset_t ncof) {
   char line[TABREADLINE];
   FILE * filehandle;
@@ -1963,8 +2076,7 @@ int variables_read_defaults(char *fname, array_def *record, offset_t ncof) {
 offset_t variables_read(char *fname, char *commsyntax, array_def *record, offset_t ncof, set_def *sets,dim_t nset) {
   FILE * filehandle;
   char line[TABREADLINE]="\0",linecopy[TABREADLINE],setname1[NAMESIZE],setname[NAMESIZE],setname2[NAMESIZE],setname3[NAMESIZE],finditem[NAMESIZE],finditem1[NAMESIZE],finditem2[NAMESIZE],finditem3[NAMESIZE],vname[NAMESIZE];//,vnamecopy[NAMESIZE];
-  char *tpnt=NULL;
-  offset_t n,m,l,ncommsyntax=0,i,j=0,addi=0,add=0,orig;
+  offset_t n,m,l,ncommsyntax=0,i,j=0,addi=0,add=0;
   dim_t dcount;
   char *readitem=NULL;
   bool IsLevel=false,IsChange=false;
@@ -1986,143 +2098,18 @@ offset_t variables_read(char *fname, char *commsyntax, array_def *record, offset
     if(IsChange) {
       record[j].change_real=true;
     }
-    readitem=strstr(line, "(ge ");
-    if(readitem!=NULL){
-      record[j].gltype=BT_GE;
-      strcpy(linecopy,line);
-      tpnt=strstr(readitem, ")");
-      if(tpnt==NULL){printf("Error: unbalanced parentheses in bound qualifier: %s\n",line);return -1;}
-      tpnt+=1;
-      memmove(readitem,tpnt,strlen(tpnt)+1);
-      readitem=strstr(linecopy, "(ge ");
-      readitem+=3;
-      readitem = strtok(readitem,")");
-      record[j].glval=atof(readitem);
-    }
-    readitem=strstr(line, "(gt ");
-    if(readitem!=NULL){
-      record[j].gltype=BT_GT;
-      strcpy(linecopy,line);
-      tpnt=strstr(readitem, ")");
-      if(tpnt==NULL){printf("Error: unbalanced parentheses in bound qualifier: %s\n",line);return -1;}
-      tpnt+=1;
-      memmove(readitem,tpnt,strlen(tpnt)+1);
-      readitem=strstr(linecopy, "(gt ");
-      readitem+=3;
-      readitem = strtok(readitem,")");
-      record[j].glval=atof(readitem);
-    }
-    readitem=strstr(line, "(le ");
-    if(readitem!=NULL){
-      record[j].gltype=BT_LE;
-      strcpy(linecopy,line);
-      tpnt=strstr(readitem, ")");
-      if(tpnt==NULL){printf("Error: unbalanced parentheses in bound qualifier: %s\n",line);return -1;}
-      tpnt+=1;
-      memmove(readitem,tpnt,strlen(tpnt)+1);
-      readitem=strstr(linecopy, "(le ");
-      readitem+=3;
-      readitem = strtok(readitem,")");
-      record[j].glval=atof(readitem);
-    }
-    readitem=strstr(line, "(lt ");
-    if(readitem!=NULL){
-      record[j].gltype=BT_LT;
-      strcpy(linecopy,line);
-      tpnt=strstr(readitem, ")");
-      if(tpnt==NULL){printf("Error: unbalanced parentheses in bound qualifier: %s\n",line);return -1;}
-      tpnt+=1;
-      memmove(readitem,tpnt,strlen(tpnt)+1);
-      readitem=strstr(linecopy, "(lt ");
-      readitem+=3;
-      readitem = strtok(readitem,")");
-      record[j].glval=atof(readitem);
-    }
-
-    readitem=strstr(line, ",ge ");
-    if(readitem!=NULL){
-      record[j].gltype=BT_GE;
-      strcpy(linecopy,line);
-      tpnt=strstr(readitem, ")");
-      if(tpnt==NULL){printf("Error: unbalanced parentheses in bound qualifier: %s\n",line);return -1;}
-      memmove(readitem,tpnt,strlen(tpnt)+1);
-      readitem=strstr(linecopy, ",ge ");
-      readitem+=3;
-      readitem = strtok(readitem,")");
-      record[j].glval=atof(readitem);
-      logmsg(2,"line %s\n type %d val %lf read %s\n",linecopy,record[j].gltype,record[j].glval,readitem);
-      logmsg(2,"line %s\n type %d val %lf\n",line,record[j].gltype,record[j].glval);
-    }
-    readitem=strstr(line, ",gt ");
-    if(readitem!=NULL){
-      record[j].gltype=BT_GT;
-      strcpy(linecopy,line);
-      tpnt=strstr(readitem, ")");
-      if(tpnt==NULL){printf("Error: unbalanced parentheses in bound qualifier: %s\n",line);return -1;}
-      memmove(readitem,tpnt,strlen(tpnt)+1);
-      readitem=strstr(linecopy, ",gt ");
-      readitem+=3;
-      readitem = strtok(readitem,")");
-      record[j].glval=atof(readitem);
-    }
-    readitem=strstr(line, ",le ");
-    if(readitem!=NULL){
-      record[j].gltype=BT_LE;
-      strcpy(linecopy,line);
-      tpnt=strstr(readitem, ")");
-      if(tpnt==NULL){printf("Error: unbalanced parentheses in bound qualifier: %s\n",line);return -1;}
-      memmove(readitem,tpnt,strlen(tpnt)+1);
-      readitem=strstr(linecopy, ",le ");
-      readitem+=3;
-      readitem = strtok(readitem,")");
-      record[j].glval=atof(readitem);
-    }
-    readitem=strstr(line, ",lt ");
-    if(readitem!=NULL){
-      record[j].gltype=BT_LT;
-      strcpy(linecopy,line);
-      tpnt=strstr(readitem, ")");
-      if(tpnt==NULL){printf("Error: unbalanced parentheses in bound qualifier: %s\n",line);return -1;}
-      memmove(readitem,tpnt,strlen(tpnt)+1);
-      readitem=strstr(linecopy, ",lt ");
-      readitem+=3;
-      readitem = strtok(readitem,")");
-      record[j].glval=atof(readitem);
+    /* tokenized qualifier parsing (audit A4); Default statements keep
+       the legacy sticky handling above (audit A6) */
+    if (strstr(line,"(default")==NULL&&tab_qualifiers_parse(line,ncommsyntax,&record[j],NULL,1)<0) {
+      fclose(filehandle);
+      return -1;
     }
     while (str_replace_all(line," ", ""));
-    if(str_find_ci(line,"(change)")>0) {
-      record[j].change_real=true;
-      str_replace_first(line,"(change)", "");
-    }
-    if(str_find_ci(line,"(percent_change)")>0) {
-      record[j].change_real=false;
-      str_replace_first(line,"(percent_change)", "");
-    }
-    if(str_find_ci(line,"(levels)")>0) {
-      record[j].level_par=true;
-      str_replace_first(line,"(levels)", "");
-    }
-    if(str_find_ci(line,"(linear)")>0) {
-      record[j].level_par=false;
-      str_replace_first(line,"(linear)", "");
-    }
-    if(str_find_ci(line,"(linear,change)")>0) {
-      record[j].change_real=true;
-      record[j].level_par=false;
-      str_replace_first(line,"(linear,change)", "");
-    }
-    if(str_find_ci(line,"(change,linear)")>0) {
-      record[j].change_real=true;
-      record[j].level_par=false;
-      str_replace_first(line,"(change,linear)", "");
-    }
     strcpy(linecopy,line);
     if (strstr(line,"(default")==NULL) {
       n=str_count_char(line,')');
-      orig=0;
-      if (strstr(line,"(orig_level")!=NULL) orig=1;
-      if (n-orig>1) {
-        for (i=1; i<n-orig; i++) {
+      if (n>1) {
+        for (i=1; i<n; i++) {
           if (i==1) {
             readitem = strtok(line,",");
           } else {
@@ -2224,38 +2211,21 @@ offset_t variables_read(char *fname, char *commsyntax, array_def *record, offset
         }
         addi=addi+add;
       } else {
-        if (n-orig==1) {
+        if (n==1) {
           printf("Error: unbalanced parentheses in statement\n");
         } else {
-          if(orig==1) {
-            strcpy(setname,line+ncommsyntax);
-            str_replace_all(setname,";", "");
-            str_replace_all(setname,"\n", "");
-            readitem=strchr(setname,')');
-            if (readitem==NULL||strlen(readitem+1)>=sizeof(record[j].cofname)) {
-              printf("Error: malformed %s declaration in TAB file\n",commsyntax);
-              return -1;
-            }
-            readitem++;
-            strcpy(record[j].cofname,readitem);
-            record[j].offset=addi;
-            record[j].size=0;
-            record[j].nelem=1;
-            addi=addi+1;
-          } else {
-            strcpy(setname,line+ncommsyntax);
-            str_replace_all(setname,";", "");
-            str_replace_all(setname,"\n", "");
-            if (strlen(setname)>=sizeof(record[j].cofname)) {
-              printf("Error: malformed %s declaration in TAB file\n",commsyntax);
-              return -1;
-            }
-            strcpy(record[j].cofname,setname);
-            record[j].offset=addi;
-            record[j].size=0;
-            record[j].nelem=1;
-            addi=addi+1;
+          strcpy(setname,line+ncommsyntax);
+          str_replace_all(setname,";", "");
+          str_replace_all(setname,"\n", "");
+          if (strlen(setname)>=sizeof(record[j].cofname)) {
+            printf("Error: malformed %s declaration in TAB file\n",commsyntax);
+            return -1;
           }
+          strcpy(record[j].cofname,setname);
+          record[j].offset=addi;
+          record[j].size=0;
+          record[j].nelem=1;
+          addi=addi+1;
         }
       }
       j++;
@@ -2285,7 +2255,8 @@ offset_t coefficients_read(char *fname, char *commsyntax, array_def *record, off
   char line[TABREADLINE]="\0",linecopy[TABREADLINE],setname1[TABREADLINE],setname[TABREADLINE],setname2[TABREADLINE],setname3[TABREADLINE],finditem[TABREADLINE],finditem1[TABREADLINE],finditem2[TABREADLINE],finditem3[TABREADLINE],vname[TABREADLINE];//,vnamecopy[NAMESIZE];
   offset_t n,m,l,ncommsyntax=0,i=0,j=0,addi=0,add=0;
   dim_t dcount;
-  char *readitem=NULL,*tpnt=NULL;
+  bool isparam=false;
+  char *readitem=NULL;
   while (commsyntax[ncommsyntax] != '\0') {
     ncommsyntax++;
   }
@@ -2296,121 +2267,19 @@ offset_t coefficients_read(char *fname, char *commsyntax, array_def *record, off
   teems_coef_is_param= (bool *) calloc (ncof+1,sizeof(bool));
 
   while (tab_next_statement(commsyntax,filehandle,line,TABREADLINE)) {
-    if(strstr(line,"parameter")!=NULL&&strstr(line,"non_parameter")==NULL&&j<ncof)teems_coef_is_param[j]=true;
-    readitem=strstr(line, "(ge ");
-    if(readitem!=NULL){
-      record[j].gltype=BT_GE;
-      strcpy(linecopy,line);
-      tpnt=strstr(readitem, ")");
-      if(tpnt==NULL){printf("Error: unbalanced parentheses in bound qualifier: %s\n",line);return -1;}
-      tpnt+=1;
-      memmove(readitem,tpnt,strlen(tpnt)+1);
-      readitem=strstr(linecopy, "(ge ");
-      readitem+=3;
-      readitem = strtok(readitem,")");
-      record[j].glval=atof(readitem);
+    /* tokenized qualifier parsing (audit A4; closes batch-1 residual
+       (b)): PARAMETER/NON_PARAMETER come from qualifier tokens now,
+       not substring matches over the whole statement. Default
+       statements keep the legacy skip (audit A6). */
+    isparam=false;
+    if (strstr(line,"(default")==NULL) {
+      if (tab_qualifiers_parse(line,ncommsyntax,&record[j],&isparam,0)<0) {
+        fclose(filehandle);
+        return -1;
+      }
+      if (isparam&&j<ncof)teems_coef_is_param[j]=true;
     }
-    readitem=strstr(line, "(gt ");
-    if(readitem!=NULL){
-      record[j].gltype=BT_GT;
-      strcpy(linecopy,line);
-      tpnt=strstr(readitem, ")");
-      if(tpnt==NULL){printf("Error: unbalanced parentheses in bound qualifier: %s\n",line);return -1;}
-      tpnt+=1;
-      memmove(readitem,tpnt,strlen(tpnt)+1);
-      readitem=strstr(linecopy, "(gt ");
-      readitem+=3;
-      readitem = strtok(readitem,")");
-      record[j].glval=atof(readitem);
-    }
-    readitem=strstr(line, "(le ");
-    if(readitem!=NULL){
-      record[j].gltype=BT_LE;
-      strcpy(linecopy,line);
-      tpnt=strstr(readitem, ")");
-      if(tpnt==NULL){printf("Error: unbalanced parentheses in bound qualifier: %s\n",line);return -1;}
-      tpnt+=1;
-      memmove(readitem,tpnt,strlen(tpnt)+1);
-      readitem=strstr(linecopy, "(le ");
-      readitem+=3;
-      readitem = strtok(readitem,")");
-      record[j].glval=atof(readitem);
-    }
-    readitem=strstr(line, "(lt ");
-    if(readitem!=NULL){
-      record[j].gltype=BT_LT;
-      strcpy(linecopy,line);
-      tpnt=strstr(readitem, ")");
-      if(tpnt==NULL){printf("Error: unbalanced parentheses in bound qualifier: %s\n",line);return -1;}
-      tpnt+=1;
-      memmove(readitem,tpnt,strlen(tpnt)+1);
-      readitem=strstr(linecopy, "(lt ");
-      readitem+=3;
-      readitem = strtok(readitem,")");
-      record[j].glval=atof(readitem);
-    }
-
-    readitem=strstr(line, ",ge ");
-    if(readitem!=NULL){
-      record[j].gltype=BT_GE;
-      strcpy(linecopy,line);
-      tpnt=strstr(readitem, ")");
-      if(tpnt==NULL){printf("Error: unbalanced parentheses in bound qualifier: %s\n",line);return -1;}
-      memmove(readitem,tpnt,strlen(tpnt)+1);
-      readitem=strstr(linecopy, ",ge ");
-      readitem+=3;
-      readitem = strtok(readitem,")");
-      record[j].glval=atof(readitem);
-    }
-    readitem=strstr(line, ",gt ");
-    if(readitem!=NULL){
-      record[j].gltype=BT_GT;
-      strcpy(linecopy,line);
-      tpnt=strstr(readitem, ")");
-      if(tpnt==NULL){printf("Error: unbalanced parentheses in bound qualifier: %s\n",line);return -1;}
-      memmove(readitem,tpnt,strlen(tpnt)+1);
-      readitem=strstr(linecopy, ",gt ");
-      readitem+=3;
-      readitem = strtok(readitem,")");
-      record[j].glval=atof(readitem);
-    }
-    readitem=strstr(line, ",le ");
-    if(readitem!=NULL){
-      record[j].gltype=BT_LE;
-      strcpy(linecopy,line);
-      tpnt=strstr(readitem, ")");
-      if(tpnt==NULL){printf("Error: unbalanced parentheses in bound qualifier: %s\n",line);return -1;}
-      memmove(readitem,tpnt,strlen(tpnt)+1);
-      readitem=strstr(linecopy, ",le ");
-      readitem+=3;
-      readitem = strtok(readitem,")");
-      record[j].glval=atof(readitem);
-    }
-    readitem=strstr(line, ",lt ");
-    if(readitem!=NULL){
-      record[j].gltype=BT_LT;
-      strcpy(linecopy,line);
-      tpnt=strstr(readitem, ")");
-      if(tpnt==NULL){printf("Error: unbalanced parentheses in bound qualifier: %s\n",line);return -1;}
-      memmove(readitem,tpnt,strlen(tpnt)+1);
-      readitem=strstr(linecopy, ",lt ");
-      readitem+=3;
-      readitem = strtok(readitem,")");
-      record[j].glval=atof(readitem);
-    }
-    
     while (str_replace_all(line," ", ""));
-    /* strip non_parameter BEFORE parameter: the bare substring strip
-       used to corrupt "(non_parameter)" into "(non_)" (parity plan
-       1.2a). The bare-word fallbacks below still risk mangling
-       lowercase names containing these words -- recorded residual. */
-    str_replace_first(line,"non_parameter", "");
-    str_replace_first(line,"(real)", ""); /* audit A5: explicit default */
-    str_replace_first(line,"parameter", "");
-    str_replace_first(line,"change", "");
-    str_replace_first(line,"integer", "");
-    str_replace_first(line,"()", "");
-    str_replace_first(line,"(,)", "");
     strcpy(linecopy,line);
     if (strstr(line,"(default")==NULL) {
       n=str_count_char(line,')');

@@ -7,6 +7,40 @@ semantics, POSTSIM, others").
 
 ## Progress log
 
+- **2026-07-26 — A4 tokenized qualifier parsing landed + range-test CMF
+  modes (25.4.4); batch-1 residual (b) closed**: `tab_qualifiers_parse`
+  (tab_parse.c) tokenizes every LEADING `(qualifier,...)` group of
+  VARIABLE/COEFFICIENT declarations — the first `(all,...)` quantifier
+  ends the region — replacing the enumerated strstr/strip matching in
+  `variables_read`/`coefficients_read` (8 bound blocks + 6 variable
+  combos + the coefficient bare-word strips deleted; the
+  `(orig_level` paren-count hack removed). Semantics: change/
+  percent_change, linear/levels, real/integer, parameter/non_parameter
+  (token-driven now — coefficient names containing "change"/
+  "parameter"/"integer" no longer corrupted = residual (b); INTEGER
+  defaults to PARAMETER per 10.3), ge/gt/le/lt bounds in both `(ge 0)`
+  and list-member form. Unknown tokens and unsupported-semantics
+  qualifiers (NO_SPLIT, LINEAR_NAME=/LINEAR_VAR=) are FATAL with named
+  errors instead of silently corrupting the quantifier walk;
+  ORIG_LEVEL=/VPQTYPE= parse-and-ignore (reporting/homogeneity
+  metadata). Double bounds warn loudly and keep the last (A9's second
+  slot still open, no longer silent). RIDE-ALONG (kit-exposed): the
+  declared-range checks were print-and-continue always; now CMF-mode-
+  driven per manual 25.4.4 — `range test initial values = yes|no|warn`
+  (initial = IsIni formulas pass) and `range test updated values =
+  updated|extrapolated|both|no|warn` (update executors + later
+  formulas passes; the three selectors all map to fatal at update-time
+  checks), default WARN both legs = GEMPACK's non-auto-accuracy
+  default, restoring golden behavior (the gmshk matrix-shock run
+  drives VTMFSD (ge 0) slightly negative — previously an invisible
+  "Error:" print, now a spec-correct warning). Validated: verify.sh
+  14/14 bit-identical, warnings 102; `.audit/quals-test-kit/
+  run_quals_tests.sh` 16/16 (equiv leg: explicit-default qualifiers on
+  existing golden declarations leave outputs BIT-IDENTICAL to the
+  golden manifest; names leg: EXCHANGE/PARAMETERS/INTEGERS coefficients
+  survive with assertions; fatal legs named; range-test warn/yes/no
+  matrix); ASan+UBSan clean johansen-lu + re-lu + gmshk.
+
 - **2026-07-25 — A1 ZERODIVIDE dual-class machinery landed (flag-gated)
   + batch-1 residual (a) closed**: spec-first from manual 10.11/10.11.1.
   Mechanism: `zdiv_state` (zbz/nbz value + on/off each) tracked

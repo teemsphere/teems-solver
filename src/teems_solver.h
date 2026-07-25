@@ -205,6 +205,12 @@ extern int backsolve_scan_mode;
 /* CMF "Assertions = yes|no|warn" (0/1/2, default 2 = abort on failure) */
 extern int teems_assertions_mode;
 int cmf_assertions_mode(char *filename);
+/* declared-range checks (manual 25.4.4): 0 no, 1 warn (default), 2
+   fatal; initial leg = formulas passes with IsIni, updated leg = the
+   update executors and later formulas passes */
+extern int teems_range_test_initial;
+extern int teems_range_test_updated;
+void cmf_range_test_modes(char *filename, int *ini, int *upd);
 /* (parameter)-qualified coefficients, parallel to coefs[] (F2) */
 extern bool *teems_coef_is_param;
 /* GEMPACK dual-class zerodivide state (manual 10.11; plan A1): tracked

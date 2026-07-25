@@ -1952,14 +1952,17 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
         }
         }
 
-        if(coefs[index].gltype>0){
-        #pragma omp parallel private(l) shared(elem_vals,coefs,ncof,offset,index)
+        int glmode=IsIni?teems_range_test_initial:teems_range_test_updated;
+        if(coefs[index].gltype>0&&glmode>0){
+        int glviol=0;
+        #pragma omp parallel private(l) shared(elem_vals,coefs,ncof,offset,index,glviol)
         {
           if(coefs[index].gltype==BT_GE){
           #pragma omp for
           for (l=0; l<varsize; l++) {
             if(elem_vals[offset+l].value<coefs[index].glval){
-              printf("Error: coefficient %s has a value below its declared lower bound %f\n",coefs[index].cofname,coefs[index].glval);
+              printf("%s: coefficient %s has a value below its declared lower bound %f\n",glmode==2?"Error":"Warning",coefs[index].cofname,coefs[index].glval);
+              glviol=1;
               l=varsize;
             }
           }
@@ -1968,7 +1971,8 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
           #pragma omp for
           for (l=0; l<varsize; l++) {
             if(elem_vals[offset+l].value<=coefs[index].glval){
-              printf("Error: coefficient %s has a value at or below its declared strict lower bound %f\n",coefs[index].cofname,coefs[index].glval);
+              printf("%s: coefficient %s has a value at or below its declared strict lower bound %f\n",glmode==2?"Error":"Warning",coefs[index].cofname,coefs[index].glval);
+              glviol=1;
               l=varsize;
             }
           }
@@ -1977,7 +1981,8 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
           #pragma omp for
           for (l=0; l<varsize; l++) {
             if(elem_vals[offset+l].value>coefs[index].glval){
-              printf("Error: coefficient %s has a value above its declared upper bound %f\n",coefs[index].cofname,coefs[index].glval);
+              printf("%s: coefficient %s has a value above its declared upper bound %f\n",glmode==2?"Error":"Warning",coefs[index].cofname,coefs[index].glval);
+              glviol=1;
               l=varsize;
             }
           }
@@ -1986,12 +1991,16 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
           #pragma omp for
           for (l=0; l<varsize; l++) {
             if(elem_vals[offset+l].value>=coefs[index].glval){
-              printf("Error: coefficient %s has a value at or above its declared strict upper bound %f\n",coefs[index].cofname,coefs[index].glval);
+              printf("%s: coefficient %s has a value at or above its declared strict upper bound %f\n",glmode==2?"Error":"Warning",coefs[index].cofname,coefs[index].glval);
+              glviol=1;
               l=varsize;
             }
           }
           }
         }
+        /* fatal only when the CMF requests it (manual 25.4.4:
+           "range test ... = yes"); the GEMPACK default is warn */
+        if(glviol&&glmode==2)MPI_Abort(PETSC_COMM_WORLD,1);
         }
         
         
@@ -2279,14 +2288,17 @@ offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_el
     free(arSet);
     free(ops);
 
-        if(coefs[index].gltype>0){
-        #pragma omp parallel private(l) shared(elem_vals,coefs,ncof,offset,index)
+        int glmode=teems_range_test_updated;
+        if(coefs[index].gltype>0&&glmode>0){
+        int glviol=0;
+        #pragma omp parallel private(l) shared(elem_vals,coefs,ncof,offset,index,glviol)
         {
           if(coefs[index].gltype==BT_GE){
           #pragma omp for
           for (l=0; l<varsize; l++) {
             if(elem_vals[offset+l].value<coefs[index].glval){
-              printf("Error: coefficient %s has a value below its declared lower bound %f\n",coefs[index].cofname,coefs[index].glval);
+              printf("%s: coefficient %s has a value below its declared lower bound %f\n",glmode==2?"Error":"Warning",coefs[index].cofname,coefs[index].glval);
+              glviol=1;
               l=varsize;
             }
           }
@@ -2295,7 +2307,8 @@ offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_el
           #pragma omp for
           for (l=0; l<varsize; l++) {
             if(elem_vals[offset+l].value<=coefs[index].glval){
-              printf("Error: coefficient %s has a value at or below its declared strict lower bound %f\n",coefs[index].cofname,coefs[index].glval);
+              printf("%s: coefficient %s has a value at or below its declared strict lower bound %f\n",glmode==2?"Error":"Warning",coefs[index].cofname,coefs[index].glval);
+              glviol=1;
               l=varsize;
             }
           }
@@ -2304,7 +2317,8 @@ offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_el
           #pragma omp for
           for (l=0; l<varsize; l++) {
             if(elem_vals[offset+l].value>coefs[index].glval){
-              printf("Error: coefficient %s has a value above its declared upper bound %f\n",coefs[index].cofname,coefs[index].glval);
+              printf("%s: coefficient %s has a value above its declared upper bound %f\n",glmode==2?"Error":"Warning",coefs[index].cofname,coefs[index].glval);
+              glviol=1;
               l=varsize;
             }
           }
@@ -2313,12 +2327,16 @@ offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_el
           #pragma omp for
           for (l=0; l<varsize; l++) {
             if(elem_vals[offset+l].value>=coefs[index].glval){
-              printf("Error: coefficient %s has a value at or above its declared strict upper bound %f\n",coefs[index].cofname,coefs[index].glval);
+              printf("%s: coefficient %s has a value at or above its declared strict upper bound %f\n",glmode==2?"Error":"Warning",coefs[index].cofname,coefs[index].glval);
+              glviol=1;
               l=varsize;
             }
           }
           }
         }
+        /* fatal only when the CMF requests it (manual 25.4.4:
+           "range test ... = yes"); the GEMPACK default is warn */
+        if(glviol&&glmode==2)MPI_Abort(PETSC_COMM_WORLD,1);
         }
     
   }
@@ -2586,14 +2604,17 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
     free(arSet);
     free(ops);
 
-        if(coefs[index].gltype>0){
-        #pragma omp parallel private(l) shared(elem_vals,coefs,ncof,offset,index)
+        int glmode=teems_range_test_updated;
+        if(coefs[index].gltype>0&&glmode>0){
+        int glviol=0;
+        #pragma omp parallel private(l) shared(elem_vals,coefs,ncof,offset,index,glviol)
         {
           if(coefs[index].gltype==BT_GE){
           #pragma omp for
           for (l=0; l<varsize; l++) {
             if(elem_vals[offset+l].value<coefs[index].glval){
-              printf("Error: coefficient %s has a value below its declared lower bound %f\n",coefs[index].cofname,coefs[index].glval);
+              printf("%s: coefficient %s has a value below its declared lower bound %f\n",glmode==2?"Error":"Warning",coefs[index].cofname,coefs[index].glval);
+              glviol=1;
               l=varsize;
             }
           }
@@ -2602,7 +2623,8 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
           #pragma omp for
           for (l=0; l<varsize; l++) {
             if(elem_vals[offset+l].value<=coefs[index].glval){
-              printf("Error: coefficient %s has a value at or below its declared strict lower bound %f\n",coefs[index].cofname,coefs[index].glval);
+              printf("%s: coefficient %s has a value at or below its declared strict lower bound %f\n",glmode==2?"Error":"Warning",coefs[index].cofname,coefs[index].glval);
+              glviol=1;
               l=varsize;
             }
           }
@@ -2611,7 +2633,8 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
           #pragma omp for
           for (l=0; l<varsize; l++) {
             if(elem_vals[offset+l].value>coefs[index].glval){
-              printf("Error: coefficient %s has a value above its declared upper bound %f\n",coefs[index].cofname,coefs[index].glval);
+              printf("%s: coefficient %s has a value above its declared upper bound %f\n",glmode==2?"Error":"Warning",coefs[index].cofname,coefs[index].glval);
+              glviol=1;
               l=varsize;
             }
           }
@@ -2620,12 +2643,16 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
           #pragma omp for
           for (l=0; l<varsize; l++) {
             if(elem_vals[offset+l].value>=coefs[index].glval){
-              printf("Error: coefficient %s has a value at or above its declared strict upper bound %f\n",coefs[index].cofname,coefs[index].glval);
+              printf("%s: coefficient %s has a value at or above its declared strict upper bound %f\n",glmode==2?"Error":"Warning",coefs[index].cofname,coefs[index].glval);
+              glviol=1;
               l=varsize;
             }
           }
           }
         }
+        /* fatal only when the CMF requests it (manual 25.4.4:
+           "range test ... = yes"); the GEMPACK default is warn */
+        if(glviol&&glmode==2)MPI_Abort(PETSC_COMM_WORLD,1);
         }
     
   }

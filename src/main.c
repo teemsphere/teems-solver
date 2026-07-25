@@ -913,6 +913,7 @@ int main(int argc,char **args) {
   if(rank==rank_hsl) {
     cmf_read(filename,niodata,iodata,tabfile,closure,shock);
     teems_assertions_mode=cmf_assertions_mode(filename);
+    cmf_range_test_modes(filename,&teems_range_test_initial,&teems_range_test_updated);
     postsim_on=cmf_postsim_on(filename);
     for (nj=0; nj<niodata+noutdata+nsoldata; nj++) logmsg(2,"rank %d logname %s fname %s\n",rank,iodata[nj].logname,iodata[nj].filname);
     if(tab_preprocess(tabfile,newtabfile)==-1)return 0;

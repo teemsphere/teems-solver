@@ -23,6 +23,11 @@ int teems_assertions_mode = 2;
    to coefs[] -- array_def itself is binary-locked to sol.var */
 bool *teems_coef_is_param = NULL;
 
+/* CMF range-test modes (manual 25.4.4): 0 = no, 1 = warn (the
+   GEMPACK default outside automatic accuracy), 2 = fatal */
+int teems_range_test_initial = 1;
+int teems_range_test_updated = 1;
+
 /* dual-class zerodivide (plan A1): scanner-tracked state + the
    GEMPACK-semantics switch (-gpzerodivide, default legacy) */
 zdiv_state teems_zdiv_scan = { 0, 0, 1, 0 };
