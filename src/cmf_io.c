@@ -515,6 +515,7 @@ int tab_preprocess(char *filename, char *newtabfile) {
   char line[TABREADLINE]="\0",line1[TABREADLINE],line2[TABREADLINE],indx[NAMESIZE],indx1[NAMESIZE],indx2[NAMESIZE],*readitem,*readitem1,commsyntax[NAMESIZE],readline[TABREADLINE],readline1[TABREADLINE],*n,newtabfile1[TABREADLINE];
   char setname[NAMESIZE],newset[NAMESIZE],varname[NAMESIZE],*n1,setelement[TABREADLINE];//,*ne,*np;//,*n2;
   char msetele[MAXVARDIM][NAMESIZE],msetsymb[MAXVARDIM][NAMESIZE],mset[MAXVARDIM][NAMESIZE];
+  char assertmsg[TABREADLINE],*am1,*am2;
   filehandle = fopen(filename,"r");
   if(filehandle==NULL){
     printf("Error: cannot open %s\n",filename);
@@ -548,6 +549,21 @@ int tab_preprocess(char *filename, char *newtabfile) {
     }
     if (n!=NULL&&i1==0&&i2==0) {
       check=0;
+      /* capture the first # label # BEFORE the strip and the lowercase
+         pass: assertion messages must survive preprocessing verbatim
+         (manual 10.14; batch-1 residual (a)) -- reinserted at write-out
+         for assertion statements only, dropped for everything else */
+      assertmsg[0]='\0';
+      am1=strchr(readline,'#');
+      if (am1!=NULL) {
+        am2=strchr(am1+1,'#');
+        if (am2!=NULL&&am2-am1>1&&(size_t)(am2-am1)<sizeof(assertmsg)) {
+          strncpy(assertmsg,am1+1,am2-am1-1);
+          assertmsg[am2-am1-1]='\0';
+          for (am1=assertmsg; *am1!='\0'; am1++)
+            if (*am1=='\n'||*am1=='\r'||*am1=='\v') *am1=' ';
+        }
+      }
       while (str_strip_comment(readline,"#"));
       while (str_replace_all(readline,"\n", " "));
       while (str_replace_all(readline,"\r", " "));
@@ -658,6 +674,14 @@ int tab_preprocess(char *filename, char *newtabfile) {
       if(str_find_ci(readline,"postsim ")==1||str_find_ci(readline,"postsim ")==0||str_find_ci(readline,"postsim(")==1||str_find_ci(readline,"postsim(")==0) {
         strcpy(commsyntax,"postsim");
         check=1;
+      }
+      /* reinsert the captured message ahead of the terminator; only
+         assertions keep their label (sticky commsyntax covers the
+         keyword-less continuation form) */
+      if (assertmsg[0]!='\0'&&strcmp(commsyntax,"assertion")==0&&
+          strlen(readline)+strlen(assertmsg)+8<sizeof(readline)&&
+          (am2=strrchr(readline,';'))!=NULL) {
+        sprintf(am2," #%s# ;",assertmsg);
       }
       if (strchr(readline,';')!=NULL) {
         if (check==1) {

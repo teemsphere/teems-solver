@@ -587,6 +587,23 @@ int formula_compile(char *fomulain, set_def *sets,array_def *coefs, offset_t nco
   return 1;
 }
 
+/* active dual-class zerodivide state for the CURRENT statement
+   (plan A1): captured from the scanner position by the formula/
+   assertion executors, disabled during update and equation
+   evaluation (manual 10.11.1: zerodivide never applies there --
+   those keep the legacy single default until their own pass) */
+static zdiv_state zdiv_active = { 0, 0, 1, 0 };
+static int zdiv_enabled = 0;
+
+void zdiv_capture(void) {
+  zdiv_active=teems_zdiv_scan;
+  zdiv_enabled=teems_gpzerodivide;
+}
+
+void zdiv_disable(void) {
+  zdiv_enabled=0;
+}
+
 solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,sum_value *sum_vals,formula_op *ops,int nops,quantifier *arSet,dim_t fdim, solve_real zerodivide) {
   int i;
   dim_t j;
@@ -731,7 +748,23 @@ solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,
       if(ops[i].Var2Type==OT_CONST) eval2=ops[i].Var2Val;
       if(ops[i].Var2Type==OT_CHANGE) eval2=record[ops[i].Var2BegAdd+l1].substep_base;
       if(eval2==0) {
-        ops[i].TmpVarVal=zerodivide;
+        if(zdiv_enabled) {
+          if(eval1==0) {
+            if(zdiv_active.zbz_on)ops[i].TmpVarVal=zdiv_active.zbz_val;
+            else {
+              printf("Error: zero divided by zero in a formula while Zerodivide (zero_by_zero) is off\n");
+              MPI_Abort(PETSC_COMM_WORLD,1);
+            }
+          } else {
+            if(zdiv_active.nbz_on)ops[i].TmpVarVal=zdiv_active.nbz_val;
+            else {
+              printf("Error: division by zero in a formula; Zerodivide (nonzero_by_zero) is off (GEMPACK default) -- set a default or guard with ID01\n");
+              MPI_Abort(PETSC_COMM_WORLD,1);
+            }
+          }
+        } else {
+          ops[i].TmpVarVal=zerodivide;
+        }
       } else {
         ops[i].TmpVarVal=eval1/eval2;
       }
@@ -1465,6 +1498,10 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
   formula_op *ops1= NULL;
 
   filehandle = fopen(fname,"r");
+  /* each pass rescans from the top, so the positional zerodivide state
+     replays in file order (manual 10.11.1); this also gives the PostSim
+     pass its fresh initial state (manual 12.2.4) */
+  zdiv_scan_reset();
   while (tab_next_statement_resolved(commsyntax,filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
     /* audit A7: the combined FORMULA & EQUATION statement would run
        its formula half (as ALWAYS, not INITIAL) while the equation
@@ -1486,6 +1523,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
         IsFomIni=false;
       }
       if(!(IsFomIni&&!IsIni)) {
+        zdiv_capture();
         ncond=0;
         for (i=0; i<MAXVARDIM; i++)logioper[i]=0;
         str_replace_first(line, commsyntax, "");
@@ -1966,6 +2004,9 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
     }
   }
   fclose(filehandle);
+  /* zerodivide never applies outside formulas (manual 10.11.1) --
+     downstream update/equation evaluation must see it off */
+  zdiv_disable();
   return j;
 }
 
@@ -1987,6 +2028,9 @@ offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_el
   quantifier *arSet1=NULL;
   formula_op *ops1= NULL;
   strcpy(commsyntax,"update");
+  /* division by zero is never allowed in UPDATEs (manual 10.11.1):
+     the dual-class state must not leak in; legacy single default only */
+  zdiv_disable();
   filehandle = fopen(fname,"r");
   while (tab_next_statement_resolved(commsyntax,filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
     IsChange=false;
@@ -2298,6 +2342,9 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
   quantifier *arSet1=NULL;
   formula_op *ops1= NULL;
   strcpy(commsyntax,"update");
+  /* division by zero is never allowed in UPDATEs (manual 10.11.1):
+     the dual-class state must not leak in; legacy single default only */
+  zdiv_disable();
   filehandle = fopen(fname,"r");
   while (tab_next_statement_resolved(commsyntax,filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
     IsChange=false;
@@ -2833,6 +2880,8 @@ offset_t assertions_execute(char *fname,set_def *sets,dim_t nset,set_element *se
   if(nassert==0)return 0;
   filehandle=fopen(fname,"r");
   if(filehandle==NULL)return 0;
+  /* fresh positional zerodivide state for this rescan (manual 10.11.1) */
+  zdiv_scan_reset();
   strcpy(sumsyntax,"sum(");
   while (tab_next_statement_resolved("assertion",filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
     /* (postsim) assertions run only in the post-solve pass, where the
@@ -2849,6 +2898,9 @@ offset_t assertions_execute(char *fname,set_def *sets,dim_t nset,set_element *se
     }
     if(strstr(line,"(always)")!=NULL)str_replace_first(line,"(always)","");
     if(postsim_pass==0&&IsAssIni&&!IsIni)continue;
+    /* assertions are formula-class statements: the dual-class
+       zerodivide state as of this file position applies (plan A1) */
+    zdiv_capture();
     /* optional # message #, captured before whitespace stripping */
     msg[0]='\0';
     p=strchr(line,'#');
@@ -2860,6 +2912,7 @@ offset_t assertions_execute(char *fname,set_def *sets,dim_t nset,set_element *se
         strncpy(msg,p+1,len);
         msg[len]='\0';
         while(len>0&&msg[len-1]==' ') msg[--len]='\0';
+        while(msg[0]==' ') memmove(msg,msg+1,strlen(msg));
         memmove(p,q+1,strlen(q+1)+1);
       }
     }
@@ -3079,6 +3132,7 @@ offset_t assertions_execute(char *fname,set_def *sets,dim_t nset,set_element *se
     free(ops);
   }
   fclose(filehandle);
+  zdiv_disable();
   if(mode==1&&total_fail>0)printf("Warning: %ld assertion failure%s in this pass (Assertions = warn)\n",(long)total_fail,(total_fail==1)?"":"s");
   return total_fail;
 }

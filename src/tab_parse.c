@@ -4303,6 +4303,34 @@ static char *tab_next_statement_resolved_raw(char *commsyntax, FILE *filehandle,
 
     }
     if (strncmp(line,commsyntax,count1) != 0) {
+      /* dual-class state (plan A1), parsed from a copy BEFORE the
+         legacy strtok chain mangles the line; the legacy single
+         default below stays byte-identical for -gpzerodivide 0 */
+      if (strncmp(line,"zerodivide",10) == 0) {
+        char zline[TABLINESIZE];
+        char *zp;
+        solve_real zval;
+        int znbz;
+        strcpy(zline,line);
+        znbz=(strstr(zline,"nonzero_by_zero")!=NULL);
+        /* DEFAULT checked first: OFF is only legal without a value, so
+           " off" inside a scalar-coefficient default name cannot misroute */
+        if ((zp=strstr(zline,"default"))!=NULL) {
+          zp+=7;
+          zp=strtok(zp,";");
+          zval=formula_subst_scalar(zp,record,coefs,ncof);
+          if(znbz) {
+            teems_zdiv_scan.nbz_val=zval;
+            teems_zdiv_scan.nbz_on=1;
+          } else {
+            teems_zdiv_scan.zbz_val=zval;
+            teems_zdiv_scan.zbz_on=1;
+          }
+        } else if (strstr(zline," off")!=NULL||strstr(zline,")off")!=NULL) {
+          if(znbz)teems_zdiv_scan.nbz_on=0;
+          else teems_zdiv_scan.zbz_on=0;
+        }
+      }
       if (strncmp(line,zerosyntax,18) == 0) {
         p=strtok(&line[18],";");
         *zerodivide=formula_subst_scalar(p,record,coefs,ncof);//atof(p);

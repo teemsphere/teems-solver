@@ -662,6 +662,10 @@ int main(int argc,char **args) {
   PetscOptionsGetInt(NULL,NULL,"-laDi",&laDi,NULL);
   if(laDi==0)laDi=2;
   PetscOptionsGetInt(NULL,NULL,"-withmc66",&mc66,NULL);
+  /* -gpzerodivide 1: GEMPACK dual-class ZERODIVIDE semantics in formulas
+     (manual 10.11/10.11.1; plan A1). Default 0 keeps the legacy single
+     conflated default -- adoption is a re-anchor-class change. */
+  PetscOptionsGetInt(NULL,NULL,"-gpzerodivide",&teems_gpzerodivide,NULL);
   PetscOptionsGetInt(NULL,NULL,"-step1",&steps1,NULL);
   if(steps1==0)steps1=2;
   PetscOptionsGetInt(NULL,NULL,"-step2",&steps2,NULL);

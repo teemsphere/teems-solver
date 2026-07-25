@@ -7,6 +7,33 @@ semantics, POSTSIM, others").
 
 ## Progress log
 
+- **2026-07-25 — A1 ZERODIVIDE dual-class machinery landed (flag-gated)
+  + batch-1 residual (a) closed**: spec-first from manual 10.11/10.11.1.
+  Mechanism: `zdiv_state` (zbz/nbz value + on/off each) tracked
+  positionally by `tab_next_statement_resolved_raw` on a line copy
+  (legacy shared-default branches untouched → flag-off is byte-identical);
+  `formulas_execute`/`assertions_execute` reset the state per rescan
+  (which also gives the PostSim pass its fresh state, manual 12.2.4),
+  capture it per statement, and disable it on exit; UPDATE executors
+  disable at entry (10.11.1: zerodivide never applies in equations or
+  updates — the jacobian leg therefore structurally never sees it
+  enabled). Gate: `-gpzerodivide 1` (default 0 = legacy conflated
+  default; adoption is a re-anchor-class change). The single
+  `formula_eval` division site branches on numerator==0: class default
+  if on, named fatal error if off; the pow(0,neg) site stays legacy
+  (not a division). Initial state per the manual's convention:
+  zero-by-zero default 0, nonzero-by-zero off. Residual (a): assertion
+  `# message #` is captured in `tab_preprocess` BEFORE `#`-strip +
+  lowercasing and reinserted (assertions only) at write-out, so failure
+  reports print the verbatim mixed-case label; leading/trailing spaces
+  trimmed. Validated: verify.sh 14/14 bit-identical ×2, warnings 102;
+  `.audit/zdiv-test-kit/run_zdiv_tests.sh` 9/9 (dual defaults hold
+  flag-on; legacy conflation reproduced and caught by an in-solver
+  assertion whose mixed-case message prints; both `off` classes abort
+  flag-on with named errors and complete under legacy); ASan+UBSan
+  clean on johansen-lu + re-lu (flag-off) and on all three kit
+  variants under `-gpzerodivide 1` (dual-state eval + both abort legs).
+
 - **2026-07-25 — Tier 0 POSTSIM engine (first cut) landed**:
   `POSTSIM (BEGIN)/(END)` sections work end-to-end. Mechanism: the
   phase-1 preprocessor recognizes `postsim` as a statement keyword (so

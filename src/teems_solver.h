@@ -207,6 +207,22 @@ extern int teems_assertions_mode;
 int cmf_assertions_mode(char *filename);
 /* (parameter)-qualified coefficients, parallel to coefs[] (F2) */
 extern bool *teems_coef_is_param;
+/* GEMPACK dual-class zerodivide state (manual 10.11; plan A1): tracked
+   positionally by the statement scanner, consulted by formula
+   evaluation only under -gpzerodivide 1 (default 0 = the legacy single
+   conflated default, bit-compatible). Initial GEMPACK state: 0/0 -> 0,
+   nonzero/0 -> error. */
+typedef struct {
+  solve_real zbz_val;
+  solve_real nbz_val;
+  int zbz_on;
+  int nbz_on;
+} zdiv_state ;
+extern zdiv_state teems_zdiv_scan;
+extern int teems_gpzerodivide;
+void zdiv_scan_reset(void);
+void zdiv_capture(void);
+void zdiv_disable(void);
 /* evaluate ASSERTION statements against the current values (manual
    10.14/25.3): rides each formulas_execute pass; (initial) assertions
    only when IsIni. postsim_pass: 0 = ordinary passes ((postsim)

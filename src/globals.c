@@ -22,3 +22,15 @@ int teems_assertions_mode = 2;
 /* (parameter)-qualified coefficients (PostSim foundation F2): parallel
    to coefs[] -- array_def itself is binary-locked to sol.var */
 bool *teems_coef_is_param = NULL;
+
+/* dual-class zerodivide (plan A1): scanner-tracked state + the
+   GEMPACK-semantics switch (-gpzerodivide, default legacy) */
+zdiv_state teems_zdiv_scan = { 0, 0, 1, 0 };
+int teems_gpzerodivide = 0;
+
+void zdiv_scan_reset(void) {
+  teems_zdiv_scan.zbz_val=0;
+  teems_zdiv_scan.nbz_val=0;
+  teems_zdiv_scan.zbz_on=1;
+  teems_zdiv_scan.nbz_on=0;
+}
