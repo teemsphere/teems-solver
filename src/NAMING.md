@@ -66,7 +66,7 @@ Binary `hsl` → `teems-solver` is deferred: path is hardcoded in teems-R
 
 ```c
 enum matrix_method  { MM_LU=0, MM_SBBD=1, MM_DBBD=2, MM_NDBBD=3 };   /* [HK16][KH19]; matches teems-R */
-enum solution_method{ SM_MODIFIED_MIDPOINT=1, SM_JOHANSEN=10, SM_NOSOLVE=100 }; /* [GM "Gragg"; D20; Pearson 1991] */
+enum solution_method{ SM_MODIFIED_MIDPOINT=1, SM_JOHANSEN=10, SM_PROBE=100 }; /* [GM "Gragg"; D20; Pearson 1991]; SM_PROBE = -solmed probe (structure probe, no solve; "NoSol" deprecated alias) */
 enum bound_type     { BT_GE=1, BT_GT=2, BT_LE=3, BT_LT=4 };          /* hcge_cof.gltype */
 /* formula_op.op and operand type codes get named constants likewise */
 ```

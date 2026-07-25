@@ -2589,7 +2589,7 @@ int equation_order_read_nested(char *fname, char *commsyntax,set_def *sets,dim_t
   return 1;
 }
 
-int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,set_element *set_elems,array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar,elem_value *elem_vals,offset_t ncofvar,offset_t ncofele, offset_t nexo,closure_entry *closure_vals,offset_t ndblock,offset_t alltimeset,offset_t allregset,bool *eq_intertemp,offset_t *eq_addr,dim_t *eq_time,dim_t *eq_reg,offset_t *counteq,offset_t nintraeq,bool *sbbd_overrid,PetscInt Istart,PetscInt Iend,PetscInt *dnz,PetscInt *dnnz,PetscInt *onz,PetscInt *onnz,PetscInt *dnzB,PetscInt *dnnzB,PetscInt *onzB,PetscInt *onnzB,int nesteddbbd) {
+int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,set_element *set_elems,array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar,elem_value *elem_vals,offset_t ncofvar,offset_t ncofele, offset_t nexo,closure_entry *closure_vals,offset_t ndblock,offset_t alltimeset,offset_t allregset,bool *eq_intertemp,offset_t *eq_addr,dim_t *eq_time,dim_t *eq_reg,offset_t *counteq,offset_t nintraeq,bool *sbbd_overrid,PetscInt Istart,PetscInt Iend,PetscInt *dnz,PetscInt *dnnz,PetscInt *onz,PetscInt *onnz,PetscInt *dnzB,PetscInt *dnnzB,PetscInt *onzB,PetscInt *onnzB,int nesteddbbd,eq_probe_meta *eqmeta,offset_t *neqmeta) {
   FILE * filehandle;
   char tline[TABREADLINE],line[TABREADLINE],line1[TABREADLINE],linecopy[TABREADLINE];//,set1[NAMESIZE],set2[NAMESIZE];
   char vname[TABREADLINE],lintmp[TABREADLINE];//,*p1=NULL;
@@ -2611,6 +2611,7 @@ int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,
 
   while (tab_next_statement_resolved(commsyntax,filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
     if (strstr(line,"(default")==NULL) {
+      if(eqmeta!=NULL)tab_equation_name(line,eqmeta[eqindx].eqname);
       str_replace_first(line, commsyntax, "");
       str_replace_first(line, "(linear)", "");
       while (str_replace_all(line,"  ", " "));
@@ -2914,6 +2915,15 @@ int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,
             dcountdim2[dcount]=dcountdim1[dcount];
           }
         nloopsfac=(offset_t)nloopslin/nloops;
+        if(eqmeta!=NULL) { /* probe structure capture: one update per reference, merged by variable */
+          for(i4=0; i4<eqmeta[eqindx].nvars_ref; i4++)if(eqmeta[eqindx].var_ref[i4]==LinVars[i].LinVarIndx)break;
+          if(i4<eqmeta[eqindx].nvars_ref)eqmeta[eqindx].var_w[i4]+=nloopslin;
+          else if(eqmeta[eqindx].nvars_ref<PROBE_MAXEQVARS) {
+            eqmeta[eqindx].var_ref[eqmeta[eqindx].nvars_ref]=LinVars[i].LinVarIndx;
+            eqmeta[eqindx].var_w[eqmeta[eqindx].nvars_ref]=nloopslin;
+            eqmeta[eqindx].nvars_ref++;
+          }
+        }
         for (dcount=0; dcount<vars[LinVars[i].LinVarIndx].size; dcount++) {
           for (i4=0; i4<fdimlin; i4++) {
             if (strcmp(LinVars[i].dimnames[dcount],arSet[i4].index_name)==0) {
@@ -3071,12 +3081,19 @@ int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,
         if(alltimeset<0&&allregset>=0)for(lj=0; lj<sets[arSet[eq_reg[eqindx]].setid].size; lj++)counteq1[set_elems[sets[arSet[eq_reg[eqindx]].setid].offset+lj].superset_pos[0]]+=nloops/sets[arSet[eq_reg[eqindx]].setid].size;
       }
       else matrow+=nloops;
+      if(eqmeta!=NULL) {
+        eqmeta[eqindx].base=matroworg;
+        eqmeta[eqindx].nrows=nloops;
+        eqmeta[eqindx].fdim=(fdim<4*MAXVARDIM)?fdim:4*MAXVARDIM;
+        for(i4=0; i4<eqmeta[eqindx].fdim; i4++)eqmeta[eqindx].setid[i4]=arSet[i4].setid;
+      }
       matroworg+=nloops;
       eqindx++;
       free(LinVars);
       free(arSet);
     }
   }
+  if(neqmeta!=NULL)*neqmeta=eqindx;
   free(counteq1);
   fclose(filehandle);
   return 1;

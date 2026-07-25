@@ -7,6 +7,7 @@ ARG MARCH=""
 ARG PATH_HSL_MA48
 ARG PATH_HSL_MA51
 ARG PATH_HSL_MC66
+ARG PATH_HSL_MC79
 ARG PATH_HSL_MP48
 ARG BUILD_DIR=/opt/teems-solver
 ARG MPICH_VERSION=5.0.1
@@ -20,6 +21,7 @@ ENV PATH="${BUILD_DIR}/lib/mpi/bin:$PATH"
 COPY ${PATH_HSL_MA48} ${BUILD_DIR}/hsl/ma48.tar.gz
 COPY ${PATH_HSL_MA51} ${BUILD_DIR}/hsl/ma51.tar.gz
 COPY ${PATH_HSL_MC66} ${BUILD_DIR}/hsl/mc66.tar.gz
+COPY ${PATH_HSL_MC79} ${BUILD_DIR}/hsl/mc79.tar.gz
 COPY ${PATH_HSL_MP48} ${BUILD_DIR}/hsl/mp48.tar.gz
 COPY ./src ${BUILD_DIR}/src
 
@@ -114,6 +116,8 @@ RUN echo 'APT::Install-Suggests "0";' >> /etc/apt/apt.conf.d/00-docker \
     && tar xfz ${BUILD_DIR}/hsl/ma51.tar.gz --strip-components=1 -C ${BUILD_DIR}/lib/ma51 \
     && mkdir ${BUILD_DIR}/lib/mc66 \
     && tar xfz ${BUILD_DIR}/hsl/mc66.tar.gz --strip-components=1 -C ${BUILD_DIR}/lib/mc66 \
+    && mkdir ${BUILD_DIR}/lib/mc79 \
+    && tar xfz ${BUILD_DIR}/hsl/mc79.tar.gz --strip-components=1 -C ${BUILD_DIR}/lib/mc79 \
     && mkdir ${BUILD_DIR}/lib/mp48 \
     && tar xfz ${BUILD_DIR}/hsl/mp48.tar.gz --strip-components=1 -C ${BUILD_DIR}/lib/mp48 \
     && cd ${BUILD_DIR}/lib/ma48 \
@@ -136,6 +140,9 @@ RUN echo 'APT::Install-Suggests "0";' >> /etc/apt/apt.conf.d/00-docker \
     && ./mp48_mod.sh \
     && cp ${BUILD_DIR}/lib/mc66/src/hsl_mc66d.f90 ${BUILD_DIR}/src \
     && cp ${BUILD_DIR}/lib/mc66/src/ddeps90.f90 ${BUILD_DIR}/src \
+    && cp ${BUILD_DIR}/lib/mc79/src/hsl_mc79i.f90 ${BUILD_DIR}/src \
+    && cp ${BUILD_DIR}/lib/mc79/src/hsl_mc79i_ciface.f90 ${BUILD_DIR}/src \
+    && cp ${BUILD_DIR}/lib/mc79/include/hsl_mc79i.h ${BUILD_DIR}/src \
     # final build — solver objects at the same ISA level as the libraries
     && cd ${BUILD_DIR}/src \
     && make OPT="-Ofast $ARCH_FLAGS" \

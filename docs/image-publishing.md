@@ -251,6 +251,7 @@ docker build --pull \
   --build-arg PATH_HSL_MA48="hsl/ma48-2.2.0.tar.gz" \
   --build-arg PATH_HSL_MA51="hsl/ma51-1.0.0.tar.gz" \
   --build-arg PATH_HSL_MC66="hsl/hsl_mc66-2.2.1.tar.gz" \
+  --build-arg PATH_HSL_MC79="hsl/hsl_mc79-1.1.1.tar.gz" \
   --build-arg PATH_HSL_MP48="hsl/hsl_mp48-2.1.1.tar.gz" \
   -f ./docker/expedited_build/Dockerfile \
   .

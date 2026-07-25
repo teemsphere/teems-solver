@@ -758,6 +758,10 @@ int main(int argc,char **args) {
     if(rank==0)printf("Warning: -solmed Mmid is deprecated; the method is Gragg's (smoothed modified midpoint) — use -solmed Gragg\n");
     strcpy(solmed,"Gragg");
   }
+  if(strcmp(solmed,"NoSol")==0) {/* transitional alias: renamed — it is a structure probe, not a degenerate solve */
+    if(rank==0)printf("Warning: -solmed NoSol is deprecated — use -solmed probe\n");
+    strcpy(solmed,"probe");
+  }
   int solmethod=0;
   if(strcmp(solmed,"Gragg")==0)solmethod=SM_GRAGG;
   if(strcmp(solmed,"Euler")==0)solmethod=SM_EULER;
@@ -766,13 +770,17 @@ int main(int argc,char **args) {
   if(strcmp(solmed,"BoSha32")==0)solmethod=SM_BOSHA32;
   if(strcmp(solmed,"DoPri54")==0)solmethod=SM_DOPRI54;
   if(strcmp(solmed,"Johansen")==0)solmethod=SM_JOHANSEN;
-  if(strcmp(solmed,"NoSol")==0)solmethod=SM_NOSOLVE;
+  if(strcmp(solmed,"probe")==0)solmethod=SM_PROBE;
   if(solmethod==0) {
-    if(rank==0)printf("Error: unknown -solmed %s (valid: Gragg, Euler, RK2, RK4, BoSha32, DoPri54, Johansen, NoSol)\n",solmed);
+    if(rank==0)printf("Error: unknown -solmed %s (valid: Gragg, Euler, RK2, RK4, BoSha32, DoPri54, Johansen, probe)\n",solmed);
     PetscFinalize();
     return 1;
   }
   logmsg(2,"Sol med %d\n",solmethod);
+  /* -probefine: with -solmed probe, add the MC79 fine Dulmage-Mendelsohn
+     report (strongly connected components of the well-determined block) */
+  dim_t probefine=0;
+  PetscOptionsGetInt(NULL,NULL,"-probefine",&probefine,NULL);
   bool isrk=(solmethod==SM_RK2||solmethod==SM_RK4||solmethod==SM_BOSHA32||solmethod==SM_DOPRI54);
   bool isrk_embedded=(solmethod==SM_BOSHA32||solmethod==SM_DOPRI54);
   /* Runge-Kutta controls (GEMPACK 26.5.1/26.5.2): -adaptive
@@ -1796,8 +1804,13 @@ int main(int argc,char **args) {
     }
   }
   logmsg(2,"rank11 %d Istart %d I end %d\n",rank, Istart,Iend);
+  /* -solmed probe: capture per-statement row-addressing metadata so the
+     structural diagnosis can name defective equation elements */
+  eq_probe_meta *eqmeta=NULL;
+  offset_t neqmeta=0;
+  if(solmethod==SM_PROBE&&rank==rank_hsl&&mpisize==1)eqmeta= (eq_probe_meta *) calloc (neq+1,sizeof(eq_probe_meta));
   if(rank==rank_hsl) {
-    jacobian_preallocate(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,nexo,closure_vals,ndblock,alltimeset,allregset,eq_intertemp,eq_addr,eq_time,eq_reg,counteq,nintraeq,&sbbd_overrid,Istart,Iend,&dnz,dnnz,&onz,onnz,&dnzB,dnnzB,&onzB,onnzB,nesteddbbd);
+    jacobian_preallocate(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,nexo,closure_vals,ndblock,alltimeset,allregset,eq_intertemp,eq_addr,eq_time,eq_reg,counteq,nintraeq,&sbbd_overrid,Istart,Iend,&dnz,dnnz,&onz,onnz,&dnzB,dnnzB,&onzB,onnzB,nesteddbbd,eqmeta,&neqmeta);
   }
   if(rank==0&&sbbd_overrid&&alltimeset<0) {
     printf("Warning: the equations reference intertemporal sets but this run's ordering ignores that structure; a bordered matrix method (-matsol 1/2/3) would detect and exploit it\n");
@@ -1888,6 +1901,15 @@ int main(int argc,char **args) {
 
   if(isrk)solve_rk(nohsl,VecSize,dnz,dnnz,onz,onnz,dnzB,dnnzB,onzB,onnzB,&vece,rank,rank_hsl,mpisize,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,&elem_vals,ncofele,nvarele,&closure_vals,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,eq_addr,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,fcomm,solmethod,adaptive,(double)epstol,(double)retryadj,maxretries,&xcf,&accmetric);
 
+  /* -solmed probe: MC79 structural diagnosis rides the probe after the
+     (skipped) solve dispatch — assemble the Jacobian and run the
+     matching / Dulmage-Mendelsohn analysis with named defects */
+  if(solmethod==SM_PROBE) {
+    probe_structural(VecSize,nvarele,ncofele,dnz,dnnz,dnzB,dnnzB,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,closure_vals,ndblock,alltimeset,allregset,eq_addr,counteq,nintraeq,eqmeta,neqmeta,iodata,niodata,noutdata,nsoldata,probefine,mpisize,rank);
+    VecDestroy(&vece); /* the skipped solve driver would have destroyed it */
+  }
+  free(eqmeta);
+
   jacobian_cache_free();
   backsolve_cache_free();
   lu_fastrefac_free();
@@ -1915,7 +1937,7 @@ int main(int argc,char **args) {
       printf("Error: cannot open %s for writing\n",solchar);
       return 1;
     }
-    fwrite(xcf, sizeof(solve_real),nvarele, solution);
+    if(xcf!=NULL)fwrite(xcf, sizeof(solve_real),nvarele, solution); /* probe runs have no solution; sol.bin stays empty */
     fclose(solution);
     if(accmetric!=NULL) {
       /* embedded-RK cumulative error metrics, one double per variable

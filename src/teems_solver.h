@@ -58,7 +58,7 @@ typedef float store_real;    /* coefficient storage precision (halves memory tra
 enum matrix_method { MM_LU=0, MM_SBBD=1, MM_DBBD=2, MM_NDBBD=3 };
 /* -solmed solution method (GEMPACK manual; Pearson 1991; Schiffmann
    2022 / GEMPACK 26.5 for the Runge-Kutta flavors) */
-enum solution_method { SM_GRAGG=1, SM_EULER=2, SM_RK2=3, SM_RK4=4, SM_BOSHA32=5, SM_DOPRI54=6, SM_JOHANSEN=10, SM_NOSOLVE=100 };
+enum solution_method { SM_GRAGG=1, SM_EULER=2, SM_RK2=3, SM_RK4=4, SM_BOSHA32=5, SM_DOPRI54=6, SM_JOHANSEN=10, SM_PROBE=100 };
 /* array_def.gltype: bound imposed on levels values */
 enum bound_type { BT_NONE=0, BT_GE=1, BT_GT=2, BT_LE=3, BT_LT=4 };
 /* formula_op.Oper: compiled formula operation */
@@ -223,6 +223,28 @@ typedef struct
   dim_t dimindx[MAXVARDIM];
 } eq_var_ref ;
 
+/* per-equation-statement addressing metadata, captured by
+   jacobian_preallocate (only when asked: eqmeta!=NULL, i.e. -solmed
+   probe) so the structural diagnosis can invert a matrix row back to
+   its named equation element: row -> eq_addr position -> statement +
+   quantifier tuple.  Quantifier dims are in declared order, first
+   slowest (the dcountdim1 layout).  var_ref/var_w record the
+   statement's linear-variable references with their element-level
+   incidence weights (entries written per reference, pre-merge) for
+   the probe report's statement-level structure section. */
+#define PROBE_MAXEQVARS 64
+typedef struct
+{
+  char eqname[NAMESIZE];
+  dim_t fdim;                     /* number of (all,) quantifiers */
+  offset_t setid[4*MAXVARDIM];    /* quantifier set ids, declared order */
+  offset_t base;                  /* first row element (matroworg) */
+  offset_t nrows;                 /* quantifier-space size (nloops) */
+  dim_t nvars_ref;                /* distinct variables referenced */
+  offset_t var_ref[PROBE_MAXEQVARS]; /* vars[] indices */
+  offset_t var_w[PROBE_MAXEQVARS];   /* incidence weights */
+} eq_probe_meta ;
+
 int sum_dedup_indices(char *formulain);
 int tab_write_variables(char *filename, char *newtabfile,array_def *vars,offset_t nvar);
 
@@ -347,7 +369,12 @@ void ndbbd_fastrefac_free(void);
 int backsolve_recover(char *fname, char *commsyntax,set_def *sets,offset_t nset, set_element *set_elems, array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar, elem_value *elem_vals,offset_t ncofele,closure_entry *closure_vals,solve_real *x,solve_real *exo_z,solve_real *bsvals);
 void backsolve_cache_free(void);
 int eq_linvar_read(char *formulain,eq_var_ref *LinVars,int linindx,array_def *vars);
-int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,set_element *set_elems,array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar,elem_value *elem_vals,offset_t ncofvar,offset_t ncofele, offset_t nexo,closure_entry *closure_vals,offset_t ndblock,offset_t alltimeset,offset_t allregset,bool *eq_intertemp,offset_t *eq_addr,dim_t *eq_time,dim_t *eq_reg,offset_t *counteq,offset_t nintraeq,bool *sbbd_overrid,PetscInt Istart,PetscInt Iend,PetscInt *dnz,PetscInt *dnnz,PetscInt *onz,PetscInt *onnz,PetscInt *dnzB,PetscInt *dnnzB,PetscInt *onzB,PetscInt *onnzB,int nesteddbbd);
+int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,set_element *set_elems,array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar,elem_value *elem_vals,offset_t ncofvar,offset_t ncofele, offset_t nexo,closure_entry *closure_vals,offset_t ndblock,offset_t alltimeset,offset_t allregset,bool *eq_intertemp,offset_t *eq_addr,dim_t *eq_time,dim_t *eq_reg,offset_t *counteq,offset_t nintraeq,bool *sbbd_overrid,PetscInt Istart,PetscInt Iend,PetscInt *dnz,PetscInt *dnnz,PetscInt *onz,PetscInt *onnz,PetscInt *dnzB,PetscInt *dnnzB,PetscInt *onzB,PetscInt *onnzB,int nesteddbbd,eq_probe_meta *eqmeta,offset_t *neqmeta);
+/* -solmed probe: assemble the condensed Jacobian sequentially and run
+   the HSL_MC79 maximum-matching / Dulmage-Mendelsohn structural
+   diagnosis on it (full stored pattern + numerically realized
+   pattern), naming defective variable and equation elements. */
+int probe_structural(PetscInt VecSize,offset_t nvarele,offset_t ncofele,PetscInt dnz,PetscInt *dnnz,PetscInt dnzB,PetscInt *dnnzB,char *tabfile,char *commsyntax,set_def *sets,dim_t nset,set_element *set_elems,array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar,elem_value *elem_vals,closure_entry *closure_vals,offset_t ndblock,offset_t alltimeset,offset_t allregset,offset_t *eq_addr,offset_t *counteq,offset_t nintraeq,eq_probe_meta *eqmeta,offset_t neqmeta,cmf_file_entry *iodata,int niodata,int noutdata,int nsoldata,int probefine,PetscInt mpisize,PetscInt rank);
 int equation_order_read(char *fname, char *commsyntax,set_def *sets,dim_t nset,set_element *set_elems,array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar,elem_value *elem_vals,offset_t ncofvar,offset_t ncofele,closure_entry *closure_vals,bool *var_inter,bool *ele_inter,array_def *eq_defs,bool *eq_intertemp,dim_t *eq_orderintra,dim_t *eq_orderreg,offset_t allregset,offset_t alltimeset,dim_t *orderintra,dim_t *orderreg);
 int equation_order_read_nested(char *fname, char *commsyntax,set_def *sets,dim_t nset,set_element *set_elems,array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar,elem_value *elem_vals,offset_t ncofvar,offset_t ncofele,closure_entry *closure_vals,bool *var_inter,bool *ele_inter,array_def *eq_defs,bool *eq_intertemp,dim_t *eq_orderintra,dim_t *eq_orderreg,offset_t allregset,offset_t alltimeset,dim_t *orderintra,dim_t *orderreg);
 /* ======= block_order.c / block_solve.c — (N)DBBD ordering and solve ====
