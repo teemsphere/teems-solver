@@ -917,6 +917,9 @@ int main(int argc,char **args) {
     postsim_on=cmf_postsim_on(filename);
     for (nj=0; nj<niodata+noutdata+nsoldata; nj++) logmsg(2,"rank %d logname %s fname %s\n",rank,iodata[nj].logname,iodata[nj].filname);
     if(tab_preprocess(tabfile,newtabfile)==-1)return 0;
+    /* audit A6: fail fast on unsupported/unknown Default statements
+       before any reader applies them positionally */
+    if(tab_defaults_validate(newtabfile)==-1)MPI_Abort(PETSC_COMM_WORLD,1);
     /* Tier 0: route POSTSIM sections to the _ps companion, consumed
        once after the solve */
     strcpy(psfile,newtabfile);
@@ -1095,7 +1098,6 @@ int main(int argc,char **args) {
   bool *var_inter= (bool *) calloc (nvar,sizeof(bool));//recycle ha_cgeset
   logmsg(2,"nvarele %ld\n",nvarele);
   if(rank==0) {
-    variables_read_defaults(tabfile,vars,nvar);
     nvarele=variables_read(tabfile,commsyntax,vars,nvar,sets,nset);
     if(nvarele==-1)MPI_Abort(PETSC_COMM_WORLD,1);
     nvarele1=nvarele;

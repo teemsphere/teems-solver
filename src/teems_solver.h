@@ -313,7 +313,10 @@ char *str_replace_all_bounded(char *line, char *finditem, char *replitem,dim_t n
 char *str_replace_first_bounded(char *line, char *finditem, char *replitem,dim_t nbuffer);
 char *str_replace_first(char *line, char *finditem, char *replitem);
 char *str_strip_comment(char *line, char *token);
-int variables_read_defaults(char *fname, array_def *record, offset_t ncof);
+/* Default-statement helpers (manual 10.19; audit A6): positional
+   semantics live in the readers; values are validated once up front */
+int tab_default_value(char *line, char *out);
+int tab_defaults_validate(char *fname);
 offset_t variables_read(char *fname, char *commsyntax, array_def *record, offset_t ncof, set_def *sets,dim_t nset);
 offset_t set_find_alltime(set_def *sets,dim_t nset);
 offset_t tab_count_statements(char *fname, char *commsyntax);

@@ -7,6 +7,42 @@ semantics, POSTSIM, others").
 
 ## Progress log
 
+- **2026-07-26 — A6 Default-statement rework landed**: spec-first from
+  manual 10.19/10.19.1. `tab_default_value` (tab_parse.c) detects a
+  Default statement and extracts its space-squeezed value (spaced
+  `(default = x)` forms now work — old bug 1); the readers apply
+  semantics POSITIONALLY and reversibly: variables_read handles all
+  four values (linear/levels/change/percent_change; the old sticky
+  only knew levels/change one-way), coefficients_read gains the real-
+  coefficient PARAMETER/NON_PARAMETER default (explicit token wins,
+  INTEGER→PARAMETER per 10.3), formulas_execute handles initial AND
+  always. `variables_read_defaults` DELETED — it pre-applied
+  `default=levels/change` to ALL variables including ones declared
+  before the statement (old bug 2, the audit's position-wrong).
+  `tab_defaults_validate` (cmf_io.c, once after preprocess, MPI_Abort
+  on failure) closes old bug 3 (defaults silently skipped): accepts
+  the supported values plus Equation linear/not_add_homotopy as
+  no-ops, and FATALS with named errors on Equation levels/
+  add_homotopy (linearized-only solver), Coefficient lower_bound/
+  upper_bound defaults (single bound slot, A9), and any unknown
+  keyword or value. PostSim sections already reject Default
+  statements (12.2.4) via the split's forbidden list. Nuance recorded:
+  integer-LHS formulas nominally stay INITIAL under a
+  `Formula (default=always)` (10.19) — not distinguished, corpus has
+  zero Default uses. Validated: verify.sh 14/14 bit-identical,
+  warnings 102; `.audit/defaults-test-kit/run_defaults_tests.sh`
+  12/12 — equiv leg (mid-file explicit GEMPACK defaults incl. spaced
+  forms + trailing defaults after the last declaration, which the old
+  pre-pass would have mis-applied) and rewrite leg (existing
+  `Variable (change)` declaration expressed as default=change / bare
+  decl / default=percent_change) both BIT-IDENTICAL to the golden
+  manifest; four fatal legs named. A1/A4 kits re-run green. ASan+UBSan
+  johansen-lu + re-lu clean. HARNESS NOTE: deliberately-aborted kit
+  runs leak MPICH shm segments; the container's 64M /dev/shm filled
+  and later MPI inits died with a pre-main SIGBUS in
+  MPIDI_POSIX_comm_bootstrap — all kits now clear
+  /dev/shm/mpich_shm_* before each run.
+
 - **2026-07-26 — A4 tokenized qualifier parsing landed + range-test CMF
   modes (25.4.4); batch-1 residual (b) closed**: `tab_qualifiers_parse`
   (tab_parse.c) tokenizes every LEADING `(qualifier,...)` group of

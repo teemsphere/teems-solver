@@ -1494,6 +1494,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
   offset_t varantidim[MAXVARDIM],varsubset[MAXVARDIM],vararset[MAXVARDIM];
   solve_real zerodivide=0,cond[MAXVARDIM],eval;
   bool IsFomIni=false,IsDefFomIni=false;
+  char fdefval[NAMESIZE];
   quantifier *arSet1=NULL;
   formula_op *ops1= NULL;
 
@@ -1511,8 +1512,16 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
       printf("Error: 'Formula & Equation' statements are not supported yet; write the Formula (initial) and Equation (levels) separately\n");
       MPI_Abort(PETSC_COMM_WORLD,1);
     }
-    if (strstr(line,"(default=initial)")!=NULL) IsDefFomIni=true;
-    if (strstr(line,"(default")==NULL) {
+    /* positional INITIAL/ALWAYS default (manual 10.19; audit A6):
+       both directions and spaced forms; values validated up front by
+       tab_defaults_validate. Integer-LHS formulas nominally keep
+       INITIAL regardless (10.19) -- not distinguished here. */
+    if (tab_default_value(line,fdefval)) {
+      if(strcmp(fdefval,"initial")==0)IsDefFomIni=true;
+      else if(strcmp(fdefval,"always")==0)IsDefFomIni=false;
+      continue;
+    }
+    {
       IsFomIni=IsDefFomIni;
       if(strstr(line, "(initial)")!=NULL) {
         str_replace_first(line, "(initial)", "");

@@ -1232,6 +1232,51 @@ void cmf_range_test_modes(char *filename, int *ini, int *upd) {
   fclose(f);
 }
 
+/* Validate every Default statement up front (manual 10.19; audit A6),
+   one scan of the preprocessed TAB (one statement per line,
+   lowercased). Supported -- applied positionally by the readers:
+   Coefficient parameter/non_parameter, Variable linear/levels/change/
+   percent_change, Formula initial/always. Accepted no-ops: Equation
+   linear/not_add_homotopy (the solver's only equation kind). Fatal:
+   Equation levels/add_homotopy (unsupported semantics), Coefficient
+   lower_bound/upper_bound defaults (single bound slot, audit A9), and
+   any unknown keyword or value. Returns 0 ok, -1 fatal. */
+int tab_defaults_validate(char *fname) {
+  FILE *f;
+  char line[TABREADLINE],val[NAMESIZE];
+  int bad=0;
+  f=fopen(fname,"r");
+  if(f==NULL)return 0;
+  while(fgets(line,TABREADLINE,f)) {
+    if(strstr(line,"(default")==NULL)continue;
+    tab_default_value(line,val);
+    if(strncmp(line,"coefficient",11)==0) {
+      if(strcmp(val,"parameter")==0||strcmp(val,"non_parameter")==0)continue;
+      if(strncmp(val,"lower_bound",11)==0||strncmp(val,"upper_bound",11)==0)
+        printf("Error: Coefficient (default=%s): bound defaults are not supported (single bound slot, audit A9)\n",val);
+      else printf("Error: unknown Coefficient default '%s'\n",val);
+    } else if(strncmp(line,"variable",8)==0) {
+      if(strcmp(val,"linear")==0||strcmp(val,"levels")==0||strcmp(val,"change")==0||strcmp(val,"percent_change")==0)continue;
+      printf("Error: unknown Variable default '%s'\n",val);
+    } else if(strncmp(line,"formula",7)==0) {
+      if(strcmp(val,"initial")==0||strcmp(val,"always")==0)continue;
+      printf("Error: unknown Formula default '%s'\n",val);
+    } else if(strncmp(line,"equation",8)==0) {
+      if(strcmp(val,"linear")==0||strcmp(val,"not_add_homotopy")==0)continue;
+      if(strcmp(val,"levels")==0)
+        printf("Error: Equation (default=levels) is not supported -- the solver handles linearized equations only\n");
+      else if(strncmp(val,"add_homotopy",12)==0)
+        printf("Error: Equation (default=add_homotopy) is not supported\n");
+      else printf("Error: unknown Equation default '%s'\n",val);
+    } else {
+      printf("Error: Default statements apply only to Coefficient/Variable/Formula/Equation: %s",line);
+    }
+    bad=1;
+  }
+  fclose(f);
+  return bad?-1:0;
+}
+
 /* Split the preprocessed TAB around POSTSIM (BEGIN)/(END) sections
    (manual 10.18, 12.2.1). Declarations (set/subset/coefficient/file)
    stay in the ordinary file -- a single namespace; what separates

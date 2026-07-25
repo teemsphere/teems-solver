@@ -1939,6 +1939,29 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
   return l;
 }
 
+/* Default statements (manual 10.19): "Keyword (DEFAULT = value) ;" --
+   DEFAULT is a qualifier, not a keyword; the statement resets the
+   named default for the declarations that FOLLOW it (positional).
+   Detects one and extracts the space-squeezed value ("initial",
+   "add_homotopy=h2", ...) into out (NAMESIZE); returns 1 for a
+   default statement, 0 otherwise. Value validation is centralized in
+   tab_defaults_validate (audit A6). */
+int tab_default_value(char *line, char *out) {
+  char *p=strstr(line,"(default");
+  int k=0;
+  out[0]='\0';
+  if(p==NULL)return 0;
+  p+=8;
+  while(*p==' ')p++;
+  if(*p=='=')p++;
+  while(*p!=')'&&*p!=';'&&*p!='\0'&&k<NAMESIZE-1) {
+    if(*p!=' ')out[k++]=*p;
+    p++;
+  }
+  out[k]='\0';
+  return 1;
+}
+
 /* Tokenized qualifier-list parsing for VARIABLE and COEFFICIENT
    declarations (manual 10.3/10.4; audit A4, closes batch-1 residual
    (b)). Strips every LEADING (qualifier,...) group from the statement
@@ -1952,14 +1975,15 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
    treatment) are fatal until their features land; reporting/metadata
    qualifiers (ORIG_LEVEL=, VPQTYPE=) parse and are ignored. Caller
    gates Default statements out (legacy sticky handling, audit A6).
-   is_variable selects the legal token set; is_param (coefficients
-   only) receives PARAMETER/NON_PARAMETER with the manual's INTEGER->
-   PARAMETER default. Returns 1 on success, -1 on error. */
-static int tab_qualifiers_parse(char *line, offset_t ncommsyntax, array_def *rec, bool *is_param, int is_variable) {
+   is_variable selects the legal token set; explicit_param
+   (coefficients only) reports an explicit PARAMETER/NON_PARAMETER
+   token (1/0, -1 = none) and isint_out an INTEGER token -- the
+   default resolution (10.3/10.19) is the caller's. Returns 1 on
+   success, -1 on error. */
+static int tab_qualifiers_parse(char *line, offset_t ncommsyntax, array_def *rec, int *explicit_param, bool *isint_out, int is_variable) {
   char group[TABREADLINE],tok[TABREADLINE],*p,*q,*t,*s;
   offset_t len;
   int k,nbtype;
-  bool isint=false,parset=false;
   p=line+ncommsyntax;
   while(*p==' ')p++;
   while(*p=='(') {
@@ -2017,17 +2041,15 @@ static int tab_qualifiers_parse(char *line, offset_t ncommsyntax, array_def *rec
       } else {
         if(strcmp(tok,"real")==0)continue;
         if(strcmp(tok,"integer")==0) {
-          isint=true;
+          *isint_out=true;
           continue;
         }
         if(strcmp(tok,"parameter")==0) {
-          *is_param=true;
-          parset=true;
+          *explicit_param=1;
           continue;
         }
         if(strcmp(tok,"non_parameter")==0) {
-          *is_param=false;
-          parset=true;
+          *explicit_param=0;
           continue;
         }
       }
@@ -2047,35 +2069,12 @@ static int tab_qualifiers_parse(char *line, offset_t ncommsyntax, array_def *rec
     }
     while(*p==' ')p++;
   }
-  /* 10.3: PARAMETER is the default for INTEGER coefficients */
-  if(!is_variable&&isint&&!parset)*is_param=true;
-  return 1;
-}
-
-int variables_read_defaults(char *fname, array_def *record, offset_t ncof) {
-  char line[TABREADLINE];
-  FILE * filehandle;
-  char commsyntax[]="variable";
-  filehandle = fopen(fname,"r");
-  offset_t i;
-  while (tab_next_statement(commsyntax,filehandle,line,TABREADLINE)) {
-    if(str_find_ci(line,"default")>0) {
-      while (str_replace_all(line," ", ""));
-      if(str_find_ci(line,"default=levels")>0) for (i=0; i<ncof; i++) {
-          record[i].level_par=true;
-        }
-      if(str_find_ci(line,"default=change")>0) for (i=0; i<ncof; i++) {
-          record[i].change_real=true;
-        }
-    }
-  }
-  fclose(filehandle);
   return 1;
 }
 
 offset_t variables_read(char *fname, char *commsyntax, array_def *record, offset_t ncof, set_def *sets,dim_t nset) {
   FILE * filehandle;
-  char line[TABREADLINE]="\0",linecopy[TABREADLINE],setname1[NAMESIZE],setname[NAMESIZE],setname2[NAMESIZE],setname3[NAMESIZE],finditem[NAMESIZE],finditem1[NAMESIZE],finditem2[NAMESIZE],finditem3[NAMESIZE],vname[NAMESIZE];//,vnamecopy[NAMESIZE];
+  char line[TABREADLINE]="\0",linecopy[TABREADLINE],setname1[NAMESIZE],setname[NAMESIZE],setname2[NAMESIZE],setname3[NAMESIZE],finditem[NAMESIZE],finditem1[NAMESIZE],finditem2[NAMESIZE],finditem3[NAMESIZE],vname[NAMESIZE],defval[NAMESIZE];//,vnamecopy[NAMESIZE];
   offset_t n,m,l,ncommsyntax=0,i,j=0,addi=0,add=0;
   dim_t dcount;
   char *readitem=NULL;
@@ -2086,11 +2085,16 @@ offset_t variables_read(char *fname, char *commsyntax, array_def *record, offset
   filehandle = fopen(fname,"r");
 
   while (tab_next_statement(commsyntax,filehandle,line,TABREADLINE)) {
-    if(strstr(line,"(default=levels)")!=NULL) {
-      IsLevel=true;
-    }
-    if(strstr(line,"(default=change)")!=NULL) {
-      IsChange=true;
+    /* positional defaults (manual 10.19; audit A6): reset the LINEAR/
+       LEVELS and PERCENT_CHANGE/CHANGE defaults for the declarations
+       that follow; both directions and spaced forms. Values are
+       validated up front by tab_defaults_validate. */
+    if(tab_default_value(line,defval)) {
+      if(strcmp(defval,"levels")==0)IsLevel=true;
+      else if(strcmp(defval,"linear")==0)IsLevel=false;
+      else if(strcmp(defval,"change")==0)IsChange=true;
+      else if(strcmp(defval,"percent_change")==0)IsChange=false;
+      continue;
     }
     if(IsLevel) {
       record[j].level_par=true;
@@ -2098,15 +2102,15 @@ offset_t variables_read(char *fname, char *commsyntax, array_def *record, offset
     if(IsChange) {
       record[j].change_real=true;
     }
-    /* tokenized qualifier parsing (audit A4); Default statements keep
-       the legacy sticky handling above (audit A6) */
-    if (strstr(line,"(default")==NULL&&tab_qualifiers_parse(line,ncommsyntax,&record[j],NULL,1)<0) {
+    /* tokenized qualifier parsing (audit A4): explicit qualifiers
+       override the defaults above */
+    if (tab_qualifiers_parse(line,ncommsyntax,&record[j],NULL,NULL,1)<0) {
       fclose(filehandle);
       return -1;
     }
     while (str_replace_all(line," ", ""));
     strcpy(linecopy,line);
-    if (strstr(line,"(default")==NULL) {
+    {
       n=str_count_char(line,')');
       if (n>1) {
         for (i=1; i<n; i++) {
@@ -2255,7 +2259,9 @@ offset_t coefficients_read(char *fname, char *commsyntax, array_def *record, off
   char line[TABREADLINE]="\0",linecopy[TABREADLINE],setname1[TABREADLINE],setname[TABREADLINE],setname2[TABREADLINE],setname3[TABREADLINE],finditem[TABREADLINE],finditem1[TABREADLINE],finditem2[TABREADLINE],finditem3[TABREADLINE],vname[TABREADLINE];//,vnamecopy[NAMESIZE];
   offset_t n,m,l,ncommsyntax=0,i=0,j=0,addi=0,add=0;
   dim_t dcount;
-  bool isparam=false;
+  bool DefParam=false,isint=false;
+  int expparam=-1;
+  char defval[NAMESIZE];
   char *readitem=NULL;
   while (commsyntax[ncommsyntax] != '\0') {
     ncommsyntax++;
@@ -2267,21 +2273,28 @@ offset_t coefficients_read(char *fname, char *commsyntax, array_def *record, off
   teems_coef_is_param= (bool *) calloc (ncof+1,sizeof(bool));
 
   while (tab_next_statement(commsyntax,filehandle,line,TABREADLINE)) {
-    /* tokenized qualifier parsing (audit A4; closes batch-1 residual
-       (b)): PARAMETER/NON_PARAMETER come from qualifier tokens now,
-       not substring matches over the whole statement. Default
-       statements keep the legacy skip (audit A6). */
-    isparam=false;
-    if (strstr(line,"(default")==NULL) {
-      if (tab_qualifiers_parse(line,ncommsyntax,&record[j],&isparam,0)<0) {
-        fclose(filehandle);
-        return -1;
-      }
-      if (isparam&&j<ncof)teems_coef_is_param[j]=true;
+    /* positional PARAMETER/NON_PARAMETER default for real
+       coefficients (manual 10.19; audit A6); values validated up
+       front by tab_defaults_validate */
+    if(tab_default_value(line,defval)) {
+      if(strcmp(defval,"parameter")==0)DefParam=true;
+      else if(strcmp(defval,"non_parameter")==0)DefParam=false;
+      continue;
     }
+    /* tokenized qualifier parsing (audit A4; closes batch-1 residual
+       (b)): an explicit PARAMETER/NON_PARAMETER token wins, INTEGER
+       defaults to PARAMETER (10.3), real coefficients follow the
+       positional default */
+    expparam=-1;
+    isint=false;
+    if (tab_qualifiers_parse(line,ncommsyntax,&record[j],&expparam,&isint,0)<0) {
+      fclose(filehandle);
+      return -1;
+    }
+    if (j<ncof&&(expparam>=0?expparam==1:(isint||DefParam)))teems_coef_is_param[j]=true;
     while (str_replace_all(line," ", ""));
     strcpy(linecopy,line);
-    if (strstr(line,"(default")==NULL) {
+    {
       n=str_count_char(line,')');
       if (n>1) {
         for (i=1; i<n; i++) {
