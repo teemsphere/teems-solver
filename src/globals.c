@@ -30,6 +30,15 @@ bool *teems_coef_is_param = NULL;
 int *teems_coef_gltype2 = NULL;
 store_real *teems_coef_glval2 = NULL;
 
+/* PostSim scope (Tier 0 residuals; manual 12.2.1-12.2.3): coefficient
+   names declared inside POSTSIM sections, recorded by the split;
+   is_ps parallels coefs[] (NULL when the TAB has no sections);
+   ps_pass gates the PostSim-only formula rules */
+char (*teems_ps_coefnames)[NAMESIZE] = NULL;
+int teems_ps_ncoefs = 0;
+bool *teems_coef_is_ps = NULL;
+int teems_ps_pass = 0;
+
 /* CMF range-test modes (manual 25.4.4): 0 = no, 1 = warn (the
    GEMPACK default outside automatic accuracy), 2 = fatal */
 int teems_range_test_initial = 1;

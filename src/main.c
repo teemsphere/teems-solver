@@ -925,7 +925,8 @@ int main(int argc,char **args) {
     strcpy(psfile,newtabfile);
     strcat(psfile,"_ps");
     npostsim=tab_postsim_split(newtabfile,psfile);
-    if(npostsim<0)return 0;
+    /* fail-fast: exit 0 here used to mask section errors */
+    if(npostsim<0)MPI_Abort(PETSC_COMM_WORLD,1);
   }
 
   strcpy(tabfile,newtabfile);
@@ -1072,6 +1073,9 @@ int main(int argc,char **args) {
     ncofele=coefficients_read(tabfile,commsyntax,coefs,ncof,sets,nset);
     /* fail-fast: exit 0 here used to mask declaration errors */
     if(ncofele==-1)MPI_Abort(PETSC_COMM_WORLD,1);
+    /* PostSim residuals: mark split-recorded PostSim coefficients for
+       the 12.2.2 LHS and 12.2.3 Read-target rules */
+    postsim_mark_coefs(coefs,ncof);
     ncofele1=ncofele;
   }
   if(nohsl) {
@@ -2021,9 +2025,14 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
     postsim_expose_results(elem_vals,ncofele,nvarele,xcf);
     if(npostsim>0) {
       logmsg(1,"postsim: running %d statement(s)\n",npostsim);
+      teems_ps_pass=1;
+      /* reads first (each statement kind runs as its own scan; within
+         a kind, file order -- manual 12.2.1) */
+      if(postsim_reads_execute(psfile,niodata,iodata,sets,nset,set_elems,coefs,ncof,ncofele,vars,nvar,nvarele,elem_vals)==-1)MPI_Abort(PETSC_COMM_WORLD,1);
       strcpy(commsyntax,"formula");
       formulas_execute(psfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,true);
       assertions_execute(psfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,true,teems_assertions_mode,0);
+      teems_ps_pass=0;
     }
     assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,true,teems_assertions_mode,1);
   }

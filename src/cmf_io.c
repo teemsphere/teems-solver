@@ -1277,19 +1277,74 @@ int tab_defaults_validate(char *fname) {
   return bad?-1:0;
 }
 
+/* --- PostSim scope helpers (Tier 0 residuals; manual 12.2.1-12.2.3) --- */
+
+/* declared name of a preprocessed declaration line: skip the keyword,
+   any (qualifier)/(quantifier) groups and blanks; the name is the next
+   identifier run (works for set/subset/coefficient/file forms) */
+static void ps_decl_name(char *line, int kwlen, char *out) {
+  char *p=line+kwlen;
+  int k=0;
+  out[0]='\0';
+  for(;;) {
+    while(*p==' ')p++;
+    if(*p!='(')break;
+    while(*p!=')'&&*p!='\0')p++;
+    if(*p==')')p++;
+  }
+  while((isalnum((int)*p)||*p=='_'||*p=='@')&&k<NAMESIZE-1)out[k++]=*p++;
+  out[k]='\0';
+}
+
+/* word-boundary identifier search (lines and names are lowercase) */
+static int line_has_ident(char *line, char *name) {
+  char *p=line;
+  size_t n=strlen(name);
+  if(n==0)return 0;
+  while((p=strstr(p,name))!=NULL) {
+    int lb=(p==line)?0:(isalnum((int)p[-1])||p[-1]=='_');
+    int rb=(isalnum((int)p[n])||p[n]=='_');
+    if(!lb&&!rb)return 1;
+    p++;
+  }
+  return 0;
+}
+
+/* logical file name of a read statement: the token after " file "
+   (terminal/text forms without one yield "") */
+static void ps_read_logname(char *line, char *out) {
+  char *p=strstr(line," file ");
+  int k=0;
+  out[0]='\0';
+  if(p==NULL)return;
+  p+=6;
+  while(*p==' ')p++;
+  while(isalnum((int)*p)||*p=='_') {
+    if(k<NAMESIZE-1)out[k++]=*p;
+    p++;
+  }
+  out[k]='\0';
+}
+
 /* Split the preprocessed TAB around POSTSIM (BEGIN)/(END) sections
-   (manual 10.18, 12.2.1). Declarations (set/subset/coefficient/file)
-   stay in the ordinary file -- a single namespace; what separates
-   PostSim is EXECUTION order -- while executables (formula/assertion/
-   zerodivide) move to the _ps companion consumed once after the solve.
-   Write/Display in sections are dropped (outputs ride the write-all
-   dump); PostSim Read and the forbidden statements are fatal.
-   Returns the PostSim executable count (0 = no sections), -1 on
-   error. */
+   (manual 10.18, 12.2.1). Declarations (set/subset/coefficient/file
+   and "read elements") stay in the ordinary file -- a single
+   namespace; what separates PostSim is EXECUTION order -- while
+   executables (formula/assertion/zerodivide/read) move to the _ps
+   companion consumed once after the solve. Write/Display in sections
+   are dropped (outputs ride the write-all dump); the forbidden
+   statements are fatal. Scope rules enforced here: ordinary
+   statements may not reference PostSim-declared names (12.2.1), and
+   no file serves both normal and PostSim Reads (12.2.3); PostSim
+   coefficient names are recorded for the 12.2.2/12.2.3 LHS and
+   Read-target rules. Returns the PostSim executable count (0 = no
+   sections), -1 on error. */
 int tab_postsim_split(char *newtabfile, char *psfile) {
   FILE *fin,*fmain,*fps;
-  char line[TABREADLINE],tmpname[TABREADLINE];
+  char line[TABREADLINE],tmpname[TABREADLINE],nm[NAMESIZE];
   int inps=0,nps=0,found=0;
+  char (*psnames)[NAMESIZE]=NULL,(*ordlogs)[NAMESIZE]=NULL,(*pslogs)[NAMESIZE]=NULL;
+  int npsn=0,nordlog=0,npslog=0,k;
   fin=fopen(newtabfile,"r");
   if(fin==NULL)return 0;
   while (fgets(line,TABREADLINE,fin)) {
@@ -1302,6 +1357,36 @@ int tab_postsim_split(char *newtabfile, char *psfile) {
     fclose(fin);
     return 0;
   }
+  /* pass A: collect the names declared inside sections (scope checks
+     below) and record the PostSim coefficients for the readers */
+  rewind(fin);
+  while (fgets(line,TABREADLINE,fin)) {
+    if(strncmp(line,"postsim (begin)",15)==0||strncmp(line,"postsim(begin)",14)==0) {
+      inps=1;
+      continue;
+    }
+    if(strncmp(line,"postsim (end)",13)==0||strncmp(line,"postsim(end)",12)==0) {
+      inps=0;
+      continue;
+    }
+    if(!inps)continue;
+    nm[0]='\0';
+    if(strncmp(line,"set ",4)==0)ps_decl_name(line,4,nm);
+    else if(strncmp(line,"subset ",7)==0)ps_decl_name(line,7,nm);
+    else if(strncmp(line,"file ",5)==0)ps_decl_name(line,5,nm);
+    else if(strncmp(line,"coefficient ",12)==0) {
+      ps_decl_name(line,12,nm);
+      if(nm[0]!='\0') {
+        teems_ps_coefnames=realloc(teems_ps_coefnames,(teems_ps_ncoefs+1)*sizeof(*teems_ps_coefnames));
+        strcpy(teems_ps_coefnames[teems_ps_ncoefs++],nm);
+      }
+    }
+    if(nm[0]!='\0') {
+      psnames=realloc(psnames,(npsn+1)*sizeof(*psnames));
+      strcpy(psnames[npsn++],nm);
+    }
+  }
+  inps=0;
   rewind(fin);
   strcpy(tmpname,newtabfile);
   strcat(tmpname,"_o");
@@ -1324,6 +1409,24 @@ int tab_postsim_split(char *newtabfile, char *psfile) {
       continue;
     }
     if(!inps) {
+      /* scope isolation (12.2.1): PostSim names are PostSim-only */
+      for(k=0;k<npsn;k++)if(line_has_ident(line,psnames[k])) {
+        printf("Error: ordinary statement references PostSim-declared name %s (manual 12.2.1): %s",psnames[k],line);
+        fclose(fin);
+        fclose(fmain);
+        fclose(fps);
+        free(psnames);
+        free(ordlogs);
+        free(pslogs);
+        return -1;
+      }
+      if(strncmp(line,"read ",5)==0&&strncmp(line,"read elements",13)!=0) {
+        ps_read_logname(line,nm);
+        if(nm[0]!='\0') {
+          ordlogs=realloc(ordlogs,(nordlog+1)*sizeof(*ordlogs));
+          strcpy(ordlogs[nordlog++],nm);
+        }
+      }
       fputs(line,fmain);
       continue;
     }
@@ -1332,14 +1435,25 @@ int tab_postsim_split(char *newtabfile, char *psfile) {
       fclose(fin);
       fclose(fmain);
       fclose(fps);
+      free(psnames);
+      free(ordlogs);
+      free(pslogs);
       return -1;
     }
+    if(strncmp(line,"read elements",13)==0) {
+      /* set-definition machinery: rides the declarations */
+      fputs(line,fmain);
+      continue;
+    }
     if(strncmp(line,"read ",5)==0) {
-      printf("Error: PostSim Read is not supported yet; read the data in the ordinary part into a (parameter) coefficient instead\n");
-      fclose(fin);
-      fclose(fmain);
-      fclose(fps);
-      return -1;
+      ps_read_logname(line,nm);
+      if(nm[0]!='\0') {
+        pslogs=realloc(pslogs,(npslog+1)*sizeof(*pslogs));
+        strcpy(pslogs[npslog++],nm);
+      }
+      fputs(line,fps);
+      nps++;
+      continue;
     }
     if(strncmp(line,"set ",4)==0||strncmp(line,"subset ",7)==0||strncmp(line,"coefficient ",12)==0||strncmp(line,"file ",5)==0) {
       fputs(line,fmain);
@@ -1358,11 +1472,28 @@ int tab_postsim_split(char *newtabfile, char *psfile) {
     fclose(fin);
     fclose(fmain);
     fclose(fps);
+    free(psnames);
+    free(ordlogs);
+    free(pslogs);
     return -1;
   }
   fclose(fin);
   fclose(fmain);
   fclose(fps);
+  /* 12.2.3: no file serves both normal and PostSim Reads */
+  for(k=0;k<npslog;k++) {
+    int k2;
+    for(k2=0;k2<nordlog;k2++)if(strcmp(pslogs[k],ordlogs[k2])==0) {
+      printf("Error: file %s is read in both the ordinary and PostSim parts (manual 12.2.3); split the data across two files\n",pslogs[k]);
+      free(psnames);
+      free(ordlogs);
+      free(pslogs);
+      return -1;
+    }
+  }
+  free(psnames);
+  free(ordlogs);
+  free(pslogs);
   if(rename(tmpname,newtabfile)!=0) {
     printf("Error: cannot finalize the PostSim split\n");
     return -1;

@@ -7,6 +7,44 @@ semantics, POSTSIM, others").
 
 ## Progress log
 
+- **2026-07-26 — PostSim residuals landed (Tier 0 now feature-complete
+  solver-side)**: spec-first from manual 12.2.1-12.2.3. (1) **PostSim
+  Read**: the split routes `read` lines to the _ps companion (`read
+  elements` stays with the declarations); `postsim_reads_execute`
+  (tab_parse.c) runs them once after the solve at the PS hook —
+  targets validated (PostSim Coefficient only: ordinary coefficient /
+  variable / unknown are named fatal errors per 12.2.3), then
+  `data_read_files` reuses the whole format machinery against scratch
+  stores and only the read coefficients' element ranges are copied
+  into the live elem_vals, preserving every post-simulation value.
+  12.2.3's same-file rule enforced in the split (normal + PostSim
+  reads of one logical file = fatal). (2) **PS-LHS validation**
+  (12.2.2): `teems_ps_pass` gates a check at formulas_execute's LHS
+  resolution — assigning a variable or an ordinary coefficient in a
+  PostSim formula is a named fatal error; PostSim coefficients are
+  known via split-recorded names (`teems_ps_coefnames`) marked onto
+  a `teems_coef_is_ps` parallel array after coefficients_read; the F2
+  (parameter) warning is suppressed on the PS pass (qualifiers
+  ignored there per 12.2.4). (3) **Scope isolation** (12.2.1): split
+  pass A collects every section-declared name (set/subset/
+  coefficient/file), pass B fatals on any ordinary statement
+  referencing one (word-boundary match; also catches ordinary/PostSim
+  redeclaration collisions — the POP-vs-pop shadowing class).
+  Ride-along: the split's -1 now MPI_Aborts (was `return 0`, third
+  exit-0 wart caught by kits). Validated: verify.sh 14/14
+  bit-identical, warnings 102; `.audit/postsim-test-kit/
+  run_postsim_tests.sh` 14/14 (positive leg: Read+formula+assertion
+  over a dedicated PS data file sums to 60 in-solver AND ordinary
+  outputs stay bit-identical to the golden shk2d manifest AND
+  flipping the data file flips the assertion — values provably come
+  from the file; six named fatal legs); all five kits 66/66;
+  ASan+UBSan johansen-lu + re-lu + shk2d clean plus a sanitized
+  PS-positive run through the read/copy/assert path. Tier-0 remains:
+  execution order is per-statement-kind (reads, then formulas, then
+  assertions; file order within each kind) — interleavings that
+  depend on a read AFTER a formula would misorder (recorded); PostSim
+  ZeroDivide statements ride the _ps scan with fresh state (A1).
+
 - **2026-07-26 — A9 second bound slot landed**: a declaration may carry
   one lower (GE/GT) and one upper (LE/LT) bound (manual 10.19.1) —
   the GDYNv3.6.tab:1771 `(ge 0, le 10)` case. Slot 1 stays in

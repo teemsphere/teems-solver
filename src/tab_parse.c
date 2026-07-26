@@ -1543,6 +1543,93 @@ int sum_count(char *formulain, char *commsyntax) {
   return j;
 }
 
+/* mark coefficients declared inside POSTSIM sections (names recorded
+   by the split) -- drives the 12.2.2 LHS rule and the 12.2.3
+   Read-target rule; teems_coef_is_ps stays NULL when the TAB has no
+   sections (zero cost) */
+void postsim_mark_coefs(array_def *coefs, offset_t ncof) {
+  offset_t i;
+  int k;
+  if(teems_ps_ncoefs==0)return;
+  free(teems_coef_is_ps);
+  teems_coef_is_ps= (bool *) calloc (ncof+1,sizeof(bool));
+  for(i=0; i<ncof; i++)
+    for(k=0; k<teems_ps_ncoefs; k++)
+      if(strcmp(coefs[i].cofname,teems_ps_coefnames[k])==0) {
+        teems_coef_is_ps[i]=true;
+        break;
+      }
+}
+
+/* PostSim Read execution (manual 12.2.1/12.2.3; Tier 0 residual):
+   runs the _ps companion's Read statements once after the solve.
+   Targets must be PostSim Coefficients -- never Variables, never
+   ordinary Coefficients. Reuses data_read_files against scratch
+   stores, then copies only the read coefficients' element ranges into
+   the live elem_vals, preserving every post-simulation value.
+   Returns the read count (0 = zero cost), -1 on error. */
+offset_t postsim_reads_execute(char *psname, int niodata, cmf_file_entry *iodata, set_def *sets, dim_t nset, set_element *set_elems, array_def *coefs, offset_t ncof, offset_t ncofele, array_def *vars, offset_t nvar, offset_t nvarele, elem_value *elem_vals) {
+  FILE *f;
+  char line[TABREADLINE],name[NAMESIZE],*p;
+  offset_t i,j,l,nreads;
+  elem_store *cstore,*vstore;
+  bool *docopy;
+  nreads=tab_count_statements(psname,"read");
+  if(nreads==0)return 0;
+  docopy= (bool *) calloc (ncof+1,sizeof(bool));
+  f=fopen(psname,"r");
+  if(f==NULL) {
+    free(docopy);
+    return -1;
+  }
+  while (tab_next_statement("read",f,line,TABREADLINE)) {
+    /* target = the first token after "read" ("read elements" stays
+       with the declarations and never reaches the _ps file) */
+    p=line+4;
+    while(*p==' ')p++;
+    l=0;
+    while(*p!=' '&&*p!='\0'&&*p!=';'&&l<NAMESIZE-1)name[l++]=*p++;
+    name[l]='\0';
+    for(i=0; i<ncof; i++)if(strcmp(coefs[i].cofname,name)==0)break;
+    if(i<ncof) {
+      if(teems_coef_is_ps==NULL||!teems_coef_is_ps[i]) {
+        printf("Error: PostSim Read into ordinary coefficient %s; targets must be PostSim Coefficients (manual 12.2.3)\n",name);
+        fclose(f);
+        free(docopy);
+        return -1;
+      }
+      docopy[i]=true;
+      continue;
+    }
+    for(j=0; j<nvar; j++)if(strcmp(vars[j].cofname,name)==0)break;
+    if(j<nvar) {
+      printf("Error: PostSim Read into variable %s; simulation results cannot be changed (manual 12.2.3)\n",name);
+      fclose(f);
+      free(docopy);
+      return -1;
+    }
+    printf("Error: PostSim Read target %s is not a declared coefficient\n",name);
+    fclose(f);
+    free(docopy);
+    return -1;
+  }
+  fclose(f);
+  cstore= (elem_store *) calloc (ncofele+1,sizeof(elem_store));
+  vstore= (elem_store *) calloc (nvarele+1,sizeof(elem_store));
+  if(data_read_files(psname,niodata,iodata,"read",sets,nset,set_elems,coefs,ncof,cstore,ncofele,vars,nvar,vstore,nvarele)==-1) {
+    free(cstore);
+    free(vstore);
+    free(docopy);
+    return -1;
+  }
+  for(i=0; i<ncof; i++)if(docopy[i])
+      for(l=0; l<coefs[i].nelem; l++)elem_vals[coefs[i].offset+l].value=cstore[coefs[i].offset+l].value;
+  free(cstore);
+  free(vstore);
+  free(docopy);
+  return nreads;
+}
+
 offset_t tab_count_statements(char *fname, char *commsyntax) {
   FILE * filehandle;
   char line[TABREADLINE]="\0";

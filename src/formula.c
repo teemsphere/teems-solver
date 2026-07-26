@@ -1741,7 +1741,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
             /* F2: parameters may only be set by Read or Formula
                (Initial) -- warn once (first pass) rather than abort,
                since TEEMS never enforced the distinction */
-            if(IsIni&&!IsFomIni&&teems_coef_is_param!=NULL&&teems_coef_is_param[index])printf("Warning: Formula (always) assigns (parameter) coefficient %s; GEMPACK only allows Read or Formula (Initial) for parameters\n",coefs[index].cofname);
+            if(!teems_ps_pass&&IsIni&&!IsFomIni&&teems_coef_is_param!=NULL&&teems_coef_is_param[index])printf("Warning: Formula (always) assigns (parameter) coefficient %s; GEMPACK only allows Read or Formula (Initial) for parameters\n",coefs[index].cofname);
             coefs[index].suplval=true;
             offset=coefs[index].offset;
             varsize=coefs[index].size;
@@ -1761,6 +1761,18 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
               break;
             }
           } while (index--);
+        }
+        /* PostSim Formula LHS must be a PostSim Coefficient (manual
+           12.2.2): never a Variable, never an ordinary Coefficient */
+        if (teems_ps_pass) {
+          if (check10) {
+            printf("Error: PostSim Formula assigns variable %s; simulation results cannot be changed (manual 12.2.2)\n",vars[index].cofname);
+            MPI_Abort(PETSC_COMM_WORLD,1);
+          }
+          if (teems_coef_is_ps==NULL||!teems_coef_is_ps[index]) {
+            printf("Error: PostSim Formula assigns ordinary coefficient %s; the LHS must be a PostSim Coefficient (manual 12.2.2)\n",coefs[index].cofname);
+            MPI_Abort(PETSC_COMM_WORLD,1);
+          }
         }
         for (l=0; l<MAXVARDIM; l++){varantidim[l]=0;varsubset[l]=0;varsupsetid[l]=0;}
         if (check10) {

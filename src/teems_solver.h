@@ -318,6 +318,13 @@ char *str_replace_all_bounded(char *line, char *finditem, char *replitem,dim_t n
 char *str_replace_first_bounded(char *line, char *finditem, char *replitem,dim_t nbuffer);
 char *str_replace_first(char *line, char *finditem, char *replitem);
 char *str_strip_comment(char *line, char *token);
+/* PostSim scope (Tier 0 residuals; manual 12.2.1-12.2.3) */
+extern char (*teems_ps_coefnames)[NAMESIZE];
+extern int teems_ps_ncoefs;
+extern bool *teems_coef_is_ps;
+extern int teems_ps_pass;
+void postsim_mark_coefs(array_def *coefs, offset_t ncof);
+offset_t postsim_reads_execute(char *psname, int niodata, cmf_file_entry *iodata, set_def *sets, dim_t nset, set_element *set_elems, array_def *coefs, offset_t ncof, offset_t ncofele, array_def *vars, offset_t nvar, offset_t nvarele, elem_value *elem_vals);
 /* Default-statement helpers (manual 10.19; audit A6): positional
    semantics live in the readers; values are validated once up front */
 int tab_default_value(char *line, char *out);
