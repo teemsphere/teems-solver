@@ -436,6 +436,12 @@ int parse_index_leadlag(char *p,int *leadlag) {
 int formula_compile(char *fomulain, set_def *sets,array_def *coefs, offset_t ncof, array_def *vars,offset_t nvar,offset_t ncofele,sum_def *sum_cof,dim_t totalsum,formula_op *ops,dim_t *nops,quantifier *arSet,dim_t fdim) {
   int npar=0,npow=0,nmul=0,ndiv=0,nplu=0,nmin=0,j;
   *nops=0;
+  /* $POS needs per-tuple index-position machinery (manual 11.5.6) --
+     defer with a clean error rather than mis-binding the index name */
+  if(strstr(fomulain,"$pos")!=NULL) {
+    printf("Error: the $POS function is not supported yet: %s\n",fomulain);
+    return 0;
+  }
   npar=str_count_char(fomulain, ')');
   if (npar==0) {
     npow=str_count_char(fomulain, '^');
@@ -464,6 +470,9 @@ int formula_compile(char *fomulain, set_def *sets,array_def *coefs, offset_t nco
   char *p=NULL;
   char fpart1[TABREADLINE],fpart2[TABREADLINE],fpart3[TABREADLINE];
   char interchar[TABREADLINE],interchar1[TABREADLINE];
+  /* fresh group numbers for multi-arg function arguments: continue
+     past the paren-group range so gen_* temp names never collide */
+  int arggrp=npar+2;
 
   for (i=1; i<npar+2; i++) {
     p=strchr(fomulain,')');
@@ -485,6 +494,75 @@ int formula_compile(char *fomulain, set_def *sets,array_def *coefs, offset_t nco
       strcpy(fpart2,fomulain);
       fpart3[0]='\0';
     }
+    /* multi-arg intrinsics MAX/MIN/ID0V (manual 11.5/11.5.1): split
+       the group on brace-depth-0 commas (indices ride inside {}),
+       compile each argument to its own temp under a fresh group
+       number, then fold pairwise; ID0V(x,v) = x unless x is 0 */
+    int fnmulti=0;
+    j=strlen(fpart1);
+    if (j>=3&&strncmp(fpart1+j-3,"max",3)==0&&(j==3||fpart1[j-4]==' '||fpart1[j-4]=='('||fpart1[j-4]=='+'||fpart1[j-4]=='-'||fpart1[j-4]=='*'||fpart1[j-4]=='/'||fpart1[j-4]=='^'||fpart1[j-4]==','))fnmulti=1;
+    if (j>=3&&strncmp(fpart1+j-3,"min",3)==0&&(j==3||fpart1[j-4]==' '||fpart1[j-4]=='('||fpart1[j-4]=='+'||fpart1[j-4]=='-'||fpart1[j-4]=='*'||fpart1[j-4]=='/'||fpart1[j-4]=='^'||fpart1[j-4]==','))fnmulti=2;
+    if (j>=4&&strncmp(fpart1+j-4,"id0v",4)==0&&(j==4||fpart1[j-5]==' '||fpart1[j-5]=='('||fpart1[j-5]=='+'||fpart1[j-5]=='-'||fpart1[j-5]=='*'||fpart1[j-5]=='/'||fpart1[j-5]=='^'||fpart1[j-5]==','))fnmulti=3;
+    if (fnmulti>0) {
+      char abuf[TABREADLINE];
+      offset_t argres[16];
+      int nargs=0,k,adepth=0,a0=0,fl,anpow,anmul,anplu;
+      fpart1[j-((fnmulti==3)?4:3)]='\0';
+      for (k=0;; k++) {
+        if(fpart2[k]=='{')adepth++;
+        if(fpart2[k]=='}')adepth--;
+        if((fpart2[k]==','&&adepth==0)||fpart2[k]=='\0') {
+          if(nargs>=16) {
+            printf("Error: too many arguments in an intrinsic function call: %s\n",fomulain);
+            return 0;
+          }
+          fl=k-a0;
+          if(fl<=0) {
+            printf("Error: empty argument in an intrinsic function call: %s\n",fomulain);
+            return 0;
+          }
+          strncpy(abuf,fpart2+a0,fl);
+          abuf[fl]='\0';
+          anpow=str_count_char(abuf, '^');
+          if (anpow>0) {
+            if(!formula_compile_pow(abuf,sets,anpow,arggrp,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,nops,arSet,fdim))return 0;
+          }
+          anmul=str_count_char(abuf, '*')+str_count_char(abuf, '/');
+          if (anmul>0) {
+            if(!formula_compile_muldiv(abuf,sets,anmul,arggrp,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,nops,arSet,fdim))return 0;
+          }
+          anplu=str_count_char(abuf, '+')+str_count_char(abuf, '-');
+          if (anplu>0) {
+            if(!formula_compile_addsub(abuf,sets,anplu,arggrp,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,nops,arSet,fdim))return 0;
+          }
+          arggrp++;
+          formula_bind_operand(abuf,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,*nops,arSet,fdim,1);
+          ops[*nops].Oper=OP_LOAD;
+          ops[*nops].TmpVarName[0]='\0';
+          *nops=*nops+1;
+          argres[nargs++]=*nops-1;
+          a0=k+1;
+          if(fpart2[k]=='\0')break;
+        }
+      }
+      if(fnmulti==3&&nargs!=2) {
+        printf("Error: ID0V takes exactly 2 arguments: %s\n",fomulain);
+        return 0;
+      }
+      if(nargs<2) {
+        printf("Error: %s takes at least 2 arguments: %s\n",(fnmulti==1)?"MAX":"MIN",fomulain);
+        return 0;
+      }
+      for (k=1; k<nargs; k++) {
+        ops[*nops].Oper=(fnmulti==1)?OP_MAXF:(fnmulti==2)?OP_MINF:OP_ID0VF;
+        ops[*nops].Var1Type=OT_TEMP;
+        ops[*nops].Var1BegAdd=(k==1)?argres[0]:(*nops-1);
+        ops[*nops].Var2Type=OT_TEMP;
+        ops[*nops].Var2BegAdd=argres[k];
+        ops[*nops].TmpVarName[0]='\0';
+        *nops=*nops+1;
+      }
+    } else {
     npow=str_count_char(fpart2, '^');
     if (npow>0) {
       if(!formula_compile_pow(fpart2,sets,npow,i,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,nops,arSet,fdim))return 0;
@@ -507,6 +585,7 @@ int formula_compile(char *fomulain, set_def *sets,array_def *coefs, offset_t nco
       ops[*nops].TmpVarName[0]='\0';
       *nops=*nops+1;
       }
+    }
     sprintf(interchar1, "%d", i);
     interchar[0]='\0';
     if (i<10) {
@@ -566,6 +645,15 @@ int formula_compile(char *fomulain, set_def *sets,array_def *coefs, offset_t nco
     if (j>=5) if (fpart1[j-1]=='d'&&fpart1[j-2]=='n'&&fpart1[j-3]=='u'&&fpart1[j-4]=='o'&&fpart1[j-5]=='r') if(j==5||fpart1[j-6]==' '||fpart1[j-6]=='('||fpart1[j-6]=='+'||fpart1[j-6]=='-'||fpart1[j-6]=='*'||fpart1[j-6]=='/'||fpart1[j-6]=='^'||fpart1[j-6]==',') {
           ops[*nops].Var1Type=OT_TEMP_ROUND;
           fpart1[j-5]='\0';
+        }
+    /* trunc0 (toward zero) / truncb (toward -inf) -- plan 3.1 */
+    if (j>=6) if (strncmp(fpart1+j-6,"trunc0",6)==0) if(j==6||fpart1[j-7]==' '||fpart1[j-7]=='('||fpart1[j-7]=='+'||fpart1[j-7]=='-'||fpart1[j-7]=='*'||fpart1[j-7]=='/'||fpart1[j-7]=='^'||fpart1[j-7]==',') {
+          ops[*nops].Var1Type=OT_TEMP_TRUNC0;
+          fpart1[j-6]='\0';
+        }
+    if (j>=6) if (strncmp(fpart1+j-6,"truncb",6)==0) if(j==6||fpart1[j-7]==' '||fpart1[j-7]=='('||fpart1[j-7]=='+'||fpart1[j-7]=='-'||fpart1[j-7]=='*'||fpart1[j-7]=='/'||fpart1[j-7]=='^'||fpart1[j-7]==',') {
+          ops[*nops].Var1Type=OT_TEMP_TRUNCB;
+          fpart1[j-6]='\0';
         }
     if (j==2) if (fpart1[j-1]=='f'&&fpart1[j-2]=='i') {
         if(!formula_compile_if(fpart2,sets,2,i,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,nops,arSet,fdim))return 0;
@@ -691,6 +779,14 @@ solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,
       }
       if (ops[i].Var1Type==OT_TEMP_ROUND) {
         ops[i].TmpVarVal=round(ops[ops[i].Var1BegAdd].TmpVarVal);
+        break;
+      }
+      if (ops[i].Var1Type==OT_TEMP_TRUNC0) {
+        ops[i].TmpVarVal=trunc(ops[ops[i].Var1BegAdd].TmpVarVal);
+        break;
+      }
+      if (ops[i].Var1Type==OT_TEMP_TRUNCB) {
+        ops[i].TmpVarVal=floor(ops[ops[i].Var1BegAdd].TmpVarVal);
         break;
       }
       if (ops[i].Var1Type==OT_CONST) {
@@ -996,6 +1092,16 @@ solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,
         if(eval1<0&&eval2-floor(eval2)!=0)printf("Error: fractional power of a negative number in formula evaluation\n");
         ops[i].TmpVarVal=pow(eval1,eval2);
       }
+      break;
+    case OP_MAXF:
+    case OP_MINF:
+    case OP_ID0VF:
+      /* multi-arg intrinsic folds: operands are always compiled temps */
+      eval1=ops[ops[i].Var1BegAdd].TmpVarVal;
+      eval2=ops[ops[i].Var2BegAdd].TmpVarVal;
+      if(ops[i].Oper==OP_MAXF)ops[i].TmpVarVal=(eval1>eval2)?eval1:eval2;
+      else if(ops[i].Oper==OP_MINF)ops[i].TmpVarVal=(eval1<eval2)?eval1:eval2;
+      else ops[i].TmpVarVal=(eval1!=0)?eval1:eval2;
       break;
     default:
       if(ops[i].Var1Type==OT_ARRAY) {
@@ -1692,7 +1798,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
         readitem = strtok(readitem,";");
         while (formula_normalize(readitem)==1);
         leadlag_encode(readitem);
-        npar=str_count_char(readitem, '(');
+        npar=str_count_char(readitem, '(')+str_count_char(readitem, ',');/* comma slack: multi-arg intrinsics emit per-arg loads + folds (plan 3.1) */
         strcpy(sumsyntax,"sum(");
         totalsum=sum_count(readitem,sumsyntax);
         sum_def *sum_cof= (sum_def *) calloc (totalsum,sizeof(sum_def));
@@ -2129,7 +2235,7 @@ offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_el
 
     while (formula_normalize(readitem)==1);
     leadlag_encode(readitem);
-    npar=str_count_char(readitem, '(');
+    npar=str_count_char(readitem, '(')+str_count_char(readitem, ',');/* comma slack: multi-arg intrinsics emit per-arg loads + folds (plan 3.1) */
     strcpy(sumsyntax,"sum(");
     totalsum=sum_count(readitem,sumsyntax);
     sum_def *sum_cof= (sum_def *) calloc (totalsum,sizeof(sum_def));
@@ -2412,7 +2518,7 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
 
     while (formula_normalize(readitem)==1);
     leadlag_encode(readitem);
-    npar=str_count_char(readitem, '(');
+    npar=str_count_char(readitem, '(')+str_count_char(readitem, ',');/* comma slack: multi-arg intrinsics emit per-arg loads + folds (plan 3.1) */
     strcpy(sumsyntax,"sum(");
     totalsum=sum_count(readitem,sumsyntax);
     sum_def *sum_cof= (sum_def *) calloc (totalsum,sizeof(sum_def));
@@ -3003,7 +3109,7 @@ offset_t assertions_execute(char *fname,set_def *sets,dim_t nset,set_element *se
     npow=str_count_char(resid,'^');
     nmul=str_count_char(resid,'*')+str_count_char(resid,'/');
     nplu=str_count_char(resid,'+')+str_count_char(resid,'-');
-    npar=str_count_char(resid,'(');
+    npar=str_count_char(resid,'(')+str_count_char(resid,',');/* comma slack for multi-arg intrinsics (plan 3.1) */
     totalsum=sum_count(resid,sumsyntax);
     sum_def *sum_cof= (sum_def *) calloc (totalsum+1,sizeof(sum_def));
     sumcount=0;

@@ -410,7 +410,7 @@ static void stmt_prog_build_one(char *line, stmt_prog *stp, char *commsyntax,
       nplu=str_count_char(readitem, '+');
       nmin=str_count_char(readitem, '-');
       nplu=nplu+nmin;
-      npar=str_count_char(readitem, '(');
+      npar=str_count_char(readitem, '(')+str_count_char(readitem, ',');/* comma slack for multi-arg intrinsics (plan 3.1) */
 
       strcpy(line,line1);
       readitem=line;

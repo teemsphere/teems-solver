@@ -7,6 +7,39 @@ semantics, POSTSIM, others").
 
 ## Progress log
 
+- **2026-07-26 — 3.1 remaining intrinsics landed: ID0V, MAX, MIN,
+  TRUNC0, TRUNCB; $POS deferred**: spec-first from manual
+  11.5/11.5.1. Zero corpus uses (pure forward parity). **Multi-arg
+  machinery** (the new piece): formula_normalize classifies `max(`,
+  `min(`, `id0v(` as function parens (both switches — operator-
+  preceded and expression-start); formula_compile splits the innermost
+  group on brace-depth-0 commas (indices ride inside {}), compiles
+  each argument through the pow/muldiv/addsub pipeline under a FRESH
+  group number (gen_* temp names embed the group id — same-id
+  arguments would cross-bind), then folds pairwise with new op codes
+  OP_MAXF/OP_MINF/OP_ID0VF (61-63; operands always compiled temps).
+  MAX/MIN take 2+ args (fold), ID0V exactly 2 (x if x≠0 else v — the
+  manual's recommended zerodivide guard, and it works in equations
+  where ZERODIVIDE cannot). Arity violations are named fatal errors.
+  ops-array sizing gains a top-level-comma slack term at the five
+  allocation sites (per-arg loads + folds exceeded the 2-per-group
+  budget). **Unary**: TRUNC0 (toward zero) / TRUNCB (floor) as
+  transform types 48/49, same reversed-name+boundary recognition as
+  ROUND. **$POS deferred**: needs per-tuple index-position machinery
+  and mostly matters inside IF conditions the engine can't express;
+  clean fatal at formula_compile entry (compile failures MPI_Abort in
+  formula/update executors; assertions warn-skip per policy).
+  Validated: verify.sh 14/14 bit-identical, warnings 102;
+  `.audit/intrinsics-test-kit/run_intrinsics_tests.sh` 7/7 with 15
+  in-solver assertions (ID0V const/expression/denominator-guard forms;
+  MAX/MIN 2-arg, 4-arg fold, expression args, nested, indexed
+  coefficient args; TRUNC0/TRUNCB both signs — all values exactly
+  representable); all six kits 73/73; ASan+UBSan johansen-lu + re-lu
+  clean plus a sanitized run of the values leg. Still open from 11.5:
+  RANDOM (needs the randomize CMF switch + reproducibility design),
+  the statistical functions, RAS_MATRIX — none in corpus, none
+  planned.
+
 - **2026-07-26 — PostSim residuals landed (Tier 0 now feature-complete
   solver-side)**: spec-first from manual 12.2.1-12.2.3. (1) **PostSim
   Read**: the split routes `read` lines to the _ps companion (`read

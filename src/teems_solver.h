@@ -63,6 +63,8 @@ enum solution_method { SM_GRAGG=1, SM_EULER=2, SM_RK2=3, SM_RK4=4, SM_BOSHA32=5,
 enum bound_type { BT_NONE=0, BT_GE=1, BT_GT=2, BT_LE=3, BT_LT=4 };
 /* formula_op.Oper: compiled formula operation */
 enum op_code { OP_LOAD=0, OP_MUL=1, OP_DIV=2, OP_ADD=3, OP_SUB=4, OP_POW=5,
+               OP_MAXF=61, OP_MINF=62, OP_ID0VF=63, /* multi-arg intrinsics
+               (manual 11.5/11.5.1): pairwise folds over compiled temps */
                OP_IF_EQ=71, OP_IF_GT=72, OP_IF_LT=73, OP_IF_NE=74,
                OP_IF_LE=75, OP_IF_GE=76 };
 /* formula_op operand types (Var1Type/Var2Type/Var3Type) */
@@ -70,7 +72,7 @@ enum operand_type { OT_ARRAY=0, OT_LINVAR=1, OT_SUM=2, OT_LINVAR2=3,
                     OT_TEMP=4, OT_CONST=5, OT_CHANGE=6,
                     OT_TEMP_ID01=41, OT_TEMP_ABS=42, OT_TEMP_LOG=43,
                     OT_TEMP_EXP=44, OT_TEMP_SQRT=45, OT_TEMP_LOG10=46,
-                    OT_TEMP_ROUND=47 };
+                    OT_TEMP_ROUND=47, OT_TEMP_TRUNC0=48, OT_TEMP_TRUNCB=49 };
 
 
 /* ================= cmf_io.c — command (CMF) file and data I/O ========== */

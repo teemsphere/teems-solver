@@ -85,7 +85,8 @@ int formula_normalize(char *fomulain) {
       if(fpart1[j+3]=='p') {
         i2++;
       }
-      if (i==3||i1==3||i2==3) {
+      /* max( / min( -- multi-arg intrinsics (parity plan 3.1) */
+      if (i==3||i1==3||i2==3||strncmp(fpart1+j+1,"max",3)==0||strncmp(fpart1+j+1,"min",3)==0) {
         fomulain[p-fomulain]=']';
         fomulain[index]='[';
       } else {
@@ -135,7 +136,8 @@ int formula_normalize(char *fomulain) {
       if(fpart1[j+4]=='t') {
         i2++;
       }
-      if (i==4||i1==4||i2==4) {
+      /* id0v( -- multi-arg intrinsic (parity plan 3.1) */
+      if (i==4||i1==4||i2==4||strncmp(fpart1+j+1,"id0v",4)==0) {
         fomulain[p-fomulain]=']';
         fomulain[index]='[';
       } else {
@@ -151,6 +153,17 @@ int formula_normalize(char *fomulain) {
       i1=0;
       if(fpart1[j+1]=='r'&&fpart1[j+2]=='o'&&fpart1[j+3]=='u'&&fpart1[j+4]=='n'&&fpart1[j+5]=='d')i1=5;
       if (i==5||i1==5) {
+        fomulain[p-fomulain]=']';
+        fomulain[index]='[';
+      } else {
+        fomulain[p-fomulain]='}';
+        fomulain[index]='{';
+      }
+      break;
+    case 7:
+      /* trunc0( / truncb( -- intrinsics (parity plan 3.1) */
+      j=index-i;
+      if (strncmp(fpart1+j+1,"trunc0",6)==0||strncmp(fpart1+j+1,"truncb",6)==0) {
         fomulain[p-fomulain]=']';
         fomulain[index]='[';
       } else {
@@ -218,7 +231,8 @@ int formula_normalize(char *fomulain) {
       if(fpart1[2]=='p') {
         i2++;
       }
-      if (i==3||i1==3||i2==3) {
+      /* max( / min( -- multi-arg intrinsics (parity plan 3.1) */
+      if (i==3||i1==3||i2==3||strncmp(fpart1,"max",3)==0||strncmp(fpart1,"min",3)==0) {
         fomulain[p-fomulain]=']';
         fomulain[index]='[';
       } else {
@@ -246,7 +260,8 @@ int formula_normalize(char *fomulain) {
       if(fpart1[0]=='l'&&fpart1[1]=='o'&&fpart1[2]=='g'&&fpart1[3]=='e')i1=4;
       i2=0;
       if(fpart1[0]=='s'&&fpart1[1]=='q'&&fpart1[2]=='r'&&fpart1[3]=='t')i2=4;
-      if (i==4||i1==4||i2==4) {
+      /* id0v( -- multi-arg intrinsic (parity plan 3.1) */
+      if (i==4||i1==4||i2==4||strncmp(fpart1,"id0v",4)==0) {
         fomulain[p-fomulain]=']';
         fomulain[index]='[';
       } else {
@@ -261,6 +276,16 @@ int formula_normalize(char *fomulain) {
       i1=0;
       if(fpart1[0]=='r'&&fpart1[1]=='o'&&fpart1[2]=='u'&&fpart1[3]=='n'&&fpart1[4]=='d')i1=5;
       if (i==5||i1==5) {
+        fomulain[p-fomulain]=']';
+        fomulain[index]='[';
+      } else {
+        fomulain[p-fomulain]='}';
+        fomulain[index]='{';
+      }
+      break;
+    case 7:
+      /* trunc0( / truncb( -- intrinsics (parity plan 3.1) */
+      if (strncmp(fpart1,"trunc0",6)==0||strncmp(fpart1,"truncb",6)==0) {
         fomulain[p-fomulain]=']';
         fomulain[index]='[';
       } else {
