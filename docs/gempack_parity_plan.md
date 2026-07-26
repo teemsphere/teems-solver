@@ -7,6 +7,35 @@ semantics, POSTSIM, others").
 
 ## Progress log
 
+- **2026-07-26 — 12.2.2 name-resolution spec pass closed: it is a
+  UNIQUENESS rule, not a resolution order (manual 11.2.1)**: "the
+  duplication of a name for two different purposes is not allowed …
+  you cannot use 'X1' to denote a coefficient and 'x1' to be a
+  variable" (names case-insensitive). So the POP-vs-pop PostSim
+  finding (PS formula RHS admits both coefficients and variables; the
+  binder silently took the variable = solution zeros) is an ILLEGAL
+  TAB, and the fix is enforcement, not a search order. Corpus survey
+  first: zero collisions across coefficient/variable/set and zero
+  same-class duplicates in the full corpus — but 553 logical-FILE
+  name shares (the write-all pattern names output Files after the
+  coefficients they dump) and one real coefficient/equation share
+  (LULC tmng), so FILE and EQUATION names are exempt from enforcement
+  (neither namespace cross-binds in this engine). `names_validate`
+  (tab_parse.c, once after variables_read): fatal named errors for
+  cross-class collisions (coef/var, coef/set, var/set), same-class
+  duplicates, and RESERVED WORDS as identifiers (sum/if/max/min/
+  id0v/… — the A4 tokenizer and 3.1 normalize would misparse them;
+  corpus-clean, verified). PostSim-vs-ordinary collisions are caught
+  even earlier by the Tier-0 scope-isolation pass at the split (its
+  12.2.1 message cites the colliding line) — layering recorded.
+  Validated: verify.sh 14/14 bit-identical, warnings 102;
+  `.audit/names-test-kit/run_names_tests.sh` 12/12 (the original
+  popvar case fatal+named via scope isolation; coef/var, coef/set,
+  var/set, duplicate, reserved each fatal+named via names_validate);
+  all eight kits green; ASan johansen-lu + re-lu clean. The "use
+  distinct names in PostSim expressions" workaround note is now
+  superseded by enforcement.
+
 - **2026-07-26 — step-4 legacy qualifiers closed: IfHeaderExists
   implemented; 2.2/3.6 dispositioned; 3.2 satisfied by A1**:
   spec-first from manual 10.9.1/11.11.8. **3.9 Read (IfHeaderExists)**

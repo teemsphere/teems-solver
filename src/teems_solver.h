@@ -328,6 +328,9 @@ extern int teems_ps_ncoefs;
 extern bool *teems_coef_is_ps;
 extern int teems_ps_pass;
 void postsim_mark_coefs(array_def *coefs, offset_t ncof);
+/* 11.2.1 name uniqueness across coefficient/variable/set + reserved
+   words (the 12.2.2 name-resolution spec pass) */
+int names_validate(set_def *sets, dim_t nset, array_def *coefs, offset_t ncof, array_def *vars, offset_t nvar);
 offset_t postsim_reads_execute(char *psname, int niodata, cmf_file_entry *iodata, set_def *sets, dim_t nset, set_element *set_elems, array_def *coefs, offset_t ncof, offset_t ncofele, array_def *vars, offset_t nvar, offset_t nvarele, elem_value *elem_vals);
 /* Default-statement helpers (manual 10.19; audit A6): positional
    semantics live in the readers; values are validated once up front */

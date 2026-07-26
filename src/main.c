@@ -1105,6 +1105,10 @@ int main(int argc,char **args) {
   if(rank==0) {
     nvarele=variables_read(tabfile,commsyntax,vars,nvar,sets,nset);
     if(nvarele==-1)MPI_Abort(PETSC_COMM_WORLD,1);
+    /* 11.2.1 name uniqueness (the 12.2.2 name-resolution spec pass):
+       a coefficient/variable/set name collision would silently bind
+       whichever list is searched first */
+    if(names_validate(sets,nset,coefs,ncof,vars,nvar)==-1)MPI_Abort(PETSC_COMM_WORLD,1);
     nvarele1=nvarele;
   }
   logmsg(2,"nvarele %ld\n",nvarele);

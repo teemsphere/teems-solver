@@ -1601,6 +1601,65 @@ int sum_count(char *formulain, char *commsyntax) {
   return j;
 }
 
+/* Name-uniqueness validation (manual 11.2.1; closes the 12.2.2 name-
+   resolution spec pass): "duplication of a name for two different
+   purposes is not allowed" -- names are case-insensitive, so
+   coefficient POP and variable pop are the SAME name. The binder
+   searches coefficients, variables and sets from several contexts
+   (a PostSim formula RHS admits both coefficients and variables), so
+   a collision silently binds whichever list is searched first -- the
+   class behind the POP-vs-pop PostSim finding (solution zeros instead
+   of data). Enforced across and within coefficient/variable/set.
+   Logical FILE and EQUATION names are exempt: the corpus write-all
+   pattern names output Files after the coefficients they dump, and a
+   real corpus TAB shares a coefficient/equation name; neither
+   namespace cross-binds here. Reserved function words are rejected as
+   identifiers (the expression machinery would misparse them).
+   Returns 0 ok, -1 fatal. */
+int names_validate(set_def *sets, dim_t nset, array_def *coefs, offset_t ncof, array_def *vars, offset_t nvar) {
+  static const char *reserved[]={"sum","if","abs","max","min","sqrt","exp","loge","log10","id01","id0v","round","trunc0","truncb","prod","maxs","mins","random","normal","cumnormal","lognormal","cumlognormal","gperf","gperfc","ras_matrix","all",NULL};
+  offset_t i,j;
+  dim_t k;
+  int r;
+  for(i=0; i<ncof; i++) {
+    for(j=0; j<nvar; j++)if(strcmp(coefs[i].cofname,vars[j].cofname)==0) {
+        printf("Error: name %s is declared as both a coefficient and a variable; names are case-insensitive and must be unique (manual 11.2.1)\n",coefs[i].cofname);
+        return -1;
+      }
+    for(k=0; k<nset; k++)if(strcmp(coefs[i].cofname,sets[k].setname)==0) {
+        printf("Error: name %s is declared as both a coefficient and a set (manual 11.2.1)\n",coefs[i].cofname);
+        return -1;
+      }
+    for(j=i+1; j<ncof; j++)if(strcmp(coefs[i].cofname,coefs[j].cofname)==0) {
+        printf("Error: coefficient %s is declared more than once (manual 11.2.1)\n",coefs[i].cofname);
+        return -1;
+      }
+    for(r=0; reserved[r]!=NULL; r++)if(strcmp(coefs[i].cofname,reserved[r])==0) {
+        printf("Error: coefficient name %s is a reserved word (manual 11.2.1)\n",coefs[i].cofname);
+        return -1;
+      }
+  }
+  for(i=0; i<nvar; i++) {
+    for(k=0; k<nset; k++)if(strcmp(vars[i].cofname,sets[k].setname)==0) {
+        printf("Error: name %s is declared as both a variable and a set (manual 11.2.1)\n",vars[i].cofname);
+        return -1;
+      }
+    for(j=i+1; j<nvar; j++)if(strcmp(vars[i].cofname,vars[j].cofname)==0) {
+        printf("Error: variable %s is declared more than once (manual 11.2.1)\n",vars[i].cofname);
+        return -1;
+      }
+    for(r=0; reserved[r]!=NULL; r++)if(strcmp(vars[i].cofname,reserved[r])==0) {
+        printf("Error: variable name %s is a reserved word (manual 11.2.1)\n",vars[i].cofname);
+        return -1;
+      }
+  }
+  for(k=0; k<nset; k++)for(r=0; reserved[r]!=NULL; r++)if(strcmp(sets[k].setname,reserved[r])==0) {
+      printf("Error: set name %s is a reserved word (manual 11.2.1)\n",sets[k].setname);
+      return -1;
+    }
+  return 0;
+}
+
 /* mark coefficients declared inside POSTSIM sections (names recorded
    by the split) -- drives the 12.2.2 LHS rule and the 12.2.3
    Read-target rule; teems_coef_is_ps stays NULL when the TAB has no
