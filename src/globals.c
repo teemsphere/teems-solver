@@ -39,6 +39,13 @@ int teems_ps_ncoefs = 0;
 bool *teems_coef_is_ps = NULL;
 int teems_ps_pass = 0;
 
+/* Read (IfHeaderExists) satisfied per coefficient (manual 11.11.8;
+   plan 3.9): under the engine's reads-then-formulas pass order, a
+   satisfied conditional read supersedes formulas assigning the same
+   coefficient -- reproducing GEMPACK's file-order outcome for the
+   default-formula + conditional-read idiom */
+bool *teems_coef_ifhdr = NULL;
+
 /* CMF range-test modes (manual 25.4.4): 0 = no, 1 = warn (the
    GEMPACK default outside automatic accuracy), 2 = fatal */
 int teems_range_test_initial = 1;

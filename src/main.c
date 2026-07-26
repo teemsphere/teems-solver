@@ -1163,7 +1163,8 @@ int main(int argc,char **args) {
   //**************************************************************************************
   if(rank==0) {
     strcpy(commsyntax,"read");
-    if(data_read_files(tabfile,niodata,iodata,commsyntax,sets,nset,set_elems,coefs,ncof,coef_store,ncofele,vars,nvar,var_store,nvarele)==-1)return 0;
+    /* fail-fast: exit 0 here used to mask read errors */
+    if(data_read_files(tabfile,niodata,iodata,commsyntax,sets,nset,set_elems,coefs,ncof,coef_store,ncofele,vars,nvar,var_store,nvarele)==-1)MPI_Abort(PETSC_COMM_WORLD,1);
   }
   //**************************************************************************************
   //********************* END READ VARIABLE, COEFFICIENT VALUE FROM FILE******************

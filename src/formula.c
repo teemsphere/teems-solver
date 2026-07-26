@@ -1637,12 +1637,13 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
      pass its fresh initial state (manual 12.2.4) */
   zdiv_scan_reset();
   while (tab_next_statement_resolved(commsyntax,filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
-    /* audit A7: the combined FORMULA & EQUATION statement would run
-       its formula half (as ALWAYS, not INITIAL) while the equation
-       half silently vanishes from the system -- fail loudly until the
-       combined form is implemented (plan 2.2) */
+    /* audit A7 / plan 2.2: FORMULA & EQUATION expands to
+       Formula (initial) + Equation (levels) (manual 10.9.1) -- the
+       levels-equation half is outside this solver's linearized-only
+       scope, so the combined form stays fatal by design rather than
+       running the formula half while the equation silently vanishes */
     if (strstr(line,"& equation")!=NULL||strstr(line,"&equation")!=NULL) {
-      printf("Error: 'Formula & Equation' statements are not supported yet; write the Formula (initial) and Equation (levels) separately\n");
+      printf("Error: 'Formula & Equation' is not supported: its expansion needs a levels equation (manual 10.9.1); linearize the equation and set the base value with Formula (initial)\n");
       MPI_Abort(PETSC_COMM_WORLD,1);
     }
     /* positional INITIAL/ALWAYS default (manual 10.19; audit A6):
@@ -1867,6 +1868,13 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
               break;
             }
           } while (index--);
+        }
+        /* a satisfied Read (IfHeaderExists) supersedes formulas
+           assigning the read coefficient (manual 11.11.8 idiom under
+           the reads-then-formulas pass order, plan 3.9): keep all the
+           statement plumbing, evaluate nothing */
+        if (!check10&&teems_coef_ifhdr!=NULL&&teems_coef_ifhdr[index]) {
+          nloops=0;
         }
         /* PostSim Formula LHS must be a PostSim Coefficient (manual
            12.2.2): never a Variable, never an ordinary Coefficient */

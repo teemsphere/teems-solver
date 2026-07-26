@@ -7,6 +7,41 @@ semantics, POSTSIM, others").
 
 ## Progress log
 
+- **2026-07-26 — step-4 legacy qualifiers closed: IfHeaderExists
+  implemented; 2.2/3.6 dispositioned; 3.2 satisfied by A1**:
+  spec-first from manual 10.9.1/11.11.8. **3.9 Read (IfHeaderExists)**
+  (the one implementable item): qualifier stripped per statement in
+  data_read_files; an absent header skips the read silently at all
+  four not-found sites (bare/quantified × coefficient/variable);
+  KEY SEMANTIC FINDING — the engine runs ALL reads before ALL
+  formulas, so plain skip semantics would invert the manual's idiom
+  (default Formula then conditional Read: the formula would overwrite
+  the read every pass). A satisfied conditional read therefore MARKS
+  its coefficient (`teems_coef_ifhdr` parallel array) and
+  formulas_execute SUPERSEDES formulas assigning it (nloops=0 at LHS
+  resolution — statement plumbing intact, nothing evaluated),
+  reproducing GEMPACK's file-order outcome for the documented idiom.
+  Divergence recorded: a formula placed AFTER the conditional read
+  (would win in GEMPACK) also gets superseded — pathological pattern,
+  zero corpus uses of the qualifier at all. **2.2 FORMULA & EQUATION**:
+  expansion needs EQUATION(LEVELS) (10.9.1) — blocked on the levels
+  major, fatal-by-design with a remedy message (was mislabeled "pure
+  sugar" in the tier row). **3.6 LINEAR_NAME/LINEAR_VAR**: levels-only,
+  zero corpus levels-variable presence — stays A4-fatal, deferred with
+  the levels machinery. **3.2 Zerodivide qualifiers**: satisfied by
+  A1's flag-gated dual-class state; adoption decision open. WART
+  RECORDED: fully-quantified reads (`Read (all,r,REG) X(r) from ...`)
+  silently no-op even unqualified — pre-existing, not a corpus form
+  (bare + partial-with-elements are), fold into the fail-fast sweep.
+  Ride-along: data_read_files failure now MPI_Aborts (was `return 0`,
+  fourth exit-0 wart). Validated: verify.sh 14/14 bit-identical,
+  warnings 102; `.audit/legacyq-test-kit/run_legacyq_tests.sh` 8/8
+  (present leg: two conditional reads land AND supersede their
+  default formulas, assertion-checked sums; absent leg: no error,
+  defaults stand; headerless-form still errors; F&E fatal named);
+  all seven kits green; ASan+UBSan johansen-lu + re-lu clean plus a
+  sanitized present-leg run.
+
 - **2026-07-26 — 3.1 remaining intrinsics landed: ID0V, MAX, MIN,
   TRUNC0, TRUNCB; $POS deferred**: spec-first from manual
   11.5/11.5.1. Zero corpus uses (pure forward parity). **Multi-arg
@@ -488,7 +523,7 @@ Read-into-coefficient to a second pass.
 | # | Statement | Status | Manual role | Call | Notes / scrutiny |
 |---|---|---|---|---|---|
 |2.1|**WRITE (general)**|◐ solver handles only `Write X to file <log> header "…"` bound to a CMF outdata logname; R **drops** Write entirely (`tablo_process.R:162`)|CORE — HAR/text/terminal, `(SET)`/`(ALLSETS)`, LONGNAME, BY_ELEMENTS, `(POSTSIM)`|**RECONSIDERED 2026-07-25 (user)**|TEEMS handles writes by **writing all coefficients**: teems-R generates a `Write X to file <log> header` line per coefficient plus a matching CMF `outdata` entry (288 in the golden-re CMF), and `outputs_write_csv` dumps every one as a CSV that `ems_compose` surfaces. User-authored Write statements are architecturally superseded — R decides what is written (currently: everything). Therefore general WRITE is NOT a PostSim prerequisite: PostSim coefficients ride the same dump (R generates the Write+outdata pairs for the PostSim section exactly as for the ordinary section). GEMPACK file-targeting forms (HAR/text/terminal, `(SET)`, LONGNAME routing) stay unimplemented; user Writes in imported TABs are replaced by the write-everything scheme. Resolves scrutiny-register items 2 and 9. Residual niceties (implement only on demand): `Write ... to terminal` as a log print; a compose-side flag marking which outputs the TAB's own Writes selected.|
-|2.2|**FORMULA & EQUATION (combined)**|✗|COMMON shorthand = FORMULA(INITIAL)+EQUATION(LEVELS)|**PARITY (cheap)**|Pure sugar over two already-supported statements. 🔍 could be an **R-side declarative rewrite** (like the existing IF/netcut rewrites), keeping the solver unchanged — preferred if it fits single-source-of-truth.|
+|2.2|**FORMULA & EQUATION (combined)**|✗ fatal by design (2026-07-26)|COMMON shorthand = FORMULA(INITIAL)+EQUATION(LEVELS)|**BLOCKED (levels equations)**|The expansion's EQUATION(LEVELS) half is outside the linearized-only solver — NOT "two already-supported statements". Fatal names the dependency and the remedy (linearize + Formula (initial)). Unblocks only with a levels-equation major; an R-side rewrite hits the same wall.|
 |2.3|**DISPLAY**|✗ (R hard-aborts)|Manual calls it "old-fashioned"; SLC/CVL preferred, but used with PostSim|**QUESTION**|Implement the **`Display (postsim)`** path minimally for PostSim; treat standalone Display as low-priority legacy. 🔍|
 |2.4|**MAPPING … FROM … TO**|✗ (R hard-aborts)|COMMON/ADVANCED; used in index expressions; `(ONTO)`/`(PROJECT)`|**QUESTION**|🔍 Assess prevalence in the target corpus (GTAP standard uses little/no mapping). Real cost (index-expression evaluation). Defer unless a corpus TAB needs it.|
 |2.5|**COMPLEMENTARITY / MCP**|✗ (R hard-aborts)|ADVANCED (ch.51); bounds, NO_SPLIT internals, condensation/subtotal interplay|**QUESTION (major)**|🔍 Highest-cost item. Standard GTAP models don't use MCP. Decide scope: likely **defer** until a target model requires it; if adopted, it's a project of its own (bounds engine + NO_SPLIT variables + Newton path).|
@@ -502,14 +537,14 @@ Read-into-coefficient to a second pass.
 | # | Feature | Status | Manual role | Call | Notes |
 |---|---|---|---|---|---|
 |3.1|**Intrinsic functions** (EXP, LOGE, SQRT, ABS, **ID01/ID0V**, ROUND/TRUNC, MAX/MIN, …)|✗ formula compiler has only LOAD/±/×/÷/POW/IF_*|CORE expression functions|**PARITY (important)**|🔍 Real models use EXP/LOG in CES/CET nests; **ID01/ID0V** are the manual's recommended replacement for Zerodivide (and work in equations). Pick the subset first: EXP, LOGE, SQRT, ABS, ID01, ID0V, ROUND. Prerequisite-ish for PostSim reports.|
-|3.2|**ZERODIVIDE completeness** (`ZERO_BY_ZERO`/`NONZERO_BY_ZERO`, `OFF`)|◐ default form only|COMMON but manual calls it error-prone, recommends ID01/ID0V|**QUESTION**|Prefer investing in ID01/ID0V (3.1) as the modern path; implement Zerodivide's stateful qualifiers only for legacy-TAB parity. 🔍|
+|3.2|**ZERODIVIDE completeness** (`ZERO_BY_ZERO`/`NONZERO_BY_ZERO`, `OFF`)|✓ flag-gated (A1, 32297ec)|COMMON but manual calls it error-prone, recommends ID01/ID0V|**DONE (adoption open)**|Full dual-class semantics behind `-gpzerodivide 1`; default 0 keeps the bit-anchored legacy conflation. Flipping the default is a re-anchor-class decision. ID01/ID0V (3.1) are the modern path and are implemented.|
 |3.3|**Set `MAXIMUM SIZE`**|✗|**OBSOLETE** — modern GEMPACK silently ignores it (§11.7.2)|**SKIP (parse-and-ignore)**|Accept the keyword and discard it so legacy TABs parse; implement no semantics. Trivial, removes a hard failure.|
 |3.4|**UPDATE `(product)` qualifier**|◐ product is TEEMS's internal default; keyword not parsed|PRODUCT is the default update qualifier|**PARITY (trivial)**|Accept `(product)` as an explicit no-op default so TABs that write it parse.|
 |3.5|**`Keyword (DEFAULT=…)` statements**|◐ `default=levels/change` handled; other forms partial|COMMON|**PARITY**|🔍 Ensure all forms parse: COEFFICIENT/VARIABLE/FORMULA/EQUATION default resets, and default LOWER/UPPER_BOUND. Low cost, prevents surprise aborts.|
-|3.6|**Variable `LINEAR_NAME=` / `LINEAR_VAR=`**|✗|Override the auto `p_`/`c_`; associate with an existing linear var|**PARITY (LINEAR_NAME) / QUESTION (LINEAR_VAR)**|LINEAR_NAME is cheap naming. LINEAR_VAR (share one linear var across levels vars) is 🔍 — assess need.|
+|3.6|**Variable `LINEAR_NAME=` / `LINEAR_VAR=`**|✗ fatal (A4)|Override the auto `p_`/`c_`; associate with an existing linear var|**DEFERRED (levels variables)**|Levels-only qualifiers with ZERO corpus presence of levels VARIABLES at all; the naming override only matters once real levels-variable machinery exists. The A4 tokenizer fatals with a named remedy.|
 |3.7|**Variable `NO_SPLIT` / `VPQType`**|✗|NO_SPLIT internal (MCP/Newton); VPQType for homogeneity testing (ch.57)|**QUESTION → defer**|🔍 NO_SPLIT couples to MCP (2.5). VPQType is a testing-only annotation. Both defer.|
 |3.8|**FILE output qualifiers** (TEXT/GAMS, ROW/COL/SPREADSHEET/SSE, SEPARATOR, FOR_UPDATES)|◐ binding is CMF-driven, TAB File qualifiers mostly ignored|Mixed core/niche|**QUESTION**|🔍 Implement **text/SSE output** only if PostSim Write-to-text needs it; GAMS export is niche → SKIP. FOR_UPDATES relates to updated-data files.|
-|3.9|**READ `IfHeaderExists` / `BY_ELEMENTS`**|◐|Conditional read / set-mapping element read|**PARITY (minor)**|IfHeaderExists is a small robustness feature; BY_ELEMENTS pairs with Mapping (2.4).|
+|3.9|**READ `IfHeaderExists` / `BY_ELEMENTS`**|✓ IfHeaderExists (2026-07-26); BY_ELEMENTS ✗|Conditional read / set-mapping element read|**IfHeaderExists DONE**|Bare header-form reads: absent header skips silently; a satisfied read SUPERSEDES formulas assigning that coefficient (reproduces GEMPACK file-order for the default+conditional-read idiom under pass-ordered execution). BY_ELEMENTS pairs with Mapping (2.4).|
 |3.10|**Subset `(BY_NUMBERS)`**|✗|Rare/obsolete (positional)|**SKIP**|Element-name subsets (default) are the modern form; don't implement.|
 
 ---

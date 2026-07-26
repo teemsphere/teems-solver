@@ -220,6 +220,8 @@ extern bool *teems_coef_is_param;
    binary-locked array_def */
 extern int *teems_coef_gltype2;
 extern store_real *teems_coef_glval2;
+/* satisfied Read (IfHeaderExists) targets, parallel to coefs[] (3.9) */
+extern bool *teems_coef_ifhdr;
 /* GEMPACK dual-class zerodivide state (manual 10.11; plan A1): tracked
    positionally by the statement scanner, consulted by formula
    evaluation only under -gpzerodivide 1 (default 0 = the legacy single

@@ -495,9 +495,16 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
 
   while (tab_next_statement(commsyntax,filehandle,line,DATREADLINE)) {
     strcpy(linecopy,line);
+    /* Read (IfHeaderExists) qualifier (manual 10.6/11.11.8; plan 3.9):
+       the read runs only when the header is on the file; an absent
+       header is NOT an error -- values set up by earlier statements
+       stand. Header-form reads only (the headerless forms error
+       below regardless). */
+    int ifhdr=0;
     if (str_find_ci(line,"(ifheaderexists)")>-1) {
-      printf("Error: Read (IfHeaderExists) is not supported\n");
-      return -1;
+      ifhdr=1;
+      str_replace_first(line,"(ifheaderexists)","");
+      while (str_replace_all(line,"  "," "));
     }
     if (str_find_ci(line,"from terminal")>-1) {
       printf("Error: Read ... from terminal is not supported (read from a file instead)\n");
@@ -681,6 +688,11 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
             }
           }
           if(count2!=4){
+            if(ifhdr) {
+              /* absent header: skip the read silently (11.11.8) */
+              fclose(filehandle1);
+              break;
+            }
             printf("Error: header \"%s\" not found in the data file\n",header);
             return -1;
           }
@@ -830,9 +842,17 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
             }
           }
           if(count2!=2){
+            if(ifhdr) {
+              /* absent header: skip the read silently (11.11.8) */
+              fclose(filehandle1);
+              break;
+            }
             printf("Error: header \"%s\" not found in the data file\n",header);
             return -1;
           }
+          /* satisfied conditional read: formulas assigning this
+             coefficient are superseded (11.11.8 idiom, plan 3.9) */
+          if(ifhdr&&teems_coef_ifhdr!=NULL&&i<ncof)teems_coef_ifhdr[i]=true;
           fclose(filehandle1);
           break;
         }
@@ -1049,9 +1069,17 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
             }
           }
           if(count2!=2){
+            if(ifhdr) {
+              /* absent header: skip the read silently (11.11.8) */
+              fclose(filehandle1);
+              break;
+            }
             printf("Error: header \"%s\" not found in the data file\n",header);
             return -1;
           }
+          /* satisfied conditional read: formulas assigning this
+             coefficient are superseded (11.11.8 idiom, plan 3.9) */
+          if(ifhdr&&teems_coef_ifhdr!=NULL&&i<ncof)teems_coef_ifhdr[i]=true;
           fclose(filehandle1);
           break;
         }
@@ -1215,6 +1243,11 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
             }
           }
           if(count2!=4){
+            if(ifhdr) {
+              /* absent header: skip the read silently (11.11.8) */
+              fclose(filehandle1);
+              break;
+            }
             printf("Error: header \"%s\" not found in the data file\n",header);
             return -1;
           }
@@ -2401,6 +2434,8 @@ offset_t coefficients_read(char *fname, char *commsyntax, array_def *record, off
   free(teems_coef_glval2);
   teems_coef_gltype2= (int *) calloc (ncof+1,sizeof(int));
   teems_coef_glval2= (store_real *) calloc (ncof+1,sizeof(store_real));
+  free(teems_coef_ifhdr);
+  teems_coef_ifhdr= (bool *) calloc (ncof+1,sizeof(bool));
 
   while (tab_next_statement(commsyntax,filehandle,line,TABREADLINE)) {
     /* positional PARAMETER/NON_PARAMETER default for real
