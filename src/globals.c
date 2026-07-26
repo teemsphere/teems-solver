@@ -23,6 +23,13 @@ int teems_assertions_mode = 2;
    to coefs[] -- array_def itself is binary-locked to sol.var */
 bool *teems_coef_is_param = NULL;
 
+/* second declared-range bound (audit A9): a declaration may carry one
+   lower (GE/GT) and one upper (LE/LT) bound (manual 10.19.1); slot 1
+   lives in array_def.gltype/glval (binary-locked to sol.var), the
+   other-direction slot rides here, parallel to coefs[] */
+int *teems_coef_gltype2 = NULL;
+store_real *teems_coef_glval2 = NULL;
+
 /* CMF range-test modes (manual 25.4.4): 0 = no, 1 = warn (the
    GEMPACK default outside automatic accuracy), 2 = fatal */
 int teems_range_test_initial = 1;

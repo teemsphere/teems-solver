@@ -1978,9 +1978,12 @@ int tab_default_value(char *line, char *out) {
    is_variable selects the legal token set; explicit_param
    (coefficients only) reports an explicit PARAMETER/NON_PARAMETER
    token (1/0, -1 = none) and isint_out an INTEGER token -- the
-   default resolution (10.3/10.19) is the caller's. Returns 1 on
-   success, -1 on error. */
-static int tab_qualifiers_parse(char *line, offset_t ncommsyntax, array_def *rec, int *explicit_param, bool *isint_out, int is_variable) {
+   default resolution (10.3/10.19) is the caller's. A declaration may
+   carry one lower (GE/GT) and one upper (LE/LT) bound (manual
+   10.19.1; audit A9): the first goes to rec->gltype/glval, the
+   opposite-direction second to gltype2/glval2; a same-direction
+   duplicate is fatal. Returns 1 on success, -1 on error. */
+static int tab_qualifiers_parse(char *line, offset_t ncommsyntax, array_def *rec, int *explicit_param, bool *isint_out, int *gltype2, store_real *glval2, int is_variable) {
   char group[TABREADLINE],tok[TABREADLINE],*p,*q,*t,*s;
   offset_t len;
   int k,nbtype;
@@ -2059,9 +2062,17 @@ static int tab_qualifiers_parse(char *line, offset_t ncommsyntax, array_def *rec
       if(tok[0]=='l'&&tok[1]=='e')nbtype=BT_LE;
       if(tok[0]=='l'&&tok[1]=='t')nbtype=BT_LT;
       if(nbtype>0&&(isdigit((int)tok[2])||tok[2]=='-'||tok[2]=='+'||tok[2]=='.')) {
-        if(rec->gltype>0)printf("Warning: multiple range bounds on a %s declaration; only the last is enforced (single bound slot, audit A9)\n",is_variable?"variable":"coefficient");
-        rec->gltype=nbtype;
-        rec->glval=atof(tok+2);
+        if(rec->gltype>0) {
+          if((rec->gltype==BT_GE||rec->gltype==BT_GT)==(nbtype==BT_GE||nbtype==BT_GT)) {
+            printf("Error: duplicate %s bound on a %s declaration (one lower GE/GT and one upper LE/LT allowed)\n",(nbtype==BT_GE||nbtype==BT_GT)?"lower":"upper",is_variable?"variable":"coefficient");
+            return -1;
+          }
+          *gltype2=nbtype;
+          *glval2=atof(tok+2);
+        } else {
+          rec->gltype=nbtype;
+          rec->glval=atof(tok+2);
+        }
         continue;
       }
       printf("Error: unknown %s qualifier '%s'\n",is_variable?"variable":"coefficient",tok);
@@ -2075,6 +2086,8 @@ static int tab_qualifiers_parse(char *line, offset_t ncommsyntax, array_def *rec
 offset_t variables_read(char *fname, char *commsyntax, array_def *record, offset_t ncof, set_def *sets,dim_t nset) {
   FILE * filehandle;
   char line[TABREADLINE]="\0",linecopy[TABREADLINE],setname1[NAMESIZE],setname[NAMESIZE],setname2[NAMESIZE],setname3[NAMESIZE],finditem[NAMESIZE],finditem1[NAMESIZE],finditem2[NAMESIZE],finditem3[NAMESIZE],vname[NAMESIZE],defval[NAMESIZE];//,vnamecopy[NAMESIZE];
+  int vgltype2=0;
+  store_real vglval2=0;
   offset_t n,m,l,ncommsyntax=0,i,j=0,addi=0,add=0;
   dim_t dcount;
   char *readitem=NULL;
@@ -2104,7 +2117,7 @@ offset_t variables_read(char *fname, char *commsyntax, array_def *record, offset
     }
     /* tokenized qualifier parsing (audit A4): explicit qualifiers
        override the defaults above */
-    if (tab_qualifiers_parse(line,ncommsyntax,&record[j],NULL,NULL,1)<0) {
+    if (tab_qualifiers_parse(line,ncommsyntax,&record[j],NULL,NULL,&vgltype2,&vglval2,1)<0) {
       fclose(filehandle);
       return -1;
     }
@@ -2260,7 +2273,8 @@ offset_t coefficients_read(char *fname, char *commsyntax, array_def *record, off
   offset_t n,m,l,ncommsyntax=0,i=0,j=0,addi=0,add=0;
   dim_t dcount;
   bool DefParam=false,isint=false;
-  int expparam=-1;
+  int expparam=-1,cgltype2=0;
+  store_real cglval2=0;
   char defval[NAMESIZE];
   char *readitem=NULL;
   while (commsyntax[ncommsyntax] != '\0') {
@@ -2271,6 +2285,10 @@ offset_t coefficients_read(char *fname, char *commsyntax, array_def *record, off
      array_def is binary-locked to the R-side sol.var parser */
   free(teems_coef_is_param);
   teems_coef_is_param= (bool *) calloc (ncof+1,sizeof(bool));
+  free(teems_coef_gltype2);
+  free(teems_coef_glval2);
+  teems_coef_gltype2= (int *) calloc (ncof+1,sizeof(int));
+  teems_coef_glval2= (store_real *) calloc (ncof+1,sizeof(store_real));
 
   while (tab_next_statement(commsyntax,filehandle,line,TABREADLINE)) {
     /* positional PARAMETER/NON_PARAMETER default for real
@@ -2287,11 +2305,17 @@ offset_t coefficients_read(char *fname, char *commsyntax, array_def *record, off
        positional default */
     expparam=-1;
     isint=false;
-    if (tab_qualifiers_parse(line,ncommsyntax,&record[j],&expparam,&isint,0)<0) {
+    cgltype2=0;
+    cglval2=0;
+    if (tab_qualifiers_parse(line,ncommsyntax,&record[j],&expparam,&isint,&cgltype2,&cglval2,0)<0) {
       fclose(filehandle);
       return -1;
     }
-    if (j<ncof&&(expparam>=0?expparam==1:(isint||DefParam)))teems_coef_is_param[j]=true;
+    if (j<ncof) {
+      if (expparam>=0?expparam==1:(isint||DefParam))teems_coef_is_param[j]=true;
+      teems_coef_gltype2[j]=cgltype2;
+      teems_coef_glval2[j]=cglval2;
+    }
     while (str_replace_all(line," ", ""));
     strcpy(linecopy,line);
     {

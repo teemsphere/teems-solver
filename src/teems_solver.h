@@ -213,6 +213,11 @@ extern int teems_range_test_updated;
 void cmf_range_test_modes(char *filename, int *ini, int *upd);
 /* (parameter)-qualified coefficients, parallel to coefs[] (F2) */
 extern bool *teems_coef_is_param;
+/* second range bound (one lower + one upper per declaration, manual
+   10.19.1; audit A9), parallel to coefs[] -- slot 1 stays in the
+   binary-locked array_def */
+extern int *teems_coef_gltype2;
+extern store_real *teems_coef_glval2;
 /* GEMPACK dual-class zerodivide state (manual 10.11; plan A1): tracked
    positionally by the statement scanner, consulted by formula
    evaluation only under -gpzerodivide 1 (default 0 = the legacy single

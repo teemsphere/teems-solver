@@ -1070,7 +1070,8 @@ int main(int argc,char **args) {
   array_def *coefs= (array_def *) calloc (ncof,sizeof(array_def));//recycle ha_cgeset
   if(rank==0) {
     ncofele=coefficients_read(tabfile,commsyntax,coefs,ncof,sets,nset);
-    if(ncofele==-1)return 0;
+    /* fail-fast: exit 0 here used to mask declaration errors */
+    if(ncofele==-1)MPI_Abort(PETSC_COMM_WORLD,1);
     ncofele1=ncofele;
   }
   if(nohsl) {

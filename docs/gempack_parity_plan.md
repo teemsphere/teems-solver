@@ -7,6 +7,30 @@ semantics, POSTSIM, others").
 
 ## Progress log
 
+- **2026-07-26 — A9 second bound slot landed**: a declaration may carry
+  one lower (GE/GT) and one upper (LE/LT) bound (manual 10.19.1) —
+  the GDYNv3.6.tab:1771 `(ge 0, le 10)` case. Slot 1 stays in
+  `array_def.gltype/glval` (the struct is fwritten verbatim to sol.var
+  at main.c ~1982 = binary-locked, same reason as F2's is_param);
+  slot 2 rides the new `teems_coef_gltype2/teems_coef_glval2` parallel
+  arrays (calloc'd in coefficients_read, NULL elsewhere — ranks
+  without the read skip slot-2 checks, matching their prior slot-1-
+  only behavior). Tokenizer: first bound → slot 1, opposite-direction
+  second → slot 2, same-direction duplicate → fatal named error
+  (replaces A4's interim keep-last warning). Enforcement refactored
+  into one `coef_range_check()` helper (formula.c) called per slot in
+  all three regions (formulas + both update executors) under the
+  25.4.4 CMF modes; message text unchanged. Variables: both bounds
+  parse cleanly into discard slots (variable bounds were never
+  enforced solver-side — pre-existing gap, recorded). Ride-along:
+  coefficients_read failure now MPI_Aborts (was `return 0` — another
+  exit-0 wart, kit-caught). Validated: verify.sh 14/14 bit-identical,
+  warnings 102; `.audit/bounds-test-kit/run_bounds_tests.sh` 15/15
+  (slot-2 upper + slot-1 lower + reversed-order + in-range + CMF-yes
+  fatal + duplicate fatal); all four kits green; ASan+UBSan
+  johansen-lu + re-lu + gmshk clean. A4 kit's dblbound leg updated to
+  the two-slot semantics. Audit A-items now ALL closed (A1-A10).
+
 - **2026-07-26 — A6 Default-statement rework landed**: spec-first from
   manual 10.19/10.19.1. `tab_default_value` (tab_parse.c) detects a
   Default statement and extracts its space-squeezed value (spaced

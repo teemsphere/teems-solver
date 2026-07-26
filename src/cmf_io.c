@@ -1253,7 +1253,7 @@ int tab_defaults_validate(char *fname) {
     if(strncmp(line,"coefficient",11)==0) {
       if(strcmp(val,"parameter")==0||strcmp(val,"non_parameter")==0)continue;
       if(strncmp(val,"lower_bound",11)==0||strncmp(val,"upper_bound",11)==0)
-        printf("Error: Coefficient (default=%s): bound defaults are not supported (single bound slot, audit A9)\n",val);
+        printf("Error: Coefficient (default=%s): bound defaults are not supported\n",val);
       else printf("Error: unknown Coefficient default '%s'\n",val);
     } else if(strncmp(line,"variable",8)==0) {
       if(strcmp(val,"linear")==0||strcmp(val,"levels")==0||strcmp(val,"change")==0||strcmp(val,"percent_change")==0)continue;
