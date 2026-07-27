@@ -1198,6 +1198,7 @@ int main(int argc,char **args) {
   if(rank==0) {
     strcpy(commsyntax,"exogenous");
     nexo=closure_read(closure,commsyntax,closure_vals,vars,nvar,sets,nset,set_elems);
+    if(nexo==-1)return 0;
     nexo1=nexo;
     strcpy(commsyntax,"shock");
     if(shocks_read(shock,commsyntax,closure_vals,nvarele,vars,nvar,sets,nset,set_elems,subints)==-1)return 0;

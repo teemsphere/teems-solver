@@ -1769,6 +1769,11 @@ offset_t closure_read(char *fname, char *commsyntax,closure_entry *closure_vals,
   int k1,k2;
   bool check;
   filehandle = fopen(fname,"r");
+  if (filehandle==NULL) {
+    printf("Error: cannot open closure file %s\n",fname);
+    MPI_Abort(PETSC_COMM_WORLD,1);
+    return -1;
+  }
   while (closure_next_statement(commsyntax,filehandle,line)) {
     while (str_strip_comment(line,"!"));
     str_replace_all(line,";", " ;");
@@ -1801,9 +1806,11 @@ offset_t closure_read(char *fname, char *commsyntax,closure_entry *closure_vals,
     }
     n1=str_count_char(line,' ');
     readitem = strchr(line,' ');
+    if (readitem==NULL) continue;
     readitem++;
     for (i=0; i<n1-1; i++) {
       p = strchr(readitem,' ');
+      if (p==NULL) break;
       strncpy(vname,readitem,p-readitem);
       vname[p-readitem]='\0';
       readitem=p;
@@ -1822,7 +1829,12 @@ offset_t closure_read(char *fname, char *commsyntax,closure_entry *closure_vals,
             check=false;
             break;
           }
-          if(j==nvar&&vname[0]!=';')printf("Error: variable %s is not declared\n",vname);
+          if(j==nvar&&vname[0]!=';') {
+            printf("Error: variable %s is not declared (closure file)\n",vname);
+            fclose(filehandle);
+            MPI_Abort(PETSC_COMM_WORLD,1);
+            return -1;
+          }
       } else {
         dims=1;
         p = strtok(vname,"(");
@@ -1833,6 +1845,14 @@ offset_t closure_read(char *fname, char *commsyntax,closure_entry *closure_vals,
             switch (vars[j].size) {
             case 1:
               p = strtok(NULL,")");//p = strtok(vname,")");
+              if (p==NULL) {
+                printf("Error: malformed entry for variable %s (closure file)\n",vars[j].cofname);
+                free(arSet);
+                free(exoantidim);
+                fclose(filehandle);
+                MPI_Abort(PETSC_COMM_WORLD,1);
+                return -1;
+              }
               if (strchr(p,'"')!=NULL) {
                 strcpy(argu,p);
                 p=strchr(argu,'"');
@@ -1846,7 +1866,14 @@ offset_t closure_read(char *fname, char *commsyntax,closure_entry *closure_vals,
                     check=false;
                     break;
                   }
-                  if(l1==sets[vars[j].setid[0]].size)printf("Error: element %s is not in set %s (in %s)\n",p,sets[vars[j].setid[0]].setname,vars[j].cofname);
+                  if(l1==sets[vars[j].setid[0]].size) {
+                    printf("Error: element %s is not in set %s (in %s)\n",p,sets[vars[j].setid[0]].setname,vars[j].cofname);
+                    free(arSet);
+                    free(exoantidim);
+                    fclose(filehandle);
+                    MPI_Abort(PETSC_COMM_WORLD,1);
+                    return -1;
+                  }
               } else {
                 if(strcmp(p,sets[vars[j].setid[0]].setname)==0) {
                   arSet[0].setid=vars[j].setid[0];
@@ -1861,18 +1888,41 @@ offset_t closure_read(char *fname, char *commsyntax,closure_entry *closure_vals,
                       dims=sets[arSet[0].setid].size;
                       break;
                     }
-                    if(l1==nset)printf("Error: set %s is not declared (in %s)\n",p,vars[j].cofname);
+                    if(l1==nset) {
+                      printf("Error: set %s is not declared (in %s)\n",p,vars[j].cofname);
+                      free(arSet);
+                      free(exoantidim);
+                      fclose(filehandle);
+                      MPI_Abort(PETSC_COMM_WORLD,1);
+                      return -1;
+                    }
                 }
               }
               break;
             default:
               p = strtok(NULL,")");
+              if (p==NULL) {
+                printf("Error: malformed entry for variable %s (closure file)\n",vars[j].cofname);
+                free(arSet);
+                free(exoantidim);
+                fclose(filehandle);
+                MPI_Abort(PETSC_COMM_WORLD,1);
+                return -1;
+              }
               strcat(p,",");
               for (l=0; l<vars[j].size; l++) {
                 if (l==0) {
                   p = strtok(p,",");
                 } else {
                   p = strtok(NULL,",");
+                }
+                if (p==NULL) {
+                  printf("Error: wrong number of arguments for variable %s (closure file)\n",vars[j].cofname);
+                  free(arSet);
+                  free(exoantidim);
+                  fclose(filehandle);
+                  MPI_Abort(PETSC_COMM_WORLD,1);
+                  return -1;
                 }
                 if (*p=='"') {
                   strcpy(argu,p+1);
@@ -1882,7 +1932,14 @@ offset_t closure_read(char *fname, char *commsyntax,closure_entry *closure_vals,
                       supsetid[l]=-2;
                       break;
                     }
-                    if(l1==sets[vars[j].setid[l]].size)printf("Error: element %s is not in set %s (in %s)\n",argu,sets[vars[j].setid[l]].setname,vars[j].cofname);
+                    if(l1==sets[vars[j].setid[l]].size) {
+                      printf("Error: element %s is not in set %s (in %s)\n",argu,sets[vars[j].setid[l]].setname,vars[j].cofname);
+                      free(arSet);
+                      free(exoantidim);
+                      fclose(filehandle);
+                      MPI_Abort(PETSC_COMM_WORLD,1);
+                      return -1;
+                    }
                 } else {
                   if(strcmp(p,sets[vars[j].setid[l]].setname)==0) {
                     arSet[l].setid=vars[j].setid[l];
@@ -1894,7 +1951,14 @@ offset_t closure_read(char *fname, char *commsyntax,closure_entry *closure_vals,
                         dims=dims*sets[arSet[l].setid].size;
                         break;
                       }
-                      if(l1==nset)printf("Error: set %s is not declared (in %s)\n",p,vars[j].cofname);
+                      if(l1==nset) {
+                        printf("Error: set %s is not declared (in %s)\n",p,vars[j].cofname);
+                        free(arSet);
+                        free(exoantidim);
+                        fclose(filehandle);
+                        MPI_Abort(PETSC_COMM_WORLD,1);
+                        return -1;
+                      }
                   }
                 }
               }
@@ -1925,7 +1989,12 @@ offset_t closure_read(char *fname, char *commsyntax,closure_entry *closure_vals,
             free(exoantidim);
             break;
           }
-          if(j==nvar)printf("Error: variable %s is not declared\n",p);
+          if(j==nvar) {
+            printf("Error: variable %s is not declared (closure file)\n",p);
+            fclose(filehandle);
+            MPI_Abort(PETSC_COMM_WORLD,1);
+            return -1;
+          }
       }
     }
   }
@@ -1945,7 +2014,9 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
   offset_t j,l=0,dims,n1,l1,l2,dcount,supsetid[MAXSUPSET],sup;
   solve_real val;
       if ( (filehandle = fopen(fname,"r")) == NULL ) {
-        printf("Error: cannot open %s\n",fname);
+        printf("Error: cannot open shock file %s\n",fname);
+        MPI_Abort(PETSC_COMM_WORLD,1);
+        return -1;
       }
   while (tab_next_statement(commsyntax,filehandle,line,DATREADLINE)) {
     str_replace_char_all(line,'\r',' ');
@@ -1957,7 +2028,9 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
       k1++;
     }
     if(k1>=DATREADLINE){
-      printf("Error: shock statement exceeds the line buffer; increase TABREADLINE\n");
+      printf("Error: shock statement exceeds the line buffer; increase DATREADLINE\n");
+      fclose(filehandle);
+      MPI_Abort(PETSC_COMM_WORLD,1);
       return -1;
     }
     str_replace_all_bounded(line,";", " ;",DATREADLINE);
@@ -1982,8 +2055,20 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
     }
     if (varnset==0) {
       readitem = strtok(NULL,"=");
+      if (readitem==NULL) {
+        printf("Error: malformed shock statement (shock file)\n");
+        fclose(filehandle);
+        MPI_Abort(PETSC_COMM_WORLD,1);
+        return -1;
+      }
       for (j=0; j<nvar; j++) if (strcmp(readitem,vars[j].cofname)==0) {
           readitem = strtok(NULL,";");
+          if (readitem==NULL) {
+            printf("Error: shock statement for variable %s has no value (shock file)\n",vars[j].cofname);
+            fclose(filehandle);
+            MPI_Abort(PETSC_COMM_WORLD,1);
+            return -1;
+          }
           k1=str_rfind_ci(readitem,"uniform");
           if(k1!=-1){
             closure_vals[vars[j].offset].shock_value=atof(readitem+k1+1)/subints;
@@ -1993,15 +2078,35 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
           l=l+1;
           break;
         }
+      /* previously fell through in silence: the shock never landed and
+         the run solved an unshocked model */
+      if (j==nvar&&readitem[0]!=';') {
+        printf("Error: %s in the shock file is not a declared variable\n",readitem);
+        fclose(filehandle);
+        MPI_Abort(PETSC_COMM_WORLD,1);
+        return -1;
+      }
     } else {
       readitem = strtok(NULL,"(");
       for (j=0; j<nvar; j++) {
         if (strcmp(readitem,vars[j].cofname)==0) {
           dims=1;
           readitem = strtok(NULL,")");
+          if (readitem==NULL) {
+            printf("Error: malformed shock statement for variable %s (shock file)\n",vars[j].cofname);
+            fclose(filehandle);
+            MPI_Abort(PETSC_COMM_WORLD,1);
+            return -1;
+          }
           strcpy(argu,readitem);
           readitem = strtok(NULL,"=");
           readitem = strtok(NULL,";");
+          if (readitem==NULL) {
+            printf("Error: shock statement for variable %s has no value (shock file)\n",vars[j].cofname);
+            fclose(filehandle);
+            MPI_Abort(PETSC_COMM_WORLD,1);
+            return -1;
+          }
           strcpy(linecopy,readitem);
           strcat(linecopy," ");
           strcat(argu,",");
@@ -2018,6 +2123,12 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
               p=strtok(argu,",");
             } else {
               p=strtok(NULL,",");
+            }
+            if (p==NULL) {
+              printf("Error: wrong number of arguments for variable %s (shock file)\n",vars[j].cofname);
+              fclose(filehandle);
+              MPI_Abort(PETSC_COMM_WORLD,1);
+              return -1;
             }
             if(strchr(p,'\"')==NULL) {
               if((strcmp(sets[vars[j].setid[n1]].setname,p)==0)) {
@@ -2036,12 +2147,14 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
                       }
                     if(sup==MAXSUPSET){
                       printf("Error: %s is not a valid set at that position of variable %s (shock file)\n",p,vars[j].cofname);
+                      MPI_Abort(PETSC_COMM_WORLD,1);
                       return -1;
                     }
                     break;
                   }
                   if(k1==nset){
                     printf("Error: %s in variable %s (shock file) is not a set\n",p,vars[j].cofname);
+                    MPI_Abort(PETSC_COMM_WORLD,1);
                     return -1;
                   }
               }
@@ -2058,6 +2171,7 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
                 }
               if(k1==sets[vars[j].setid[n1]].size){
                 printf("Error: %s in variable %s (shock file) is not a set element\n",p,vars[j].cofname);
+                MPI_Abort(PETSC_COMM_WORLD,1);
                 return -1;
               }
             }
@@ -2105,6 +2219,12 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
               } else {
                 readitem=strtok(NULL," ");
               }
+              if (readitem==NULL) {
+                printf("Error: shock statement for variable %s supplies fewer values than elements (%ld expected) (shock file)\n",vars[j].cofname,(long)dims);
+                fclose(filehandle);
+                MPI_Abort(PETSC_COMM_WORLD,1);
+                return -1;
+              }
               val=atof(readitem);
               l2=n1;
               if(vars[j].size>1) {
@@ -2135,6 +2255,7 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
       }
       if(j==nvar){
         printf("Error: %s in the shock file is not a declared variable\n",readitem);
+        MPI_Abort(PETSC_COMM_WORLD,1);
         return -1;
       }
     }
