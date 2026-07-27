@@ -7,7 +7,32 @@ semantics, POSTSIM, others").
 
 ## Progress log
 
-- **2026-07-26 — 12.2.2 name-resolution spec pass closed: it is a
+- **2026-07-28 — step-5 corpus survey (decision evidence for the
+  scrutiny register)**: statement-leading keyword census over 71
+  unique TABs (54 archive `tab_files/` + 19 extracted from the 11
+  `original_tabs/` zips, deduped by content hash; comments and
+  `# labels #` stripped before matching). **Transfer: 0 uses.
+  Loop/Break/Cycle: 0 uses** — recommend reject-cleanly dispositions
+  for 2.6 and 2.7. **Complementarity: exactly 1 model** — GMig2 v3.0
+  (migration bound `Complementarity (variable=NMIGSP, lower_bound=0)`);
+  2.5 needed only if migration modeling becomes a target.
+  **Mapping: 19 statements across 7 files, all GTAP-family, and
+  load-bearing where present**: GTAP-E/-EP use `REGTOBLOC` (REG→BLOC)
+  20x each in the emissions-trading machinery — as an index function
+  (`del_nctaxb(REGTOBLOC(r))`) and in mapping-conditional sums
+  (`sum{r,REG: REGTOBLOC(r) = b, CO2T(r)}`); GTAP-AEZ uses
+  MACTS/MAPFORSLCOV/MAPGRAZLCOV for land-cover; classic gtap.tab has
+  the same REGTOBLOC pattern; GMig2 has MAPPROD. The upstream
+  gtapv7.tab core's UCOM2COMM/UACT2ACTS are the user→model
+  aggregation identity (`UCOM2COMM(c) = $POS(c)` feeding the CNT
+  welfare accounting) — subsumed by TEEMS's R-side aggregation
+  (UCOM≡COMM here) and coupled to the rejected `$POS` intrinsic, so
+  the core model needs nothing. **The named validation targets
+  GDYNv3.6 and gtapep use NONE of the four majors.** Net: 2.4 Mapping
+  is the only major with real demand, and the demand is specifically
+  GTAP-E/-EP/-AEZ (energy/emissions/land-use satellites); its hard
+  part is the mapping-valued index + `MAP(r) = b` set-condition forms,
+  not the declaration.
   UNIQUENESS rule, not a resolution order (manual 11.2.1)**: "the
   duplication of a name for two different purposes is not allowed …
   you cannot use 'X1' to denote a coefficient and 'x1' to be a
