@@ -38,8 +38,9 @@ solve_real formula_subst_scalar(char *var2, elem_value *record, array_def *coefs
 
 /* split a lowered mapping token "map@idx" (mapping_lower_calls):
    returns the index part and sets *mp to mapping id + 1, or returns
-   the token unchanged with *mp = 0 */
-static char *map_split(char *p, int *mp) {
+   the token unchanged with *mp = 0.  Shared with the jacobian-side
+   linear-variable index walk (design doc M2b). */
+char *mapping_token_split(char *p, int *mp) {
   char *at;
   dim_t m;
   *mp=0;
@@ -122,7 +123,7 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
         p=strtok(NULL,"}");
         leadlag=0;
         parse_index_leadlag(p,&leadlag);
-          p=map_split(p,&mp);
+          p=mapping_token_split(p,&mp);
        for (l=0; l<fdim; l++) {
              if(varindex==2) {
               ops[nops].Var2Dims[l].ADims=0;
@@ -171,7 +172,7 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
           p=strtok(NULL,",");
           leadlag=0;
           parse_index_leadlag(p,&leadlag);
-          p=map_split(p,&mp);
+          p=mapping_token_split(p,&mp);
           for (l1=0; l1<fdim; l1++) {
             if (strcmp(p,arSet[l1].index_name)==0) {
               if(mp>0) {
@@ -200,7 +201,7 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
         p=strtok(NULL,"}");
         leadlag=0;
         parse_index_leadlag(p,&leadlag);
-          p=map_split(p,&mp);
+          p=mapping_token_split(p,&mp);
         for (l1=0; l1<fdim; l1++) {
           if (strcmp(p,arSet[l1].index_name)==0) {
             if(mp>0) {
@@ -259,7 +260,7 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
         p=strtok(NULL,"}");
         leadlag=0;
         parse_index_leadlag(p,&leadlag);
-          p=map_split(p,&mp);
+          p=mapping_token_split(p,&mp);
         for (l=0; l<fdim; l++) {
              if(varindex==2) {
               ops[nops].Var2Dims[l].ADims=0;
@@ -308,7 +309,7 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
           p=strtok(NULL,",");
           leadlag=0;
           parse_index_leadlag(p,&leadlag);
-          p=map_split(p,&mp);
+          p=mapping_token_split(p,&mp);
           for (l1=0; l1<fdim; l1++) {
             if (strcmp(p,arSet[l1].index_name)==0) {
               if(mp>0) {
@@ -337,7 +338,7 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
         p=strtok(NULL,"}");
         leadlag=0;
         parse_index_leadlag(p,&leadlag);
-          p=map_split(p,&mp);
+          p=mapping_token_split(p,&mp);
         for (l1=0; l1<fdim; l1++) {
           if (strcmp(p,arSet[l1].index_name)==0) {
             if(mp>0) {

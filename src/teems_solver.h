@@ -295,6 +295,7 @@ typedef struct
   char dimsetnames[MAXVARDIM][NAMESIZE];
   dim_t dimleadlag[MAXVARDIM];
   dim_t dimindx[MAXVARDIM];
+  int dimmapid[MAXVARDIM];   /* >0: dim routes via teems_maps[id-1] (11.9.5, M2b) */
 } eq_var_ref ;
 
 /* per-equation-statement addressing metadata, captured by
@@ -357,6 +358,9 @@ int mapping_values_read(char *fname, int niodata, cmf_file_entry *iodata, map_de
 int mapping_use_guards(char *fname, map_def *maps, dim_t nmap);
 void mapping_lower_calls(char *line);
 void mapping_reject_in(char *line, const char *what);
+char *mapping_token_split(char *p, int *mp);
+void mapping_eq_sum_guard(char *line);
+void mapping_eq_matsol_guard(char *fname);
 int mappings_validate(map_def *maps, dim_t nmap, set_def *sets, set_element *set_elems);
 offset_t postsim_reads_execute(char *psname, int niodata, cmf_file_entry *iodata, set_def *sets, dim_t nset, set_element *set_elems, array_def *coefs, offset_t ncof, offset_t ncofele, array_def *vars, offset_t nvar, offset_t nvarele, elem_value *elem_vals);
 /* Default-statement helpers (manual 10.19; audit A6): positional

@@ -1177,7 +1177,12 @@ int main(int argc,char **args) {
 
   if(rank==0)coef_resolve_sets(vars,nvar,sets,nset,var_store);
 
-  if(rank==rank_hsl)tab_write_variables(tabfile,newtabfile1,vars,nvar);
+  if(rank==rank_hsl) {
+    tab_write_variables(tabfile,newtabfile1,vars,nvar);
+    /* interim M2b guard: mapped equation columns are invisible to the
+       bordered methods' block classification, so they run only under LU */
+    if(matsol!=MM_LU)mapping_eq_matsol_guard(newtabfile1);
+  }
   strcpy(tabfile,newtabfile1);
   if(nohsl) {
     MPI_Bcast(sets,nset*sizeof(set_def), MPI_BYTE,0, PETSC_COMM_WORLD);

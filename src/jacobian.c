@@ -40,6 +40,7 @@ typedef struct
   offset_t dcountdim2[4*MAXVARDIM];
   dim_t dcountdim3[MAXVARDIM];      /* variable dim -> arSet position */
   dim_t supset[MAXSUPSET];          /* superset_pos column per dim, 0 = direct */
+  int dcountmap[MAXVARDIM];         /* >0: dim routes via teems_maps[id-1] (M2b) */
   dim_t dimleadlag[MAXVARDIM];
   sum_prog *sums;                   /* coefficient-expression sums */
   int nsums;
@@ -299,7 +300,12 @@ static void stmt_prog_execute(stmt_prog *st, offset_t matrow, offset_t *eq_addr,
           }
           li3=0;
           for (dcount=0; dcount<vars[lv->LinVarIndx].size; dcount++) {
-            if(lv->supset[dcount]==0) {
+            if(lv->dcountmap[dcount]>0) {
+              /* mapped dim (M2b): the loop runs the domain; the column
+                 sits at the mapping's codomain position */
+              li3=li3+((offset_t)teems_maps[lv->dcountmap[dcount]-1].values[arSet1[lv->dcountdim3[dcount]].indx])*vars[lv->LinVarIndx].strides[dcount];
+            }
+            else if(lv->supset[dcount]==0) {
               li3=li3+(arSet1[lv->dcountdim3[dcount]].indx+lv->dimleadlag[dcount])*vars[lv->LinVarIndx].strides[dcount];
             }
             else {
@@ -340,6 +346,102 @@ static void stmt_prog_execute(stmt_prog *st, offset_t matrow, offset_t *eq_addr,
   }
 }
 
+/* One index token of a linear-variable reference (shared by the
+   statement builder, the preallocation scan and the two ordering
+   scans, whose per-dim recovery blocks were verbatim copies): decode
+   the lead/lag, then recover the set the dim loops over -- from the
+   (all,idx,SET) quantifier when idx is quantified, else from the
+   textually nearest enclosing sum(idx,SET,...) before the reference
+   (lvar = the reference's offset in the statement text, the original
+   occurrence disambiguation).  A lowered mapping token map@idx
+   (design doc M2b) splits instead of searching: in split mode -- the
+   builder/preallocation, whose loops iterate the DOMAIN and route the
+   column offset through the mapping's value table -- dimnames gets
+   the bare index, dimsetnames the domain set and dimmapid the
+   mapping id; in keep mode -- the ordering scans -- the whole token
+   is kept, so it matches no quantifier and the reference classifies
+   as crossing blocks (the conservative direction), and dimsetnames
+   gets the codomain so border marking resolves it to the declared
+   set's full range. */
+static void linvar_dim_read(char *p, char *linecopy, offset_t lvar,
+                            eq_var_ref *ref, dim_t d, bool split_mapped,
+                            set_def *sets) {
+  char lintmp[TABREADLINE],*p1;
+  offset_t l1,lvar3;
+  int leadlag=0,lvar1,lvar2,lvar4,mp=0;
+  if(p==NULL)p="";
+  parse_index_leadlag(p,&leadlag);
+  ref->dimleadlag[d]=leadlag;
+  ref->dimmapid[d]=0;
+  if(strchr(p,'@')!=NULL) {
+    char *idx=mapping_token_split(p,&mp);
+    if(split_mapped) {
+      ref->dimmapid[d]=mp;
+      strcpy(ref->dimnames[d],idx);
+      strcpy(ref->dimsetnames[d],sets[teems_maps[mp-1].fromset].setname);
+    }
+    else {
+      *(idx-1)='@';
+      strcpy(ref->dimnames[d],p);
+      strcpy(ref->dimsetnames[d],sets[teems_maps[mp-1].toset].setname);
+    }
+    return;
+  }
+  strcpy(ref->dimnames[d],p);
+  strcpy(lintmp,"(all,");
+  strcat(lintmp,p);
+  strcat(lintmp,",");
+  l1=str_find_ci(linecopy,lintmp);
+  if (l1>-1) {
+    p1=&linecopy[0]+l1;
+    strncpy(ref->dimsetnames[d],p1+strlen(lintmp),strchr(p1,')')-p1-strlen(lintmp));
+  }
+  else {
+    strcpy(lintmp,"sum(");
+    strcat(lintmp,p);
+    strcat(lintmp,",");
+    lvar1=str_count_ci(linecopy,lintmp);
+    lvar3=str_find_ci(linecopy,lintmp);
+    if (lvar1>1) for(lvar2=0; lvar2<lvar1; lvar2++) {
+        lvar4=str_find_ci(&linecopy[lvar3+4],lintmp);
+        if (lvar4>-1&&lvar4<lvar) {
+          lvar3=lvar3+lvar4+4;
+        }
+        else {
+          break;
+        }
+      }
+    p1=&linecopy[0]+lvar3;
+    p1=p1+strlen(lintmp);
+    strncpy(ref->dimsetnames[d],p1,strchr(p1,',')-p1);
+  }
+}
+
+/* Validate one mapped dimension of a linear-variable reference and
+   disable superset routing for it (the column offset goes through the
+   mapping's value table instead): the loop index must range over the
+   mapping's domain set exactly and the declared dim set must be the
+   codomain exactly -- the same contract map_dim_bind enforces on the
+   coefficient side -- and a lead/lag offset through a mapping has no
+   meaning.  Named fatals, not mis-binds. */
+static void linvar_map_dim_check(eq_var_ref *ref, dim_t d, offset_t frame_setid,
+                                 array_def *vars) {
+  map_def *md=&teems_maps[ref->dimmapid[d]-1];
+  if((offset_t)md->fromset!=frame_setid) {
+    printf("Error: the index of mapping %s does not range over its domain set (in %s); subset routing around a mapped argument is not supported\n",md->mapname,ref->LinVarName);
+    MPI_Abort(PETSC_COMM_WORLD,1);
+  }
+  if((offset_t)md->toset!=vars[ref->LinVarIndx].setid[d]) {
+    printf("Error: mapping %s does not map into the argument set at that position of %s (manual 11.9.7)\n",md->mapname,ref->LinVarName);
+    MPI_Abort(PETSC_COMM_WORLD,1);
+  }
+  if(ref->dimleadlag[d]!=0) {
+    printf("Error: a lead/lag offset on the mapped index of %s (mapping %s) is not supported\n",ref->LinVarName,md->mapname);
+    MPI_Abort(PETSC_COMM_WORLD,1);
+  }
+  md->used=true;
+}
+
 /* Build one equation statement's compiled programs into *stp (the build
    half of the former jacobian_fill loop body; the statement text in line
    is consumed).  force_all treats every row of the block as owned --
@@ -357,7 +459,6 @@ static void stmt_prog_build_one(char *line, stmt_prog *stp, char *commsyntax,
   char *readitem=NULL,*p=NULL,*p1=NULL;
   PetscInt Jindx=0;
   bool isinproc;
-  mapping_reject_in(line,"Equation");
   dim_t fdim,np,dcount,fdimlin=0,i4,sup,supset[MAXSUPSET];
   int totalsum,sumcount=1,sumcount1=0,lvar,lvar1,lvar2,lvar3,lvar4;
   offset_t lj,l1,i1=0,sumbegadd,dcountdim1[4*MAXVARDIM],dcountdim2[4*MAXVARDIM],dcountdim3[4*MAXVARDIM],nloops,nloopslin,nloopsfac,li3,nsumele,nsumele1,l2;
@@ -459,109 +560,16 @@ static void stmt_prog_build_one(char *line, stmt_prog *stp, char *commsyntax,
           case 1:
             p = strtok(tline,"{");
             p = strtok(NULL,"}");
-            leadlag=0;
-            if(p==NULL)p="";
-            parse_index_leadlag(p,&leadlag);
-            strcpy(LinVars[i3].dimnames[0],p);
-            LinVars[i3].dimleadlag[0]=leadlag;
-            strcpy(lintmp,"(all,");
-            strcat(lintmp,p);
-            strcat(lintmp,",");
-            l1=str_find_ci(linecopy,lintmp);
-            if (l1>-1) {
-              p1=&linecopy[0]+l1;
-              strncpy(LinVars[i3].dimsetnames[0],p1+strlen(lintmp),strchr(p1,')')-p1-strlen(lintmp));
-            }
-            else {
-              strcpy(lintmp,"sum(");
-              strcat(lintmp,p);
-              strcat(lintmp,",");
-              lvar1=str_count_ci(linecopy,lintmp);
-              lvar3=str_find_ci(linecopy,lintmp);
-              if (lvar1>1) for(lvar2=0; lvar2<lvar1; lvar2++) {
-                  lvar4=str_find_ci(&linecopy[lvar3+4],lintmp);
-                  if (lvar4>-1&&lvar4<lvar) {
-                    lvar3=lvar3+lvar4+4;
-                  }
-                  else {
-                    break;
-                  }
-                }
-              p1=&linecopy[0]+lvar3;
-              p1=p1+strlen(lintmp);
-              strncpy(LinVars[i3].dimsetnames[0],p1,strchr(p1,',')-p1);
-            }
+            linvar_dim_read(p,linecopy,lvar,&LinVars[i3],0,true,sets);
             break;
           default:
             p = strtok(tline,"{");
             for (i4=0; i4<vars[l].size-1; i4++) {
               p = strtok(NULL,",");
-              leadlag=0;
-              if(p==NULL)p="";
-              parse_index_leadlag(p,&leadlag);
-              strcpy(LinVars[i3].dimnames[i4],p);
-              LinVars[i3].dimleadlag[i4]=leadlag;
-              strcpy(lintmp,"(all,");
-              strcat(lintmp,p);
-              strcat(lintmp,",");
-              l1=str_find_ci(linecopy,lintmp);
-              if (l1>-1) {
-                p1=&linecopy[0]+l1;
-                strncpy(LinVars[i3].dimsetnames[i4],p1+strlen(lintmp),strchr(p1,')')-p1-strlen(lintmp));
-              }
-              else {
-                strcpy(lintmp,"sum(");
-                strcat(lintmp,p);
-                strcat(lintmp,",");
-                lvar1=str_count_ci(linecopy,lintmp);
-                lvar3=str_find_ci(linecopy,lintmp);
-                if (lvar1>1) for(lvar2=0; lvar2<lvar1; lvar2++) {
-                    lvar4=str_find_ci(&linecopy[lvar3+4],lintmp);
-                    if (lvar4>-1&&lvar4<lvar) {
-                      lvar3=lvar3+lvar4+4;
-                    }
-                    else {
-                      break;
-                    }
-                  }
-                p1=&linecopy[0]+lvar3;
-                p1=p1+strlen(lintmp);
-                strncpy(LinVars[i3].dimsetnames[i4],p1,strchr(p1,',')-p1);
-              }
+              linvar_dim_read(p,linecopy,lvar,&LinVars[i3],i4,true,sets);
             }
             p = strtok(NULL,"}");
-            leadlag=0;
-            if(p==NULL)p="";
-            parse_index_leadlag(p,&leadlag);
-            strcpy(LinVars[i3].dimnames[i4],p);
-            LinVars[i3].dimleadlag[i4]=leadlag;
-            strcpy(lintmp,"(all,");
-            strcat(lintmp,p);
-            strcat(lintmp,",");
-            l1=str_find_ci(linecopy,lintmp);
-            if (l1>-1) {
-              p1=&linecopy[0]+l1;
-              strncpy(LinVars[i3].dimsetnames[i4],p1+strlen(lintmp),strchr(p1,')')-p1-strlen(lintmp));
-            }
-            else {
-              strcpy(lintmp,"sum(");
-              strcat(lintmp,p);
-              strcat(lintmp,",");
-              lvar1=str_count_ci(linecopy,lintmp);
-              lvar3=str_find_ci(linecopy,lintmp);
-              if (lvar1>1) for(lvar2=0; lvar2<lvar1; lvar2++) {
-                  lvar4=str_find_ci(&linecopy[lvar3+4],lintmp);
-                  if (lvar4>-1&&lvar4<lvar) {
-                    lvar3=lvar3+lvar4+4;
-                  }
-                  else {
-                    break;
-                  }
-                }
-              p1=&linecopy[0]+lvar3;
-              p1=p1+strlen(lintmp);
-              strncpy(LinVars[i3].dimsetnames[i4],p1,strchr(p1,',')-p1);
-            }
+            linvar_dim_read(p,linecopy,lvar,&LinVars[i3],i4,true,sets);
             break;
           }
           i3++;
@@ -780,6 +788,11 @@ static void stmt_prog_build_one(char *line, stmt_prog *stp, char *commsyntax,
           }
           for(dcount=0; dcount<MAXSUPSET; dcount++)supset[dcount]=0;
           for (dcount=0; dcount<vars[LinVars[i].LinVarIndx].size; dcount++) {
+            if(LinVars[i].dimmapid[dcount]>0) {
+              linvar_map_dim_check(&LinVars[i],dcount,arSet[dcountdim3[dcount]].setid,vars);
+              supset[dcount]=0;
+              continue;
+            }
             if(sets[vars[LinVars[i].LinVarIndx].setid[dcount]].size!=sets[arSet[dcountdim3[dcount]].setid].size) {
               for(sup=1; sup<MAXSUPSET; sup++)if(vars[LinVars[i].LinVarIndx].setid[dcount]==sets[arSet[dcountdim3[dcount]].setid].subsetid[sup]) {
                   supset[dcount]=sup;
@@ -800,6 +813,7 @@ static void stmt_prog_build_one(char *line, stmt_prog *stp, char *commsyntax,
           for (dcount=0; dcount<vars[LinVars[i].LinVarIndx].size; dcount++) {
             stp->lv[i].dcountdim3[dcount]=dcountdim3[dcount];
             stp->lv[i].supset[dcount]=supset[dcount];
+            stp->lv[i].dcountmap[dcount]=LinVars[i].dimmapid[dcount];
             stp->lv[i].dimleadlag[dcount]=LinVars[i].dimleadlag[dcount];
           }
           stp->lv[i].built=true;
@@ -975,7 +989,10 @@ static void bs_prog_execute(bs_prog *bp, set_def *sets, set_element *set_elems,
           }
           li3=0;
           for (dcount=0; dcount<vars[lv->LinVarIndx].size; dcount++) {
-            if(lv->supset[dcount]==0) {
+            if(lv->dcountmap[dcount]>0) {
+              li3=li3+((offset_t)teems_maps[lv->dcountmap[dcount]-1].values[arSet1[lv->dcountdim3[dcount]].indx])*vars[lv->LinVarIndx].strides[dcount];
+            }
+            else if(lv->supset[dcount]==0) {
               li3=li3+(arSet1[lv->dcountdim3[dcount]].indx+lv->dimleadlag[dcount])*vars[lv->LinVarIndx].strides[dcount];
             }
             else {
@@ -1887,109 +1904,16 @@ int equation_order_read(char *fname, char *commsyntax,set_def *sets,dim_t nset,s
           case 1:
             p = strtok(tline,"{");
             p = strtok(NULL,"}");
-            leadlag=0;
-            if(p==NULL)p="";
-            parse_index_leadlag(p,&leadlag);
-            LinVars[i3].dimleadlag[0]=leadlag;
-            strcpy(LinVars[i3].dimnames[0],p);
-            strcpy(lintmp,"(all,");
-            strcat(lintmp,p);
-            strcat(lintmp,",");
-            l1=str_find_ci(linecopy,lintmp);
-            if (l1>-1) {
-              p1=&linecopy[0]+l1;
-              strncpy(LinVars[i3].dimsetnames[0],p1+strlen(lintmp),strchr(p1,')')-p1-strlen(lintmp));
-            }
-            else {
-              strcpy(lintmp,"sum(");
-              strcat(lintmp,p);
-              strcat(lintmp,",");
-              lvar1=str_count_ci(linecopy,lintmp);
-              lvar3=str_find_ci(linecopy,lintmp);
-              if (lvar1>1) for(lvar2=0; lvar2<lvar1; lvar2++) {
-                  lvar4=str_find_ci(&linecopy[lvar3+4],lintmp);
-                  if (lvar4>-1&&lvar4<lvar) {
-                    lvar3=lvar3+lvar4+4;
-                  }
-                  else {
-                    break;
-                  }
-                }
-              p1=&linecopy[0]+lvar3;
-              p1=p1+strlen(lintmp);
-              strncpy(LinVars[i3].dimsetnames[0],p1,strchr(p1,',')-p1);
-            }
+            linvar_dim_read(p,linecopy,lvar,&LinVars[i3],0,false,sets);
             break;
           default:
             p = strtok(tline,"{");
             for (i4=0; i4<vars[l].size-1; i4++) {
               p = strtok(NULL,",");
-              leadlag=0;
-              if(p==NULL)p="";
-              parse_index_leadlag(p,&leadlag);
-              LinVars[i3].dimleadlag[i4]=leadlag;
-              strcpy(LinVars[i3].dimnames[i4],p);
-              strcpy(lintmp,"(all,");
-              strcat(lintmp,p);
-              strcat(lintmp,",");
-              l1=str_find_ci(linecopy,lintmp);
-              if (l1>-1) {
-                p1=&linecopy[0]+l1;
-                strncpy(LinVars[i3].dimsetnames[i4],p1+strlen(lintmp),strchr(p1,')')-p1-strlen(lintmp));
-              }
-              else {
-                strcpy(lintmp,"sum(");
-                strcat(lintmp,p);
-                strcat(lintmp,",");
-                lvar1=str_count_ci(linecopy,lintmp);
-                lvar3=str_find_ci(linecopy,lintmp);
-                if (lvar1>1) for(lvar2=0; lvar2<lvar1; lvar2++) {
-                    lvar4=str_find_ci(&linecopy[lvar3+4],lintmp);
-                    if (lvar4>-1&&lvar4<lvar) {
-                      lvar3=lvar3+lvar4+4;
-                    }
-                    else {
-                      break;
-                    }
-                  }
-                p1=&linecopy[0]+lvar3;
-                p1=p1+strlen(lintmp);
-                strncpy(LinVars[i3].dimsetnames[i4],p1,strchr(p1,',')-p1);
-              }
+              linvar_dim_read(p,linecopy,lvar,&LinVars[i3],i4,false,sets);
             }
             p = strtok(NULL,"}");
-            leadlag=0;
-            if(p==NULL)p="";
-            parse_index_leadlag(p,&leadlag);
-            LinVars[i3].dimleadlag[i4]=leadlag;
-            strcpy(LinVars[i3].dimnames[i4],p);
-            strcpy(lintmp,"(all,");
-            strcat(lintmp,p);
-            strcat(lintmp,",");
-            l1=str_find_ci(linecopy,lintmp);
-            if (l1>-1) {
-              p1=&linecopy[0]+l1;
-              strncpy(LinVars[i3].dimsetnames[i4],p1+strlen(lintmp),strchr(p1,')')-p1-strlen(lintmp));
-            }
-            else {
-              strcpy(lintmp,"sum(");
-              strcat(lintmp,p);
-              strcat(lintmp,",");
-              lvar1=str_count_ci(linecopy,lintmp);
-              lvar3=str_find_ci(linecopy,lintmp);
-              if (lvar1>1) for(lvar2=0; lvar2<lvar1; lvar2++) {
-                  lvar4=str_find_ci(&linecopy[lvar3+4],lintmp);
-                  if (lvar4>-1&&lvar4<lvar) {
-                    lvar3=lvar3+lvar4+4;
-                  }
-                  else {
-                    break;
-                  }
-                }
-              p1=&linecopy[0]+lvar3;
-              p1=p1+strlen(lintmp);
-              strncpy(LinVars[i3].dimsetnames[i4],p1,strchr(p1,',')-p1);
-            }
+            linvar_dim_read(p,linecopy,lvar,&LinVars[i3],i4,false,sets);
             break;
           }
           i3++;
@@ -2306,109 +2230,16 @@ int equation_order_read_nested(char *fname, char *commsyntax,set_def *sets,dim_t
           case 1:
             p = strtok(tline,"{");
             p = strtok(NULL,"}");
-            leadlag=0;
-            if(p==NULL)p="";
-            parse_index_leadlag(p,&leadlag);
-            LinVars[i3].dimleadlag[0]=leadlag;
-            strcpy(LinVars[i3].dimnames[0],p);
-            strcpy(lintmp,"(all,");
-            strcat(lintmp,p);
-            strcat(lintmp,",");
-            l01=str_find_ci(linecopy,lintmp);
-            if (l01>-1) {
-              p1=&linecopy[0]+l01;
-              strncpy(LinVars[i3].dimsetnames[0],p1+strlen(lintmp),strchr(p1,')')-p1-strlen(lintmp));
-            }
-            else {
-              strcpy(lintmp,"sum(");
-              strcat(lintmp,p);
-              strcat(lintmp,",");
-              lvar1=str_count_ci(linecopy,lintmp);
-              lvar3=str_find_ci(linecopy,lintmp);
-              if (lvar1>1) for(lvar2=0; lvar2<lvar1; lvar2++) {
-                  lvar4=str_find_ci(&linecopy[lvar3+4],lintmp);
-                  if (lvar4>-1&&lvar4<lvar) {
-                    lvar3=lvar3+lvar4+4;
-                  }
-                  else {
-                    break;
-                  }
-                }
-              p1=&linecopy[0]+lvar3;
-              p1=p1+strlen(lintmp);
-              strncpy(LinVars[i3].dimsetnames[0],p1,strchr(p1,',')-p1);
-            }
+            linvar_dim_read(p,linecopy,lvar,&LinVars[i3],0,false,sets);
             break;
           default:
             p = strtok(tline,"{");
             for (i4=0; i4<vars[l].size-1; i4++) {
               p = strtok(NULL,",");
-              leadlag=0;
-              if(p==NULL)p="";
-              parse_index_leadlag(p,&leadlag);
-              LinVars[i3].dimleadlag[i4]=leadlag;
-              strcpy(LinVars[i3].dimnames[i4],p);
-              strcpy(lintmp,"(all,");
-              strcat(lintmp,p);
-              strcat(lintmp,",");
-              l01=str_find_ci(linecopy,lintmp);
-              if (l01>-1) {
-                p1=&linecopy[0]+l01;
-                strncpy(LinVars[i3].dimsetnames[i4],p1+strlen(lintmp),strchr(p1,')')-p1-strlen(lintmp));
-              }
-              else {
-                strcpy(lintmp,"sum(");
-                strcat(lintmp,p);
-                strcat(lintmp,",");
-                lvar1=str_count_ci(linecopy,lintmp);
-                lvar3=str_find_ci(linecopy,lintmp);
-                if (lvar1>1) for(lvar2=0; lvar2<lvar1; lvar2++) {
-                    lvar4=str_find_ci(&linecopy[lvar3+4],lintmp);
-                    if (lvar4>-1&&lvar4<lvar) {
-                      lvar3=lvar3+lvar4+4;
-                    }
-                    else {
-                      break;
-                    }
-                  }
-                p1=&linecopy[0]+lvar3;
-                p1=p1+strlen(lintmp);
-                strncpy(LinVars[i3].dimsetnames[i4],p1,strchr(p1,',')-p1);
-              }
+              linvar_dim_read(p,linecopy,lvar,&LinVars[i3],i4,false,sets);
             }
             p = strtok(NULL,"}");
-            leadlag=0;
-            if(p==NULL)p="";
-            parse_index_leadlag(p,&leadlag);
-            LinVars[i3].dimleadlag[i4]=leadlag;
-            strcpy(LinVars[i3].dimnames[i4],p);
-            strcpy(lintmp,"(all,");
-            strcat(lintmp,p);
-            strcat(lintmp,",");
-            l01=str_find_ci(linecopy,lintmp);
-            if (l01>-1) {
-              p1=&linecopy[0]+l01;
-              strncpy(LinVars[i3].dimsetnames[i4],p1+strlen(lintmp),strchr(p1,')')-p1-strlen(lintmp));
-            }
-            else {
-              strcpy(lintmp,"sum(");
-              strcat(lintmp,p);
-              strcat(lintmp,",");
-              lvar1=str_count_ci(linecopy,lintmp);
-              lvar3=str_find_ci(linecopy,lintmp);
-              if (lvar1>1) for(lvar2=0; lvar2<lvar1; lvar2++) {
-                  lvar4=str_find_ci(&linecopy[lvar3+4],lintmp);
-                  if (lvar4>-1&&lvar4<lvar) {
-                    lvar3=lvar3+lvar4+4;
-                  }
-                  else {
-                    break;
-                  }
-                }
-              p1=&linecopy[0]+lvar3;
-              p1=p1+strlen(lintmp);
-              strncpy(LinVars[i3].dimsetnames[i4],p1,strchr(p1,',')-p1);
-            }
+            linvar_dim_read(p,linecopy,lvar,&LinVars[i3],i4,false,sets);
             break;
           }
           i3++;
@@ -2694,109 +2525,16 @@ int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,
           case 1:
             p = strtok(tline,"{");
             p = strtok(NULL,"}");
-            leadlag=0;
-            if(p==NULL)p="";
-            parse_index_leadlag(p,&leadlag);
-            strcpy(LinVars[i3].dimnames[0],p);
-            LinVars[i3].dimleadlag[0]=leadlag;
-            strcpy(lintmp,"(all,");
-            strcat(lintmp,p);
-            strcat(lintmp,",");
-            l1=str_find_ci(linecopy,lintmp);
-            if (l1>-1) {
-              p1=&linecopy[0]+l1;
-              strncpy(LinVars[i3].dimsetnames[0],p1+strlen(lintmp),strchr(p1,')')-p1-strlen(lintmp));
-            }
-            else {
-              strcpy(lintmp,"sum(");
-              strcat(lintmp,p);
-              strcat(lintmp,",");
-              lvar1=str_count_ci(linecopy,lintmp);
-              lvar3=str_find_ci(linecopy,lintmp);
-              if (lvar1>1) for(lvar2=0; lvar2<lvar1; lvar2++) {
-                  lvar4=str_find_ci(&linecopy[lvar3+4],lintmp);
-                  if (lvar4>-1&&lvar4<lvar) {
-                    lvar3=lvar3+lvar4+4;
-                  }
-                  else {
-                    break;
-                  }
-                }
-              p1=&linecopy[0]+lvar3;
-              p1=p1+strlen(lintmp);
-              strncpy(LinVars[i3].dimsetnames[0],p1,strchr(p1,',')-p1);
-            }
+            linvar_dim_read(p,linecopy,lvar,&LinVars[i3],0,true,sets);
             break;
           default:
             p = strtok(tline,"{");
             for (i4=0; i4<vars[l].size-1; i4++) {
               p = strtok(NULL,",");
-              leadlag=0;
-              if(p==NULL)p="";
-              parse_index_leadlag(p,&leadlag);
-              strcpy(LinVars[i3].dimnames[i4],p);
-              LinVars[i3].dimleadlag[i4]=leadlag;
-              strcpy(lintmp,"(all,");
-              strcat(lintmp,p);
-              strcat(lintmp,",");
-              l1=str_find_ci(linecopy,lintmp);
-              if (l1>-1) {
-                p1=&linecopy[0]+l1;
-                strncpy(LinVars[i3].dimsetnames[i4],p1+strlen(lintmp),strchr(p1,')')-p1-strlen(lintmp));
-              }
-              else {
-                strcpy(lintmp,"sum(");
-                strcat(lintmp,p);
-                strcat(lintmp,",");
-                lvar1=str_count_ci(linecopy,lintmp);
-                lvar3=str_find_ci(linecopy,lintmp);
-                if (lvar1>1) for(lvar2=0; lvar2<lvar1; lvar2++) {
-                    lvar4=str_find_ci(&linecopy[lvar3+4],lintmp);
-                    if (lvar4>-1&&lvar4<lvar) {
-                      lvar3=lvar3+lvar4+4;
-                    }
-                    else {
-                      break;
-                    }
-                  }
-                p1=&linecopy[0]+lvar3;
-                p1=p1+strlen(lintmp);
-                strncpy(LinVars[i3].dimsetnames[i4],p1,strchr(p1,',')-p1);
-              }
+              linvar_dim_read(p,linecopy,lvar,&LinVars[i3],i4,true,sets);
             }
             p = strtok(NULL,"}");
-            leadlag=0;
-            if(p==NULL)p="";
-            parse_index_leadlag(p,&leadlag);
-            strcpy(LinVars[i3].dimnames[i4],p);
-            LinVars[i3].dimleadlag[i4]=leadlag;
-            strcpy(lintmp,"(all,");
-            strcat(lintmp,p);
-            strcat(lintmp,",");
-            l1=str_find_ci(linecopy,lintmp);
-            if (l1>-1) {
-              p1=&linecopy[0]+l1;
-              strncpy(LinVars[i3].dimsetnames[i4],p1+strlen(lintmp),strchr(p1,')')-p1-strlen(lintmp));
-            }
-            else {
-              strcpy(lintmp,"sum(");
-              strcat(lintmp,p);
-              strcat(lintmp,",");
-              lvar1=str_count_ci(linecopy,lintmp);
-              lvar3=str_find_ci(linecopy,lintmp);
-              if (lvar1>1) for(lvar2=0; lvar2<lvar1; lvar2++) {
-                  lvar4=str_find_ci(&linecopy[lvar3+4],lintmp);
-                  if (lvar4>-1&&lvar4<lvar) {
-                    lvar3=lvar3+lvar4+4;
-                  }
-                  else {
-                    break;
-                  }
-                }
-              p1=&linecopy[0]+lvar3;
-              p1=p1+strlen(lintmp);
-              strncpy(LinVars[i3].dimsetnames[i4],p1,strchr(p1,',')-p1);
-            }
+            linvar_dim_read(p,linecopy,lvar,&LinVars[i3],i4,true,sets);
             break;
           }
           i3++;
@@ -2935,6 +2673,11 @@ int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,
         }
         for(dcount=0; dcount<MAXSUPSET; dcount++)supset[dcount]=0;
         for (dcount=0; dcount<vars[LinVars[i].LinVarIndx].size; dcount++) {
+          if(LinVars[i].dimmapid[dcount]>0) {
+            linvar_map_dim_check(&LinVars[i],dcount,arSet[dcountdim5[dcount]].setid,vars);
+            supset[dcount]=0;
+            continue;
+          }
           if(sets[vars[LinVars[i].LinVarIndx].setid[dcount]].size!=sets[arSet[dcountdim5[dcount]].setid].size) {
             for(sup=1; sup<MAXSUPSET; sup++)if(vars[LinVars[i].LinVarIndx].setid[dcount]==sets[arSet[dcountdim5[dcount]].setid].subsetid[sup]) {
                 supset[dcount]=sup;
@@ -2992,7 +2735,11 @@ int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,
           }
           li3=0;
           for (dcount=0; dcount<vars[LinVars[i].LinVarIndx].size; dcount++) {
-            if(supset[dcount]==0) {
+            if(LinVars[i].dimmapid[dcount]>0) {
+              /* must mirror the fill loop exactly or dnnz/onnz miscount */
+              li3=li3+((offset_t)teems_maps[LinVars[i].dimmapid[dcount]-1].values[arSet[dcountdim5[dcount]].indx])*vars[LinVars[i].LinVarIndx].strides[dcount];
+            }
+            else if(supset[dcount]==0) {
               li3=li3+(arSet[dcountdim5[dcount]].indx+LinVars[i].dimleadlag[dcount])*vars[LinVars[i].LinVarIndx].strides[dcount];
             }
             else {

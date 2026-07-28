@@ -1052,7 +1052,8 @@ int tab_write_variables(char *filename, char *newtabfile,array_def *vars,offset_
   if (filehandle==NULL) return -1;
   fout = fopen(newtabfile,"w");
   while (fgets(line,TABREADLINE,filehandle)) {
-    if(str_find_ci(line,"equation ")>-1||str_find_ci(line,"update ")>-1) {
+    int eqpos=str_find_ci(line,"equation ");
+    if(eqpos>-1||str_find_ci(line,"update ")>-1) {
       linelght=strlen(line);
       for (i=0; i<nvar; i++) {
         p=strchr(line,';');
@@ -1076,7 +1077,18 @@ int tab_write_variables(char *filename, char *newtabfile,array_def *vars,offset_
           l=l+strlen(vars[i].cofname);
         }
       }
-
+      /* one-shot lowering of mapping calls in Equation statements
+         (design doc M2b): every downstream equation consumer -- the
+         ordering scans, preallocation, the statement builder, the
+         backsolve validator -- reads this rewritten file, so the
+         nested MAP(i) index form is rewritten to the flat map@i token
+         exactly once, here.  Updates keep their named fatal
+         (mapping_use_guards).  Mapped indices inside sum bodies stay
+         fatal until M2c. */
+      if((eqpos==0||eqpos==1)&&teems_nmap>0) {
+        mapping_lower_calls(line);
+        mapping_eq_sum_guard(line);
+      }
     }
     fprintf(fout,"%s",line);
   }

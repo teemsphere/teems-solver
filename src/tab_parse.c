@@ -1988,30 +1988,26 @@ int mapping_use_guards(char *fname, map_def *maps, dim_t nmap) {
       }
   }
   fclose(filehandle);
-  /* equations and updates cannot carry mapping calls yet (design doc
-     M2b): the ordering and preallocation scanners run before the
-     statement builder's guard and would shred the nested index */
-  for (int gk=0; gk<2; gk++) {
-    const char *gkind=gk==0?"equation":"update";
-    const char *gname=gk==0?"Equation":"Update";
-    filehandle = fopen(fname,"r");
-    while (tab_next_statement((char *)gkind,filehandle,line,TABREADLINE)) {
-      dim_t gm;
-      int gpos;
-      char gfind[NAMESIZE+2];
-      for (gm=0; gm<nmap; gm++) {
-        sprintf(gfind,"%s(",maps[gm].mapname);
-        gpos=str_find_ci(line,gfind);
-        if (gpos==0||(gpos>0&&!isalnum((int)line[gpos-1])&&line[gpos-1]!='_')) {
-          printf("Error: mapping-valued indices in %s statements are not supported yet (mapping %s)\n",gname,maps[gm].mapname);
-          fclose(filehandle);
-          MPI_Abort(PETSC_COMM_WORLD,1);
-          return -1;
-        }
+  /* updates cannot carry mapping calls yet (corpus: none do); equations
+     are lowered in the tab_write_variables rewrite and compiled through
+     the mapped linear-variable machinery (design doc M2b) */
+  filehandle = fopen(fname,"r");
+  while (tab_next_statement("update",filehandle,line,TABREADLINE)) {
+    dim_t gm;
+    int gpos;
+    char gfind[NAMESIZE+2];
+    for (gm=0; gm<nmap; gm++) {
+      sprintf(gfind,"%s(",maps[gm].mapname);
+      gpos=str_find_ci(line,gfind);
+      if (gpos==0||(gpos>0&&!isalnum((int)line[gpos-1])&&line[gpos-1]!='_')) {
+        printf("Error: mapping-valued indices in Update statements are not supported yet (mapping %s)\n",maps[gm].mapname);
+        fclose(filehandle);
+        MPI_Abort(PETSC_COMM_WORLD,1);
+        return -1;
       }
     }
-    fclose(filehandle);
   }
+  fclose(filehandle);
   filehandle = fopen(fname,"r");
   while (tab_next_statement("write",filehandle,line,TABREADLINE)) {
     readitem = strtok(line," ");
@@ -2084,6 +2080,54 @@ void mapping_reject_in(char *line, const char *what) {
       MPI_Abort(PETSC_COMM_WORLD,1);
     }
   }
+}
+
+/* Named fatal when a lowered mapping token sits inside a sum(...) body
+   of an equation statement: sum_parse's carried-dim discovery cannot
+   digest the @ form yet (design doc M2c).  The span walk is balanced-
+   paren so mapped references OUTSIDE the sums stay allowed. */
+void mapping_eq_sum_guard(char *line) {
+  int k,from=0,depth;
+  if (teems_nmap==0||strchr(line,'@')==NULL) return;
+  while ((k=str_find_ci(line+from,"sum("))>-1) {
+    k+=from;
+    if (k>0&&(isalnum((int)line[k-1])||line[k-1]=='_')) {
+      from=k+4;
+      continue;
+    }
+    depth=1;
+    for (k=k+4; line[k]!='\0'&&depth>0; k++) {
+      if (line[k]=='(') depth++;
+      else if (line[k]==')') depth--;
+      else if (line[k]=='@') {
+        printf("Error: mapping-valued indices inside sums of Equation statements are not supported yet\n");
+        MPI_Abort(PETSC_COMM_WORLD,1);
+      }
+    }
+    from=k;
+  }
+}
+
+/* Interim guard for the bordered matrix methods (design doc M2b): a
+   mapped variable reference can place a column in another diagonal
+   block invisibly to the SBBD/DBBD/NDBBD border classification, so a
+   tabfile whose equations carry lowered mapping tokens runs only under
+   -matsol 0 (LU) until the border marking learns mapped references.
+   Scans the post-lowering tabfile; caller gates on the matrix method. */
+void mapping_eq_matsol_guard(char *fname) {
+  FILE *filehandle;
+  char line[TABREADLINE]="\0";
+  if (teems_nmap==0) return;
+  filehandle = fopen(fname,"r");
+  if (filehandle==NULL) return;
+  while (tab_next_statement("equation",filehandle,line,TABREADLINE)) {
+    if (strchr(line,'@')!=NULL) {
+      printf("Error: mapping-valued indices in Equation statements need -matsol 0 (LU); the bordered methods' block classification does not follow mapped references yet\n");
+      fclose(filehandle);
+      MPI_Abort(PETSC_COMM_WORLD,1);
+    }
+  }
+  fclose(filehandle);
 }
 
 /* Pre-use mapping validation (manual 11.9.2/11.9.3): every mapping
@@ -5075,6 +5119,18 @@ int backsolve_validate_refs(char *fname, array_def *vars) {
       }
     }
     if (hit>=0) eqfound[hit]=1;
+    /* M2b: backsolve recovery inverts a row->element bijection of the
+       defining equation; a mapped (many-to-one) reference breaks it by
+       construction, so a nominated defining equation carrying lowered
+       mapping tokens is rejected up front rather than failing the
+       runtime one-to-one check with a generic message */
+    if (hit>=0&&strchr(line,'@')!=NULL) {
+      printf("Error: defining equation %s for backsolved variable %s uses a set mapping; backsolving through mapped references is not supported (the row-to-element recovery is no longer one-to-one)\n",eqname,vars[backsolves[hit].varindx].cofname);
+      fclose(filehandle);
+      free(eqfound);
+      MPI_Abort(PETSC_COMM_WORLD,1);
+      return -1;
+    }
     for (i=0; i<nbacksolve; i++) {
       strcpy(ref,"p_");
       strcat(ref,vars[backsolves[i].varindx].cofname);
