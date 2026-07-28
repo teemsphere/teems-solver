@@ -1639,6 +1639,13 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
             if(strchr(readitem,':')==NULL)strcpy(tempset,readitem);
             else {
               p = strchr(readitem,':');
+              /* quantifier conditions support numeric comparisons only:
+                 a mapping equality here would atof its RHS to 0 and
+                 filter silently wrong (M3) */
+              if (strchr(p,'@')!=NULL) {
+                printf("Error: mapping equalities in Formula quantifier conditions are not supported; move the condition into a sum (manual 11.4.11)\n");
+                MPI_Abort(PETSC_COMM_WORLD,1);
+              }
               strncpy(tempset,readitem,p-readitem);
               tempset[p-readitem]='\0';
               if(strchr(readitem,'(')!=NULL) {
@@ -2089,6 +2096,12 @@ offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_el
   filehandle = fopen(fname,"r");
   while (tab_next_statement_resolved(commsyntax,filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
     mapping_reject_in(line,"Update");
+    /* update statements have no condition machinery: a ':' used to make
+       the set lookup miss and expand over sets[0] in silence (M3) */
+    if (strchr(line,':')!=NULL) {
+      printf("Error: conditions in Update statements are not supported\n");
+      MPI_Abort(PETSC_COMM_WORLD,1);
+    }
     IsChange=false;
     IsExplicit=false;
     if(strstr(line, "(change)")!=NULL) {
@@ -2372,6 +2385,12 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
   filehandle = fopen(fname,"r");
   while (tab_next_statement_resolved(commsyntax,filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
     mapping_reject_in(line,"Update");
+    /* update statements have no condition machinery: a ':' used to make
+       the set lookup miss and expand over sets[0] in silence (M3) */
+    if (strchr(line,':')!=NULL) {
+      printf("Error: conditions in Update statements are not supported\n");
+      MPI_Abort(PETSC_COMM_WORLD,1);
+    }
     IsChange=false;
     IsExplicit=false;
     if(strstr(line, "(change)")!=NULL) {
@@ -2636,6 +2655,8 @@ int sum_eval(char *formulain, char *commsyntax,set_def *sets,dim_t nset, set_ele
   quantifier *arSet2=NULL;
   formula_op *ops1= NULL;
   offset_t arsetsize;
+  int condpos=-1;
+  offset_t condfix=-1;
   length=strlen(formulain);
   readitem=formulain;
   while (i<length) {
@@ -2677,6 +2698,7 @@ int sum_eval(char *formulain, char *commsyntax,set_def *sets,dim_t nset, set_ele
         arSet[sum_cof[j].size].setid=sum_cof[j].sumsetid;
         strcpy(arSet[sum_cof[j].size].index_name,sum_cof[j].sumindx);
         fdimsumcof=sum_cof[j].size+1;
+        sum_cond_rhs_resolve(sum_cof[j].cond_mapid,sum_cof[j].cond_rhs,arSet,fdimsumcof,sets,set_elems,&condpos,&condfix);
         nops=0;
         if(!formula_compile(p,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,&nops,arSet,fdimsumcof))MPI_Abort(PETSC_COMM_WORLD,1);
         #pragma omp parallel private(l,l1,l2,dcount,superset_pos,vval,arSet2,ops1) shared(elem_vals,arSet,sum_vals)
@@ -2703,6 +2725,9 @@ int sum_eval(char *formulain, char *commsyntax,set_def *sets,dim_t nset, set_ele
           }
           vval=0;
           for (l1=0; l1<sets[sum_cof[j].sumsetid].size; l1++) {
+            /* mapping-equality condition (M3): only domain elements
+               mapping to the target codomain position contribute */
+            if (sum_cof[j].cond_mapid>0&&(offset_t)teems_maps[sum_cof[j].cond_mapid-1].values[l1]!=(condpos>=0?(offset_t)arSet2[condpos].indx:condfix)) continue;
             arSet2[sum_cof[j].size].indx=l1;
             vval+=formula_eval(elem_vals,sets,set_elems,sum_vals,ops1,nops,arSet2,fdimsumcof,zerodivide);
           }
@@ -2771,6 +2796,7 @@ int sum_eval(char *formulain, char *commsyntax,set_def *sets,dim_t nset, set_ele
         arSet[sum_cof[j].size].setid=sum_cof[j].sumsetid;
         strcpy(arSet[sum_cof[j].size].index_name,sum_cof[j].sumindx);
         fdimsumcof=sum_cof[j].size+1;
+        sum_cond_rhs_resolve(sum_cof[j].cond_mapid,sum_cof[j].cond_rhs,arSet,fdimsumcof,sets,set_elems,&condpos,&condfix);
         nops=0;
         if(!formula_compile(p,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,&nops,arSet,fdimsumcof))MPI_Abort(PETSC_COMM_WORLD,1);
         #pragma omp parallel private(l,l1,l2,dcount,superset_pos,vval,arSet2,ops1) shared(elem_vals,arSet,sum_vals)
@@ -2797,6 +2823,9 @@ int sum_eval(char *formulain, char *commsyntax,set_def *sets,dim_t nset, set_ele
           }
           vval=0;
           for (l1=0; l1<sets[sum_cof[j].sumsetid].size; l1++) {
+            /* mapping-equality condition (M3): only domain elements
+               mapping to the target codomain position contribute */
+            if (sum_cof[j].cond_mapid>0&&(offset_t)teems_maps[sum_cof[j].cond_mapid-1].values[l1]!=(condpos>=0?(offset_t)arSet2[condpos].indx:condfix)) continue;
             arSet2[sum_cof[j].size].indx=l1;
             vval+=formula_eval(elem_vals,sets,set_elems,sum_vals,ops1,nops,arSet2,fdimsumcof,zerodivide);
           }

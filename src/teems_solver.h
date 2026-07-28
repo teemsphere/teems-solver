@@ -182,6 +182,8 @@ typedef struct
   char dimnames[MAXVARDIM][NAMESIZE];
   offset_t setid[MAXVARDIM];
   offset_t strides[MAXVARDIM];
+  int cond_mapid;              /* >0: mapping-equality condition on the summed index (11.4.11, M3) */
+  char cond_rhs[NAMESIZE];     /* its RHS token: outer quantifier index or codomain element */
 } sum_def ;
 
 typedef struct
@@ -296,6 +298,8 @@ typedef struct
   dim_t dimleadlag[MAXVARDIM];
   dim_t dimindx[MAXVARDIM];
   int dimmapid[MAXVARDIM];   /* >0: dim routes via teems_maps[id-1] (11.9.5, M2b) */
+  int dimcondmap[MAXVARDIM]; /* >0: dim's enclosing sum has a mapping-equality condition (M3) */
+  char dimcondrhs[MAXVARDIM][NAMESIZE]; /* its RHS token */
 } eq_var_ref ;
 
 /* per-equation-statement addressing metadata, captured by
@@ -360,6 +364,10 @@ void mapping_lower_calls(char *line);
 void mapping_reject_in(char *line, const char *what);
 char *mapping_token_split(char *p, int *mp);
 char *sum_dim_identity(char *p);
+void sum_cond_parse(char *settok, const char *sumindx, int *cond_mapid, char *cond_rhs);
+void sum_cond_domain_check(sum_def *sc, set_def *sets);
+dim_t sum_cond_carry_rhs(sum_def *sc, quantifier *arSet, dim_t fdim, dim_t l3, char *interchar);
+void sum_cond_rhs_resolve(int cond_mapid, const char *cond_rhs, quantifier *frame, dim_t nframe, set_def *sets, set_element *set_elems, int *condpos, offset_t *condfix);
 void mapping_eq_matsol_guard(char *fname);
 int mappings_validate(map_def *maps, dim_t nmap, set_def *sets, set_element *set_elems);
 offset_t postsim_reads_execute(char *psname, int niodata, cmf_file_entry *iodata, set_def *sets, dim_t nset, set_element *set_elems, array_def *coefs, offset_t ncof, offset_t ncofele, array_def *vars, offset_t nvar, offset_t nvarele, elem_value *elem_vals);

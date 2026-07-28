@@ -1053,7 +1053,19 @@ int tab_write_variables(char *filename, char *newtabfile,array_def *vars,offset_
   fout = fopen(newtabfile,"w");
   while (fgets(line,TABREADLINE,filehandle)) {
     int eqpos=str_find_ci(line,"equation ");
-    if(eqpos>-1||str_find_ci(line,"update ")>-1) {
+    int updpos=str_find_ci(line,"update ");
+    /* update statements have no condition machinery: a ':' used to
+       make the set lookup miss and expand over sets[0] in silence;
+       the per-step update pass may never run (a broken system dies in
+       the solver first), so fail here (M3) */
+    if((updpos==0||updpos==1)&&strchr(line,':')!=NULL) {
+      printf("Error: conditions in Update statements are not supported\n");
+      fclose(filehandle);
+      fclose(fout);
+      MPI_Abort(PETSC_COMM_WORLD,1);
+      return -1;
+    }
+    if(eqpos>-1||updpos>-1) {
       linelght=strlen(line);
       for (i=0; i<nvar; i++) {
         p=strchr(line,';');
@@ -1085,6 +1097,24 @@ int tab_write_variables(char *filename, char *newtabfile,array_def *vars,offset_
          exactly once, here.  Updates keep their named fatal
          (mapping_use_guards). */
       if((eqpos==0||eqpos==1)&&teems_nmap>0) mapping_lower_calls(line);
+      /* equation-level quantifier conditions prune ROWS -- that
+         changes VecSize/eq_addr/closure squareness and is not
+         supported; before M3 the ':' made the set lookup miss and the
+         equation silently expanded over sets[0] */
+      if(eqpos==0||eqpos==1) {
+        offset_t qk=0,qf;
+        while((qf=str_find_ci(&line[qk],"(all,"))>-1) {
+          for(qk=qk+qf+5; line[qk]!='\0'&&line[qk]!=')'; qk++) {
+            if(line[qk]==':') {
+              printf("Error: conditions on Equation quantifiers are not supported (row pruning); put the condition on a sum inside the equation (manual 11.4.11)\n");
+              fclose(filehandle);
+              fclose(fout);
+              MPI_Abort(PETSC_COMM_WORLD,1);
+              return -1;
+            }
+          }
+        }
+      }
     }
     fprintf(fout,"%s",line);
   }

@@ -1321,10 +1321,12 @@ offset_t sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
         p = strtok(NULL,",");
         strcpy(sum_cof[j].sumindx,p);
         p = strtok(NULL,",");
+        sum_cond_parse(p,sum_cof[j].sumindx,&sum_cof[j].cond_mapid,sum_cof[j].cond_rhs);
         for (l7=0; l7<nset; l7++) if(strcmp(p,sets[l7].setname)==0) {
             sum_cof[j].sumsetid=l7;
             break;
           }
+        sum_cond_domain_check(&sum_cof[j],sets);
 
         ncur=str_count_ci(line2, "{");
         l2=0;
@@ -1414,6 +1416,7 @@ offset_t sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
             }
           }
         }
+        l3=sum_cond_carry_rhs(&sum_cof[j],arSet,fdim,l3,interchar);
         if (interchar[strlen(interchar)-1]==',') {
           interchar[strlen(interchar)-1]='}';
         } else {
@@ -1466,10 +1469,12 @@ offset_t sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
         p = strtok(NULL,",");
         strcpy(sum_cof[j].sumindx,p);
         p = strtok(NULL,",");
+        sum_cond_parse(p,sum_cof[j].sumindx,&sum_cof[j].cond_mapid,sum_cof[j].cond_rhs);
         for (l7=0; l7<nset; l7++) if(strcmp(p,sets[l7].setname)==0) {
             sum_cof[j].sumsetid=l7;
             break;
           }
+        sum_cond_domain_check(&sum_cof[j],sets);
 
         ncur=str_count_ci(line2, "{");
         l2=0;
@@ -1559,6 +1564,7 @@ offset_t sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
             }
           }
         }
+        l3=sum_cond_carry_rhs(&sum_cof[j],arSet,fdim,l3,interchar);
         if (interchar[strlen(interchar)-1]==',') {
           interchar[strlen(interchar)-1]='}';
         } else {
@@ -1971,6 +1977,42 @@ int mapping_use_guards(char *fname, map_def *maps, dim_t nmap) {
   filehandle = fopen(fname,"r");
   while (tab_next_statement("formula",filehandle,line,TABREADLINE)) {
     strcpy(linecopy,line);
+    /* a mapping equality in a Formula QUANTIFIER condition would have
+       its RHS read as a numeric constant (0) and filter silently
+       wrong; checked here, before the LHS walk below mistakes the
+       condition's mapping call for a formula-assigned mapping (M3) */
+    {
+      int qk=0,qf,qbeg,depth;
+      while ((qf=str_find_ci(line+qk,"(all,"))>-1) {
+        int hascolon=0;
+        char qsave;
+        qk+=qf+5;
+        qbeg=qk;
+        depth=1;
+        for (; line[qk]!='\0'&&depth>0; qk++) {
+          if (line[qk]=='(') depth++;
+          else if (line[qk]==')') depth--;
+          else if (line[qk]==':') hascolon=1;
+        }
+        if (hascolon) {
+          dim_t qm;
+          char qfind[NAMESIZE+2];
+          qsave=line[qk];
+          line[qk]='\0';
+          for (qm=0; qm<nmap; qm++) {
+            sprintf(qfind,"%s(",maps[qm].mapname);
+            if (str_find_ci(line+qbeg,qfind)>-1) {
+              printf("Error: mapping equalities in Formula quantifier conditions are not supported; move the condition into a sum (manual 11.4.11)\n");
+              fclose(filehandle);
+              MPI_Abort(PETSC_COMM_WORLD,1);
+              return -1;
+            }
+          }
+          line[qk]=qsave;
+        }
+      }
+      strcpy(line,linecopy);
+    }
     readitem = strtok(line," ");
     readitem = strtok(NULL," (");
     /* skip quantifier groups ("all,c,com)" -- the "(" is a delimiter)
@@ -2074,6 +2116,119 @@ void mapping_lower_calls(char *line) {
 char *sum_dim_identity(char *p) {
   char *at=strchr(p,'@');
   return at==NULL?p:at+1;
+}
+
+/* Parse the ":<condition>" tail of a sum's set token (manual 11.4.11;
+   design doc M3).  The one supported form is a mapping equality on
+   the summed index -- MAP(idx) = rhs, arriving lowered as
+   map@idx=rhs -- and every other condition is a named fatal: before
+   M3 a ':' in the set token made the set lookup miss and the sum
+   silently expanded over sets[0].  The set part is truncated in
+   place for the caller to resolve; the RHS token is kept raw and
+   resolves at build/eval time against the frame (outer quantifier
+   index) or the mapping's codomain elements. */
+void sum_cond_parse(char *settok, const char *sumindx, int *cond_mapid, char *cond_rhs) {
+  char *colon,*eq,*lhs;
+  int mp=0;
+  *cond_mapid=0;
+  cond_rhs[0]='\0';
+  colon=strchr(settok,':');
+  if (colon==NULL) return;
+  *colon='\0';
+  lhs=colon+1;
+  eq=strchr(lhs,'=');
+  if (eq==NULL) {
+    printf("Error: unsupported sum condition '%s'; only a mapping equality MAPPING(index) = value is supported (manual 11.4.11)\n",lhs);
+    MPI_Abort(PETSC_COMM_WORLD,1);
+    return;
+  }
+  *eq='\0';
+  lhs=mapping_token_split(lhs,&mp);
+  if (mp==0) {
+    printf("Error: unsupported sum condition on '%s'; only a mapping equality MAPPING(index) = value is supported (manual 11.4.11)\n",lhs);
+    MPI_Abort(PETSC_COMM_WORLD,1);
+    return;
+  }
+  if (strcmp(lhs,sumindx)!=0) {
+    printf("Error: the sum condition on mapping %s must test the summed index %s, not %s\n",teems_maps[mp-1].mapname,sumindx,lhs);
+    MPI_Abort(PETSC_COMM_WORLD,1);
+    return;
+  }
+  if (eq[1]=='\0'||strlen(eq+1)>=NAMESIZE) {
+    printf("Error: malformed sum condition RHS for mapping %s\n",teems_maps[mp-1].mapname);
+    MPI_Abort(PETSC_COMM_WORLD,1);
+    return;
+  }
+  *cond_mapid=mp;
+  {
+    /* keep the RHS raw but unquoted: a fixed codomain element may
+       arrive as "ele" */
+    char *src=eq+1,*dst=cond_rhs;
+    for (; *src!='\0'; src++) if (*src!='\"') *dst++=*src;
+    *dst='\0';
+  }
+}
+
+/* Resolve a sum condition's RHS against an evaluation frame: an index
+   name in the frame gives a per-tuple compare (the quantifier must
+   range over the codomain exactly), a codomain element name a fixed
+   position; anything else is a named fatal. */
+void sum_cond_rhs_resolve(int cond_mapid, const char *cond_rhs, quantifier *frame, dim_t nframe, set_def *sets, set_element *set_elems, int *condpos, offset_t *condfix) {
+  dim_t l;
+  offset_t cs;
+  *condpos=-1;
+  *condfix=-1;
+  if (cond_mapid==0) return;
+  for (l=0; l<nframe; l++) if (strcmp(cond_rhs,frame[l].index_name)==0) {
+      if (frame[l].setid!=(offset_t)teems_maps[cond_mapid-1].toset) {
+        printf("Error: the RHS index %s of the condition on mapping %s does not range over the mapping's codomain set\n",cond_rhs,teems_maps[cond_mapid-1].mapname);
+        MPI_Abort(PETSC_COMM_WORLD,1);
+        return;
+      }
+      *condpos=(int)l;
+      return;
+    }
+  cs=(offset_t)teems_maps[cond_mapid-1].toset;
+  for (l=0; l<(dim_t)sets[cs].size; l++) if (strcmp(set_elems[sets[cs].offset+l].setele,cond_rhs)==0) {
+      *condfix=(offset_t)l;
+      return;
+    }
+  printf("Error: the sum condition RHS %s for mapping %s is neither a quantifier index nor an element of the codomain set %s\n",cond_rhs,teems_maps[cond_mapid-1].mapname,sets[cs].setname);
+  MPI_Abort(PETSC_COMM_WORLD,1);
+}
+
+/* The condition's value table is indexed by domain position, so the
+   summed set must be the mapping's domain exactly (the M2 exact-match
+   contract). */
+void sum_cond_domain_check(sum_def *sc, set_def *sets) {
+  if (sc->cond_mapid==0) return;
+  if ((offset_t)teems_maps[sc->cond_mapid-1].fromset!=sc->sumsetid) {
+    printf("Error: the condition on mapping %s sums over set %s, not the mapping's domain set %s\n",teems_maps[sc->cond_mapid-1].mapname,sets[sc->sumsetid].setname,sets[teems_maps[sc->cond_mapid-1].fromset].setname);
+    MPI_Abort(PETSC_COMM_WORLD,1);
+  }
+}
+
+/* A mapping-equality condition whose RHS is an outer quantifier index
+   makes the sum's value depend on that index even when the body never
+   references it (the GTAP-E shape: tot(b) = sum over the domain of
+   the r with MAP(r)=b): append it as a carried dim so the sum store
+   holds one slot per RHS element.  The RHS quantifier must range over
+   the codomain exactly.  Returns the updated carried-dim count. */
+dim_t sum_cond_carry_rhs(sum_def *sc, quantifier *arSet, dim_t fdim, dim_t l3, char *interchar) {
+  dim_t l4,l5;
+  if (sc->cond_mapid==0) return l3;
+  for (l5=0; l5<fdim-1; l5++) if (strcmp(sc->cond_rhs,arSet[l5].index_name)==0) break;
+  if (l5>=fdim-1) return l3; /* not a quantifier (scalar statements have fdim 0): codomain element, resolved at eval */
+  if (arSet[l5].setid!=(offset_t)teems_maps[sc->cond_mapid-1].toset) {
+    printf("Error: the RHS quantifier %s of the condition on mapping %s does not range over the mapping's codomain set\n",sc->cond_rhs,teems_maps[sc->cond_mapid-1].mapname);
+    MPI_Abort(PETSC_COMM_WORLD,1);
+    return l3;
+  }
+  for (l4=0; l4<l3; l4++) if (strcmp(sc->cond_rhs,sc->dimnames[l4])==0) return l3;
+  strcpy(sc->dimnames[l3],sc->cond_rhs);
+  sc->setid[l3]=arSet[l5].setid;
+  strcat(interchar,sc->cond_rhs);
+  return l3+1;
 }
 
 /* named fatal for statement kinds that cannot carry mapping calls yet
