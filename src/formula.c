@@ -719,6 +719,26 @@ void zdiv_disable(void) {
   zdiv_enabled=0;
 }
 
+/* per-tuple element offset of one operand: each quantifier position
+   contributes stride * (element index -- routed through superset_pos
+   when the operand's set is wider than the frame's -- plus leadlag).
+   The single authority for operand addressing; previously ~30 verbatim
+   copies across the eval switch (refactored for the mapping mode,
+   docs/mapping_complementarity_design.md M2). Sum operands arrive with
+   SupSet/leadlag zeroed, so the full form is exact for them too. */
+static inline offset_t dims_offset(const dim_addr *D, const quantifier *arSet, dim_t fdim, const set_def *sets, const set_element *set_elems) {
+  offset_t l=0;
+  dim_t j;
+  for (j=0; j<fdim; j++) {
+    if(D[j].SupSet==1) {
+      l+=D[j].ADims*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[D[j].SSIndx]+D[j].leadlag);
+    } else {
+      l+=D[j].ADims*(arSet[j].indx+D[j].leadlag);
+    }
+  }
+  return l;
+}
+
 solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,sum_value *sum_vals,formula_op *ops,int nops,quantifier *arSet,dim_t fdim, solve_real zerodivide) {
   int i;
   dim_t j;
@@ -728,22 +748,12 @@ solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,
     switch(ops[i].Oper) {
     case OP_LOAD:
       if (ops[i].Var1Type==OT_ARRAY) {
-        l=0;
-        for (j=0; j<fdim; j++) {
-          if(ops[i].Var1Dims[j].SupSet==1) {
-            l+=ops[i].Var1Dims[j].ADims*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var1Dims[j].SSIndx]+ops[i].Var1Dims[j].leadlag);
-          } else {
-            l+=ops[i].Var1Dims[j].ADims*(arSet[j].indx+ops[i].Var1Dims[j].leadlag);
-          }
-        }
+        l=dims_offset(ops[i].Var1Dims,arSet,fdim,sets,set_elems);
         ops[i].TmpVarVal=record[ops[i].Var1BegAdd+l].value;
         break;
       }
       if (ops[i].Var1Type==OT_SUM) {
-        l=0;
-        for (j=0; j<fdim; j++) {
-          l+=ops[i].Var1Dims[j].ADims*arSet[j].indx;
-        }
+        l=dims_offset(ops[i].Var1Dims,arSet,fdim,sets,set_elems);
         ops[i].TmpVarVal=sum_vals[ops[i].Var1BegAdd+l].value;
         break;
       }
@@ -794,38 +804,17 @@ solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,
         break;
       }
       if (ops[i].Var1Type==OT_CHANGE) {
-        l=0;
-        for (j=0; j<fdim; j++) {
-          if(ops[i].Var1Dims[j].SupSet==1) {
-            l+=ops[i].Var1Dims[j].ADims*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var1Dims[j].SSIndx]+ops[i].Var1Dims[j].leadlag);
-          } else {
-            l+=ops[i].Var1Dims[j].ADims*(arSet[j].indx+ops[i].Var1Dims[j].leadlag);
-          }
-        }
+        l=dims_offset(ops[i].Var1Dims,arSet,fdim,sets,set_elems);
         ops[i].TmpVarVal=record[ops[i].Var1BegAdd+l].substep_base;
         break;
       }
       break;
     case OP_MUL:
       if(ops[i].Var1Type<3||ops[i].Var1Type==OT_CHANGE) {
-        l=0;
-        for (j=0; j<fdim; j++) {
-          if(ops[i].Var1Dims[j].SupSet==1) {
-            l+=ops[i].Var1Dims[j].ADims*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var1Dims[j].SSIndx]+ops[i].Var1Dims[j].leadlag);
-          } else {
-            l+=ops[i].Var1Dims[j].ADims*(arSet[j].indx+ops[i].Var1Dims[j].leadlag);
-          }
-        }
+        l=dims_offset(ops[i].Var1Dims,arSet,fdim,sets,set_elems);
       }
       if(ops[i].Var2Type<3||ops[i].Var2Type==OT_CHANGE) {
-        l1=0;
-        for (j=0; j<fdim; j++) {
-          if(ops[i].Var2Dims[j].SupSet==1) {
-            l1+=ops[i].Var2Dims[j].ADims*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var2Dims[j].SSIndx]+ops[i].Var2Dims[j].leadlag);
-          } else {
-            l1+=ops[i].Var2Dims[j].ADims*(arSet[j].indx+ops[i].Var2Dims[j].leadlag);
-          }
-        }
+        l1=dims_offset(ops[i].Var2Dims,arSet,fdim,sets,set_elems);
       }
       if(ops[i].Var1Type==OT_ARRAY) eval1=record[ops[i].Var1BegAdd+l].value;
       if(ops[i].Var1Type==OT_SUM) eval1=sum_vals[ops[i].Var1BegAdd+l].value;
@@ -841,24 +830,10 @@ solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,
       break;
     case OP_DIV:
       if(ops[i].Var1Type<3||ops[i].Var1Type==OT_CHANGE) {
-        l=0;
-        for (j=0; j<fdim; j++) {
-          if(ops[i].Var1Dims[j].SupSet==1) {
-            l+=ops[i].Var1Dims[j].ADims*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var1Dims[j].SSIndx]+ops[i].Var1Dims[j].leadlag);
-          } else {
-            l+=ops[i].Var1Dims[j].ADims*(arSet[j].indx+ops[i].Var1Dims[j].leadlag);
-          }
-        }
+        l=dims_offset(ops[i].Var1Dims,arSet,fdim,sets,set_elems);
       }
       if(ops[i].Var2Type<3||ops[i].Var2Type==OT_CHANGE) {
-        l1=0;
-        for (j=0; j<fdim; j++) {
-          if(ops[i].Var2Dims[j].SupSet==1) {
-            l1+=ops[i].Var2Dims[j].ADims*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var2Dims[j].SSIndx]+ops[i].Var2Dims[j].leadlag);
-          } else {
-            l1+=ops[i].Var2Dims[j].ADims*(arSet[j].indx+ops[i].Var2Dims[j].leadlag);
-          }
-        }
+        l1=dims_offset(ops[i].Var2Dims,arSet,fdim,sets,set_elems);
       }
       if(ops[i].Var1Type==OT_ARRAY) eval1=record[ops[i].Var1BegAdd+l].value;
       if(ops[i].Var1Type==OT_SUM) eval1=sum_vals[ops[i].Var1BegAdd+l].value;
@@ -894,25 +869,11 @@ solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,
       break;
     case OP_ADD:
       if(ops[i].Var1Type==OT_ARRAY) {
-        l=0;
-        for (j=0; j<fdim; j++) {
-          if(ops[i].Var1Dims[j].SupSet==1) {
-            l+=ops[i].Var1Dims[j].ADims*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var1Dims[j].SSIndx]+ops[i].Var1Dims[j].leadlag);
-          } else {
-            l+=ops[i].Var1Dims[j].ADims*(arSet[j].indx+ops[i].Var1Dims[j].leadlag);
-          }
-        }
+        l=dims_offset(ops[i].Var1Dims,arSet,fdim,sets,set_elems);
         eval1=record[ops[i].Var1BegAdd+l].value;
       }
       if(ops[i].Var1Type==OT_SUM) {
-        l=0;
-        for (j=0; j<fdim; j++) {
-          if(ops[i].Var1Dims[j].SupSet==1) {
-            l+=ops[i].Var1Dims[j].ADims*set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var1Dims[j].SSIndx];
-          } else {
-            l+=ops[i].Var1Dims[j].ADims*arSet[j].indx;
-          }
-        }
+        l=dims_offset(ops[i].Var1Dims,arSet,fdim,sets,set_elems);
         eval1=sum_vals[ops[i].Var1BegAdd+l].value;
       }
       if (ops[i].Var1Type==OT_TEMP) {
@@ -922,37 +883,15 @@ solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,
         eval1=ops[i].Var1Val;
       }
       if(ops[i].Var1Type==OT_CHANGE) {
-        l=0;
-        for (j=0; j<fdim; j++) {
-          if(ops[i].Var1Dims[j].SupSet==1) {
-            l+=ops[i].Var1Dims[j].ADims*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var1Dims[j].SSIndx]+ops[i].Var1Dims[j].leadlag);
-          } else {
-            l+=ops[i].Var1Dims[j].ADims*(arSet[j].indx+ops[i].Var1Dims[j].leadlag);
-          }
-        }
+        l=dims_offset(ops[i].Var1Dims,arSet,fdim,sets,set_elems);
         eval1=record[ops[i].Var1BegAdd+l].substep_base;
       }
       if(ops[i].Var2Type==OT_ARRAY) {
-        l=0;
-        for (j=0; j<fdim; j++) {
-          if(ops[i].Var2Dims[j].SupSet==1) {
-            l+=ops[i].Var2Dims[j].ADims*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var2Dims[j].SSIndx]+ops[i].Var2Dims[j].leadlag);
-          } else {
-            l+=ops[i].Var2Dims[j].ADims*(arSet[j].indx+ops[i].Var2Dims[j].leadlag);
-          }
-        }
+        l=dims_offset(ops[i].Var2Dims,arSet,fdim,sets,set_elems);
         eval2=record[ops[i].Var2BegAdd+l].value;
       }
       if(ops[i].Var2Type==OT_SUM) {
-        l=0;
-        for (j=0; j<fdim; j++) {
-            l1=l;
-          if(ops[i].Var2Dims[j].SupSet==1) {
-            l+=ops[i].Var2Dims[j].ADims*set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var2Dims[j].SSIndx];
-          } else {
-            l+=ops[i].Var2Dims[j].ADims*arSet[j].indx;
-          }
-        }
+        l=dims_offset(ops[i].Var2Dims,arSet,fdim,sets,set_elems);
         eval2=sum_vals[ops[i].Var2BegAdd+l].value;
       }
       if (ops[i].Var2Type==OT_TEMP) {
@@ -962,39 +901,18 @@ solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,
         eval2=ops[i].Var2Val;
       }
       if(ops[i].Var2Type==OT_CHANGE) {
-        l=0;
-        for (j=0; j<fdim; j++) {
-          if(ops[i].Var2Dims[j].SupSet==1) {
-            l+=ops[i].Var2Dims[j].ADims*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var2Dims[j].SSIndx]+ops[i].Var2Dims[j].leadlag);
-          } else {
-            l+=ops[i].Var2Dims[j].ADims*(arSet[j].indx+ops[i].Var2Dims[j].leadlag);
-          }
-        }
+        l=dims_offset(ops[i].Var2Dims,arSet,fdim,sets,set_elems);
         eval2=record[ops[i].Var2BegAdd+l].substep_base;
       }
       ops[i].TmpVarVal=eval1+eval2;
       break;
     case OP_SUB:
       if(ops[i].Var1Type==OT_ARRAY) {
-        l=0;
-        for (j=0; j<fdim; j++) {
-          if(ops[i].Var1Dims[j].SupSet==1) {
-            l+=ops[i].Var1Dims[j].ADims*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var1Dims[j].SSIndx]+ops[i].Var1Dims[j].leadlag);
-          } else {
-            l+=ops[i].Var1Dims[j].ADims*(arSet[j].indx+ops[i].Var1Dims[j].leadlag);
-          }
-        }
+        l=dims_offset(ops[i].Var1Dims,arSet,fdim,sets,set_elems);
         eval1=record[ops[i].Var1BegAdd+l].value;
       }
       if(ops[i].Var1Type==OT_SUM) {
-        l=0;
-        for (j=0; j<fdim; j++) {
-          if(ops[i].Var1Dims[j].SupSet==1) {
-            l+=ops[i].Var1Dims[j].ADims*set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var1Dims[j].SSIndx];
-          } else {
-            l+=ops[i].Var1Dims[j].ADims*arSet[j].indx;
-          }
-        }
+        l=dims_offset(ops[i].Var1Dims,arSet,fdim,sets,set_elems);
         eval1=sum_vals[ops[i].Var1BegAdd+l].value;
       }
       if (ops[i].Var1Type==OT_TEMP) {
@@ -1004,36 +922,15 @@ solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,
         eval1=ops[i].Var1Val;
       }
       if(ops[i].Var1Type==OT_CHANGE) {
-        l=0;
-        for (j=0; j<fdim; j++) {
-          if(ops[i].Var1Dims[j].SupSet==1) {
-            l+=ops[i].Var1Dims[j].ADims*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var1Dims[j].SSIndx]+ops[i].Var1Dims[j].leadlag);
-          } else {
-            l+=ops[i].Var1Dims[j].ADims*(arSet[j].indx+ops[i].Var1Dims[j].leadlag);
-          }
-        }
+        l=dims_offset(ops[i].Var1Dims,arSet,fdim,sets,set_elems);
         eval1=record[ops[i].Var1BegAdd+l].substep_base;
       }
       if(ops[i].Var2Type==OT_ARRAY) {
-        l=0;
-        for (j=0; j<fdim; j++) {
-          if(ops[i].Var2Dims[j].SupSet==1) {
-            l+=ops[i].Var2Dims[j].ADims*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var2Dims[j].SSIndx]+ops[i].Var2Dims[j].leadlag);
-          } else {
-            l+=ops[i].Var2Dims[j].ADims*(arSet[j].indx+ops[i].Var2Dims[j].leadlag);
-          }
-        }
+        l=dims_offset(ops[i].Var2Dims,arSet,fdim,sets,set_elems);
         eval2=record[ops[i].Var2BegAdd+l].value;
       }
       if(ops[i].Var2Type==OT_SUM) {
-        l=0;
-        for (j=0; j<fdim; j++) {
-          if(ops[i].Var2Dims[j].SupSet==1) {
-            l+=ops[i].Var2Dims[j].ADims*set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var2Dims[j].SSIndx];
-          } else {
-            l+=ops[i].Var2Dims[j].ADims*arSet[j].indx;
-          }
-        }
+        l=dims_offset(ops[i].Var2Dims,arSet,fdim,sets,set_elems);
         eval2=sum_vals[ops[i].Var2BegAdd+l].value;
       }
       if (ops[i].Var2Type==OT_TEMP) {
@@ -1043,38 +940,17 @@ solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,
         eval2=ops[i].Var2Val;
       }
       if(ops[i].Var2Type==OT_CHANGE) {
-        l=0;
-        for (j=0; j<fdim; j++) {
-          if(ops[i].Var2Dims[j].SupSet==1) {
-            l+=ops[i].Var2Dims[j].ADims*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var2Dims[j].SSIndx]+ops[i].Var2Dims[j].leadlag);
-          } else {
-            l+=ops[i].Var2Dims[j].ADims*(arSet[j].indx+ops[i].Var2Dims[j].leadlag);
-          }
-        }
+        l=dims_offset(ops[i].Var2Dims,arSet,fdim,sets,set_elems);
         eval2=record[ops[i].Var2BegAdd+l].substep_base;
       }
       ops[i].TmpVarVal=eval1-eval2;
       break;
     case OP_POW:
       if(ops[i].Var1Type<3||ops[i].Var1Type==OT_CHANGE) {
-        l=0;
-        for (j=0; j<fdim; j++) {
-          if(ops[i].Var1Dims[j].SupSet==1) {
-            l+=ops[i].Var1Dims[j].ADims*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var1Dims[j].SSIndx]+ops[i].Var1Dims[j].leadlag);
-          } else {
-            l+=ops[i].Var1Dims[j].ADims*(arSet[j].indx+ops[i].Var1Dims[j].leadlag);
-          }
-        }
+        l=dims_offset(ops[i].Var1Dims,arSet,fdim,sets,set_elems);
       }
       if(ops[i].Var2Type<3||ops[i].Var2Type==OT_CHANGE) {
-        l1=0;
-        for (j=0; j<fdim; j++) {
-          if(ops[i].Var2Dims[j].SupSet==1) {
-            l1+=ops[i].Var2Dims[j].ADims*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var2Dims[j].SSIndx]+ops[i].Var2Dims[j].leadlag);
-          } else {
-            l1+=ops[i].Var2Dims[j].ADims*(arSet[j].indx+ops[i].Var2Dims[j].leadlag);
-          }
-        }
+        l1=dims_offset(ops[i].Var2Dims,arSet,fdim,sets,set_elems);
       }
       if(ops[i].Var1Type==OT_ARRAY) eval1=record[ops[i].Var1BegAdd+l].value;
       if(ops[i].Var1Type==OT_SUM) eval1=sum_vals[ops[i].Var1BegAdd+l].value;
@@ -1105,25 +981,11 @@ solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,
       break;
     default:
       if(ops[i].Var1Type==OT_ARRAY) {
-        l=0;
-        for (j=0; j<fdim; j++) {
-          if(ops[i].Var1Dims[j].SupSet==1) {
-            l+=ops[i].Var1Dims[j].ADims*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var1Dims[j].SSIndx]+ops[i].Var1Dims[j].leadlag);
-          } else {
-            l+=ops[i].Var1Dims[j].ADims*(arSet[j].indx+ops[i].Var1Dims[j].leadlag);
-          }
-        }
+        l=dims_offset(ops[i].Var1Dims,arSet,fdim,sets,set_elems);
         eval1=record[ops[i].Var1BegAdd+l].value;
       }
       if(ops[i].Var1Type==OT_SUM) {
-        l=0;
-        for (j=0; j<fdim; j++) {
-          if(ops[i].Var1Dims[j].SupSet==1) {
-            l+=ops[i].Var1Dims[j].ADims*set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var1Dims[j].SSIndx];
-          } else {
-            l+=ops[i].Var1Dims[j].ADims*arSet[j].indx;
-          }
-        }
+        l=dims_offset(ops[i].Var1Dims,arSet,fdim,sets,set_elems);
         eval1=sum_vals[ops[i].Var1BegAdd+l].value;
       }
       if (ops[i].Var1Type==OT_TEMP) {
@@ -1133,36 +995,15 @@ solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,
         eval1=ops[i].Var1Val;
       }
       if(ops[i].Var1Type==OT_CHANGE) {
-        l=0;
-        for (j=0; j<fdim; j++) {
-          if(ops[i].Var1Dims[j].SupSet==1) {
-            l+=ops[i].Var1Dims[j].ADims*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var1Dims[j].SSIndx]+ops[i].Var1Dims[j].leadlag);
-          } else {
-            l+=ops[i].Var1Dims[j].ADims*(arSet[j].indx+ops[i].Var1Dims[j].leadlag);
-          }
-        }
+        l=dims_offset(ops[i].Var1Dims,arSet,fdim,sets,set_elems);
         eval1=record[ops[i].Var1BegAdd+l].substep_base;
       }
       if(ops[i].Var2Type==OT_ARRAY) {
-        l=0;
-        for (j=0; j<fdim; j++) {
-          if(ops[i].Var2Dims[j].SupSet==1) {
-            l+=ops[i].Var2Dims[j].ADims*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var2Dims[j].SSIndx]+ops[i].Var2Dims[j].leadlag);
-          } else {
-            l+=ops[i].Var2Dims[j].ADims*(arSet[j].indx+ops[i].Var2Dims[j].leadlag);
-          }
-        }
+        l=dims_offset(ops[i].Var2Dims,arSet,fdim,sets,set_elems);
         eval2=record[ops[i].Var2BegAdd+l].value;
       }
       if(ops[i].Var2Type==OT_SUM) {
-        l=0;
-        for (j=0; j<fdim; j++) {
-          if(ops[i].Var2Dims[j].SupSet==1) {
-            l+=ops[i].Var2Dims[j].ADims*set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var2Dims[j].SSIndx];
-          } else {
-            l+=ops[i].Var2Dims[j].ADims*arSet[j].indx;
-          }
-        }
+        l=dims_offset(ops[i].Var2Dims,arSet,fdim,sets,set_elems);
         eval2=sum_vals[ops[i].Var2BegAdd+l].value;
       }
       if (ops[i].Var2Type==OT_TEMP) {
@@ -1172,37 +1013,16 @@ solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,
         eval2=ops[i].Var2Val;
       }
       if(ops[i].Var2Type==OT_CHANGE) {
-        l=0;
-        for (j=0; j<fdim; j++) {
-          if(ops[i].Var2Dims[j].SupSet==1) {
-            l+=ops[i].Var2Dims[j].ADims*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var2Dims[j].SSIndx]+ops[i].Var2Dims[j].leadlag);
-          } else {
-            l+=ops[i].Var2Dims[j].ADims*(arSet[j].indx+ops[i].Var2Dims[j].leadlag);
-          }
-        }
+        l=dims_offset(ops[i].Var2Dims,arSet,fdim,sets,set_elems);
         eval2=record[ops[i].Var2BegAdd+l].substep_base;
       }
 
       if(ops[i].Var3Type==OT_ARRAY) {
-        l=0;
-        for (j=0; j<fdim; j++) {
-          if(ops[i].Var3Dims[j].SupSet==1) {
-            l+=ops[i].Var3Dims[j].ADims*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var3Dims[j].SSIndx]+ops[i].Var3Dims[j].leadlag);
-          } else {
-            l+=ops[i].Var3Dims[j].ADims*(arSet[j].indx+ops[i].Var3Dims[j].leadlag);
-          }
-        }
+        l=dims_offset(ops[i].Var3Dims,arSet,fdim,sets,set_elems);
         eval3=record[ops[i].Var3BegAdd+l].value;
       }
       if(ops[i].Var3Type==OT_SUM) {
-        l=0;
-        for (j=0; j<fdim; j++) {
-          if(ops[i].Var3Dims[j].SupSet==1) {
-            l+=ops[i].Var3Dims[j].ADims*set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var3Dims[j].SSIndx];
-          } else {
-            l+=ops[i].Var3Dims[j].ADims*arSet[j].indx;
-          }
-        }
+        l=dims_offset(ops[i].Var3Dims,arSet,fdim,sets,set_elems);
         eval3=sum_vals[ops[i].Var3BegAdd+l].value;
       }
       if (ops[i].Var3Type==OT_TEMP) {
@@ -1212,14 +1032,7 @@ solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,
         eval3=ops[i].Var3Val;
       }
       if(ops[i].Var3Type==OT_CHANGE) {
-        l=0;
-        for (j=0; j<fdim; j++) {
-          if(ops[i].Var3Dims[j].SupSet==1) {
-            l+=ops[i].Var3Dims[j].ADims*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[ops[i].Var3Dims[j].SSIndx]+ops[i].Var3Dims[j].leadlag);
-          } else {
-            l+=ops[i].Var3Dims[j].ADims*(arSet[j].indx+ops[i].Var3Dims[j].leadlag);
-          }
-        }
+        l=dims_offset(ops[i].Var3Dims,arSet,fdim,sets,set_elems);
         eval3=record[ops[i].Var3BegAdd+l].substep_base;
       }
       if(ops[i].Oper==OP_IF_EQ)if(eval1==eval2)ops[i].TmpVarVal=eval3;else ops[i].TmpVarVal=0;
