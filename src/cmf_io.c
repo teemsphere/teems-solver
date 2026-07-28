@@ -606,12 +606,20 @@ int tab_preprocess(char *filename, char *newtabfile) {
       str_replace_first(readline,"read(", "read (");
       str_replace_first(readline,"write(", "write (");
       str_replace_first(readline,"zerodivide(", "zerodivide (");
+      str_replace_first(readline,"mapping(", "mapping (");
       if(str_find_ci(readline,"subset ")==1||str_find_ci(readline,"subset ")==0) {
         strcpy(commsyntax,"subset");
         check=1;
       }
       if(str_find_ci(readline,"file ")==1||str_find_ci(readline,"file ")==0) {
         strcpy(commsyntax,"file");
+        check=1;
+      }
+      /* MAPPING declarations (manual 11.9); without recognition the
+         sticky-keyword continuation would hand them to the previous
+         statement's scanner */
+      if(str_find_ci(readline,"mapping ")==1||str_find_ci(readline,"mapping ")==0) {
+        strcpy(commsyntax,"mapping");
         check=1;
       }
       if (str_find_ci(readline,"coefficient ")==1||str_find_ci(readline,"coefficient ")==0) {//if (ha_cgefind(readline,"coefficient ")>-1) {

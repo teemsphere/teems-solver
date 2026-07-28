@@ -495,6 +495,11 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
 
   while (tab_next_statement(commsyntax,filehandle,line,DATREADLINE)) {
     strcpy(linecopy,line);
+    /* Read (by_elements) statements carry CHARACTER data for set
+       mappings (manual 11.9.1a) and are consumed by
+       mapping_values_read; the numeric reader must not see them
+       (the "(" would route them into the indexed-read branch) */
+    if (str_find_ci(line,"by_elements")>-1) continue;
     /* Read (IfHeaderExists) qualifier (manual 10.6/11.11.8; plan 3.9):
        the read runs only when the header is on the file; an absent
        header is NOT an error -- values set up by earlier statements
@@ -1616,7 +1621,7 @@ int sum_count(char *formulain, char *commsyntax) {
    namespace cross-binds here. Reserved function words are rejected as
    identifiers (the expression machinery would misparse them).
    Returns 0 ok, -1 fatal. */
-int names_validate(set_def *sets, dim_t nset, array_def *coefs, offset_t ncof, array_def *vars, offset_t nvar) {
+int names_validate(set_def *sets, dim_t nset, array_def *coefs, offset_t ncof, array_def *vars, offset_t nvar, map_def *maps, dim_t nmap) {
   static const char *reserved[]={"sum","if","abs","max","min","sqrt","exp","loge","log10","id01","id0v","round","trunc0","truncb","prod","maxs","mins","random","normal","cumnormal","lognormal","cumlognormal","gperf","gperfc","ras_matrix","all",NULL};
   offset_t i,j;
   dim_t k;
@@ -1657,6 +1662,28 @@ int names_validate(set_def *sets, dim_t nset, array_def *coefs, offset_t ncof, a
       printf("Error: set name %s is a reserved word (manual 11.2.1)\n",sets[k].setname);
       return -1;
     }
+  for(k=0; k<nmap; k++) {
+    for(i=0; i<ncof; i++)if(strcmp(maps[k].mapname,coefs[i].cofname)==0) {
+        printf("Error: name %s is declared as both a mapping and a coefficient (manual 11.2.1)\n",maps[k].mapname);
+        return -1;
+      }
+    for(i=0; i<nvar; i++)if(strcmp(maps[k].mapname,vars[i].cofname)==0) {
+        printf("Error: name %s is declared as both a mapping and a variable (manual 11.2.1)\n",maps[k].mapname);
+        return -1;
+      }
+    for(j=0; j<nset; j++)if(strcmp(maps[k].mapname,sets[j].setname)==0) {
+        printf("Error: name %s is declared as both a mapping and a set (manual 11.2.1)\n",maps[k].mapname);
+        return -1;
+      }
+    for(j=k+1; j<nmap; j++)if(strcmp(maps[k].mapname,maps[j].mapname)==0) {
+        printf("Error: mapping %s is declared more than once (manual 11.2.1)\n",maps[k].mapname);
+        return -1;
+      }
+    for(r=0; reserved[r]!=NULL; r++)if(strcmp(maps[k].mapname,reserved[r])==0) {
+        printf("Error: mapping name %s is a reserved word (manual 11.2.1)\n",maps[k].mapname);
+        return -1;
+      }
+  }
   return 0;
 }
 
@@ -1760,6 +1787,250 @@ offset_t tab_count_statements(char *fname, char *commsyntax) {
   }
   fclose(filehandle);
   return j;
+}
+
+/* MAPPING declarations (manual 11.9):
+     Mapping [(onto)] <name> from <set1> to <set2> ;
+   Both sets must already be declared; the (onto) qualifier arms the
+   codomain-coverage check in mappings_validate (11.9.3). */
+int mappings_read(char *fname, map_def *maps, dim_t nmap, set_def *sets, dim_t nset) {
+  FILE *filehandle;
+  char line[TABREADLINE]="\0",linecopy[TABREADLINE];
+  char *commsyntax="mapping";
+  char *readitem=NULL;
+  dim_t j=0,i;
+  filehandle = fopen(fname,"r");
+  while (tab_next_statement(commsyntax,filehandle,line,TABREADLINE)) {
+    if (j>=nmap) break;
+    strcpy(linecopy,line);
+    readitem = strtok(line," ");   /* "mapping" */
+    readitem = strtok(NULL," ");
+    if (readitem!=NULL&&strcmp(readitem,"(onto)")==0) {
+      maps[j].onto=true;
+      readitem = strtok(NULL," ");
+    }
+    if (readitem==NULL||strlen(readitem)>=NAMESIZE) {
+      printf("Error: malformed Mapping statement in TAB file: %s\n",linecopy);
+      fclose(filehandle);
+      MPI_Abort(PETSC_COMM_WORLD,1);
+      return -1;
+    }
+    strcpy(maps[j].mapname,readitem);
+    readitem = strtok(NULL," ");
+    if (readitem==NULL||strcmp(readitem,"from")!=0) {
+      printf("Error: malformed Mapping statement in TAB file: %s\n",linecopy);
+      fclose(filehandle);
+      MPI_Abort(PETSC_COMM_WORLD,1);
+      return -1;
+    }
+    readitem = strtok(NULL," ");
+    for (i=0; i<nset; i++) if (readitem!=NULL&&strcmp(readitem,sets[i].setname)==0) break;
+    if (readitem==NULL||i==nset) {
+      printf("Error: set %s in Mapping %s is not declared\n",readitem==NULL?"":readitem,maps[j].mapname);
+      fclose(filehandle);
+      MPI_Abort(PETSC_COMM_WORLD,1);
+      return -1;
+    }
+    maps[j].fromset=i;
+    readitem = strtok(NULL," ");
+    if (readitem==NULL||strcmp(readitem,"to")!=0) {
+      printf("Error: malformed Mapping statement in TAB file: %s\n",linecopy);
+      fclose(filehandle);
+      MPI_Abort(PETSC_COMM_WORLD,1);
+      return -1;
+    }
+    readitem = strtok(NULL," ;");
+    for (i=0; i<nset; i++) if (readitem!=NULL&&strcmp(readitem,sets[i].setname)==0) break;
+    if (readitem==NULL||i==nset) {
+      printf("Error: set %s in Mapping %s is not declared\n",readitem==NULL?"":readitem,maps[j].mapname);
+      fclose(filehandle);
+      MPI_Abort(PETSC_COMM_WORLD,1);
+      return -1;
+    }
+    maps[j].toset=i;
+    maps[j].values= (dim_t *) calloc (sets[maps[j].fromset].size>0?sets[maps[j].fromset].size:1,sizeof(dim_t));
+    j++;
+  }
+  fclose(filehandle);
+  return 0;
+}
+
+/* Mapping values via Read (by_elements) (manual 11.9.1a): CHARACTER
+   data, one codomain element NAME per domain element, resolved to
+   codomain positions here. Also the guard sweep for the deferred
+   mapping forms: integer reads of a mapping (11.9.1c), formulas
+   assigning a mapping (11.9.1b/d/e), and writes of a mapping
+   (11.9.10) are named fatals, not silent mis-binds. */
+int mapping_values_read(char *fname, int niodata, cmf_file_entry *iodata, map_def *maps, dim_t nmap, set_def *sets, set_element *set_elems) {
+  FILE *filehandle;
+  char line[TABREADLINE]="\0",linecopy[TABREADLINE],line1[TABREADLINE],longname[TABREADLINE];
+  char *readitem=NULL;
+  dim_t j,i,vsize,dim1;
+  int k0,k1,nj;
+  filehandle = fopen(fname,"r");
+  while (tab_next_statement("read",filehandle,line,TABREADLINE)) {
+    strcpy(linecopy,line);
+    int byele=(str_find_ci(line,"by_elements")>-1);
+    if (byele) {
+      str_replace_first(line,"(by_elements)","");
+      while (str_replace_all(line,"  "," "));
+    }
+    readitem = strtok(line," ");   /* "read" */
+    readitem = strtok(NULL," ");
+    if (readitem==NULL) continue;
+    for (j=0; j<nmap; j++) if (strcmp(readitem,maps[j].mapname)==0) break;
+    if (j==nmap) {
+      if (byele) {
+        printf("Error: Read (by_elements) target %s is not a declared mapping (manual 11.9.1)\n",readitem);
+        fclose(filehandle);
+        MPI_Abort(PETSC_COMM_WORLD,1);
+        return -1;
+      }
+      continue;
+    }
+    if (!byele) {
+      printf("Error: integer Read of mapping %s is not supported; use Read (by_elements) (manual 11.9.1)\n",maps[j].mapname);
+      fclose(filehandle);
+      MPI_Abort(PETSC_COMM_WORLD,1);
+      return -1;
+    }
+    k0=str_find_ci(linecopy,"from file ");
+    if (k0<0) {
+      printf("Error: Read (by_elements) for mapping %s has no file clause\n",maps[j].mapname);
+      fclose(filehandle);
+      MPI_Abort(PETSC_COMM_WORLD,1);
+      return -1;
+    }
+    k1=str_find_ci(linecopy+k0+10," ");
+    if (k1<0||k1>=(int)sizeof(line1)) {
+      printf("Error: malformed Read (by_elements) statement for mapping %s\n",maps[j].mapname);
+      fclose(filehandle);
+      MPI_Abort(PETSC_COMM_WORLD,1);
+      return -1;
+    }
+    strncpy(line1,linecopy+k0+10,k1);
+    line1[k1]='\0';
+    for (k0=0; k0<niodata; k0++) if (strcmp(line1,iodata[k0].logname)==0) break;
+    if (k0==niodata) {
+      printf("Error: cannot open file %s named in the CMF file\n",line1);
+      fclose(filehandle);
+      MPI_Abort(PETSC_COMM_WORLD,1);
+      return -1;
+    }
+    readitem = strtok(NULL,"\"");
+    readitem = strtok(NULL,"\"");
+    if (readitem==NULL||strlen(readitem)>=HEADERSIZE) {
+      printf("Error: Read (by_elements) for mapping %s needs a header (manual 11.9.1)\n",maps[j].mapname);
+      fclose(filehandle);
+      MPI_Abort(PETSC_COMM_WORLD,1);
+      return -1;
+    }
+    datafile_read_header_info(readitem,iodata[k0].filname,&vsize,longname,&dim1);
+    if (dim1!=sets[maps[j].fromset].size) {
+      printf("Error: Read (by_elements) for mapping %s supplies %ld values for the %ld elements of set %s\n",maps[j].mapname,(long)dim1,(long)sets[maps[j].fromset].size,sets[maps[j].fromset].setname);
+      fclose(filehandle);
+      MPI_Abort(PETSC_COMM_WORLD,1);
+      return -1;
+    }
+    datafile_labels *matvar1= (datafile_labels *) calloc (dim1,sizeof(datafile_labels));
+    datafile_read_labels(readitem,iodata[k0].filname,dim1,matvar1);
+    for (i=0; i<dim1; i++) {
+      nj=0;
+      while (matvar1[i].ch[nj]!='\0') {
+        matvar1[i].ch[nj]=tolower((int)matvar1[i].ch[nj]);
+        nj++;
+      }
+      dim_t k;
+      for (k=0; k<sets[maps[j].toset].size; k++)
+        if (strcmp(matvar1[i].ch,set_elems[sets[maps[j].toset].offset+k].setele)==0) break;
+      if (k==sets[maps[j].toset].size) {
+        printf("Error: %s in the data for mapping %s is not an element of set %s (manual 11.9.2)\n",matvar1[i].ch,maps[j].mapname,sets[maps[j].toset].setname);
+        free(matvar1);
+        fclose(filehandle);
+        MPI_Abort(PETSC_COMM_WORLD,1);
+        return -1;
+      }
+      maps[j].values[i]=k;
+    }
+    free(matvar1);
+    maps[j].has_values=true;
+  }
+  fclose(filehandle);
+  return 0;
+}
+
+/* Deferred-form guards (run AFTER names_validate so a name clash gets
+   its own message first): a formula whose LHS is a mapping
+   (11.9.1b/d/e) or a write of a mapping (11.9.10) would otherwise
+   mis-bind silently */
+int mapping_use_guards(char *fname, map_def *maps, dim_t nmap) {
+  FILE *filehandle;
+  char line[TABREADLINE]="\0",linecopy[TABREADLINE];
+  char *readitem=NULL;
+  dim_t j;
+  filehandle = fopen(fname,"r");
+  while (tab_next_statement("formula",filehandle,line,TABREADLINE)) {
+    strcpy(linecopy,line);
+    readitem = strtok(line," ");
+    readitem = strtok(NULL," (");
+    /* skip quantifier groups ("all,c,com)" -- the "(" is a delimiter)
+       and Formula qualifiers ("by_elements)", "initial)", ...) */
+    while (readitem!=NULL&&(strncmp(readitem,"all,",4)==0||strchr(readitem,')')!=NULL)) {
+      readitem = strtok(NULL," (");
+    }
+    if (readitem==NULL) continue;
+    strtok(readitem,"(=");
+    for (j=0; j<nmap; j++) if (strcmp(readitem,maps[j].mapname)==0) {
+        printf("Error: formula-assigned mappings are not supported; give mapping %s its values with Read (by_elements) (manual 11.9.1)\n",maps[j].mapname);
+        fclose(filehandle);
+        MPI_Abort(PETSC_COMM_WORLD,1);
+        return -1;
+      }
+  }
+  fclose(filehandle);
+  filehandle = fopen(fname,"r");
+  while (tab_next_statement("write",filehandle,line,TABREADLINE)) {
+    readitem = strtok(line," ");
+    readitem = strtok(NULL," ");
+    if (readitem!=NULL&&readitem[0]=='(') readitem = strtok(NULL," ");
+    if (readitem==NULL) continue;
+    for (j=0; j<nmap; j++) if (strcmp(readitem,maps[j].mapname)==0) {
+        printf("Error: writing mapping %s is not supported (manual 11.9.10)\n",maps[j].mapname);
+        fclose(filehandle);
+        MPI_Abort(PETSC_COMM_WORLD,1);
+        return -1;
+      }
+  }
+  fclose(filehandle);
+  return 0;
+}
+
+/* Pre-use mapping validation (manual 11.9.2/11.9.3): every mapping
+   must have values, and an (onto) mapping must cover its codomain.
+   Range validity is guaranteed by construction in
+   mapping_values_read (names resolve to positions or abort). */
+int mappings_validate(map_def *maps, dim_t nmap, set_def *sets, set_element *set_elems) {
+  dim_t j,i;
+  for (j=0; j<nmap; j++) {
+    if (!maps[j].has_values) {
+      printf("Error: mapping %s is never given values (manual 11.9.1)\n",maps[j].mapname);
+      MPI_Abort(PETSC_COMM_WORLD,1);
+      return -1;
+    }
+    if (maps[j].onto) {
+      dim_t tosize=sets[maps[j].toset].size;
+      bool *hit= (bool *) calloc (tosize>0?tosize:1,sizeof(bool));
+      for (i=0; i<sets[maps[j].fromset].size; i++) hit[maps[j].values[i]]=true;
+      for (i=0; i<tosize; i++) if (!hit[i]) {
+          printf("Error: mapping %s is not onto: element %s of set %s is not mapped to (manual 11.9.3)\n",maps[j].mapname,set_elems[sets[maps[j].toset].offset+i].setele,sets[maps[j].toset].setname);
+          free(hit);
+          MPI_Abort(PETSC_COMM_WORLD,1);
+          return -1;
+        }
+      free(hit);
+    }
+  }
+  return 0;
 }
 
 offset_t closure_read(char *fname, char *commsyntax,closure_entry *closure_vals, array_def *vars,offset_t nvar,set_def *sets,dim_t nset, set_element *set_elems) {

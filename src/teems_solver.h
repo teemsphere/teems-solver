@@ -140,6 +140,21 @@ typedef struct
   dim_t superset_pos[MAXSUPSET];
 } set_element ;
 
+/* a MAPPING declaration (manual 11.9): a total many-to-one function
+   from domain-set elements to codomain-set positions. Values arrive
+   via Read (by_elements) (11.9.1a) and are immutable once used
+   (11.9.9). */
+typedef struct
+{
+  char mapname[NAMESIZE];
+  dim_t fromset;   /* set id of the domain */
+  dim_t toset;     /* set id of the codomain */
+  bool onto;       /* (onto): every codomain element must be hit (11.9.3) */
+  bool has_values;
+  bool used;
+  dim_t *values;   /* per domain element: position in the codomain */
+} map_def ;
+
 /* a COEFFICIENT or VARIABLE declaration: name, dimensionality and layout */
 typedef struct
 {
@@ -328,9 +343,15 @@ extern int teems_ps_ncoefs;
 extern bool *teems_coef_is_ps;
 extern int teems_ps_pass;
 void postsim_mark_coefs(array_def *coefs, offset_t ncof);
-/* 11.2.1 name uniqueness across coefficient/variable/set + reserved
-   words (the 12.2.2 name-resolution spec pass) */
-int names_validate(set_def *sets, dim_t nset, array_def *coefs, offset_t ncof, array_def *vars, offset_t nvar);
+/* 11.2.1 name uniqueness across coefficient/variable/set/mapping +
+   reserved words (the 12.2.2 name-resolution spec pass) */
+int names_validate(set_def *sets, dim_t nset, array_def *coefs, offset_t ncof, array_def *vars, offset_t nvar, map_def *maps, dim_t nmap);
+/* MAPPING statements (manual 11.9): declarations, by_elements value
+   reads, and the pre-use validation pass (range/onto/coverage) */
+int mappings_read(char *fname, map_def *maps, dim_t nmap, set_def *sets, dim_t nset);
+int mapping_values_read(char *fname, int niodata, cmf_file_entry *iodata, map_def *maps, dim_t nmap, set_def *sets, set_element *set_elems);
+int mapping_use_guards(char *fname, map_def *maps, dim_t nmap);
+int mappings_validate(map_def *maps, dim_t nmap, set_def *sets, set_element *set_elems);
 offset_t postsim_reads_execute(char *psname, int niodata, cmf_file_entry *iodata, set_def *sets, dim_t nset, set_element *set_elems, array_def *coefs, offset_t ncof, offset_t ncofele, array_def *vars, offset_t nvar, offset_t nvarele, elem_value *elem_vals);
 /* Default-statement helpers (manual 10.19; audit A6): positional
    semantics live in the readers; values are validated once up front */

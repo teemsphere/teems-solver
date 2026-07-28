@@ -634,6 +634,8 @@ int main(int argc,char **args) {
   offset_t nsetspace=0,dcount,ndblock=0,netcut=0,ndblock1,nreg=0,ntime=0;
   dim_t nset=0,vsize,dim1,nlength=0,matsol=0,laA=2,laDi=2,laD=2,nsbbdblocks=2,nesteddbbd=0,mc66=0,subints=1,subindx;
   offset_t alltimeset=-1,allregset=-1;
+  map_def *maps=NULL;
+  dim_t nmap=0;
   PetscReal cntl6=0,cntl3;
   if(rank<10) {
     strcat(newtabfile,"000");
@@ -1035,11 +1037,30 @@ int main(int argc,char **args) {
     j2=1;
     while(j2==1)for(i=1; i<MAXSUPSET; i++)subset_map_build(set_elems,sets,nset,&j2); //printf("check %d\n",i);}
     ndblock1=ndblock;
+    /* MAPPING statements (manual 11.9): declarations + by_elements
+       values, resolved against the set elements built above so they
+       exist before any coefficient/equation machinery runs */
+    nmap=tab_count_statements(tabfile,"mapping");
+    if(nmap>0) {
+      maps= (map_def *) calloc (nmap,sizeof(map_def));
+      mappings_read(tabfile,maps,nmap,sets,nset);
+      mapping_values_read(tabfile,niodata,iodata,maps,nmap,sets,set_elems);
+      mappings_validate(maps,nmap,sets,set_elems);
+    }
   }
   MPI_Barrier(PETSC_COMM_WORLD);
   if(nohsl) {
     MPI_Bcast(sets,nset*sizeof(set_def), MPI_BYTE,0, PETSC_COMM_WORLD);
     MPI_Bcast(set_elems,nsetspace*sizeof(set_element), MPI_BYTE,0, PETSC_COMM_WORLD);
+    MPI_Bcast(&nmap,sizeof(dim_t), MPI_BYTE,0, PETSC_COMM_WORLD);
+    if(nmap>0) {
+      if(rank!=0) maps= (map_def *) calloc (nmap,sizeof(map_def));
+      MPI_Bcast(maps,nmap*sizeof(map_def), MPI_BYTE,0, PETSC_COMM_WORLD);
+      for(i=0; i<nmap; i++) {
+        if(rank!=0) maps[i].values= (dim_t *) calloc (sets[maps[i].fromset].size>0?sets[maps[i].fromset].size:1,sizeof(dim_t));
+        MPI_Bcast(maps[i].values,sets[maps[i].fromset].size*sizeof(dim_t), MPI_BYTE,0, PETSC_COMM_WORLD);
+      }
+    }
   }
   /* The chain dimension and the diagonal-block partition are derived
      structurally just before the ordering, once the equations are
@@ -1108,7 +1129,8 @@ int main(int argc,char **args) {
     /* 11.2.1 name uniqueness (the 12.2.2 name-resolution spec pass):
        a coefficient/variable/set name collision would silently bind
        whichever list is searched first */
-    if(names_validate(sets,nset,coefs,ncof,vars,nvar)==-1)MPI_Abort(PETSC_COMM_WORLD,1);
+    if(names_validate(sets,nset,coefs,ncof,vars,nvar,maps,nmap)==-1)MPI_Abort(PETSC_COMM_WORLD,1);
+    if(nmap>0)mapping_use_guards(tabfile,maps,nmap);
     nvarele1=nvarele;
   }
   logmsg(2,"nvarele %ld\n",nvarele);
