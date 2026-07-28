@@ -114,8 +114,10 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
         for (l=0; l<fdim; l++) {
           if(varindex==2) {
             ops[nops].Var2Dims[l].ADims=0;
+            ops[nops].Var2Dims[l].MapId=0;
           } else {
             ops[nops].Var1Dims[l].ADims=0;
+            ops[nops].Var1Dims[l].MapId=0;
           }
         }
         break;
@@ -129,10 +131,12 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
               ops[nops].Var2Dims[l].ADims=0;
               ops[nops].Var2Dims[l].leadlag=0;
               ops[nops].Var2Dims[l].SupSet=0;
+              ops[nops].Var2Dims[l].MapId=0;
             } else {
               ops[nops].Var1Dims[l].ADims=0;
               ops[nops].Var1Dims[l].leadlag=0;
               ops[nops].Var1Dims[l].SupSet=0;
+              ops[nops].Var1Dims[l].MapId=0;
             }
           if (strcmp(p,arSet[l].index_name)==0) {
             if(mp>0) {
@@ -162,10 +166,12 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
             ops[nops].Var2Dims[l1].ADims=0;
             ops[nops].Var2Dims[l1].leadlag=0;
             ops[nops].Var2Dims[l1].SupSet=0;
+            ops[nops].Var2Dims[l1].MapId=0;
           } else {
             ops[nops].Var1Dims[l1].ADims=0;
             ops[nops].Var1Dims[l1].leadlag=0;
             ops[nops].Var1Dims[l1].SupSet=0;
+            ops[nops].Var1Dims[l1].MapId=0;
           }
         }
         for (l=0; l<coefs[index].size-1; l++) {
@@ -250,9 +256,11 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
           if(varindex==2) {
             ops[nops].Var2Dims[l].ADims=0;
             ops[nops].Var2Dims[l].leadlag=0;
+            ops[nops].Var2Dims[l].MapId=0;
           } else {
             ops[nops].Var1Dims[l].ADims=0;
             ops[nops].Var1Dims[l].leadlag=0;
+            ops[nops].Var1Dims[l].MapId=0;
           }
         }
         break;
@@ -266,10 +274,12 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
               ops[nops].Var2Dims[l].ADims=0;
               ops[nops].Var2Dims[l].leadlag=0;
               ops[nops].Var2Dims[l].SupSet=0;
+              ops[nops].Var2Dims[l].MapId=0;
             } else {
               ops[nops].Var1Dims[l].ADims=0;
               ops[nops].Var1Dims[l].leadlag=0;
               ops[nops].Var1Dims[l].SupSet=0;
+              ops[nops].Var1Dims[l].MapId=0;
             }
           if (strcmp(p,arSet[l].index_name)==0) {
             if(mp>0) {
@@ -299,10 +309,12 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
             ops[nops].Var2Dims[l1].ADims=0;
             ops[nops].Var2Dims[l1].leadlag=0;
             ops[nops].Var2Dims[l1].SupSet=0;
+            ops[nops].Var2Dims[l1].MapId=0;
           } else {
             ops[nops].Var1Dims[l1].ADims=0;
             ops[nops].Var1Dims[l1].leadlag=0;
             ops[nops].Var1Dims[l1].SupSet=0;
+            ops[nops].Var1Dims[l1].MapId=0;
           }
         }
         for (l=0; l<vars[index].size-1; l++) {
@@ -379,6 +391,23 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
         ops[nops].Var1BegAdd=sum_cof[index].offset;
         ops[nops].Var1Type=OT_SUM;
         for (l1=0; l1<sum_cof[index].size; l1++)ops[nops].Var1Dims[l1].SSIndx=0;
+      }
+      /* ops slots are reused across the sum-body compiles and the outer
+         statement compile of one statement, and this block only ever
+         wrote ADims: a generated-sum dim inheriting a stale MapId from
+         a mapped body operand routed the OUTER read through the
+         mapping's value table (M2c kit, carried leg) -- clear the
+         routing fields for every frame dim */
+      for (l1=0; l1<fdim; l1++) {
+        if(varindex==2) {
+          ops[nops].Var2Dims[l1].leadlag=0;
+          ops[nops].Var2Dims[l1].SupSet=0;
+          ops[nops].Var2Dims[l1].MapId=0;
+        } else {
+          ops[nops].Var1Dims[l1].leadlag=0;
+          ops[nops].Var1Dims[l1].SupSet=0;
+          ops[nops].Var1Dims[l1].MapId=0;
+        }
       }
       switch(sum_cof[index].size) {
       case 0:
@@ -1530,15 +1559,9 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
   zdiv_scan_reset();
   while (tab_next_statement_resolved(commsyntax,filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
     /* mapping calls lower to flat map@idx tokens before any brace
-       tokenizer runs (manual 11.9.4; design doc M2); inside sum
-       bodies the carried-dim discovery cannot digest them yet */
-    if (teems_nmap>0) {
-      mapping_lower_calls(line);
-      if (strchr(line,'@')!=NULL&&str_find_ci(line,"sum(")>-1) {
-        printf("Error: mapping-valued indices inside sums are not supported yet\n");
-        MPI_Abort(PETSC_COMM_WORLD,1);
-      }
-    }
+       tokenizer runs (manual 11.9.4; design doc M2); sum carried-dim
+       discovery identifies them by their domain index (M2c) */
+    if (teems_nmap>0) mapping_lower_calls(line);
     /* audit A7 / plan 2.2: FORMULA & EQUATION expands to
        Formula (initial) + Equation (levels) (manual 10.9.1) -- the
        levels-equation half is outside this solver's linearized-only

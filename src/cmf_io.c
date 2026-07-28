@@ -1083,12 +1083,8 @@ int tab_write_variables(char *filename, char *newtabfile,array_def *vars,offset_
          backsolve validator -- reads this rewritten file, so the
          nested MAP(i) index form is rewritten to the flat map@i token
          exactly once, here.  Updates keep their named fatal
-         (mapping_use_guards).  Mapped indices inside sum bodies stay
-         fatal until M2c. */
-      if((eqpos==0||eqpos==1)&&teems_nmap>0) {
-        mapping_lower_calls(line);
-        mapping_eq_sum_guard(line);
-      }
+         (mapping_use_guards). */
+      if((eqpos==0||eqpos==1)&&teems_nmap>0) mapping_lower_calls(line);
     }
     fprintf(fout,"%s",line);
   }

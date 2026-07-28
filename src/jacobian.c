@@ -376,16 +376,20 @@ static void linvar_dim_read(char *p, char *linecopy, offset_t lvar,
   if(strchr(p,'@')!=NULL) {
     char *idx=mapping_token_split(p,&mp);
     if(split_mapped) {
+      /* the loop set is whatever the domain index ranges over -- fall
+         through to the textual recovery with the bare index so a sum
+         over a SUBSET of the domain resolves to the subset and trips
+         the exact-domain fatal in linvar_map_dim_check rather than
+         silently looping the full domain (M2c) */
       ref->dimmapid[d]=mp;
-      strcpy(ref->dimnames[d],idx);
-      strcpy(ref->dimsetnames[d],sets[teems_maps[mp-1].fromset].setname);
+      p=idx;
     }
     else {
       *(idx-1)='@';
       strcpy(ref->dimnames[d],p);
       strcpy(ref->dimsetnames[d],sets[teems_maps[mp-1].toset].setname);
+      return;
     }
-    return;
   }
   strcpy(ref->dimnames[d],p);
   strcpy(lintmp,"(all,");
@@ -402,6 +406,12 @@ static void linvar_dim_read(char *p, char *linecopy, offset_t lvar,
     strcat(lintmp,",");
     lvar1=str_count_ci(linecopy,lintmp);
     lvar3=str_find_ci(linecopy,lintmp);
+    if (mp>0&&lvar3==-1) {
+      /* mapped index with no quantifier or enclosing sum in sight:
+         fall back to the declared domain (cannot crash on the miss) */
+      strcpy(ref->dimsetnames[d],sets[teems_maps[mp-1].fromset].setname);
+      return;
+    }
     if (lvar1>1) for(lvar2=0; lvar2<lvar1; lvar2++) {
         lvar4=str_find_ci(&linecopy[lvar3+4],lintmp);
         if (lvar4>-1&&lvar4<lvar) {
@@ -1211,24 +1221,24 @@ int eq_sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifier 
             strcat(argu,",");
             l=str_count_ci(argu, ",");
             if (l<2) {
-              if(strcmp(p,sum_cof[j].sumindx)!=0) {
+              if(strcmp(sum_dim_identity(p),sum_cof[j].sumindx)!=0) {
                 strcat(interchar,sum_cof[j].sumindx);
                 for (l4=0; l4<l3; l4++) {
-                  if(strcmp(p,sum_cof[j].dimnames[l4])==0) {
+                  if(strcmp(sum_dim_identity(p),sum_cof[j].dimnames[l4])==0) {
                     break;
                   }
                 }
                 if (l4==l3||l3==0) {
-                  strcpy(sum_cof[j].dimnames[l3],p);
+                  strcpy(sum_cof[j].dimnames[l3],sum_dim_identity(p));
                   l6=0;
-                  for (l5=0; l5<fdim-1; l5++) if(strcmp(p,arSet[l5].index_name)==0) {
+                  for (l5=0; l5<fdim-1; l5++) if(strcmp(sum_dim_identity(p),arSet[l5].index_name)==0) {
                       sum_cof[j].setid[l3]=l5;
                       l6++;
                     }
                   if (l6==0) {
                     interchar1[0]='\0';
                     strcat(interchar1,"sum(");
-                    strcat(interchar1,p);
+                    strcat(interchar1,sum_dim_identity(p));
                     strcpy(line3,formulain);
                     line3[readitem-formulain]='\0';
                     l7=str_rfind_ci(line3,interchar1);
@@ -1251,17 +1261,17 @@ int eq_sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifier 
                 else {
                   p = strtok(NULL,",");
                 }
-                if(strcmp(p,sum_cof[j].sumindx)!=0) {
+                if(strcmp(sum_dim_identity(p),sum_cof[j].sumindx)!=0) {
                   for (l4=0; l4<l3; l4++) {
-                    if(strcmp(p,sum_cof[j].dimnames[l4])==0) {
+                    if(strcmp(sum_dim_identity(p),sum_cof[j].dimnames[l4])==0) {
                       break;
                     }
                   }
                   if (l4==l3||l3==0) {
-                    strcpy(sum_cof[j].dimnames[l3],p);
+                    strcpy(sum_cof[j].dimnames[l3],sum_dim_identity(p));
                     strcat(interchar,sum_cof[j].dimnames[l3]);
                     l6=0;
-                    for (l5=0; l5<fdim-1; l5++) if(strcmp(p,arSet[l5].index_name)==0) {
+                    for (l5=0; l5<fdim-1; l5++) if(strcmp(sum_dim_identity(p),arSet[l5].index_name)==0) {
                         sum_cof[j].setid[l3]=l5;
                         l6++;
                         break;
@@ -1269,7 +1279,7 @@ int eq_sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifier 
                     if (l6==0) {
                       interchar1[0]='\0';
                       strcat(interchar1,"sum(");
-                      strcat(interchar1,p);
+                      strcat(interchar1,sum_dim_identity(p));
                       strcpy(line3,formulain);
                       line3[readitem-formulain]='\0';
                       l7=str_rfind_ci(line3,interchar1);
@@ -1369,24 +1379,24 @@ int eq_sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifier 
             strcat(argu,",");
             l=str_count_ci(argu, ",");
             if (l<2) {
-              if(strcmp(p,sum_cof[j].sumindx)!=0) {
+              if(strcmp(sum_dim_identity(p),sum_cof[j].sumindx)!=0) {
                 for (l4=0; l4<l3; l4++) {
-                  if(strcmp(p,sum_cof[j].dimnames[l4])==0) {
+                  if(strcmp(sum_dim_identity(p),sum_cof[j].dimnames[l4])==0) {
                     break;
                   }
                 }
                 if (l4==l3||l3==0) {
-                  strcpy(sum_cof[j].dimnames[l3],p);
+                  strcpy(sum_cof[j].dimnames[l3],sum_dim_identity(p));
                   strcat(interchar,sum_cof[j].dimnames[l3]);
                   l6=0;
-                  for (l5=0; l5<fdim-1; l5++) if(strcmp(p,arSet[l5].index_name)==0) {
+                  for (l5=0; l5<fdim-1; l5++) if(strcmp(sum_dim_identity(p),arSet[l5].index_name)==0) {
                       sum_cof[j].setid[l3]=l5;
                       l6++;
                     }
                   if (l6==0) {
                     interchar1[0]='\0';
                     strcat(interchar1,"sum(");
-                    strcat(interchar1,p);
+                    strcat(interchar1,sum_dim_identity(p));
                     strcpy(line3,formulain);
                     line3[readitem-formulain]='\0';
                     l7=str_rfind_ci(line3,interchar1);
@@ -1409,25 +1419,25 @@ int eq_sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifier 
                 else {
                   p = strtok(NULL,",");
                 }
-                if(strcmp(p,sum_cof[j].sumindx)!=0) {
+                if(strcmp(sum_dim_identity(p),sum_cof[j].sumindx)!=0) {
                   for (l4=0; l4<l3; l4++) {
-                    if(strcmp(p,sum_cof[j].dimnames[l4])==0) {
+                    if(strcmp(sum_dim_identity(p),sum_cof[j].dimnames[l4])==0) {
                       break;
                     }
                   }
                   if (l4==l3||l3==0) {
-                    strcpy(sum_cof[j].dimnames[l3],p);
+                    strcpy(sum_cof[j].dimnames[l3],sum_dim_identity(p));
                     strcat(interchar,sum_cof[j].dimnames[l3]);
                     strcat(interchar,",");
                     l6=0;
-                    for (l5=0; l5<fdim-1; l5++) if(strcmp(p,arSet[l5].index_name)==0) {
+                    for (l5=0; l5<fdim-1; l5++) if(strcmp(sum_dim_identity(p),arSet[l5].index_name)==0) {
                         sum_cof[j].setid[l3]=arSet[l5].setid;//l5;
                         l6++;
                       }
                     if (l6==0) {
                       interchar1[0]='\0';
                       strcat(interchar1,"sum(");
-                      strcat(interchar1,p);
+                      strcat(interchar1,sum_dim_identity(p));
                       strcpy(line3,formulain);
                       line3[readitem-formulain]='\0';
                       l7=str_rfind_ci(line3,interchar1);

@@ -1339,24 +1339,24 @@ offset_t sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
           strcat(argu,",");
           l=str_count_ci(argu, ",");
           if (l<2) {
-            if(strcmp(p,sum_cof[j].sumindx)!=0) {
+            if(strcmp(sum_dim_identity(p),sum_cof[j].sumindx)!=0) {
               strcat(interchar,sum_cof[j].sumindx);
               for (l4=0; l4<l3; l4++) {
-                if(strcmp(p,sum_cof[j].dimnames[l4])==0) {
+                if(strcmp(sum_dim_identity(p),sum_cof[j].dimnames[l4])==0) {
                   break;
                 }
               }
               if (l4==l3||l3==0) {
-                strcpy(sum_cof[j].dimnames[l3],p);
+                strcpy(sum_cof[j].dimnames[l3],sum_dim_identity(p));
                 l6=0;
-                for (l5=0; l5<fdim-1; l5++) if(strcmp(p,arSet[l5].index_name)==0) {
+                for (l5=0; l5<fdim-1; l5++) if(strcmp(sum_dim_identity(p),arSet[l5].index_name)==0) {
                     sum_cof[j].setid[l3]=arSet[l5].setid;
                     l6++;
                   }
                 if (l6==0) {
                   interchar1[0]='\0';
                   strcat(interchar1,"sum(");
-                  strcat(interchar1,p);
+                  strcat(interchar1,sum_dim_identity(p));
                   strcpy(line3,formulain);
                   line3[readitem-formulain]='\0';
                   l7=str_rfind_ci(line3,interchar1);
@@ -1377,17 +1377,17 @@ offset_t sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
               } else {
                 p = strtok(NULL,",");
               }
-              if(strcmp(p,sum_cof[j].sumindx)!=0) {
+              if(strcmp(sum_dim_identity(p),sum_cof[j].sumindx)!=0) {
                 for (l4=0; l4<l3; l4++) {
-                  if(strcmp(p,sum_cof[j].dimnames[l4])==0) {
+                  if(strcmp(sum_dim_identity(p),sum_cof[j].dimnames[l4])==0) {
                     break;
                   }
                 }
                 if (l4==l3||l3==0) {
-                  strcpy(sum_cof[j].dimnames[l3],p);
+                  strcpy(sum_cof[j].dimnames[l3],sum_dim_identity(p));
                   strcat(interchar,sum_cof[j].dimnames[l3]);
                   l6=0;
-                  for (l5=0; l5<fdim-1; l5++) if(strcmp(p,arSet[l5].index_name)==0) {
+                  for (l5=0; l5<fdim-1; l5++) if(strcmp(sum_dim_identity(p),arSet[l5].index_name)==0) {
                       sum_cof[j].setid[l3]=arSet[l5].setid;
                       l6++;
                       break;
@@ -1395,7 +1395,7 @@ offset_t sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
                   if (l6==0) {
                     interchar1[0]='\0';
                     strcat(interchar1,"sum(");
-                    strcat(interchar1,p);
+                    strcat(interchar1,sum_dim_identity(p));
                     strcpy(line3,formulain);
                     line3[readitem-formulain]='\0';
                     l7=str_rfind_ci(line3,interchar1);
@@ -1484,24 +1484,24 @@ offset_t sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
           strcat(argu,",");
           l=str_count_ci(argu, ",");
           if (l<2) {
-            if(strcmp(p,sum_cof[j].sumindx)!=0) {
+            if(strcmp(sum_dim_identity(p),sum_cof[j].sumindx)!=0) {
               for (l4=0; l4<l3; l4++) {
-                if(strcmp(p,sum_cof[j].dimnames[l4])==0) {
+                if(strcmp(sum_dim_identity(p),sum_cof[j].dimnames[l4])==0) {
                   break;
                 }
               }
               if (l4==l3||l3==0) {
-                strcpy(sum_cof[j].dimnames[l3],p);
-                strcat(interchar,p);
+                strcpy(sum_cof[j].dimnames[l3],sum_dim_identity(p));
+                strcat(interchar,sum_dim_identity(p));
                 l6=0;
-                for (l5=0; l5<fdim-1; l5++) if(strcmp(p,arSet[l5].index_name)==0) {
+                for (l5=0; l5<fdim-1; l5++) if(strcmp(sum_dim_identity(p),arSet[l5].index_name)==0) {
                     sum_cof[j].setid[l3]=arSet[l5].setid;
                     l6++;
                   }
                 if (l6==0) {
                   interchar1[0]='\0';
                   strcat(interchar1,"sum(");
-                  strcat(interchar1,p);
+                  strcat(interchar1,sum_dim_identity(p));
                   strcpy(line3,formulain);
                   line3[readitem-formulain]='\0';
                   l7=str_rfind_ci(line3,interchar1);
@@ -1522,25 +1522,25 @@ offset_t sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
               } else {
                 p = strtok(NULL,",");
               }
-              if(strcmp(p,sum_cof[j].sumindx)!=0) {
+              if(strcmp(sum_dim_identity(p),sum_cof[j].sumindx)!=0) {
                 for (l4=0; l4<l3; l4++) {
-                  if(strcmp(p,sum_cof[j].dimnames[l4])==0) {
+                  if(strcmp(sum_dim_identity(p),sum_cof[j].dimnames[l4])==0) {
                     break;
                   }
                 }
                 if (l4==l3||l3==0) {
-                  strcpy(sum_cof[j].dimnames[l3],p);
+                  strcpy(sum_cof[j].dimnames[l3],sum_dim_identity(p));
                   strcat(interchar,sum_cof[j].dimnames[l3]);
                   strcat(interchar,",");
                   l6=0;
-                  for (l5=0; l5<fdim-1; l5++) if(strcmp(p,arSet[l5].index_name)==0) {
+                  for (l5=0; l5<fdim-1; l5++) if(strcmp(sum_dim_identity(p),arSet[l5].index_name)==0) {
                       sum_cof[j].setid[l3]=arSet[l5].setid;
                       l6++;
                     }
                   if (l6==0) {
                     interchar1[0]='\0';
                     strcat(interchar1,"sum(");
-                    strcat(interchar1,p);
+                    strcat(interchar1,sum_dim_identity(p));
                     strcpy(line3,formulain);
                     line3[readitem-formulain]='\0';
                     l7=str_rfind_ci(line3,interchar1);
@@ -2065,6 +2065,17 @@ void mapping_lower_calls(char *line) {
   }
 }
 
+/* Identity of an index token for sum carried-dim discovery (design
+   doc M2c): a lowered mapping token map@idx is summed or carried by
+   its domain index idx -- the mapping routes the OPERAND's dimension,
+   not the loop dimension -- so the summed-index test, carried-dim
+   dedupe, set resolution and the generated-sum replacement token all
+   work on the part after the '@'. */
+char *sum_dim_identity(char *p) {
+  char *at=strchr(p,'@');
+  return at==NULL?p:at+1;
+}
+
 /* named fatal for statement kinds that cannot carry mapping calls yet
    -- without this the reference mis-parses in silence */
 void mapping_reject_in(char *line, const char *what) {
@@ -2079,32 +2090,6 @@ void mapping_reject_in(char *line, const char *what) {
       printf("Error: mapping-valued indices in %s statements are not supported yet (mapping %s)\n",what,teems_maps[m].mapname);
       MPI_Abort(PETSC_COMM_WORLD,1);
     }
-  }
-}
-
-/* Named fatal when a lowered mapping token sits inside a sum(...) body
-   of an equation statement: sum_parse's carried-dim discovery cannot
-   digest the @ form yet (design doc M2c).  The span walk is balanced-
-   paren so mapped references OUTSIDE the sums stay allowed. */
-void mapping_eq_sum_guard(char *line) {
-  int k,from=0,depth;
-  if (teems_nmap==0||strchr(line,'@')==NULL) return;
-  while ((k=str_find_ci(line+from,"sum("))>-1) {
-    k+=from;
-    if (k>0&&(isalnum((int)line[k-1])||line[k-1]=='_')) {
-      from=k+4;
-      continue;
-    }
-    depth=1;
-    for (k=k+4; line[k]!='\0'&&depth>0; k++) {
-      if (line[k]=='(') depth++;
-      else if (line[k]==')') depth--;
-      else if (line[k]=='@') {
-        printf("Error: mapping-valued indices inside sums of Equation statements are not supported yet\n");
-        MPI_Abort(PETSC_COMM_WORLD,1);
-      }
-    }
-    from=k;
   }
 }
 
