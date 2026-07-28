@@ -357,6 +357,7 @@ static void stmt_prog_build_one(char *line, stmt_prog *stp, char *commsyntax,
   char *readitem=NULL,*p=NULL,*p1=NULL;
   PetscInt Jindx=0;
   bool isinproc;
+  mapping_reject_in(line,"Equation");
   dim_t fdim,np,dcount,fdimlin=0,i4,sup,supset[MAXSUPSET];
   int totalsum,sumcount=1,sumcount1=0,lvar,lvar1,lvar2,lvar3,lvar4;
   offset_t lj,l1,i1=0,sumbegadd,dcountdim1[4*MAXVARDIM],dcountdim2[4*MAXVARDIM],dcountdim3[4*MAXVARDIM],nloops,nloopslin,nloopsfac,li3,nsumele,nsumele1,l2;

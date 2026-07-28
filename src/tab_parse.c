@@ -1988,6 +1988,30 @@ int mapping_use_guards(char *fname, map_def *maps, dim_t nmap) {
       }
   }
   fclose(filehandle);
+  /* equations and updates cannot carry mapping calls yet (design doc
+     M2b): the ordering and preallocation scanners run before the
+     statement builder's guard and would shred the nested index */
+  for (int gk=0; gk<2; gk++) {
+    const char *gkind=gk==0?"equation":"update";
+    const char *gname=gk==0?"Equation":"Update";
+    filehandle = fopen(fname,"r");
+    while (tab_next_statement((char *)gkind,filehandle,line,TABREADLINE)) {
+      dim_t gm;
+      int gpos;
+      char gfind[NAMESIZE+2];
+      for (gm=0; gm<nmap; gm++) {
+        sprintf(gfind,"%s(",maps[gm].mapname);
+        gpos=str_find_ci(line,gfind);
+        if (gpos==0||(gpos>0&&!isalnum((int)line[gpos-1])&&line[gpos-1]!='_')) {
+          printf("Error: mapping-valued indices in %s statements are not supported yet (mapping %s)\n",gname,maps[gm].mapname);
+          fclose(filehandle);
+          MPI_Abort(PETSC_COMM_WORLD,1);
+          return -1;
+        }
+      }
+    }
+    fclose(filehandle);
+  }
   filehandle = fopen(fname,"r");
   while (tab_next_statement("write",filehandle,line,TABREADLINE)) {
     readitem = strtok(line," ");
@@ -2003,6 +2027,63 @@ int mapping_use_guards(char *fname, map_def *maps, dim_t nmap) {
   }
   fclose(filehandle);
   return 0;
+}
+
+/* pre-lower mapping calls "map(i)" to the flat token "map@i" so the
+   brace tokenizers never meet a nested index list (design doc M2);
+   composition map1(map2(i)) stays a named fatal (11.9.6 deferred) */
+void mapping_lower_calls(char *line) {
+  dim_t m;
+  int k,k2,from;
+  char find[NAMESIZE+2];
+  for (m=0; m<teems_nmap; m++) {
+    sprintf(find,"%s(",teems_maps[m].mapname);
+    from=0;
+    while ((k=str_find_ci(line+from,find))>-1) {
+      k+=from;
+      if (k>0&&(isalnum((int)line[k-1])||line[k-1]=='_')) {
+        from=k+1;
+        continue;
+      }
+      int op=k+(int)strlen(find)-1;
+      for (k2=op+1; line[k2]!='\0'&&line[k2]!=')'&&line[k2]!='('; k2++);
+      /* a '(' before the ')' is an unlowered inner call; an '@' in the
+         span is an already-lowered one -- both are composition */
+      {
+        int k3;
+        int inner=(line[k2]=='(');
+        for (k3=op+1; k3<k2; k3++) if (line[k3]=='@') inner=1;
+        if (inner) {
+          printf("Error: composition of set mappings is not supported (mapping %s; manual 11.9.6)\n",teems_maps[m].mapname);
+          MPI_Abort(PETSC_COMM_WORLD,1);
+        }
+      }
+      if (line[k2]=='\0') {
+        from=k+1;
+        continue;
+      }
+      line[op]='@';
+      memmove(line+k2,line+k2+1,strlen(line+k2+1)+1);
+      from=k+1;
+    }
+  }
+}
+
+/* named fatal for statement kinds that cannot carry mapping calls yet
+   -- without this the reference mis-parses in silence */
+void mapping_reject_in(char *line, const char *what) {
+  dim_t m;
+  int k;
+  char find[NAMESIZE+2];
+  if (teems_nmap==0) return;
+  for (m=0; m<teems_nmap; m++) {
+    sprintf(find,"%s(",teems_maps[m].mapname);
+    k=str_find_ci(line,find);
+    if (k==0||(k>0&&!isalnum((int)line[k-1])&&line[k-1]!='_')) {
+      printf("Error: mapping-valued indices in %s statements are not supported yet (mapping %s)\n",what,teems_maps[m].mapname);
+      MPI_Abort(PETSC_COMM_WORLD,1);
+    }
+  }
 }
 
 /* Pre-use mapping validation (manual 11.9.2/11.9.3): every mapping

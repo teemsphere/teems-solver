@@ -237,6 +237,10 @@ extern int *teems_coef_gltype2;
 extern store_real *teems_coef_glval2;
 /* satisfied Read (IfHeaderExists) targets, parallel to coefs[] (3.9) */
 extern bool *teems_coef_ifhdr;
+/* set mappings (manual 11.9), populated in main after the broadcast;
+   consumed by the operand binder/eval and the statement guards */
+extern map_def *teems_maps;
+extern dim_t teems_nmap;
 /* GEMPACK dual-class zerodivide state (manual 10.11; plan A1): tracked
    positionally by the statement scanner, consulted by formula
    evaluation only under -gpzerodivide 1 (default 0 = the legacy single
@@ -351,6 +355,8 @@ int names_validate(set_def *sets, dim_t nset, array_def *coefs, offset_t ncof, a
 int mappings_read(char *fname, map_def *maps, dim_t nmap, set_def *sets, dim_t nset);
 int mapping_values_read(char *fname, int niodata, cmf_file_entry *iodata, map_def *maps, dim_t nmap, set_def *sets, set_element *set_elems);
 int mapping_use_guards(char *fname, map_def *maps, dim_t nmap);
+void mapping_lower_calls(char *line);
+void mapping_reject_in(char *line, const char *what);
 int mappings_validate(map_def *maps, dim_t nmap, set_def *sets, set_element *set_elems);
 offset_t postsim_reads_execute(char *psname, int niodata, cmf_file_entry *iodata, set_def *sets, dim_t nset, set_element *set_elems, array_def *coefs, offset_t ncof, offset_t ncofele, array_def *vars, offset_t nvar, offset_t nvarele, elem_value *elem_vals);
 /* Default-statement helpers (manual 10.19; audit A6): positional
@@ -385,6 +391,7 @@ typedef struct
   int SupSet;                /* 1 = index via superset_pos, 0 = direct */
   int SSIndx;                /* column into superset_pos (< MAXSUPSET) */
   int leadlag;               /* intertemporal lead/lag shift */
+  int MapId;                 /* >0: route via teems_maps[MapId-1] (11.9.4) */
 } dim_addr ;
 
 /* one operation of a compiled formula program (interpreted per element) */

@@ -46,6 +46,11 @@ int teems_ps_pass = 0;
    default-formula + conditional-read idiom */
 bool *teems_coef_ifhdr = NULL;
 
+/* set mappings (manual 11.9): filled in main once declarations and
+   by_elements values are read and broadcast */
+map_def *teems_maps = NULL;
+dim_t teems_nmap = 0;
+
 /* CMF range-test modes (manual 25.4.4): 0 = no, 1 = warn (the
    GEMPACK default outside automatic accuracy), 2 = fatal */
 int teems_range_test_initial = 1;

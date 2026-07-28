@@ -1062,6 +1062,8 @@ int main(int argc,char **args) {
       }
     }
   }
+  teems_maps=maps;
+  teems_nmap=nmap;
   /* The chain dimension and the diagonal-block partition are derived
      structurally just before the ordering, once the equations are
      readable. Only the bordered methods consume these dimensions. */

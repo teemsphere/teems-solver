@@ -36,11 +36,57 @@ solve_real formula_subst_scalar(char *var2, elem_value *record, array_def *coefs
 }
 
 
+/* split a lowered mapping token "map@idx" (mapping_lower_calls):
+   returns the index part and sets *mp to mapping id + 1, or returns
+   the token unchanged with *mp = 0 */
+static char *map_split(char *p, int *mp) {
+  char *at;
+  dim_t m;
+  *mp=0;
+  if (p==NULL) return p;
+  at=strchr(p,'@');
+  if (at==NULL) return p;
+  if (strchr(at+1,'@')!=NULL) {
+    printf("Error: composition of set mappings is not supported (manual 11.9.6)\n");
+    MPI_Abort(PETSC_COMM_WORLD,1);
+  }
+  *at='\0';
+  for (m=0; m<teems_nmap; m++) if (strcmp(p,teems_maps[m].mapname)==0) {
+      *mp=(int)m+1;
+      return at+1;
+    }
+  printf("Error: unknown mapping %s in an index expression\n",p);
+  MPI_Abort(PETSC_COMM_WORLD,1);
+  return at+1;
+}
+
+/* bind one mapped dimension (manual 11.9.4/11.9.7): the index must
+   range over the mapping's domain set exactly and the argument
+   position must be the codomain set exactly (subset routing around a
+   mapped argument is deferred -- named fatal, not a mis-bind) */
+static void map_dim_bind(dim_addr *Dm, int mp, dim_t frame_setid, offset_t arg_setid, offset_t stride, int leadlag, const char *symname) {
+  if ((dim_t)teems_maps[mp-1].fromset!=frame_setid) {
+    printf("Error: the index of mapping %s does not range over its domain set (in %s); subset routing around a mapped argument is not supported\n",teems_maps[mp-1].mapname,symname);
+    MPI_Abort(PETSC_COMM_WORLD,1);
+  }
+  if ((offset_t)teems_maps[mp-1].toset!=arg_setid) {
+    printf("Error: mapping %s does not map into the argument set at that position of %s (manual 11.9.7)\n",teems_maps[mp-1].mapname,symname);
+    MPI_Abort(PETSC_COMM_WORLD,1);
+  }
+  Dm->ADims=stride;
+  Dm->leadlag=leadlag;
+  Dm->SupSet=0;
+  Dm->SSIndx=0;
+  Dm->MapId=mp;
+  teems_maps[mp-1].used=true;
+}
+
 int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t ncof, array_def *vars,offset_t nvar,offset_t ncofele,sum_def *sum_cof,int totalsum,formula_op *ops,int nops,quantifier *arSet,dim_t fdim,int varindex) {
   offset_t index;
   char *p=NULL;//,copyvar[TABREADLINE];//,*p1=NULL,*p2=NULL,*p3=NULL,*p4=NULL;
   dim_t l1,l,sup;//,svar2;//=0,i2=0,i3=0,i4=0,svar1,svar2,checkvar20=0,checkvar10=0,checkvar11=0,checkvar12=0,checkvar16=0,checkvar14=0,l;
   int leadlag;
+  int mp=0;
   bool IsChange=false;
   p= strtok(var2,"{");
   if (p==NULL) {
@@ -76,6 +122,7 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
         p=strtok(NULL,"}");
         leadlag=0;
         parse_index_leadlag(p,&leadlag);
+          p=map_split(p,&mp);
        for (l=0; l<fdim; l++) {
              if(varindex==2) {
               ops[nops].Var2Dims[l].ADims=0;
@@ -87,6 +134,9 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
               ops[nops].Var1Dims[l].SupSet=0;
             }
           if (strcmp(p,arSet[l].index_name)==0) {
+            if(mp>0) {
+              map_dim_bind(varindex==2?&ops[nops].Var2Dims[l]:&ops[nops].Var1Dims[l],mp,arSet[l].setid,coefs[index].setid[0],coefs[index].strides[0],leadlag,coefs[index].cofname);
+            } else
             if(varindex==2) {
               if (sets[coefs[index].setid[0]].size>sets[arSet[l].setid].size) {
                 ops[nops].Var2Dims[l].SupSet=1;
@@ -121,8 +171,13 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
           p=strtok(NULL,",");
           leadlag=0;
           parse_index_leadlag(p,&leadlag);
+          p=map_split(p,&mp);
           for (l1=0; l1<fdim; l1++) {
             if (strcmp(p,arSet[l1].index_name)==0) {
+              if(mp>0) {
+                map_dim_bind(varindex==2?&ops[nops].Var2Dims[l1]:&ops[nops].Var1Dims[l1],mp,arSet[l1].setid,coefs[index].setid[l],coefs[index].strides[l],leadlag,coefs[index].cofname);
+                break;
+              }
               if(varindex==2) {
                 if (sets[coefs[index].setid[l]].size>sets[arSet[l1].setid].size) {
                   ops[nops].Var2Dims[l1].SupSet=1;
@@ -145,8 +200,13 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
         p=strtok(NULL,"}");
         leadlag=0;
         parse_index_leadlag(p,&leadlag);
+          p=map_split(p,&mp);
         for (l1=0; l1<fdim; l1++) {
           if (strcmp(p,arSet[l1].index_name)==0) {
+            if(mp>0) {
+                map_dim_bind(varindex==2?&ops[nops].Var2Dims[l1]:&ops[nops].Var1Dims[l1],mp,arSet[l1].setid,coefs[index].setid[l],coefs[index].strides[l],leadlag,coefs[index].cofname);
+                break;
+              }
             if(varindex==2) {
               if (sets[coefs[index].setid[l]].size>sets[arSet[l1].setid].size) {
                 ops[nops].Var2Dims[l1].SupSet=1;
@@ -199,6 +259,7 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
         p=strtok(NULL,"}");
         leadlag=0;
         parse_index_leadlag(p,&leadlag);
+          p=map_split(p,&mp);
         for (l=0; l<fdim; l++) {
              if(varindex==2) {
               ops[nops].Var2Dims[l].ADims=0;
@@ -210,6 +271,9 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
               ops[nops].Var1Dims[l].SupSet=0;
             }
           if (strcmp(p,arSet[l].index_name)==0) {
+            if(mp>0) {
+              map_dim_bind(varindex==2?&ops[nops].Var2Dims[l]:&ops[nops].Var1Dims[l],mp,arSet[l].setid,vars[index].setid[0],vars[index].strides[0],leadlag,vars[index].cofname);
+            } else
             if(varindex==2) {
               if (sets[vars[index].setid[0]].size>sets[arSet[l].setid].size) {
                 ops[nops].Var2Dims[l].SupSet=1;
@@ -244,8 +308,13 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
           p=strtok(NULL,",");
           leadlag=0;
           parse_index_leadlag(p,&leadlag);
+          p=map_split(p,&mp);
           for (l1=0; l1<fdim; l1++) {
             if (strcmp(p,arSet[l1].index_name)==0) {
+              if(mp>0) {
+                map_dim_bind(varindex==2?&ops[nops].Var2Dims[l1]:&ops[nops].Var1Dims[l1],mp,arSet[l1].setid,vars[index].setid[l],vars[index].strides[l],leadlag,vars[index].cofname);
+                break;
+              }
               if(varindex==2) {
                 if (sets[vars[index].setid[l]].size>sets[arSet[l1].setid].size) {
                   ops[nops].Var2Dims[l1].SupSet=1;
@@ -268,8 +337,13 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
         p=strtok(NULL,"}");
         leadlag=0;
         parse_index_leadlag(p,&leadlag);
+          p=map_split(p,&mp);
         for (l1=0; l1<fdim; l1++) {
           if (strcmp(p,arSet[l1].index_name)==0) {
+            if(mp>0) {
+                map_dim_bind(varindex==2?&ops[nops].Var2Dims[l1]:&ops[nops].Var1Dims[l1],mp,arSet[l1].setid,vars[index].setid[l],vars[index].strides[l],leadlag,vars[index].cofname);
+                break;
+              }
             if(varindex==2) {
               if (sets[vars[index].setid[l]].size>sets[arSet[l1].setid].size) {
                 ops[nops].Var2Dims[l1].SupSet=1;
@@ -730,7 +804,11 @@ static inline offset_t dims_offset(const dim_addr *D, const quantifier *arSet, d
   offset_t l=0;
   dim_t j;
   for (j=0; j<fdim; j++) {
-    if(D[j].SupSet==1) {
+    if(D[j].MapId>0) {
+      /* mapped argument (manual 11.9.4): the domain element routes
+         through the mapping's codomain-position table */
+      l+=D[j].ADims*teems_maps[D[j].MapId-1].values[arSet[j].indx+D[j].leadlag];
+    } else if(D[j].SupSet==1) {
       l+=D[j].ADims*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[D[j].SSIndx]+D[j].leadlag);
     } else {
       l+=D[j].ADims*(arSet[j].indx+D[j].leadlag);
@@ -1450,6 +1528,16 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
      pass its fresh initial state (manual 12.2.4) */
   zdiv_scan_reset();
   while (tab_next_statement_resolved(commsyntax,filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
+    /* mapping calls lower to flat map@idx tokens before any brace
+       tokenizer runs (manual 11.9.4; design doc M2); inside sum
+       bodies the carried-dim discovery cannot digest them yet */
+    if (teems_nmap>0) {
+      mapping_lower_calls(line);
+      if (strchr(line,'@')!=NULL&&str_find_ci(line,"sum(")>-1) {
+        printf("Error: mapping-valued indices inside sums are not supported yet\n");
+        MPI_Abort(PETSC_COMM_WORLD,1);
+      }
+    }
     /* audit A7 / plan 2.2: FORMULA & EQUATION expands to
        Formula (initial) + Equation (levels) (manual 10.9.1) -- the
        levels-equation half is outside this solver's linearized-only
@@ -1976,6 +2064,7 @@ offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_el
   zdiv_disable();
   filehandle = fopen(fname,"r");
   while (tab_next_statement_resolved(commsyntax,filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
+    mapping_reject_in(line,"Update");
     IsChange=false;
     IsExplicit=false;
     if(strstr(line, "(change)")!=NULL) {
@@ -2258,6 +2347,7 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
   zdiv_disable();
   filehandle = fopen(fname,"r");
   while (tab_next_statement_resolved(commsyntax,filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
+    mapping_reject_in(line,"Update");
     IsChange=false;
     IsExplicit=false;
     if(strstr(line, "(change)")!=NULL) {
@@ -2763,6 +2853,7 @@ offset_t assertions_execute(char *fname,set_def *sets,dim_t nset,set_element *se
   zdiv_scan_reset();
   strcpy(sumsyntax,"sum(");
   while (tab_next_statement_resolved("assertion",filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
+    mapping_reject_in(line,"Assertion");
     /* (postsim) assertions run only in the post-solve pass, where the
        initial/always qualifiers are ignored (manual 12.2.4) */
     if(strstr(line,"(postsim)")!=NULL) {
