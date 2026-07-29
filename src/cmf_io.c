@@ -634,7 +634,10 @@ int tab_preprocess(char *filename, char *newtabfile) {
         strcpy(commsyntax,"read");
         check=1;
       }
-      if (str_find_ci(readline,"formula ")==1||str_find_ci(readline,"formula ")==0) {
+      if (str_find_ci(readline,"formula ")==1||str_find_ci(readline,"formula ")==0
+          ||str_find_ci(readline,"formula&")==1||str_find_ci(readline,"formula&")==0) {
+        /* the no-space Formula&Equation spelling (10.9.1) must not
+           fall through to the sticky-keyword prepend */
         strcpy(commsyntax,"formula");
         check=1;
       }

@@ -929,6 +929,11 @@ int main(int argc,char **args) {
     npostsim=tab_postsim_split(newtabfile,psfile);
     /* fail-fast: exit 0 here used to mask section errors */
     if(npostsim<0)MPI_Abort(PETSC_COMM_WORLD,1);
+    /* C0: expand Formula&Equation, pair levels variables with value
+       coefficients + updates, linearize Equation (levels) by change
+       differentiation; untouched when the TAB has no levels
+       statements (design doc section 5) */
+    if(tab_levels_transform(newtabfile)<0)MPI_Abort(PETSC_COMM_WORLD,1);
   }
 
   strcpy(tabfile,newtabfile);

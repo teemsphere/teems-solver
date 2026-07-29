@@ -7,6 +7,38 @@ semantics, POSTSIM, others").
 
 ## Progress log
 
+- **2026-07-30 — C0 levels-equation linearization landed (mapping/
+  complementarity design doc section 5; prerequisite for GMig2
+  Complementarity)**: new `tab_levels_transform` pass (src/levels.c)
+  on the preprocessed statement stream — each levels Variable becomes
+  the GEMPACK associated triple (9.2.2: declaration passes through,
+  value Coefficient(non_parameter) + Update appended); Formula&Equation
+  expands per 10.9.1; Equation (levels) is linearized by CHANGE
+  differentiation (18.1/18.2.1 — TABLO's sanctioned ACD mode; every
+  corpus levels equation meets a 9.2.6 change-diff trigger anyway).
+  Auto-pair naming: coefficient and variable share the levels name —
+  bare tokens bind the coefficient (value), p_/c_ tokens the variable
+  (column) — via three bit-neutral reader adjustments (names_validate
+  level_par exemption; binder variables-first for p_ tokens;
+  data_read_files level_par deferral to the pair coefficient), each
+  unambiguous on legal TABs by 11.2.1 uniqueness. Ride-along: the
+  no-space `Formula&Equation` spelling no longer falls through the
+  sticky-keyword prepend in tab_preprocess. Named fatals: non-parameter
+  coefficient / linear variable / unknown name in a levels equation
+  (11.4.8), functions (SQRT/EXP/LOGE/LOG10 deferred, zero corpus uses),
+  conditional sums, p_/c_-leading levels names (the p_-substring
+  scanners cannot carry them — recorded with GMig2's user-declared c_*
+  linear variables as ONE naming-normalization follow-on, a C1
+  prerequisite). Kit `.audit/levels-test-kit` 13 legs: value-pinned
+  Johansen-exact forms (percent/change products, quotient, sum,
+  parameter multiplier, mixed, F&E) + Gragg-extrapolated X^E (4.84
+  pinned, loge dB term compiled in-equation) + failing-assertion
+  canary + 6 named fatals; legacyq feq leg repointed to the 11.4.8
+  fatal. Gates: verify.sh 14/14 bit-identical x2, warnings 102, all
+  kits green, ASan sweep. Observed while testing (not C0 scope): a
+  bare-name shock of a dimensioned variable (`Shock lv = uniform 1;`)
+  silently shocks a single element — fold into the fail-fast sweep.
+
 - **2026-07-28 — step-5 corpus survey (decision evidence for the
   scrutiny register)**: statement-leading keyword census over 71
   unique TABs (54 archive `tab_files/` + 19 extracted from the 11
@@ -577,7 +609,7 @@ Read-into-coefficient to a second pass.
 | # | Statement | Status | Manual role | Call | Notes / scrutiny |
 |---|---|---|---|---|---|
 |2.1|**WRITE (general)**|◐ solver handles only `Write X to file <log> header "…"` bound to a CMF outdata logname; R **drops** Write entirely (`tablo_process.R:162`)|CORE — HAR/text/terminal, `(SET)`/`(ALLSETS)`, LONGNAME, BY_ELEMENTS, `(POSTSIM)`|**RECONSIDERED 2026-07-25 (user)**|TEEMS handles writes by **writing all coefficients**: teems-R generates a `Write X to file <log> header` line per coefficient plus a matching CMF `outdata` entry (288 in the golden-re CMF), and `outputs_write_csv` dumps every one as a CSV that `ems_compose` surfaces. User-authored Write statements are architecturally superseded — R decides what is written (currently: everything). Therefore general WRITE is NOT a PostSim prerequisite: PostSim coefficients ride the same dump (R generates the Write+outdata pairs for the PostSim section exactly as for the ordinary section). GEMPACK file-targeting forms (HAR/text/terminal, `(SET)`, LONGNAME routing) stay unimplemented; user Writes in imported TABs are replaced by the write-everything scheme. Resolves scrutiny-register items 2 and 9. Residual niceties (implement only on demand): `Write ... to terminal` as a log print; a compose-side flag marking which outputs the TAB's own Writes selected.|
-|2.2|**FORMULA & EQUATION (combined)**|✗ fatal by design (2026-07-26)|COMMON shorthand = FORMULA(INITIAL)+EQUATION(LEVELS)|**BLOCKED (levels equations)**|The expansion's EQUATION(LEVELS) half is outside the linearized-only solver — NOT "two already-supported statements". Fatal names the dependency and the remedy (linearize + Formula (initial)). Unblocks only with a levels-equation major; an R-side rewrite hits the same wall.|
+|2.2|**FORMULA & EQUATION (combined)**|✅ (2026-07-30, C0)|COMMON shorthand = FORMULA(INITIAL)+EQUATION(LEVELS)|**DONE**|tab_levels_transform expands per 10.9.1 and linearizes the EQUATION(LEVELS) half by change differentiation (design doc section 5); the A7 execute-time fatal stays as a backstop for PostSim sections. Operand legality (11.4.8) enforced with named fatals.|
 |2.3|**DISPLAY**|✗ (R hard-aborts)|Manual calls it "old-fashioned"; SLC/CVL preferred, but used with PostSim|**QUESTION**|Implement the **`Display (postsim)`** path minimally for PostSim; treat standalone Display as low-priority legacy. 🔍|
 |2.4|**MAPPING … FROM … TO**|✗ (R hard-aborts)|COMMON/ADVANCED; used in index expressions; `(ONTO)`/`(PROJECT)`|**QUESTION**|🔍 Assess prevalence in the target corpus (GTAP standard uses little/no mapping). Real cost (index-expression evaluation). Defer unless a corpus TAB needs it.|
 |2.5|**COMPLEMENTARITY / MCP**|✗ (R hard-aborts)|ADVANCED (ch.51); bounds, NO_SPLIT internals, condensation/subtotal interplay|**QUESTION (major)**|🔍 Highest-cost item. Standard GTAP models don't use MCP. Decide scope: likely **defer** until a target model requires it; if adopted, it's a project of its own (bounds engine + NO_SPLIT variables + Newton path).|

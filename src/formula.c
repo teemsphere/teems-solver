@@ -98,8 +98,21 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
     p++;
     p++;
   }
+  /* levels auto-pair (design doc section 5): a p_-prefixed token names
+     a LINEAR variable, so when a levels pair shares the name the
+     variable must win; bare tokens keep coefficient-first (value
+     reference). Bit-neutral otherwise: 11.2.1 uniqueness forbids a
+     shared coefficient/variable name except the level_par pair. */
+  bool PairSkipCoefs=false;
+  if(IsChange) {
+    offset_t vi;
+    for(vi=0; vi<nvar; vi++) if(strcmp(vars[vi].cofname,p)==0) {
+        PairSkipCoefs=true;
+        break;
+      }
+  }
   index=ncof-1;
-  do {
+  if(!PairSkipCoefs) do {
     if (strcmp(coefs[index].cofname,p)==0) {
       if(!coefs[index].suplval)warn_no_values(coefs[index].cofname,index,0);
       if(varindex==2) {

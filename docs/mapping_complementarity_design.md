@@ -116,6 +116,7 @@ baseline, kit legs; feature zero-cost when unused)
   fixture through deploy).
 - **C0** — minimal levels-equation linearization (auto-diff of
   `Equation (levels)`) + `Formula&Equation` expansion riding on it.
+  Full design in section 5 below (2026-07-29).
 - **C1** — Complementarity parse + validation (qualifier/set
   matching, bound typing, name length, condensation guards) + derived
   statements (comp@E formula+equation, dummy, difference vars).
@@ -217,3 +218,153 @@ engine" template for seeding pass 2. → C3 = wrap numbering→driver
 in a loop with the closure-modification hook between passes;
 backsolve_read's post-hoc closure_vals marking pass
 (tab_parse.c:4650-4670) is the mutation template.
+
+## 5. C0 design: minimal levels-equation linearization (2026-07-29)
+
+**STATUS: SHIPPED solver-side 2026-07-30** (src/levels.c
+tab_levels_transform + the three reader adjustments below;
+.audit/levels-test-kit 13 legs; verify.sh 14/14 bit-identical,
+warnings 102, all kits green; parity-plan progress log has the
+record). teems-R side = the C0-R phase (lift
+formula_equation/default_levels rejections, mirror bookkeeping).
+Deferred with named fatals: functions in levels equations,
+conditional sums, p_/c_-leading levels names (joint follow-on with
+GMig2's user-declared c_* linear variables — C1 prerequisite).
+
+Spec sources: manual 9.2 (gpd2.2.2, the TABLO conversion), 18.1/18.2.1
+(differentiation rules), 10.9.1 (Formula&Equation), 11.4.8 (levels-
+equation operand legality: ONLY levels variables, parameters, constants;
+non-parameter coefficients and linear variables are illegal; functions
+limited to SQRT/EXP/LOGE/LOG10). Corpus contract = GMig2 v3.0
+(original_tabs/3617 gtap.tab): 4x `Equation (levels)` + 7x
+`Formula&Equation`; expression surface `+ - * / ^ ( ) [ ]`, `sum()`,
+constants, parameter coefficients, levels variables (both `(levels)`
+percent and `(change,levels)` change forms; some Read from file, some
+set by `Formula (initial)`; values also referenced by ordinary formulas
+and by ordinary linear equations, e.g. `MIGNOSP00 = 100/MIGNOSP`,
+`qops = 100/LFNOSP * c_LFNOSP`).
+
+**Change differentiation only (TABLO's ACD mode).** Manual 9.2.6:
+TABLO uses change differentiation when either side is zero, any change
+variable appears, the top-level operator is +/-, or a SUM occurs —
+every GMig2 levels equation and F&E meets at least one of these, so
+change-diff-only reproduces TABLO exactly on the whole target corpus,
+and ACD ("Always use Change Differentiation") is a sanctioned global
+TABLO option, so the mode is spec-legal for any other TAB. Divergence
+(TABs where TABLO would default to percent-change differentiation)
+affects Johansen one-step results and convergence path, not the
+extrapolated solution; recorded, not guarded.
+
+**Rules (18.1), change mode:** d(A+B)=dA+dB; d(A-B)=dA-dB;
+d(A*B)=B*dA+A*dB; d(A/B)=(1/B)*dA-(A/B^2)*dB; d(A^B)=B*A^(B-1)*dA
++LOGE(A)*A^B*dB; d(sum(j,S,A))=sum(j,S,dA); d(param)=d(const)=0.
+Terminals: dX -> p_X (change var, solution already in change units) or
+(X/100)*p_X (percent var). Implementation: recursive AST differentiation
+producing a flat term list [(coef-expr, levels-var-ref, sum-context)];
+each side emitted as `sum(j,S,...)`-wrapped `(coef)*p_x(args)` terms so
+every linear-variable factor is preceded by `*`/`+`/`-`/`(` (the
+equation-side LinVar scan's accepted positions; a variable in a
+denominator or exponent is invisible to it). All-parameter side emits
+literal `0` (constant sides compile fine).
+
+**The naming crux and its resolution ("auto-pair").** GEMPACK converts
+each levels Variable X into Coefficient(non_parameter) X + linear
+Variable p_X + Update (9.2.2). TEEMS convention is variables declared
+BARE and referenced as p_X/c_X, with the binder stripping `p_` and
+searching coefficients FIRST — so the literal GEMPACK pair is today
+forbidden (names_validate coef-vs-var + the main.c coefficient-vs-p_var
+guard) and would mis-bind update RHSs. Resolution: declare BOTH as `x`
+— coefficient x (value store) + variable x (level_par=true, change_real
+per qualifier) — with three principled reader adjustments, each
+bit-neutral on any legal current TAB because 11.2.1 name-uniqueness
+makes today's lookups unambiguous:
+  1. names_validate: coefficient X + variable X is legal iff the
+     variable has level_par (this combination IS the GEMPACK associated
+     pair; hand-written pairs get the same semantics).
+  2. formula_bind_operand: tokens carrying a p_ prefix search variables
+     BEFORE coefficients (a p_ prefix explicitly denotes a linear
+     variable); bare tokens keep coefficient-first (value reference).
+  3. data_read_files (both branches): a level_par variable match defers
+     to the paired coefficient (a levels read means "read the levels
+     values").
+Everything else already lines up: level_par's single existing behavior
+(suppress the p_-insert on bare occurrences in equation/update lines,
+cmf_io.c tab_write_variables) is exactly the value-reference semantics
+the pair needs; `c_X` references become `p_X` in preprocess and resolve
+to bare x; closure/shock/solution names are the bare variable name,
+unchanged from every other TEEMS variable.
+
+**New pass `tab_levels_transform` (new src/levels.c),** called on the
+preprocessed one-statement-per-line stream right after
+tab_postsim_split, before sets_read (declarations must exist before the
+readers; postsim sections already forbid variables/equations). Scan A
+collects levels variables (name, change/percent, quantifier text,
+argument list) honoring explicit qualifiers AND positional
+`Variable (default=levels|linear|change|percent_change)` statements
+(mirrors variables_read), plus parameter/non-parameter coefficient
+names and linear variable names for legality checks. Zero-cost gate: no
+levels variables, no `&equation`, no `equation (levels` -> return
+without rewriting (goldens bit-identical by construction). Pass B
+rewrites to a tmp file + rename (tab_postsim_split model):
+  - levels Variable statement: passed through VERBATIM (variables_read
+    re-derives level_par/change_real from the same qualifiers/defaults)
+    + emit `coefficient (non_parameter) <quants> x(args) ;` + emit
+    `update <quants> x(args) = p_x(args) ;` (percent) or
+    `update (change) <quants> x(args) = p_x(args) ;` (change — emitted
+    p_-form directly since the preprocess c_->p_ rewrite already ran;
+    updates_apply's (change) branch adds the RHS, its default branch
+    produces x*(1+p_x/100), both correct for the single-variable RHS).
+  - `Formula&Equation [quals] NAME [#lbl#] <quants> LHS = RHS ;` ->
+    `formula (initial) <quants> LHS = RHS ;` + `equation (levels) NAME
+    <quants> LHS = RHS ;` (10.9.1; only (initial)/(levels) qualifiers
+    accepted), the latter then differentiated like any levels equation.
+    The A7 fatal in formulas_execute stays as a dead-man backstop.
+  - `Equation (levels) NAME <quants> LHS = RHS ;` -> parse both sides
+    (recursive descent: numbers, refs, + - * / ^, parens, sum(idx,SET,
+    body)), enforce 11.4.8 legality with named fatals (non-parameter
+    coefficient / linear variable / unknown name / function — SQRT,
+    EXP, LOGE, LOG10 deferred with a named fatal, zero corpus uses),
+    differentiate, emit `equation NAME <quants> dLHS = dRHS ;`.
+  - Backstop: `(levels` surviving on any equation line after the pass
+    is a named fatal (today it would mis-parse silently).
+Generated-name collision: none (no new names are minted — the pair
+shares the levels variable's own name; sum indices are carried
+verbatim, gen_* space untouched).
+
+**What stays fatal (named):** functions in levels equations (the four
+legal ones deferred); PROD(); `Equation (default=levels)` (statement-
+level (levels) is the corpus form); LINEAR_NAME=/LINEAR_VAR= (A4,
+zero corpus levels TABs use them... GMig2 included); NO_SPLIT.
+
+**Recorded pre-existing gap (C1 blocker, not C0):** user-DECLARED
+c_-prefixed variables (GMig2: c_shiftlf, c_migin, c_smigin, ...) are
+mangled by the preprocess c_->p_ rewrite (reference becomes p_shiftlf,
+declared name stays c_shiftlf, LinVar scan strcmp misses and BREAKS the
+whole scan silently -> dropped columns). Fix belongs with C1 (GMig2
+e2e): declaration-time normalization (strip c_, set change_real) or
+scan-side fallback; either way add the M3-style named fatal on the
+scan-break path.
+
+**Other recorded interactions:** levels values ride coefficient storage
+(store_real float — same precision as all data); the levels variable's
+var_store/elem_vals slots hold ordinary per-step solution data (updates
+and PostSim exposure unchanged); PostSim references of a levels name
+bind the coefficient = post-update levels, the GEMPACK semantics;
+division in generated derivative coefficients (quotient/power rules)
+rides the existing zerodivide machinery; equation sides with zero
+linear variables after differentiation are legal text (`0`) — the
+existing "no diagnostic on an empty row" behavior is unchanged and the
+closure counts them like GEMPACK does (the levels equation contributes
+one row of its quantifier size regardless).
+
+**Gates:** verify.sh 14/14 bit-identical + warnings 102 (goldens have
+no levels statements — the zero-cost gate must hold); new
+.audit/levels-test-kit: manual-pinned linearizations (9.2.4 examples 1
+change/percent product forms, 9.2.5 changes-form sum), GMig2-shaped
+legs (param*X+Y change pair = E_RMIGSP_C shape; X*Y-X*Y products =
+E_RYnmvsPPP; ratio^levels-exponent with the LOGE term = E_LFNOSPendog;
+sum over quantified index = E_POPNO F&E), F&E expansion leg, mixed
+percent+change, value-pinned multi-step solve with per-step levels
+updates asserted via PostSim, and named-fatal legs (non-parameter
+coefficient, linear variable, function, unknown name, surviving
+(levels)); ASan on kit legs; all prior kits re-run.

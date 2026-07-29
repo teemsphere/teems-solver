@@ -276,6 +276,12 @@ int tab_has_postsim_assertions(char *fname);
    PostSim executable count; -1 on error) and the CMF run-time switch */
 int tab_postsim_split(char *newtabfile, char *psfile);
 int cmf_postsim_on(char *filename);
+/* C0: levels-statement transform -- expand Formula&Equation, pair
+   levels variables with value coefficients + updates, linearize
+   Equation (levels) by change differentiation (design doc
+   mapping_complementarity_design.md section 5); no-op when the TAB
+   has no levels statements; -1 on error */
+int tab_levels_transform(char *fname);
 offset_t backsolve_read(char *fname, array_def *vars, offset_t nvar, closure_entry *closure_vals);
 int backsolve_validate_refs(char *fname, array_def *vars);
 int tab_equation_name(char *stmt, char *eqname);

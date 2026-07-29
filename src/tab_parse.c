@@ -553,6 +553,9 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
       }
       count2=0;
       for (i=0; i<nvar; i++) {
+        /* levels auto-pair (design doc section 5): a Read of a levels
+           name targets the value coefficient, not the variable */
+        if (vars[i].level_par) continue;
         vname1= strtok(vars[i].cofname,"(");
         if (strcmp(vname1,vname)==0) { //,vsize ha_var[i].cofname
           vars[i].suplval=true;
@@ -1091,6 +1094,9 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
       }
       if(i<ncof)count2=1;
       for (i=0; i<nvar; i++) {
+        /* levels auto-pair (design doc section 5): quantified reads of
+           a levels name also target the value coefficient */
+        if (vars[i].level_par) continue;
         vname1= strtok(vars[i].cofname,"(");
         if (strcmp(vname1,vname)==0) { //,vsize ha_var[i].cofname
           dims=1;
@@ -1634,6 +1640,9 @@ int names_validate(set_def *sets, dim_t nset, array_def *coefs, offset_t ncof, a
   int r;
   for(i=0; i<ncof; i++) {
     for(j=0; j<nvar; j++)if(strcmp(coefs[i].cofname,vars[j].cofname)==0) {
+        /* levels auto-pair (design doc section 5): Coefficient X +
+           levels Variable X is the GEMPACK associated pair (9.2.2) */
+        if(vars[j].level_par)continue;
         printf("Error: name %s is declared as both a coefficient and a variable; names are case-insensitive and must be unique (manual 11.2.1)\n",coefs[i].cofname);
         return -1;
       }
