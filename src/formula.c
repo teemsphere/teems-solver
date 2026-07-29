@@ -1769,6 +1769,10 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
         nsumele=i3;
         for (i=0; i<totalsum; i++) {
           i1=1;
+          /* a scalar sum store (size 0) has no strides; the unguarded
+             write was strides[-1] = setid[MAXVARDIM-1], benign only
+             because that slot is never read at size 0 */
+          if (sum_cof[i].size==0) continue;
           sum_cof[i].strides[sum_cof[i].size-1]=1;
           for(j=sum_cof[i].size-2; j>-1; j--) {
             sum_cof[i].strides[j]=sum_cof[i].strides[j+1]*sets[sum_cof[i].setid[j+1]].size;
