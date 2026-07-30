@@ -384,6 +384,25 @@ static void stmt_prog_execute(stmt_prog *st, offset_t matrow, offset_t *eq_addr,
    as crossing blocks (the conservative direction), and dimsetnames
    gets the codomain so border marking resolves it to the declared
    set's full range. */
+/* resolve a LinVar name token (the text after the p_ prefix) to a
+   declared variable: bare TEEMS convention first, then declared
+   p_-/c_-leading names -- the GEMPACK hand-linearized pair idiom (GTAP-AEZ
+   p_YIELD) and c_-named linear variables (GMig2 c_shiftlf), whose
+   references reach the scans as p_<token> via the preprocess c_->p_
+   rewrite (design doc section 6). Returns -1 when nothing matches. */
+offset_t linvar_resolve(char *vname, array_def *vars, offset_t nvar) {
+  offset_t l;
+  char full[NAMESIZE+4];
+  for (l=0; l<nvar; l++) if (strcmp(vars[l].cofname,vname)==0) return l;
+  if (strlen(vname)<NAMESIZE) {
+    full[0]='p'; full[1]='_'; strcpy(full+2,vname);
+    for (l=0; l<nvar; l++) if (strcmp(vars[l].cofname,full)==0) return l;
+    full[0]='c';
+    for (l=0; l<nvar; l++) if (strcmp(vars[l].cofname,full)==0) return l;
+  }
+  return -1;
+}
+
 static void linvar_dim_read(char *p, char *linecopy, offset_t lvar,
                             eq_var_ref *ref, dim_t d, bool split_mapped,
                             set_def *sets) {
@@ -573,7 +592,14 @@ static void stmt_prog_build_one(char *line, stmt_prog *stp, char *commsyntax,
           varindx1=str_find_ci(readitem+varindx2,"p_");
           if(varindx1==-1) break;
           varindx2=varindx2+varindx1;
-          if(varindx2==0||readitem[varindx2-1]=='*'||readitem[varindx2-1]=='+'||readitem[varindx2-1]=='-'||readitem[varindx2-1]=='('||readitem[varindx2-1]==',') break;
+          if(varindx2==0) {
+            /* position 0 is a genuine token start only before the
+               first token; after the cursor advances it is the tail
+               of a p_*-named variable (design doc section 6) */
+            if(i==0) break;
+            varindx2++;
+          }
+          else if(readitem[varindx2-1]=='*'||readitem[varindx2-1]=='+'||readitem[varindx2-1]=='-'||readitem[varindx2-1]=='('||readitem[varindx2-1]==',') break;
           else varindx2++;
         }
         if(varindx1==-1) break;
@@ -585,13 +611,16 @@ static void stmt_prog_build_one(char *line, stmt_prog *stp, char *commsyntax,
           strncpy(vname,readitem,p-readitem);
           vname[p-readitem]='\0';
           strcpy(LinVars[i3].LinVarName,vname);
-          for (l=0; l<nvar; l++) {
-            if (strcmp(vars[l].cofname,vname)==0) {
-              LinVars[i3].LinVarIndx=l;
-              break;
+          {
+            offset_t lr=linvar_resolve(vname,vars,nvar);
+            if (lr<0) {
+              /* was a silent break dropping every later column */
+              printf("Error: equation references p_%s but no variable %s, p_%s or c_%s is declared\n",vname,vname,vname,vname);
+              MPI_Abort(PETSC_COMM_WORLD,1);
             }
+            l=lr;
+            LinVars[i3].LinVarIndx=l;
           }
-          if (l>=nvar) break;
           p=strpbrk(readitem,"}+*-/^)");
           if (p==NULL) break;
           if (*p=='}') {
@@ -622,11 +651,14 @@ static void stmt_prog_build_one(char *line, stmt_prog *stp, char *commsyntax,
         else {
           strcpy(vname,readitem);
           strcpy(LinVars[i3].LinVarName,vname);
-          for (l=0; l<nvar; l++) {
-            if (strcmp(vars[l].cofname,vname)==0) {
-              LinVars[i3].LinVarIndx=l;
-              break;
+          {
+            offset_t lr=linvar_resolve(vname,vars,nvar);
+            if (lr<0) {
+              /* was a silent miss leaving LinVarIndx=0 (variable 0) */
+              printf("Error: equation references p_%s but no variable %s, p_%s or c_%s is declared\n",vname,vname,vname,vname);
+              MPI_Abort(PETSC_COMM_WORLD,1);
             }
+            LinVars[i3].LinVarIndx=lr;
           }
           i3++;
         }
@@ -1947,7 +1979,14 @@ int equation_order_read(char *fname, char *commsyntax,set_def *sets,dim_t nset,s
           varindx1=str_find_ci(readitem+varindx2,"p_");
           if(varindx1==-1) break;
           varindx2=varindx2+varindx1;
-          if(varindx2==0||readitem[varindx2-1]=='*'||readitem[varindx2-1]=='+'||readitem[varindx2-1]=='-'||readitem[varindx2-1]=='('||readitem[varindx2-1]==',') break;
+          if(varindx2==0) {
+            /* position 0 is a genuine token start only before the
+               first token; after the cursor advances it is the tail
+               of a p_*-named variable (design doc section 6) */
+            if(i==0) break;
+            varindx2++;
+          }
+          else if(readitem[varindx2-1]=='*'||readitem[varindx2-1]=='+'||readitem[varindx2-1]=='-'||readitem[varindx2-1]=='('||readitem[varindx2-1]==',') break;
           else varindx2++;
         }
         if(varindx1==-1) break;
@@ -1958,13 +1997,16 @@ int equation_order_read(char *fname, char *commsyntax,set_def *sets,dim_t nset,s
           strncpy(vname,readitem,p-readitem);
           vname[p-readitem]='\0';
           strcpy(LinVars[i3].LinVarName,vname);
-          for (l=0; l<nvar; l++) {
-            if (strcmp(vars[l].cofname,vname)==0) {
-              LinVars[i3].LinVarIndx=l;
-              break;
+          {
+            offset_t lr=linvar_resolve(vname,vars,nvar);
+            if (lr<0) {
+              /* was a silent break dropping every later column */
+              printf("Error: equation references p_%s but no variable %s, p_%s or c_%s is declared\n",vname,vname,vname,vname);
+              MPI_Abort(PETSC_COMM_WORLD,1);
             }
+            l=lr;
+            LinVars[i3].LinVarIndx=l;
           }
-          if (l>=nvar) break;
           p=strpbrk(readitem,"}+*-/^)");
           if (p==NULL) break;
           if (*p=='}') {
@@ -1995,11 +2037,14 @@ int equation_order_read(char *fname, char *commsyntax,set_def *sets,dim_t nset,s
         else {
           strcpy(vname,readitem);
           strcpy(LinVars[i3].LinVarName,vname);
-          for (l=0; l<nvar; l++) {
-            if (strcmp(vars[l].cofname,vname)==0) {
-              LinVars[i3].LinVarIndx=l;
-              break;
+          {
+            offset_t lr=linvar_resolve(vname,vars,nvar);
+            if (lr<0) {
+              /* was a silent miss leaving LinVarIndx=0 (variable 0) */
+              printf("Error: equation references p_%s but no variable %s, p_%s or c_%s is declared\n",vname,vname,vname,vname);
+              MPI_Abort(PETSC_COMM_WORLD,1);
             }
+            LinVars[i3].LinVarIndx=lr;
           }
           i3++;
         }
@@ -2273,7 +2318,14 @@ int equation_order_read_nested(char *fname, char *commsyntax,set_def *sets,dim_t
           varindx1=str_find_ci(readitem+varindx2,"p_");
           if(varindx1==-1) break;
           varindx2=varindx2+varindx1;
-          if(varindx2==0||readitem[varindx2-1]=='*'||readitem[varindx2-1]=='+'||readitem[varindx2-1]=='-'||readitem[varindx2-1]=='('||readitem[varindx2-1]==',') break;
+          if(varindx2==0) {
+            /* position 0 is a genuine token start only before the
+               first token; after the cursor advances it is the tail
+               of a p_*-named variable (design doc section 6) */
+            if(i==0) break;
+            varindx2++;
+          }
+          else if(readitem[varindx2-1]=='*'||readitem[varindx2-1]=='+'||readitem[varindx2-1]=='-'||readitem[varindx2-1]=='('||readitem[varindx2-1]==',') break;
           else varindx2++;
         }
         if(varindx1==-1) break;
@@ -2284,13 +2336,16 @@ int equation_order_read_nested(char *fname, char *commsyntax,set_def *sets,dim_t
           strncpy(vname,readitem,p-readitem);
           vname[p-readitem]='\0';
           strcpy(LinVars[i3].LinVarName,vname);
-          for (l=0; l<nvar; l++) {
-            if (strcmp(vars[l].cofname,vname)==0) {
-              LinVars[i3].LinVarIndx=l;
-              break;
+          {
+            offset_t lr=linvar_resolve(vname,vars,nvar);
+            if (lr<0) {
+              /* was a silent break dropping every later column */
+              printf("Error: equation references p_%s but no variable %s, p_%s or c_%s is declared\n",vname,vname,vname,vname);
+              MPI_Abort(PETSC_COMM_WORLD,1);
             }
+            l=lr;
+            LinVars[i3].LinVarIndx=l;
           }
-          if (l>=nvar) break;
           p=strpbrk(readitem,"}+*-/^)");
           if (p==NULL) break;
           if (*p=='}') {
@@ -2321,11 +2376,14 @@ int equation_order_read_nested(char *fname, char *commsyntax,set_def *sets,dim_t
         else {
           strcpy(vname,readitem);
           strcpy(LinVars[i3].LinVarName,vname);
-          for (l=0; l<nvar; l++) {
-            if (strcmp(vars[l].cofname,vname)==0) {
-              LinVars[i3].LinVarIndx=l;
-              break;
+          {
+            offset_t lr=linvar_resolve(vname,vars,nvar);
+            if (lr<0) {
+              /* was a silent miss leaving LinVarIndx=0 (variable 0) */
+              printf("Error: equation references p_%s but no variable %s, p_%s or c_%s is declared\n",vname,vname,vname,vname);
+              MPI_Abort(PETSC_COMM_WORLD,1);
             }
+            LinVars[i3].LinVarIndx=lr;
           }
           i3++;
         }
@@ -2570,7 +2628,14 @@ int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,
           varindx1=str_find_ci(readitem+varindx2,"p_");
           if(varindx1==-1) break;
           varindx2=varindx2+varindx1;
-          if(varindx2==0||readitem[varindx2-1]=='*'||readitem[varindx2-1]=='+'||readitem[varindx2-1]=='-'||readitem[varindx2-1]=='('||readitem[varindx2-1]==',') break;
+          if(varindx2==0) {
+            /* position 0 is a genuine token start only before the
+               first token; after the cursor advances it is the tail
+               of a p_*-named variable (design doc section 6) */
+            if(i==0) break;
+            varindx2++;
+          }
+          else if(readitem[varindx2-1]=='*'||readitem[varindx2-1]=='+'||readitem[varindx2-1]=='-'||readitem[varindx2-1]=='('||readitem[varindx2-1]==',') break;
           else varindx2++;
         }
         if(varindx1==-1) break;
@@ -2581,13 +2646,16 @@ int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,
           strncpy(vname,readitem,p-readitem);
           vname[p-readitem]='\0';
           strcpy(LinVars[i3].LinVarName,vname);
-          for (l=0; l<nvar; l++) {
-            if (strcmp(vars[l].cofname,vname)==0) {
-              LinVars[i3].LinVarIndx=l;
-              break;
+          {
+            offset_t lr=linvar_resolve(vname,vars,nvar);
+            if (lr<0) {
+              /* was a silent break dropping every later column */
+              printf("Error: equation references p_%s but no variable %s, p_%s or c_%s is declared\n",vname,vname,vname,vname);
+              MPI_Abort(PETSC_COMM_WORLD,1);
             }
+            l=lr;
+            LinVars[i3].LinVarIndx=l;
           }
-          if (l>=nvar) break;
           p=strpbrk(readitem,"}+*-/^)");
           if (p==NULL) break;
           if (*p=='}') {
@@ -2618,11 +2686,14 @@ int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,
         else {
           strcpy(vname,readitem);
           strcpy(LinVars[i3].LinVarName,vname);
-          for (l=0; l<nvar; l++) {
-            if (strcmp(vars[l].cofname,vname)==0) {
-              LinVars[i3].LinVarIndx=l;
-              break;
+          {
+            offset_t lr=linvar_resolve(vname,vars,nvar);
+            if (lr<0) {
+              /* was a silent miss leaving LinVarIndx=0 (variable 0) */
+              printf("Error: equation references p_%s but no variable %s, p_%s or c_%s is declared\n",vname,vname,vname,vname);
+              MPI_Abort(PETSC_COMM_WORLD,1);
             }
+            LinVars[i3].LinVarIndx=lr;
           }
           i3++;
         }

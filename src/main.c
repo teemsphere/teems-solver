@@ -301,7 +301,12 @@ static int chain_refs_scan(char *fname, set_def *sets, dim_t nset, array_def *co
         varindx1=str_find_ci(readitem+varindx2,"p_");
         if(varindx1==-1) break;
         varindx2=varindx2+varindx1;
-        if(varindx2==0||readitem[varindx2-1]=='*'||readitem[varindx2-1]=='+'||readitem[varindx2-1]=='-'||readitem[varindx2-1]=='('||readitem[varindx2-1]==',') break;
+        if(varindx2==0) {
+          /* genuine start only before the first token (section 6) */
+          if(i==0) break;
+          varindx2++;
+        }
+        else if(readitem[varindx2-1]=='*'||readitem[varindx2-1]=='+'||readitem[varindx2-1]=='-'||readitem[varindx2-1]=='('||readitem[varindx2-1]==',') break;
         else varindx2++;
       }
       if(varindx1==-1) break;
@@ -310,10 +315,12 @@ static int chain_refs_scan(char *fname, set_def *sets, dim_t nset, array_def *co
       if(p==NULL||*p!='{')continue;/* reference without indices */
       strncpy(vname,readitem,p-readitem);
       vname[p-readitem]='\0';
-      for (l=0; l<nvar; l++) {
-        if (strcmp(vars[l].cofname,vname)==0)break;
+      {
+        offset_t lr=linvar_resolve(vname,vars,nvar);
+        if(lr<0)continue;/* refcount scan stays lenient; the equation
+                            builders fatal undeclared references */
+        l=lr;
       }
-      if(l==nvar)continue;
       pend=strchr(p,'}');
       if(pend==NULL)continue;
       strncpy(idxlist,p+1,pend-p-1);
@@ -1146,16 +1153,13 @@ int main(int argc,char **args) {
     MPI_Bcast(vars,nvar*sizeof(array_def), MPI_BYTE,0, PETSC_COMM_WORLD);
   }
   nvarele=nvarele1;
-  if(rank==0){
-  for (i=0;i<nvar;i++){
-    if(vars[i].cofname[1]=='_'){
-    for (j=0;j<ncof;j++)if (strcmp(coefs[j].cofname,vars[i].cofname+2)==0){
-      printf("Error: coefficient %s and variable %s share a name (p_/c_ prefixes do not disambiguate); rename one of them\n",coefs[j].cofname,vars[i].cofname);
-      return 0;
-    }
-    }
-  }
-  }
+  /* coefficient X + variable p_X/c_X is the hand-linearized pair
+     idiom (GTAP-AEZ YIELD/p_YIELD) and is now resolved unambiguously:
+     p_-prefixed tokens bind variables first (incl. the declared
+     p_-/c_-leading name via linvar_resolve), bare tokens bind
+     coefficients first. The old guard here fataled the idiom; the
+     genuine ambiguity (variable X + variable p_X/c_X) is fataled in
+     names_validate (design doc section 6). */
   logmsg(2,"nvarele %ld\n",nvarele);
   elem_value *elem_vals= (elem_value *) calloc ((ncofele+nvarele),sizeof(elem_value));
   elem_store *coef_store= (elem_store *) calloc (ncofele,sizeof(elem_store));

@@ -98,18 +98,22 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
     p++;
     p++;
   }
-  /* levels auto-pair (design doc section 5): a p_-prefixed token names
-     a LINEAR variable, so when a levels pair shares the name the
-     variable must win; bare tokens keep coefficient-first (value
-     reference). Bit-neutral otherwise: 11.2.1 uniqueness forbids a
-     shared coefficient/variable name except the level_par pair. */
+  /* p_-prefixed tokens name LINEAR variables: when the token resolves
+     to one -- bare TEEMS convention, the C0 levels auto-pair, or a
+     declared p_-/c_-leading name (design doc sections 5/6) -- the
+     variable wins and the coefficient search is skipped; bare tokens
+     keep coefficient-first (value reference). Bit-neutral otherwise:
+     11.2.1 uniqueness plus the names_validate ambiguity fatal make
+     the resolution unique. */
   bool PairSkipCoefs=false;
   if(IsChange) {
-    offset_t vi;
-    for(vi=0; vi<nvar; vi++) if(strcmp(vars[vi].cofname,p)==0) {
-        PairSkipCoefs=true;
-        break;
-      }
+    offset_t lr=linvar_resolve(p,vars,nvar);
+    if(lr>=0) {
+      PairSkipCoefs=true;
+      /* redirect the search token to the declared name so the
+         variable loop below binds the resolved record */
+      p=vars[lr].cofname;
+    }
   }
   index=ncof-1;
   if(!PairSkipCoefs) do {

@@ -282,6 +282,9 @@ int cmf_postsim_on(char *filename);
    mapping_complementarity_design.md section 5); no-op when the TAB
    has no levels statements; -1 on error */
 int tab_levels_transform(char *fname);
+/* LinVar token resolution incl. declared p_-/c_-leading names
+   (design doc section 6); -1 when nothing matches */
+offset_t linvar_resolve(char *vname, array_def *vars, offset_t nvar);
 offset_t backsolve_read(char *fname, array_def *vars, offset_t nvar, closure_entry *closure_vals);
 int backsolve_validate_refs(char *fname, array_def *vars);
 int tab_equation_name(char *stmt, char *eqname);

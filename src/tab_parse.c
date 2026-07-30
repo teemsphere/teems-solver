@@ -1660,6 +1660,15 @@ int names_validate(set_def *sets, dim_t nset, array_def *coefs, offset_t ncof, a
       }
   }
   for(i=0; i<nvar; i++) {
+    /* declared p_-/c_-leading names are legal (hand-linearized pairs,
+       design doc section 6) UNLESS the bare name is also a variable:
+       then the reference token p_<bare> is ambiguous */
+    if((vars[i].cofname[0]=='p'||vars[i].cofname[0]=='c')&&vars[i].cofname[1]=='_') {
+      for(j=0; j<nvar; j++)if(strcmp(vars[j].cofname,vars[i].cofname+2)==0) {
+          printf("Error: variables %s and %s cannot coexist: the reference p_%s is ambiguous (manual 11.2.1)\n",vars[i].cofname,vars[j].cofname,vars[i].cofname+2);
+          return -1;
+        }
+    }
     for(k=0; k<nset; k++)if(strcmp(vars[i].cofname,sets[k].setname)==0) {
         printf("Error: name %s is declared as both a variable and a set (manual 11.2.1)\n",vars[i].cofname);
         return -1;
@@ -2307,6 +2316,19 @@ int mappings_validate(map_def *maps, dim_t nmap, set_def *sets, set_element *set
   return 0;
 }
 
+/* closure/shock entry name -> variable: exact declared name first
+   (incl. declared p_-/c_-leading names, design doc section 6), then
+   the prefix-stripped TEEMS convention (entry p_qgdp = variable
+   qgdp; backsolve_read has used this shape since 10.16 support) */
+static offset_t closure_var_find(char *vname, array_def *vars, offset_t nvar) {
+  offset_t j;
+  for (j=0; j<nvar; j++) if (strcmp(vname,vars[j].cofname)==0) return j;
+  if ((vname[0]=='p'||vname[0]=='c')&&vname[1]=='_') {
+    for (j=0; j<nvar; j++) if (strcmp(vname+2,vars[j].cofname)==0) return j;
+  }
+  return -1;
+}
+
 offset_t closure_read(char *fname, char *commsyntax,closure_entry *closure_vals, array_def *vars,offset_t nvar,set_def *sets,dim_t nset, set_element *set_elems) {
   FILE * filehandle;
   char line[TABREADLINE]="\0",*readitem=NULL,*p=NULL,*p1=NULL,vname[TABREADLINE],argu[TABREADLINE];//,linecopy[TABREADLINE]
@@ -2324,8 +2346,9 @@ offset_t closure_read(char *fname, char *commsyntax,closure_entry *closure_vals,
     str_replace_all(line,";", " ;");
     while (str_replace_all(line,"\n", " "));
     while (str_replace_all(line,"\r", " "));
-    while (str_replace_first(line," p_", " "));
-    while (str_replace_first(line," c_", " "));
+    /* the old blanket " p_"/" c_" strip destroyed declared
+       p_-/c_-leading names (section 6); resolution now happens at
+       the lookups via closure_var_find */
     while (str_replace_all(line,"  ", " "));
     while (str_replace_all(line," ,", ","));
     while (str_replace_all(line,", ", ","));
@@ -2362,6 +2385,7 @@ offset_t closure_read(char *fname, char *commsyntax,closure_entry *closure_vals,
       readitem++;
       check=true;
       if (strchr(vname,'(')==NULL) {
+        { offset_t jf=closure_var_find(vname,vars,nvar); if(jf>=0) strcpy(vname,vars[jf].cofname); }
         for (j=0; j<nvar; j++) if (strcmp(vname,vars[j].cofname)==0) {
             dims=vars[j].nelem;
             if (dims==0) {
@@ -2383,6 +2407,7 @@ offset_t closure_read(char *fname, char *commsyntax,closure_entry *closure_vals,
       } else {
         dims=1;
         p = strtok(vname,"(");
+        { offset_t jf=closure_var_find(p,vars,nvar); if(jf>=0) p=vars[jf].cofname; }
         for(sup=0; sup<MAXSUPSET; sup++)supsetid[sup]=0;
         for (j=0; j<nvar; j++) if (strcmp(p,vars[j].cofname)==0) {
             quantifier *arSet= (quantifier *) calloc (vars[j].size,sizeof(quantifier));
@@ -2581,8 +2606,7 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
     str_replace_all_bounded(line,";", " ;",DATREADLINE);
     while (str_replace_all(line,"= ", "="));
     while (str_replace_all_bounded(line,"  ", " ",DATREADLINE));
-    while (str_replace_first_bounded(line," p_", " ",DATREADLINE));
-    while (str_replace_first_bounded(line," c_", " ",DATREADLINE));
+    /* prefix resolution moved to the lookups (section 6) */
     varnset=str_count_char(line,',');
     j=str_count_char(line,'(');
     for(sup=0; sup<MAXSUPSET; sup++)supsetid[sup]=-1;
@@ -2606,6 +2630,7 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
         MPI_Abort(PETSC_COMM_WORLD,1);
         return -1;
       }
+      { offset_t jf=closure_var_find(readitem,vars,nvar); if(jf>=0) readitem=vars[jf].cofname; }
       for (j=0; j<nvar; j++) if (strcmp(readitem,vars[j].cofname)==0) {
           readitem = strtok(NULL,";");
           if (readitem==NULL) {
@@ -2633,6 +2658,7 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
       }
     } else {
       readitem = strtok(NULL,"(");
+      { offset_t jf=closure_var_find(readitem,vars,nvar); if(jf>=0) readitem=vars[jf].cofname; }
       for (j=0; j<nvar; j++) {
         if (strcmp(readitem,vars[j].cofname)==0) {
           dims=1;

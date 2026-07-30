@@ -368,3 +368,49 @@ percent+change, value-pinned multi-step solve with per-step levels
 updates asserted via PostSim, and named-fatal legs (non-parameter
 coefficient, linear variable, function, unknown name, surviving
 (levels)); ASan on kit legs; all prior kits re-run.
+
+## 6. Naming resolution for p_/c_-leading declared variables (C1
+prerequisite; designed 2026-07-30)
+
+Corpus evidence: GTAP-AEZ declares `p_YIELD`/`p_UNMGLANDF` as the
+GEMPACK hand-linearized pair idiom (coefficient `YIELD` + variable
+`p_YIELD` + `Update YIELD = p_YIELD;`, references use the declared
+name directly); GMig2 declares eight `c_*` linear variables
+(c_shiftlf, c_migin, ...); gtap-pov has both classes. Today these are
+silently broken: the preprocess c_->p_ rewrite plus the equation-side
+LinVar scans (token after `p_` strcmp'd against bare declared names)
+miss them, and a miss BREAKS the scan, silently dropping every later
+column in the statement; the main.c coefficient-vs-p_variable guard
+fatals the AEZ pair outright.
+
+**Design: reference resolution, not renaming.** Declared names stay
+verbatim end to end (closure/shock files, solution binaries, R compose
+all see the user's names; zero R-side changes).
+1. Scan-start acceptance fix (4 discovery twins): `varindx2==0` is
+   accepted only before the first token -- after the cursor advances
+   it means "tail of a p_*-named variable" (p_p_l) and must be
+   rejected, matching eq_zero_linvar's boundary set (which already
+   rejects '_'-preceded occurrences, keeping the ordinal machines
+   consistent).
+2. Token resolution (helper shared by the 4 twins + the main.c
+   lead/lag refcount scan + formula_bind_operand): token T after
+   `p_` resolves to (a) variable named T (TEEMS bare convention),
+   else (b) variable named `p_`+T, else (c) variable named `c_`+T
+   (the c_->p_ rewrite folds both spellings to `p_`+T). The
+   "column text = p_ + LinVarName" reconstruction convention is
+   preserved (LinVarName keeps the token).
+3. Scan miss = NAMED FATAL (was: silent break dropping columns; the
+   else-branch scalar token miss even left LinVarIndx=0, silently
+   binding variable 0). Residual loud class: value references to
+   p_-leading COEFFICIENT names in equations (none in corpus).
+4. main.c coefficient-vs-p_variable guard REMOVED (the binder now
+   disambiguates: p_-prefixed tokens bind variables first, bare
+   tokens bind coefficients first -- C0's ordering extended with the
+   full-name fallback); replaced by the genuine ambiguity fatal in
+   names_validate: variable X + variable p_X/c_X coexisting (the
+   token p_X cannot be resolved).
+Deferred: p_/c_-leading LEVELS variable names (GMig2 P_L) keep the C0
+fatal -- their auto-pair coefficient shares the p_-leading name, so
+bare value tokens (`p_l{s}`) would be indistinguishable from columns
+without renaming the pair coefficient (gen_lv*) and rewriting value
+references; that piece rides with C1/GMig2 e2e.
