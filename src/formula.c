@@ -2228,6 +2228,10 @@ offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_el
     nsumele=i3;
     for (i=0; i<totalsum; i++) {
       i1=1;
+      /* scalar sum store (size 0): no strides (formulas_execute
+         guard; strides[-1] hit setid[MAXVARDIM-1], unread at
+         size 0) */
+      if (sum_cof[i].size==0) continue;
       sum_cof[i].strides[sum_cof[i].size-1]=1;
       for(j=sum_cof[i].size-2; j>-1; j--) {
         sum_cof[i].strides[j]=sum_cof[i].strides[j+1]*sets[sum_cof[i].setid[j+1]].size;
@@ -2518,6 +2522,10 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
     nsumele=i3;
     for (i=0; i<totalsum; i++) {
       i1=1;
+      /* scalar sum store (size 0): no strides (formulas_execute
+         guard; strides[-1] hit setid[MAXVARDIM-1], unread at
+         size 0) */
+      if (sum_cof[i].size==0) continue;
       sum_cof[i].strides[sum_cof[i].size-1]=1;
       for(j=sum_cof[i].size-2; j>-1; j--) {
         sum_cof[i].strides[j]=sum_cof[i].strides[j+1]*sets[sum_cof[i].setid[j+1]].size;
@@ -3110,6 +3118,12 @@ offset_t assertions_execute(char *fname,set_def *sets,dim_t nset,set_element *se
       sum_cof[i].offset=i3;
       sum_cof[i].summatsize=i4;
       i3=i3+i4;
+      /* a scalar sum store (size 0) has no strides; the unguarded
+         write was strides[-1] = setid[MAXVARDIM-1] (the class fixed
+         in formulas_execute and the equation builder; this is the
+         assertion-executor twin, surfaced by the C1 kit's scalar
+         sum assertions) */
+      if (sum_cof[i].size==0) continue;
       sum_cof[i].strides[sum_cof[i].size-1]=1;
       for(l=sum_cof[i].size-2; l>-1; l--)sum_cof[i].strides[l]=sum_cof[i].strides[l+1]*sets[sum_cof[i].setid[l+1]].size;
     }

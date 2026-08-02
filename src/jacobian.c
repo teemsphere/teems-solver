@@ -747,6 +747,10 @@ static void stmt_prog_build_one(char *line, stmt_prog *stp, char *commsyntax,
         nsumele=li3;
         for (i3=0; i3<totalsum; i3++) {
           i1=1;
+          /* scalar sum store (size 0): no strides (formulas_execute
+             guard; strides[-1] hit setid[MAXVARDIM-1], unread at
+             size 0) */
+          if (sum_cof[i3].size==0) continue;
           sum_cof[i3].strides[sum_cof[i3].size-1]=1;
           for(sj=sum_cof[i3].size-2; sj>-1; sj--) {
             sum_cof[i3].strides[sj]=sum_cof[i3].strides[sj+1]*sets[sum_cof[i3].setid[sj+1]].size;
