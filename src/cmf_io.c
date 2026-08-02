@@ -607,6 +607,7 @@ int tab_preprocess(char *filename, char *newtabfile) {
       str_replace_first(readline,"write(", "write (");
       str_replace_first(readline,"zerodivide(", "zerodivide (");
       str_replace_first(readline,"mapping(", "mapping (");
+      str_replace_first(readline,"complementarity(", "complementarity (");
       if(str_find_ci(readline,"subset ")==1||str_find_ci(readline,"subset ")==0) {
         strcpy(commsyntax,"subset");
         check=1;
@@ -620,6 +621,14 @@ int tab_preprocess(char *filename, char *newtabfile) {
          statement's scanner */
       if(str_find_ci(readline,"mapping ")==1||str_find_ci(readline,"mapping ")==0) {
         strcpy(commsyntax,"mapping");
+        check=1;
+      }
+      /* COMPLEMENTARITY statements (manual 10.17; design doc section
+         7); the embedded "variable =" qualifier cannot false-match the
+         variable check below because those tests anchor at position
+         0/1 */
+      if(str_find_ci(readline,"complementarity ")==1||str_find_ci(readline,"complementarity ")==0) {
+        strcpy(commsyntax,"complementarity");
         check=1;
       }
       if (str_find_ci(readline,"coefficient ")==1||str_find_ci(readline,"coefficient ")==0) {//if (ha_cgefind(readline,"coefficient ")>-1) {

@@ -414,3 +414,116 @@ fatal -- their auto-pair coefficient shares the p_-leading name, so
 bare value tokens (`p_l{s}`) would be indistinguishable from columns
 without renaming the pair coefficient (gen_lv*) and rewriting value
 references; that piece rides with C1/GMig2 e2e.
+
+## 7. C1 design: Complementarity parse/validation + derived statements
+(designed 2026-07-30)
+
+Scope per section 3 phasing: statement recognition, parse, validation
+(11.14), derived-statement generation (51.7.2), closure integration
+for the derived variables, and the C1a naming prerequisite below.
+The approximate-run state machinery (3-IF equation E_$comp, per-step
+states, Newton correction, step redo) is C2; closure/shock
+auto-modification is C3. Consequence: a complementarity whose
+variable has ANY endogenous component cannot be solved yet and is a
+NAMED FATAL after closure processing ("state machinery is C2"). A
+complementarity whose variable is fully exogenous is INERT: the
+derived statements compile and solve (comp@E tracks the expression
+through the run), which is exactly the GMig2 exogenous-migration
+closures (the shipped closure family swaps c_NMIGSP exogenous; the
+default closure with NMIGSP endogenous waits for C2).
+
+**C1a prerequisite -- p_-leading LEVELS names (GMig2 P_L).**
+The auto-pair coefficient no longer shares the declared name when the
+name starts p_: it gets a generated name `gen_lvN` (N = discovery
+ordinal; the name contains no `p_`/`c_` substring so the equation
+scanners never see it), and the transform rewrites every bare
+VALUE-reference token of the declared name to `gen_lvN` across the
+statement stream (whole-token match, double-quoted element strings
+excluded) -- in formulas, levels equations, reads, writes, updates and
+the _ps companion. c_-leading LEVELS names stay a named fatal
+(narrowed from the original p_/c_ plan): the preprocess c_->p_
+rewrite folds their value references on equation/update lines into
+`p_<tail>` BEFORE the transform, textually indistinguishable from a
+change-reference column of the same variable; zero corpus uses
+(GMig2's c_* class is linear -- section 6 -- and P_L is the only
+p_/c_-leading levels name in the survey). The Variable declaration keeps the declared name
+verbatim (variables_read, closures, shocks, solution and compose all
+see the user's name; zero R-side surface). Explicit column tokens
+p_<name>/c_<name> are single distinct tokens and are untouched;
+linvar_resolve already resolves them (section 6). The generated pair
+statements become `coefficient (non_parameter) <quants> gen_lvN<args>`
++ `update [(change)] <quants> gen_lvN<args> = p_<name><args>`. The
+levels-equation terminal emission uses gen_lvN for the value factor
+(`(gen_lvN{s}/100)*`) and `p_<declared>` for the column. A user
+coefficient sharing the p_/c_-leading levels name is a named fatal
+(the exemption in names_validate keys on shared names and must not
+cover renamed pairs). The C0 fatal and the R-side
+model_err$levels_prefix_name mirror are lifted.
+
+**C1b statement pipeline.** `complementarity` joins the tab_preprocess
+keyword cascade (position-0/1 test like mapping/postsim; the embedded
+`variable =` qualifier cannot false-match because those tests anchor
+at position 0/1). Statements arrive at the new pass
+tab_complementarity_transform (src/comp.c), which runs after
+tab_postsim_split and BEFORE tab_levels_transform (its derived
+statements are levels statements that C0 then expands/linearizes).
+Grammar after preprocess (lowercased, one line, comments stripped):
+  complementarity (variable = x[,lower_bound = b][,upper_bound = b])
+      name (all,i,S)... expr ;
+Qualifier parse tokenizes the group on top-level commas, each part
+split at '='. Validation at transform time (textual): VARIABLE
+present and a declared levels variable (lv_scan tables); at least one
+bound; bound typing (levels variable | Coefficient(parameter) | real
+constant); name present, <= 10 chars (11.2.1/10.17); quantifier count
+== X's argument count (and == each variable/parameter bound's);
+expression legality (11.4.8) rides the generated Equation (levels)
+through C0's parser. Validation post-sets_read (new
+complementarities_validate, main.c after subset construction):
+quantifier set at position k equal to or an ordered subset of X's
+declaration set at position k (walk set_elems: every element of T in
+S in the same relative order), same for variable/coefficient bounds
+(11.14 points 2-3). Comp records (name, X, bound kind/name/value,
+quantifier sets, X argument sets) live in a teems_comps global
+(broadcast like mappings).
+
+**C1c derived statements** (51.7.2; GEMPACK's $-prefixed names use
+'@' suffixes instead -- '$' does not survive the tokenizers, '@' does
+(mapping precedent), and '@' is illegal in user GEMPACK names so the
+namespace is collision-free):
+  variable (change,levels) <quants> <comp>@e(<idxs>) ;
+  formula (initial) <quants> <comp>@e(<idxs>) = <expr> ;
+  equation (levels) e_<comp>@e <quants> <comp>@e(<idxs>) = <expr> ;
+  variable (change) <quants> <comp>@d(<idxs>) ;         [dummy]
+  variable (change) del_comp@ ;                         [once per TAB]
+  [levels-variable bound:]
+  variable (change,levels) <quants> <comp>@l(<idxs>) ;
+  formula (initial) + equation (levels) e_<comp>@l:
+      <comp>@l = <X args> - <bound args> ;              [@u mirrored]
+The comp statement itself is consumed (never reaches the readers).
+comp@e/@l/@u ride the C0 auto-pair + linearization untouched. The
+dummy and del_comp@ are declared but referenced by no equation until
+C2 (E_$comp); they are auto-exogenized in closure processing (51.7.2
+(c)/(d): the user must not mention them; closure_read gains a
+post-hoc marking pass on the backsolve_read template + a fatal if a
+closure or shock statement names any '@'-containing derived name).
+comp@e/@l/@u stay endogenous (51.7.2 (b)/(e) -- unlisted = endogenous
+already). Squareness in inert mode: comp@e/@l/@u each balanced by
+their generated equation; dummy + del_comp@ exogenous; X exogenous by
+the user's closure. NO_SPLIT semantics for del_comp@ matter only when
+C2 shocks it (recorded, not implemented).
+
+**C1 fatals (named):** state machinery (any X component endogenous,
+post-closure); VARIABLE qualifier missing/not a levels variable; no
+bound; bound not levels-var/parameter/constant; missing name; name >
+10 chars; quantifier count mismatch (statement vs X vs non-constant
+bounds); set not equal/ordered-subset per position (post-sets_read);
+user closure/shock mention of a derived '@' name; complementarity
+inside PostSim (already fatal via the 12.2.1 list); user coefficient
+sharing a p_/c_-leading levels variable name (C1a).
+
+**Counting note (11.14):** the complementarity contributes one
+equation of quantifier size for closure purposes -- that row IS
+E_$comp and arrives with C2. Inert mode does not need it (X
+exogenous removes both the row and the free variable). teems-R side
+mirrors this: at C1-R a TAB with a complementarity deploys only when
+the complementarity variable is exogenous over its full domain.

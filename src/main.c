@@ -936,6 +936,11 @@ int main(int argc,char **args) {
     npostsim=tab_postsim_split(newtabfile,psfile);
     /* fail-fast: exit 0 here used to mask section errors */
     if(npostsim<0)MPI_Abort(PETSC_COMM_WORLD,1);
+    /* C1: parse Complementarity statements, validate (10.17/11.14)
+       and replace them with their derived levels statements (51.7.2)
+       BEFORE the levels transform expands those; untouched when the
+       TAB has none (design doc section 7) */
+    if(tab_complementarity_transform(newtabfile)<0)MPI_Abort(PETSC_COMM_WORLD,1);
     /* C0: expand Formula&Equation, pair levels variables with value
        coefficients + updates, linearize Equation (levels) by change
        differentiation; untouched when the TAB has no levels
@@ -1059,6 +1064,10 @@ int main(int argc,char **args) {
       mapping_values_read(tabfile,niodata,iodata,maps,nmap,sets,set_elems);
       mappings_validate(maps,nmap,sets,set_elems);
     }
+    /* C1: complementarity quantifier sets vs the variable's and
+       bounds' argument sets (11.14 points 2-3) -- needs the set
+       elements built above for the ordered-subset walk */
+    if(complementarities_validate(sets,nset,set_elems)==-1)MPI_Abort(PETSC_COMM_WORLD,1);
   }
   MPI_Barrier(PETSC_COMM_WORLD);
   if(nohsl) {
@@ -1246,6 +1255,12 @@ int main(int argc,char **args) {
     if(backsolve_read(tabfile,vars,nvar,closure_vals)==-1)return 0;
     if(backsolve_validate_refs(tabfile,vars)==-1)return 0;
     if(nbacksolve>0)logmsg(1,"Backsolving %d variables (%ld elements) from retained defining equations\n",nbacksolve,nbselems);
+    /* C1: auto-exogenize the complementarity dummies and del_comp@
+       (51.7.2 (c)/(d); the marks and the nexo adjustment ride the
+       closure broadcast below), enforce the 11.14.1 backsolve guard
+       and the C2 state-machinery guard (design doc section 7) */
+    if(comp_closure_check(closure_vals,vars,nvar,&nexo)==-1)MPI_Abort(PETSC_COMM_WORLD,1);
+    nexo1=nexo;
   }
   if(nohsl) {
     if(nvarele*sizeof(closure_entry)>1500000000) {

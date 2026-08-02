@@ -282,6 +282,31 @@ int cmf_postsim_on(char *filename);
    mapping_complementarity_design.md section 5); no-op when the TAB
    has no levels statements; -1 on error */
 int tab_levels_transform(char *fname);
+/* C1: one Complementarity statement (manual 10.17/11.14; design doc
+   section 7): parsed at transform time, set matching validated after
+   set elements exist, closure integration after closure_read. Bound
+   kinds: 0 none, 1 real constant, 2 levels variable, 3 parameter
+   coefficient. Quantifier/argument set names are recorded textually
+   by the transform (declarations are not yet read at that stage). */
+typedef struct
+{
+  char name[NAMESIZE];              /* <= 10 chars (11.2.1) */
+  char varname[NAMESIZE];           /* X: the complementarity variable */
+  int lower_kind, upper_kind;
+  double lower_const, upper_const;
+  char lower_name[NAMESIZE], upper_name[NAMESIZE];
+  dim_t nquant;
+  char qidx[MAXVARDIM][NAMESIZE];   /* statement quantifier indices */
+  char qset[MAXVARDIM][NAMESIZE];   /* statement quantifier sets */
+  char xset[MAXVARDIM][NAMESIZE];   /* X's declared set per arg position */
+  char lset[MAXVARDIM][NAMESIZE];   /* bound sets (kind 2/3 only) */
+  char uset[MAXVARDIM][NAMESIZE];
+} comp_def ;
+extern comp_def *teems_comps;
+extern dim_t teems_ncomp;
+int tab_complementarity_transform(char *fname);
+int complementarities_validate(set_def *sets, dim_t nset, set_element *set_elems);
+int comp_closure_check(closure_entry *closure_vals, array_def *vars, offset_t nvar, offset_t *nexo);
 /* LinVar token resolution incl. declared p_-/c_-leading names
    (design doc section 6); -1 when nothing matches */
 offset_t linvar_resolve(char *vname, array_def *vars, offset_t nvar);

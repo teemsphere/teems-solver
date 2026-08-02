@@ -1641,8 +1641,12 @@ int names_validate(set_def *sets, dim_t nset, array_def *coefs, offset_t ncof, a
   for(i=0; i<ncof; i++) {
     for(j=0; j<nvar; j++)if(strcmp(coefs[i].cofname,vars[j].cofname)==0) {
         /* levels auto-pair (design doc section 5): Coefficient X +
-           levels Variable X is the GEMPACK associated pair (9.2.2) */
-        if(vars[j].level_par)continue;
+           levels Variable X is the GEMPACK associated pair (9.2.2).
+           NOT for p_/c_-leading levels names: their pair coefficient
+           is gen_lv-renamed (C1a, design doc section 7), so a
+           coefficient sharing the name is a genuine clash. */
+        if(vars[j].level_par&&
+           !((vars[j].cofname[0]=='p'||vars[j].cofname[0]=='c')&&vars[j].cofname[1]=='_'))continue;
         printf("Error: name %s is declared as both a coefficient and a variable; names are case-insensitive and must be unique (manual 11.2.1)\n",coefs[i].cofname);
         return -1;
       }
@@ -2322,6 +2326,14 @@ int mappings_validate(map_def *maps, dim_t nmap, set_def *sets, set_element *set
    qgdp; backsolve_read has used this shape since 10.16 support) */
 static offset_t closure_var_find(char *vname, array_def *vars, offset_t nvar) {
   offset_t j;
+  /* derived complementarity variables (comp@e/@d/@l/@u, del_comp@;
+     design doc section 7) are solver-managed (51.7.2: "you must not
+     mention any of [them] in your Command file"); '@' is illegal in
+     user names, so any '@' here is such a mention */
+  if (strchr(vname,'@')!=NULL) {
+    printf("Error: %s is a solver-managed derived complementarity variable and cannot appear in closure or shock files (manual 51.7.2)\n",vname);
+    MPI_Abort(PETSC_COMM_WORLD,1);
+  }
   for (j=0; j<nvar; j++) if (strcmp(vname,vars[j].cofname)==0) return j;
   if ((vname[0]=='p'||vname[0]=='c')&&vname[1]=='_') {
     for (j=0; j<nvar; j++) if (strcmp(vname+2,vars[j].cofname)==0) return j;
