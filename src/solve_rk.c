@@ -962,10 +962,11 @@ bool solve_comp_approx(PetscBool nohsl,PetscInt VecSize,PetscInt dnz,PetscInt* d
         elem_vals1[tindx1].substep_base=0;
       }
     }
-    /* 51.7.5 post-simulation state check + 51.5.3-style change lines */
+    /* 51.7.5 post-simulation state check + 51.5.3-style change lines
+       (the state runtime stays live: the C3 accurate run reads the
+       final states from it; main frees it after the last pass) */
     comp_states_report(sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals);
   }
-  comp_states_free();
 
   free(x1);
   free(base_X);

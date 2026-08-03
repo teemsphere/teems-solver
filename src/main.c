@@ -1273,19 +1273,33 @@ int main(int argc,char **args) {
   }
   /* every rank dispatches on active-mode complementarities (C2) */
   MPI_Bcast(&teems_comp_active,sizeof(offset_t), MPI_BYTE,0, PETSC_COMM_WORLD);
-  /* approximate-run controls (manual 51.6): default step count = the
-     accurate method's step sum; CMF statements override */
-  int comp_steps=0,comp_redo=1;
+  /* approximate/accurate-run controls (manual 51.6): default step
+     count = the accurate method's step sum; CMF statements override.
+     comp_acc_phase: 0 = approximate pass (or first pass), 1 = the
+     accurate pass after the 51.7.1 closure modification (C3). */
+  int comp_steps=0,comp_redo=1,comp_do_approx=1,comp_do_acc=1,comp_sberr_warn=0,comp_acc_phase=0;
   double comp_minfrac=0.005;
   if(teems_comp_active>0) {
     if(rank==0) {
-      comp_steps=(solmethod==SM_GRAGG||solmethod==SM_EULER)?steps1+steps2+steps3:steps1;
+      /* 51.6 default = the accurate run's step sum; steps2/steps3
+         were folded into ratios above, so rebuild the three counts
+         the multistep driver will use */
+      comp_steps=(solmethod==SM_GRAGG||solmethod==SM_EULER)
+        ?steps1+(int)llround(steps1*step_ratio2)+(int)llround(steps1*step_ratio3)
+        :steps1;
       if(comp_steps<1)comp_steps=10;
-      cmf_comp_options(filename,&comp_steps,&comp_redo,&comp_minfrac);
+      cmf_comp_options(filename,&comp_steps,&comp_redo,&comp_minfrac,&comp_do_approx,&comp_do_acc,&comp_sberr_warn);
+      if(!comp_do_approx&&!comp_do_acc) {
+        printf("Error: complementarity do_approx_run and do_acc_run cannot both be no\n");
+        MPI_Abort(PETSC_COMM_WORLD,1);
+      }
     }
     MPI_Bcast(&comp_steps,sizeof(int), MPI_BYTE,0, PETSC_COMM_WORLD);
     MPI_Bcast(&comp_redo,sizeof(int), MPI_BYTE,0, PETSC_COMM_WORLD);
     MPI_Bcast(&comp_minfrac,sizeof(double), MPI_BYTE,0, PETSC_COMM_WORLD);
+    MPI_Bcast(&comp_do_approx,sizeof(int), MPI_BYTE,0, PETSC_COMM_WORLD);
+    MPI_Bcast(&comp_do_acc,sizeof(int), MPI_BYTE,0, PETSC_COMM_WORLD);
+    MPI_Bcast(&comp_sberr_warn,sizeof(int), MPI_BYTE,0, PETSC_COMM_WORLD);
     /* state flips change the filtered nonzero pattern between steps,
        which breaks the persistent-pivot refactorization */
     {
@@ -1442,6 +1456,17 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
       return 1;
     }
   }
+  /* C3 accurate-run re-entry (design doc section 8 tail): after the
+     approximate pass the 51.7.1 closure modification changes WHICH
+     components are exogenous (never how many), so everything downstream
+     of the closure -- border classification, exo_index numbering,
+     block/equation addressing, preallocation, the shock vector -- is
+     rebuilt by re-running this section. All ranks take the jump
+     together (comp_acc_phase is broadcast-derived). */
+comp_accurate_reentry:
+  /* the approximate driver leaves commsyntax at "formula"; the
+     ordering below must parse equations */
+  strcpy(commsyntax,"equation");
   if(nesteddbbd==1)ndbbddrank1=(PetscInt *) calloc(ntime,sizeof(PetscInt));
   offset_t *countvarintra1= (offset_t *) calloc (ndblock+1,sizeof(offset_t));
   array_def *eq_defs= (array_def *) calloc (neq,sizeof(array_def));//recycle ha_cgeset
@@ -2012,15 +2037,79 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
       inmemory=0;
     } else if(rank==0)logmsg(1,"inmemory: keeping ~%ld MB of value arrays resident per rank\n",need/1048576);
   }
-  /* C2: any endogenous complementarity-variable component routes the
-     simulation to the approximate (Euler) run with the E_$comp state
-     machinery live (manual 51.1.2); the requested method becomes the
-     accurate run's method at C3 */
-  bool comp_dispatch=(teems_comp_active>0&&solmethod!=SM_PROBE);
+  /* C2/C3 (manual 51.1.3): endogenous complementarity-variable
+     components route the first pass to the approximate (Euler) run
+     with the E_$comp state machinery live; the 51.7.1 closure/shock
+     modification then re-enters the pipeline and the REQUESTED method
+     solves the accurate run (comp_acc_phase 1). */
+  bool comp_dispatch=(teems_comp_active>0&&solmethod!=SM_PROBE&&comp_acc_phase==0);
   if(comp_dispatch) {
-    if(rank==0)printf("Complementarity: %ld active (endogenous) component(s); running the approximate simulation as forward Euler with %d steps (the %s accurate run is not implemented yet -- C3; manual 51.1.2)\n",(long)teems_comp_active,comp_steps,solmed);
-    if(rank==0&&subints>1)printf("Warning: subintervals are ignored by the complementarity approximate run (per-subinterval approximate+accurate pairs arrive with C3; manual 51.7.4)\n");
-    solve_comp_approx(nohsl,VecSize,dnz,dnnz,onz,onnz,dnzB,dnnzB,onzB,onnzB,&vece,rank,rank_hsl,mpisize,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,&elem_vals,ncofele,nvarele,&closure_vals,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,eq_addr,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,fcomm,comp_steps,comp_redo,comp_minfrac,&xcf);
+    if(comp_do_approx) {
+      if(rank==0)printf("Complementarity: %ld active (endogenous) component(s); approximate simulation as forward Euler with %d steps (manual 51.1.2)\n",(long)teems_comp_active,comp_steps);
+      if(rank==0&&subints>1)printf("Warning: the complementarity approximate run treats the simulation as one interval (per-subinterval approximate+accurate pairs, manual 51.7.4, are not implemented)\n");
+      solve_comp_approx(nohsl,VecSize,dnz,dnnz,onz,onnz,dnzB,dnnzB,onzB,onnzB,&vece,rank,rank_hsl,mpisize,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,&elem_vals,ncofele,nvarele,&closure_vals,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,eq_addr,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,fcomm,comp_steps,comp_redo,comp_minfrac,&xcf);
+    }
+    else {
+      if(rank==0)printf("Complementarity: do_approx_run = no; taking the pre-simulation states as the accurate run's targets (manual 51.6)\n");
+      VecDestroy(&vece); /* the skipped approximate driver would have consumed it */
+    }
+    if(comp_do_acc) {
+      /* capture the target states from the current values (post-
+         approximate, or pre-sim when the approximate run was skipped) */
+      if(rank==rank_hsl) {
+        if(comp_accurate_prepare(sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals)<0)MPI_Abort(PETSC_COMM_WORLD,1);
+      }
+      /* restore the pre-simulation values: the accurate run solves the
+         original data with the modified closure (drivers re-snapshot
+         .initial on entry; formulas/reads state is exactly the .initial
+         snapshot taken before the first approximate step) */
+      if(comp_do_approx) {
+        for(i=0; i<ncofele+nvarele; i++) {
+          elem_vals[i].value=elem_vals[i].initial;
+          elem_vals[i].substep_base=0;
+        }
+      }
+      /* 51.7.1 closure/shock modification on the pre-sim values (the
+         shocks are pre-sim-to-target differences); rank coverage
+         mirrors the update passes -- rank 0 under HSL, every rank
+         under nohsl -- so the numbering below reads the same closure
+         it read on pass 1 */
+      if(rank==rank_hsl) {
+        if(comp_accurate_closure(closure_vals,vars,nvar,coefs,ncof,sets,nset,set_elems,elem_vals)<0)MPI_Abort(PETSC_COMM_WORLD,1);
+      }
+      if(rank==0)printf("Complementarity: accurate simulation with the %s method (closure/shocks modified per manual 51.7.1)\n",solmed);
+      /* tear down pass-1 state and re-enter the closure-dependent
+         pipeline: exo_index numbering restarts from zero (backsolved
+         ordinals are assigned by backsolve_read and keep theirs) */
+      for(i=0; i<nvarele; i++)if(!closure_vals[i].is_backsolved)closure_vals[i].exo_index=0;
+      jacobian_cache_free();
+      backsolve_cache_free();
+      free(xcf);
+      xcf=NULL;
+      free(eqmeta);
+      free(eq_addr);
+      free(counteq);
+      free(counteqnoadd);
+      free(countvarintra1);
+      if(nesteddbbd==1) {
+        free(ndbbddrank1);
+        ndbbddrank1=NULL;
+      }
+      if(rank==rank_hsl) {
+        PetscFree(dnnz);
+        PetscFree(onnz);
+        PetscFree(dnnzB);
+        PetscFree(onnzB);
+      }
+      var_inter=(bool *) calloc (nvar,sizeof(bool));
+      ele_inter=(bool *) calloc (nvarele,sizeof(bool));
+      comp_acc_phase=1;
+      goto comp_accurate_reentry;
+    }
+    else {
+      if(rank==0)printf("Complementarity: do_acc_run = no; the approximate run's solution is the simulation result (manual 51.6)\n");
+      comp_states_free();
+    }
   }
 
   if(!comp_dispatch&&solmethod==SM_JOHANSEN)solve_johansen(nohsl,VecSize,A,dnz,dnnz,onz,onnz,B,dnzB,dnnzB,onzB,onnzB,vecb,vece,rank,rank_hsl,mpisize,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,&elem_vals,ncofele+nvarele,ncofele,nvarele,&closure_vals,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,eq_addr,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,&xcf);
@@ -2030,6 +2119,23 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
   if(!comp_dispatch&&(solmethod==SM_GRAGG||solmethod==SM_EULER))solve_gragg(nohsl,VecSize,&A,dnz,dnnz,onz,onnz,&B,dnzB,dnnzB,onzB,onnzB,&vecb,&vece,rank,rank_hsl,mpisize,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,&elem_vals,ncofele+nvarele,ncofele,nvarele,&closure_vals,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,eq_addr,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,subints,fcomm,solmethod,&xcf);
 
   if(!comp_dispatch&&isrk)solve_rk(nohsl,VecSize,dnz,dnnz,onz,onnz,dnzB,dnnzB,onzB,onnzB,&vece,rank,rank_hsl,mpisize,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,&elem_vals,ncofele,nvarele,&closure_vals,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,eq_addr,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,fcomm,solmethod,adaptive,(double)epstol,(double)retryadj,maxretries,&xcf,&accmetric);
+
+  /* C3: after the accurate run, every component must sit in its
+     approximate-run state with the variable inside its bounds
+     (manual 51.5.4/51.7.5); fatal unless the CMF downgrades with
+     `complementarity state/bound_error = warn` */
+  if(comp_acc_phase==1) {
+    offset_t comp_nbad=0;
+    if(rank==rank_hsl)comp_nbad=comp_verify_states(sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals);
+    if(rank==rank_hsl&&comp_nbad>0) {
+      if(comp_sberr_warn)printf("Warning: %ld complementarity state/bound error(s) after the accurate run (treated as warnings per the CMF; check the log carefully, manual 51.6)\n",(long)comp_nbad);
+      else {
+        printf("Error: %ld complementarity state/bound error(s) after the accurate run; rerun with more Euler steps (complementarity steps_approx_run) or smaller shocks, or downgrade with 'complementarity state/bound_error = warn' (manual 51.5.4/51.6)\n",(long)comp_nbad);
+        MPI_Abort(PETSC_COMM_WORLD,1);
+      }
+    }
+    comp_states_free();
+  }
 
   /* -solmed probe: MC79 structural diagnosis rides the probe after the
      (skipped) solve dispatch — assemble the Jacobian and run the

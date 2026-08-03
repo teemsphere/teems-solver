@@ -295,6 +295,10 @@ void probe_onfail_context(set_def *sets,set_element *set_elems,array_def *vars,o
   onfail_ctx.eqmeta=eqmeta;
   onfail_ctx.neqmeta=neqmeta;
   onfail_ctx.VecSize=VecSize;
+  /* re-registration (the C3 accurate pass rebuilds the numbering):
+     drop the previous pass's inverse tables */
+  free(onfail_ctx.col2ele);
+  free(onfail_ctx.row2leq);
   onfail_ctx.col2ele= (int *) malloc (VecSize*sizeof(int));
   onfail_ctx.row2leq= (int *) malloc (VecSize*sizeof(int));
   for(i=0; i<VecSize; i++) {

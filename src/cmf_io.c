@@ -1564,10 +1564,13 @@ int tab_postsim_split(char *newtabfile, char *psfile) {
      complementarity steps_approx_run = N ;
      complementarity redo_steps = no|yes ;
      complementarity redo_step_min_fraction = f ;
+     complementarity do_approx_run = no|yes ;
+     complementarity do_acc_run = no|yes ;
+     complementarity state/bound_error = warn|fatal ;
    Outputs are left untouched when the statement is absent (callers
    pass the defaults: steps = accurate-run step sum, redo yes,
-   fraction 0.005). */
-void cmf_comp_options(char *filename, int *steps_approx, int *redo_steps, double *redo_min_frac) {
+   fraction 0.005, both runs on, errors fatal). */
+void cmf_comp_options(char *filename, int *steps_approx, int *redo_steps, double *redo_min_frac, int *do_approx, int *do_acc, int *sberr_warn) {
   FILE *f;
   char l[TABREADLINE];
   char *p;
@@ -1594,6 +1597,18 @@ void cmf_comp_options(char *filename, int *steps_approx, int *redo_steps, double
     else if(str_find_ci(l+k,"redo_steps")>=0) {
       if(str_find_ci(p,"no")==0)*redo_steps=0;
       else if(str_find_ci(p,"yes")==0)*redo_steps=1;
+    }
+    else if(str_find_ci(l+k,"do_approx_run")>=0) {
+      if(str_find_ci(p,"no")==0)*do_approx=0;
+      else if(str_find_ci(p,"yes")==0)*do_approx=1;
+    }
+    else if(str_find_ci(l+k,"do_acc_run")>=0) {
+      if(str_find_ci(p,"no")==0)*do_acc=0;
+      else if(str_find_ci(p,"yes")==0)*do_acc=1;
+    }
+    else if(str_find_ci(l+k,"state/bound_error")>=0||str_find_ci(l+k,"state_bound_error")>=0) {
+      if(str_find_ci(p,"warn")==0)*sberr_warn=1;
+      else if(str_find_ci(p,"fatal")==0)*sberr_warn=0;
     }
   }
   fclose(f);

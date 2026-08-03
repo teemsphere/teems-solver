@@ -335,10 +335,19 @@ int comp_states_set(set_def *sets, dim_t nset, set_element *set_elems, array_def
 int comp_states_check(set_def *sets, dim_t nset, set_element *set_elems, array_def *coefs, offset_t ncof, array_def *vars, offset_t nvar, elem_value *elem_vals, offset_t *nflip, double *minfrac);
 int comp_states_report(set_def *sets, dim_t nset, set_element *set_elems, array_def *coefs, offset_t ncof, array_def *vars, offset_t nvar, elem_value *elem_vals);
 void comp_states_free(void);
-/* CMF statements for complementarity simulations (manual 51.6):
-   "complementarity steps_approx_run = N ;", "complementarity
-   redo_steps = no ;", "complementarity redo_step_min_fraction = f ;" */
-void cmf_comp_options(char *filename, int *steps_approx, int *redo_steps, double *redo_min_frac);
+/* C3 accurate run (manual 51.7.1/51.5.4; design doc section 8 tail).
+   comp_accurate_prepare: capture the per-component target states
+   from the CURRENT values (post-approximate normally; pre-sim under
+   do_approx_run = no, with lazy init). comp_accurate_closure: the
+   51.7.1 closure/shock modification, run on PRE-SIM-restored values
+   (dummy endogenous + one component exogenized per active component;
+   nexo unchanged). comp_verify_states: post-accurate 51.5.4/51.7.5
+   checks; returns the violation count (caller maps warn/fatal). */
+int comp_accurate_prepare(set_def *sets, dim_t nset, set_element *set_elems, array_def *coefs, offset_t ncof, array_def *vars, offset_t nvar, elem_value *elem_vals);
+int comp_accurate_closure(closure_entry *closure_vals, array_def *vars, offset_t nvar, array_def *coefs, offset_t ncof, set_def *sets, dim_t nset, set_element *set_elems, elem_value *elem_vals);
+offset_t comp_verify_states(set_def *sets, dim_t nset, set_element *set_elems, array_def *coefs, offset_t ncof, array_def *vars, offset_t nvar, elem_value *elem_vals);
+/* CMF statements for complementarity simulations (manual 51.6) */
+void cmf_comp_options(char *filename, int *steps_approx, int *redo_steps, double *redo_min_frac, int *do_approx, int *do_acc, int *sberr_warn);
 /* LinVar token resolution incl. declared p_-/c_-leading names
    (design doc section 6); -1 when nothing matches */
 offset_t linvar_resolve(char *vname, array_def *vars, offset_t nvar);

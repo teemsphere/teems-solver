@@ -1432,6 +1432,7 @@ typedef struct {
   offset_t tsetid[MAXVARDIM];       /* statement quantifier sets */
   offset_t *xmap[MAXVARDIM], *lmap[MAXVARDIM], *umap[MAXVARDIM];
   signed char *state, *prestate;    /* step-start / pre-simulation */
+  signed char *finstate;            /* approximate-run final states (C3) */
   double *z0, *l0, *u0;             /* step-start point and bounds */
 } comp_rt;
 
@@ -1547,10 +1548,11 @@ static int cp_rt_init(set_def *sets, dim_t nset, set_element *se, array_def *coe
     }
     rt->state = (signed char *)calloc(rt->ntuple, sizeof(signed char));
     rt->prestate = (signed char *)calloc(rt->ntuple, sizeof(signed char));
+    rt->finstate = (signed char *)calloc(rt->ntuple, sizeof(signed char));
     rt->z0 = (double *)calloc(rt->ntuple, sizeof(double));
     rt->l0 = (double *)calloc(rt->ntuple, sizeof(double));
     rt->u0 = (double *)calloc(rt->ntuple, sizeof(double));
-    if (rt->state == NULL || rt->prestate == NULL || rt->z0 == NULL || rt->l0 == NULL || rt->u0 == NULL) {
+    if (rt->state == NULL || rt->prestate == NULL || rt->finstate == NULL || rt->z0 == NULL || rt->l0 == NULL || rt->u0 == NULL) {
       printf("Error: out of memory in the complementarity state runtime\n");
       return -1;
     }
@@ -1693,6 +1695,7 @@ void comp_states_free(void) {
     }
     free(rt->state);
     free(rt->prestate);
+    free(rt->finstate);
     free(rt->z0);
     free(rt->l0);
     free(rt->u0);
@@ -1700,6 +1703,159 @@ void comp_states_free(void) {
   free(cprt);
   cprt = NULL;
   cprt_ready = 0;
+}
+
+/* ---------- C3 accurate run (manual 51.7.1/51.5.4; design doc
+   section 8 tail) ------------------------------------------------- */
+
+/* capture the per-component states from the CURRENT levels values as
+   the accurate run's targets (post-approximate values normally;
+   pre-simulation values under do_approx_run = no, where the lazy
+   init also runs the 51.7.5 pre-sim check) */
+int comp_accurate_prepare(set_def *sets, dim_t nset, set_element *set_elems, array_def *coefs, offset_t ncof, array_def *vars, offset_t nvar, elem_value *elem_vals) {
+  dim_t k;
+  offset_t j;
+  (void)vars; (void)nvar;
+  if (!cprt_ready) {
+    if (cp_rt_init(sets, nset, set_elems, coefs, ncof, elem_vals) < 0) return -1;
+    cprt_ready = 1;
+  }
+  for (k = 0; k < teems_ncomp; k++) {
+    comp_def *cp = &teems_comps[k];
+    comp_rt *rt = &cprt[k];
+    for (j = 0; j < rt->ntuple; j++) {
+      double X, E, L, U;
+      cp_eval_tuple(rt, cp, coefs, elem_vals, j, &X, &E, &L, &U);
+      rt->finstate[j] = (signed char)cp_plane_state(X - E, L, U);
+    }
+  }
+  return 0;
+}
+
+/* 51.7.1 closure/shock modification for the accurate run. Runs on
+   PRE-SIMULATION-restored values (the shocks are computed from
+   pre-sim levels). Per ACTIVE component (X endogenous in the
+   unmodified closure): the dummy comp@d component returns to
+   ENDOGENOUS (turning the E_$comp row off) and ONE component is
+   exogenized against it -- final state 2: comp@e shocked to zero
+   (shock = -presim expression value); state 1/3 with a
+   constant/parameter bound: X shocked to the bound (change or
+   percent form); state 1/3 with a levels-variable bound: the @l/@u
+   difference component shocked to zero. Inert components are left
+   untouched. nexo is unchanged (one-for-one swap). */
+int comp_accurate_closure(closure_entry *closure_vals, array_def *vars, offset_t nvar, array_def *coefs, offset_t ncof, set_def *sets, dim_t nset, set_element *set_elems, elem_value *elem_vals) {
+  dim_t k, d;
+  offset_t j;
+  (void)nset; (void)ncof; (void)set_elems;
+  if (!cprt_ready) return -1;
+  for (k = 0; k < teems_ncomp; k++) {
+    comp_def *cp = &teems_comps[k];
+    comp_rt *rt = &cprt[k];
+    char nm[NAMESIZE + 4];
+    offset_t xvi, dvi, evi, lvi = -1, uvi = -1;
+    for (xvi = 0; xvi < nvar; xvi++) if (strcmp(vars[xvi].cofname, cp->varname) == 0) break;
+    snprintf(nm, sizeof(nm), "%s@d", cp->name);
+    for (dvi = 0; dvi < nvar; dvi++) if (strcmp(vars[dvi].cofname, nm) == 0) break;
+    snprintf(nm, sizeof(nm), "%s@e", cp->name);
+    for (evi = 0; evi < nvar; evi++) if (strcmp(vars[evi].cofname, nm) == 0) break;
+    if (cp->lower_kind == 2) {
+      snprintf(nm, sizeof(nm), "%s@l", cp->name);
+      for (lvi = 0; lvi < nvar; lvi++) if (strcmp(vars[lvi].cofname, nm) == 0) break;
+      if (lvi == nvar) lvi = -1;
+    }
+    if (cp->upper_kind == 2) {
+      snprintf(nm, sizeof(nm), "%s@u", cp->name);
+      for (uvi = 0; uvi < nvar; uvi++) if (strcmp(vars[uvi].cofname, nm) == 0) break;
+      if (uvi == nvar) uvi = -1;
+    }
+    if (xvi == nvar || dvi == nvar || evi == nvar) {
+      printf("Error: Complementarity %s: derived variables not found for the accurate run (internal)\n", cp->name);
+      return -1;
+    }
+    for (j = 0; j < rt->ntuple; j++) {
+      double X, E, L, U, target, shock;
+      offset_t xoff = 0, l2 = j, tgt;
+      int s = rt->finstate[j];
+      for (d = 0; d < rt->nd; d++) {
+        offset_t idx = l2 / coefs[rt->wxi].strides[d];
+        l2 = l2 % coefs[rt->wxi].strides[d];
+        xoff += rt->xmap[d][idx] * vars[xvi].strides[d];
+      }
+      if (closure_vals[vars[xvi].offset + xoff].is_exogenous) continue; /* inert component */
+      cp_eval_tuple(rt, cp, coefs, elem_vals, j, &X, &E, &L, &U);
+      /* the dummy returns endogenous; the E_$comp row goes inert
+         (weights are back at their zero initials after the pre-sim
+         restore) */
+      closure_vals[vars[dvi].offset + j].is_exogenous = false;
+      closure_vals[vars[dvi].offset + j].shock_value = 0;
+      if (s == 2) {
+        tgt = vars[evi].offset + j;
+        shock = -E;                      /* change variable: to zero */
+      } else if ((s == 1 && cp->lower_kind == 2) || (s == 3 && cp->upper_kind == 2)) {
+        tgt = (s == 1 ? vars[lvi].offset : vars[uvi].offset) + j;
+        shock = -(X - (s == 1 ? L : U)); /* difference variable: to zero */
+      } else {
+        target = (s == 1) ? L : U;       /* constant/parameter bound: known */
+        tgt = vars[xvi].offset + xoff;
+        if (cp->xpct) {
+          if (X == 0) {
+            printf("Error: Complementarity %s: cannot shock the percent-change pair of %s from a zero pre-simulation level\n", cp->name, cp->varname);
+            return -1;
+          }
+          shock = 100 * (target / X - 1);
+        } else shock = target - X;
+      }
+      closure_vals[tgt].is_exogenous = true;
+      closure_vals[tgt].shock_value = (store_real)shock;
+      {
+        char tn[NAMESIZE * MAXVARDIM];
+        cp_tuple_name(rt, sets, set_elems, coefs, j, tn, sizeof(tn));
+        logmsg(1, "Complementarity %s%s: accurate run in state %d -- exogenizing %s with shock %.6g (manual 51.7.1)\n",
+               cp->name, tn, s,
+               s == 2 ? "the expression variable" : ((s == 1 && cp->lower_kind == 2) || (s == 3 && cp->upper_kind == 2)) ? "the bound-difference variable" : "the complementarity variable",
+               shock);
+      }
+    }
+  }
+  return 0;
+}
+
+/* 51.5.4/51.7.5 checks after the accurate run: each component must be
+   in its approximate-run final state (to tolerance) and the
+   complementarity variable within its bounds. Returns the violation
+   count; the caller decides warn vs fatal (CMF `complementarity
+   state/bound_error`). */
+offset_t comp_verify_states(set_def *sets, dim_t nset, set_element *set_elems, array_def *coefs, offset_t ncof, array_def *vars, offset_t nvar, elem_value *elem_vals) {
+  dim_t k;
+  offset_t j, nbad = 0;
+  (void)nset; (void)ncof; (void)vars; (void)nvar;
+  if (!cprt_ready) return 0;
+  for (k = 0; k < teems_ncomp; k++) {
+    comp_def *cp = &teems_comps[k];
+    comp_rt *rt = &cprt[k];
+    for (j = 0; j < rt->ntuple; j++) {
+      double X, E, L, U, tol;
+      int s;
+      char tn[NAMESIZE * MAXVARDIM];
+      cp_eval_tuple(rt, cp, coefs, elem_vals, j, &X, &E, &L, &U);
+      s = cp_plane_state(X - E, L, U);
+      tol = 1e-4 * (fabs(X) > 1 ? fabs(X) : 1);
+      cp_tuple_name(rt, sets, set_elems, coefs, j, tn, sizeof(tn));
+      if (s != rt->finstate[j]) {
+        printf("Error: Complementarity %s%s: post-simulation state %d differs from the approximate run's state %d (manual 51.5.4)\n", cp->name, tn, s, (int)rt->finstate[j]);
+        nbad++;
+      } else if (X < L - tol || X > U + tol) {
+        printf("Error: Complementarity %s%s: the variable value %.6g lies outside the bounds %.6g/%.6g after the accurate run (manual 51.7.5)\n",
+               cp->name, tn, X, L <= -CP_INF ? -9e99 : L, U >= CP_INF ? 9e99 : U);
+        nbad++;
+      } else if (cp_exact_state(X, E, L, U) == 0) {
+        printf("Warning: Complementarity %s%s: the post-simulation point is not accurately in any state (X %.6g, expression %.6g; manual 51.7.5)\n", cp->name, tn, X, E);
+      } else if (s != rt->prestate[j]) {
+        printf("Complementarity %s%s: state change %d -> %d over the simulation (X %.6g, expression %.6g)\n", cp->name, tn, (int)rt->prestate[j], s, X, E);
+      }
+    }
+  }
+  return nbad;
 }
 
 int tab_levels_transform(char *fname) {
