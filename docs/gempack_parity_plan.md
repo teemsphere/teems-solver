@@ -7,6 +7,30 @@ semantics, POSTSIM, others").
 
 ## Progress log
 
+- **2026-08-03 — C2 Complementarity approximate-run state machinery
+  landed (ed2b069; design doc section 8; C1 parse/validation/derived
+  statements landed same day @ 298c0f1 with the C1a p_-leading
+  levels-name prerequisite)**: the 11.14 E_$comp equation is emitted
+  as static TAB text over per-component weight coefficients written
+  by C code from the current levels values each step (the runtime
+  3-state IF lives in the values; preallocation counts structurally
+  so the static text preallocates the union of all branches). New
+  solve_comp_approx driver: forward Euler with per-step state
+  evaluation (51.7.5 whole-plane division), the $del_Comp Newton
+  correction shocked 1 in full per step (NO_SPLIT), and step redo at
+  the crossing fraction (51.7.3). CMF statements `complementarity
+  steps_approx_run/redo_steps/redo_step_min_fraction` (51.6);
+  pre/post-sim exactness warnings (51.7.5) + state-change report
+  lines (51.5.3). Closure balance per component: endogenous
+  complementarity variable = active (dummy auto-exogenous, counted
+  as one equation element per 11.14); exogenous = inert (endogenous
+  dummy absorbs the row). teems-R mirrors the counting in
+  .check_system_square, exposes composed comp@e/@l/@u, and solves an
+  active quota model e2e. Remaining for full ch. 51 parity: the C3
+  accurate run (51.7.1 closure/shock auto-modification + two-pass
+  re-entry + subinterval redo) and the do_approx_run/do_acc_run/
+  state_bound_error CMF switches.
+
 - **2026-07-30 — C0 levels-equation linearization landed (mapping/
   complementarity design doc section 5; prerequisite for GMig2
   Complementarity)**: new `tab_levels_transform` pass (src/levels.c)
