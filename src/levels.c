@@ -985,15 +985,27 @@ static int cp_parse_stmt(lv_ctx *c, char *line, comp_def *cp, char *expr, size_t
               if (lower) { cp->lower_kind = 1; cp->lower_const = d; }
               else { cp->upper_kind = 1; cp->upper_const = d; }
             } else {
+              int lvi;
               if (strlen(val) >= NAMESIZE) return lv_err(c, "bound name too long");
-              if (lv_find_lv(c, val, (int)strlen(val)) >= 0 || lv_find_lv_decl(c, val, (int)strlen(val)) >= 0) {
-                if (lower) { cp->lower_kind = 2; strcpy(cp->lower_name, val); }
-                else { cp->upper_kind = 2; strcpy(cp->upper_name, val); }
+              lvi = lv_find_lv(c, val, (int)strlen(val));
+              if (lvi < 0) lvi = lv_find_lv_decl(c, val, (int)strlen(val));
+              if (lvi >= 0) {
+                if (lower) {
+                  cp->lower_kind = 2;
+                  strcpy(cp->lower_name, c->lv[lvi].name);
+                  strcpy(cp->lval, c->lv[lvi].valname);
+                  cp->lpct = !c->lv[lvi].change;
+                } else {
+                  cp->upper_kind = 2;
+                  strcpy(cp->upper_name, c->lv[lvi].name);
+                  strcpy(cp->uval, c->lv[lvi].valname);
+                  cp->upct = !c->lv[lvi].change;
+                }
               } else if (lv_find_cf(c, val, (int)strlen(val)) >= 0) {
                 if (!c->cf[lv_find_cf(c, val, (int)strlen(val))].param)
                   return lv_err(c, "a Complementarity bound must be a levels variable, a Coefficient(parameter) or a real constant (manual 10.17); non-parameter coefficient");
-                if (lower) { cp->lower_kind = 3; strcpy(cp->lower_name, val); }
-                else { cp->upper_kind = 3; strcpy(cp->upper_name, val); }
+                if (lower) { cp->lower_kind = 3; strcpy(cp->lower_name, val); strcpy(cp->lval, val); }
+                else { cp->upper_kind = 3; strcpy(cp->upper_name, val); strcpy(cp->uval, val); }
               } else if (lv_find_linvar(c, val, (int)strlen(val)) >= 0) {
                 return lv_err(c, "a Complementarity bound must be a levels variable, a Coefficient(parameter) or a real constant (manual 10.17); linear variable");
               } else {
@@ -1012,13 +1024,19 @@ static int cp_parse_stmt(lv_ctx *c, char *line, comp_def *cp, char *expr, size_t
   if (cp->varname[0] == '\0') return lv_err(c, "Complementarity needs a VARIABLE qualifier (manual 11.14)");
   if (cp->lower_kind == 0 && cp->upper_kind == 0) return lv_err(c, "Complementarity needs at least one of LOWER_BOUND/UPPER_BOUND (manual 10.17)");
   /* X must be a LEVELS variable */
-  if (lv_find_lv(c, cp->varname, (int)strlen(cp->varname)) < 0 &&
-      lv_find_lv_decl(c, cp->varname, (int)strlen(cp->varname)) < 0) {
-    if (lv_find_linvar(c, cp->varname, (int)strlen(cp->varname)) >= 0)
-      return lv_err(c, "the Complementarity variable must be a LEVELS variable (manual 11.14); linear variable");
-    if (lv_find_cf(c, cp->varname, (int)strlen(cp->varname)) >= 0)
-      return lv_err(c, "the Complementarity variable must be a LEVELS variable (manual 11.14); coefficient");
-    return lv_err(c, "the Complementarity variable is not declared (must be a LEVELS variable, manual 11.14)");
+  {
+    int xvi = lv_find_lv(c, cp->varname, (int)strlen(cp->varname));
+    if (xvi < 0) xvi = lv_find_lv_decl(c, cp->varname, (int)strlen(cp->varname));
+    if (xvi < 0) {
+      if (lv_find_linvar(c, cp->varname, (int)strlen(cp->varname)) >= 0)
+        return lv_err(c, "the Complementarity variable must be a LEVELS variable (manual 11.14); linear variable");
+      if (lv_find_cf(c, cp->varname, (int)strlen(cp->varname)) >= 0)
+        return lv_err(c, "the Complementarity variable must be a LEVELS variable (manual 11.14); coefficient");
+      return lv_err(c, "the Complementarity variable is not declared (must be a LEVELS variable, manual 11.14)");
+    }
+    strcpy(cp->varname, c->lv[xvi].name);
+    strcpy(cp->xval, c->lv[xvi].valname);
+    cp->xpct = !c->lv[xvi].change;
   }
   /* name */
   while (*p == ' ') p++;
@@ -1162,6 +1180,22 @@ static int cp_emit_derived(FILE *fout, comp_def *cp, const char *expr) {
     fprintf(fout, "formula (initial) %s %s@u%s = %s%s - %s%s ;\n", quants, cp->name, idxs, cp->varname, idxs, cp->upper_name, idxs);
     fprintf(fout, "equation (levels) e_%s@u %s %s@u%s = %s%s - %s%s ;\n", cp->name, quants, cp->name, idxs, cp->varname, idxs, cp->upper_name, idxs);
   }
+  /* C2 (design doc section 8): the E_$comp row as static text. The
+     3-state IF of 11.14 lives in the weight coefficients, written by
+     comp_states_set from the current levels values before every
+     Jacobian fill; they have no formulas/reads/updates, so nothing
+     else ever touches them. Constant/parameter bounds contribute no
+     column (their step change is zero). */
+  fprintf(fout, "coefficient (non_parameter) %s %s@wx%s ;\n", quants, cp->name, idxs);
+  fprintf(fout, "coefficient (non_parameter) %s %s@we%s ;\n", quants, cp->name, idxs);
+  if (cp->lower_kind == 2) fprintf(fout, "coefficient (non_parameter) %s %s@wl%s ;\n", quants, cp->name, idxs);
+  if (cp->upper_kind == 2) fprintf(fout, "coefficient (non_parameter) %s %s@wu%s ;\n", quants, cp->name, idxs);
+  fprintf(fout, "coefficient (non_parameter) %s %s@wn%s ;\n", quants, cp->name, idxs);
+  fprintf(fout, "equation e_%s@ %s 0+%s@wx%s*p_%s%s", cp->name, quants, cp->name, idxs, cp->varname, idxs);
+  if (cp->lower_kind == 2) fprintf(fout, "-%s@wl%s*p_%s%s", cp->name, idxs, cp->lower_name, idxs);
+  if (cp->upper_kind == 2) fprintf(fout, "-%s@wu%s*p_%s%s", cp->name, idxs, cp->upper_name, idxs);
+  fprintf(fout, "+%s@we%s*p_%s@e%s+%s@wn%s*p_del_comp@+p_%s@d%s = 0 ;\n",
+          cp->name, idxs, cp->name, idxs, cp->name, idxs, cp->name, idxs);
   return 0;
 }
 
@@ -1277,55 +1311,395 @@ int complementarities_validate(set_def *sets, dim_t nset, set_element *set_elems
   return 0;
 }
 
-/* closure integration (51.7.2 (b)-(e) + 11.14.1, C1 subset): the
-   dummy variables and del_comp@ are auto-exogenized (the user cannot
-   mention them -- closure_var_find fatals on '@' names); comp@e/@l/@u
-   stay endogenous by omission. The complementarity variable must not
-   be backsolved (11.14.1) and -- until the C2 state machinery -- must
-   be fully exogenous (the E_$comp equation row does not exist yet). */
-int comp_closure_check(closure_entry *closure_vals, array_def *vars, offset_t nvar, offset_t *nexo) {
-  offset_t i, j;
-  dim_t k;
+/* per-position element map from a statement quantifier set into an
+   equal or same-ordered-superset declaration set (validated by
+   cp_ordered_subset): out[it] = element it's index in the big set.
+   Returns -1 when an element is missing (cannot happen after
+   complementarities_validate). Shared by comp_closure_check and the
+   C2 state runtime. */
+static int cp_pos_map(offset_t tset, offset_t sset, set_def *sets, set_element *se, offset_t *out) {
+  offset_t it, is = 0;
+  if (tset == sset) {
+    for (it = 0; it < (offset_t)sets[tset].size; it++) out[it] = it;
+    return 0;
+  }
+  for (it = 0; it < (offset_t)sets[tset].size; it++) {
+    while (is < (offset_t)sets[sset].size && strcmp(se[sets[tset].offset + it].setele, se[sets[sset].offset + is].setele) != 0) is++;
+    if (is == (offset_t)sets[sset].size) return -1;
+    out[it] = is++;
+  }
+  return 0;
+}
+
+/* closure integration (51.7.2 (b)-(e) + 11.14.1): the user cannot
+   mention any derived '@' name (closure_var_find fatals);
+   comp@e/@l/@u stay endogenous by omission; del_comp@ is
+   auto-exogenized. C2 balances the E_$comp row per component: where
+   the complementarity variable X is ENDOGENOUS the dummy comp@d
+   component is auto-exogenized (approximate-run semantics, 51.7.2
+   (c)) and the component counts into teems_comp_active; where X is
+   EXOGENOUS the dummy stays endogenous and absorbs the row (the C1
+   inert closures keep solving unchanged). No '@' variable and no X
+   component may be backsolved (11.14.1). */
+int comp_closure_check(closure_entry *closure_vals, array_def *vars, offset_t nvar, offset_t *nexo, set_def *sets, dim_t nset, set_element *set_elems) {
+  offset_t i, j, xi, di;
+  dim_t k, d;
+  (void)nset;
+  teems_comp_active = 0;
   if (teems_ncomp == 0) return 0;
   for (i = 0; i < nvar; i++) {
-    size_t ln = strlen(vars[i].cofname);
-    offset_t nele = vars[i].nelem == 0 ? 1 : vars[i].nelem; /* scalars: nelem 0, one slot */
-    bool dummy;
+    offset_t nele = vars[i].nelem; /* scalars carry nelem 1 (size 0) */
     if (strchr(vars[i].cofname, '@') == NULL) continue;
-    dummy = (ln >= 2 && vars[i].cofname[ln - 2] == '@' && vars[i].cofname[ln - 1] == 'd') ||
-            strcmp(vars[i].cofname, "del_comp@") == 0;
     for (j = 0; j < nele; j++) {
       if (closure_vals[vars[i].offset + j].is_backsolved) {
         printf("Error: derived complementarity variable %s cannot be backsolved\n", vars[i].cofname);
         return -1;
       }
-      if (dummy && !closure_vals[vars[i].offset + j].is_exogenous) {
-        closure_vals[vars[i].offset + j].is_exogenous = true;
-        (*nexo)++;
+    }
+    if (strcmp(vars[i].cofname, "del_comp@") == 0) {
+      for (j = 0; j < nele; j++) {
+        if (!closure_vals[vars[i].offset + j].is_exogenous) {
+          closure_vals[vars[i].offset + j].is_exogenous = true;
+          (*nexo)++;
+        }
       }
     }
   }
   for (k = 0; k < teems_ncomp; k++) {
     comp_def *cp = &teems_comps[k];
-    offset_t nele;
-    for (i = 0; i < nvar; i++) if (strcmp(vars[i].cofname, cp->varname) == 0) break;
-    if (i == nvar) {
-      printf("Error: Complementarity %s: variable %s not found after reading declarations\n", cp->name, cp->varname);
+    char dname[NAMESIZE + 4];
+    offset_t nele, xoff, l2;
+    offset_t *pmap[MAXVARDIM];
+    for (xi = 0; xi < nvar; xi++) if (strcmp(vars[xi].cofname, cp->varname) == 0) break;
+    snprintf(dname, sizeof(dname), "%s@d", cp->name);
+    for (di = 0; di < nvar; di++) if (strcmp(vars[di].cofname, dname) == 0) break;
+    if (xi == nvar || di == nvar) {
+      printf("Error: Complementarity %s: variable %s not found after reading declarations\n", cp->name, xi == nvar ? cp->varname : dname);
       return -1;
     }
-    nele = vars[i].nelem == 0 ? 1 : vars[i].nelem;
-    for (j = 0; j < nele; j++) {
-      if (closure_vals[vars[i].offset + j].is_backsolved) {
-        printf("Error: the Complementarity variable %s must not be backsolved (manual 11.14.1)\n", cp->varname);
+    for (d = 0; d < vars[di].size; d++) {
+      offset_t tsz = sets[vars[di].setid[d]].size;
+      pmap[d] = (offset_t *)malloc((tsz > 0 ? tsz : 1) * sizeof(offset_t));
+      if (pmap[d] == NULL || cp_pos_map(vars[di].setid[d], vars[xi].setid[d], sets, set_elems, pmap[d]) == -1) {
+        printf("Error: Complementarity %s: cannot map quantifier elements onto %s's declaration sets\n", cp->name, cp->varname);
+        for (j = 0; (dim_t)j <= d; j++) free(pmap[j]);
         return -1;
       }
-      if (!closure_vals[vars[i].offset + j].is_exogenous) {
-        printf("Error: Complementarity %s: the approximate-run state machinery is not implemented yet (C2); a complementarity is currently solvable only with its variable %s fully exogenous\n", cp->name, cp->varname);
+    }
+    nele = vars[di].nelem;
+    for (j = 0; j < nele; j++) {
+      /* decode the dummy tuple (row-major strides), map into X's
+         element space */
+      l2 = j;
+      xoff = 0;
+      for (d = 0; d < vars[di].size; d++) {
+        xoff += pmap[d][l2 / vars[di].strides[d]] * vars[xi].strides[d];
+        l2 = l2 % vars[di].strides[d];
+      }
+      if (closure_vals[vars[xi].offset + xoff].is_backsolved) {
+        printf("Error: the Complementarity variable %s must not be backsolved (manual 11.14.1)\n", cp->varname);
+        for (d = 0; d < vars[di].size; d++) free(pmap[d]);
         return -1;
+      }
+      if (closure_vals[vars[xi].offset + xoff].is_exogenous) continue; /* inert: dummy absorbs the row */
+      teems_comp_active++;
+      if (!closure_vals[vars[di].offset + j].is_exogenous) {
+        closure_vals[vars[di].offset + j].is_exogenous = true;
+        (*nexo)++;
+      }
+    }
+    for (d = 0; d < vars[di].size; d++) free(pmap[d]);
+  }
+  return 0;
+}
+
+/* ---------- C2 per-step state runtime (design doc section 8) ----------
+   States from the whole-plane division (51.7.5 fig 51.8): z = X -
+   comp@E; z < L -> 1, z > U -> 3, else 2 (missing bound = infinite).
+   comp_states_set writes the E_$comp weight coefficients from the
+   current levels values; comp_states_check detects state flips after
+   a trial step and returns the linear-interpolation crossing
+   fraction for the redo (51.7.3). Everything runs on the rank that
+   owns the value arrays (rank_hsl); the driver broadcasts decisions. */
+
+#define CP_INF 1e300
+
+typedef struct {
+  offset_t xci, eci, lci, uci;      /* value coefficients (-1 absent) */
+  offset_t wxi, wei, wli, wui, wni; /* weight coefficients (-1 absent) */
+  offset_t ntuple;
+  dim_t nd;
+  offset_t tsetid[MAXVARDIM];       /* statement quantifier sets */
+  offset_t *xmap[MAXVARDIM], *lmap[MAXVARDIM], *umap[MAXVARDIM];
+  signed char *state, *prestate;    /* step-start / pre-simulation */
+  double *z0, *l0, *u0;             /* step-start point and bounds */
+} comp_rt;
+
+static comp_rt *cprt = NULL;
+static int cprt_ready = 0;
+
+static offset_t cp_find_coef(array_def *coefs, offset_t ncof, const char *name) {
+  offset_t i;
+  for (i = 0; i < ncof; i++) if (strcmp(coefs[i].cofname, name) == 0) return i;
+  return -1;
+}
+
+/* "(ele1,ele2)" for messages; empty for scalar comps */
+static void cp_tuple_name(comp_rt *rt, set_def *sets, set_element *se, array_def *coefs, offset_t j, char *out, size_t cap) {
+  dim_t d;
+  offset_t l2 = j;
+  size_t used = 0;
+  out[0] = '\0';
+  if (rt->nd == 0) return;
+  for (d = 0; d < rt->nd; d++) {
+    offset_t idx = l2 / coefs[rt->wxi].strides[d];
+    l2 = l2 % coefs[rt->wxi].strides[d];
+    used += snprintf(out + used, cap > used ? cap - used : 0, "%s%s%s",
+                     d == 0 ? "(" : ",", se[sets[rt->tsetid[d]].offset + idx].setele,
+                     d + 1 == rt->nd ? ")" : "");
+  }
+}
+
+/* current point of one component: X, E (expression), L, U */
+static void cp_eval_tuple(comp_rt *rt, comp_def *cp, array_def *coefs, elem_value *elem_vals, offset_t j, double *X, double *E, double *L, double *U) {
+  offset_t l2 = j, xoff = 0, loff = 0, uoff = 0;
+  dim_t d;
+  for (d = 0; d < rt->nd; d++) {
+    offset_t idx = l2 / coefs[rt->wxi].strides[d];
+    l2 = l2 % coefs[rt->wxi].strides[d];
+    xoff += rt->xmap[d][idx] * coefs[rt->xci].strides[d];
+    if (rt->lci >= 0) loff += rt->lmap[d][idx] * coefs[rt->lci].strides[d];
+    if (rt->uci >= 0) uoff += rt->umap[d][idx] * coefs[rt->uci].strides[d];
+  }
+  *X = elem_vals[coefs[rt->xci].offset + xoff].value;
+  *E = elem_vals[coefs[rt->eci].offset + j].value;
+  *L = cp->lower_kind == 0 ? -CP_INF : cp->lower_kind == 1 ? cp->lower_const : (double)elem_vals[coefs[rt->lci].offset + loff].value;
+  *U = cp->upper_kind == 0 ? CP_INF : cp->upper_kind == 1 ? cp->upper_const : (double)elem_vals[coefs[rt->uci].offset + uoff].value;
+}
+
+static int cp_plane_state(double z, double L, double U) {
+  if (z < L) return 1;
+  if (z > U) return 3;
+  return 2;
+}
+
+/* 51.7.5 exactness: the point must lie near the exact graph of one of
+   the states. Returns the matching state, 0 when none is close. */
+static int cp_exact_state(double X, double E, double L, double U) {
+  double tol = 1e-4 * (fabs(X) > 1 ? fabs(X) : 1);
+  if (L > -CP_INF && fabs(X - L) <= tol && E >= -tol) return 1;
+  if (fabs(E) <= tol && X >= L - tol && X <= U + tol) return 2;
+  if (U < CP_INF && fabs(X - U) <= tol && E <= tol) return 3;
+  return 0;
+}
+
+static int cp_rt_init(set_def *sets, dim_t nset, set_element *se, array_def *coefs, offset_t ncof, elem_value *elem_vals) {
+  dim_t k, d;
+  offset_t j;
+  (void)nset;
+  cprt = (comp_rt *)calloc(teems_ncomp, sizeof(comp_rt));
+  if (cprt == NULL) { printf("Error: out of memory in the complementarity state runtime\n"); return -1; }
+  for (k = 0; k < teems_ncomp; k++) {
+    comp_def *cp = &teems_comps[k];
+    comp_rt *rt = &cprt[k];
+    char nm[NAMESIZE + 4];
+    snprintf(nm, sizeof(nm), "%s@wx", cp->name); rt->wxi = cp_find_coef(coefs, ncof, nm);
+    snprintf(nm, sizeof(nm), "%s@we", cp->name); rt->wei = cp_find_coef(coefs, ncof, nm);
+    snprintf(nm, sizeof(nm), "%s@wn", cp->name); rt->wni = cp_find_coef(coefs, ncof, nm);
+    snprintf(nm, sizeof(nm), "%s@e", cp->name);  rt->eci = cp_find_coef(coefs, ncof, nm);
+    rt->xci = cp_find_coef(coefs, ncof, cp->xval);
+    rt->wli = rt->wui = rt->lci = rt->uci = -1;
+    if (cp->lower_kind == 2) { snprintf(nm, sizeof(nm), "%s@wl", cp->name); rt->wli = cp_find_coef(coefs, ncof, nm); }
+    if (cp->upper_kind == 2) { snprintf(nm, sizeof(nm), "%s@wu", cp->name); rt->wui = cp_find_coef(coefs, ncof, nm); }
+    if (cp->lower_kind >= 2) rt->lci = cp_find_coef(coefs, ncof, cp->lval);
+    if (cp->upper_kind >= 2) rt->uci = cp_find_coef(coefs, ncof, cp->uval);
+    if (rt->wxi < 0 || rt->wei < 0 || rt->wni < 0 || rt->xci < 0 || rt->eci < 0 ||
+        (cp->lower_kind == 2 && rt->wli < 0) || (cp->upper_kind == 2 && rt->wui < 0) ||
+        (cp->lower_kind >= 2 && rt->lci < 0) || (cp->upper_kind >= 2 && rt->uci < 0)) {
+      printf("Error: Complementarity %s: derived coefficients not found after reading declarations\n", cp->name);
+      return -1;
+    }
+    rt->nd = coefs[rt->wxi].size;
+    rt->ntuple = coefs[rt->wxi].nelem; /* scalars carry nelem 1 */
+    for (d = 0; d < rt->nd; d++) {
+      offset_t tsz;
+      rt->tsetid[d] = coefs[rt->wxi].setid[d];
+      tsz = sets[rt->tsetid[d]].size;
+      rt->xmap[d] = (offset_t *)malloc((tsz > 0 ? tsz : 1) * sizeof(offset_t));
+      if (rt->xmap[d] == NULL || cp_pos_map(rt->tsetid[d], coefs[rt->xci].setid[d], sets, se, rt->xmap[d]) == -1) {
+        printf("Error: Complementarity %s: cannot map quantifier elements onto %s's declaration sets\n", cp->name, cp->varname);
+        return -1;
+      }
+      if (rt->lci >= 0) {
+        rt->lmap[d] = (offset_t *)malloc((tsz > 0 ? tsz : 1) * sizeof(offset_t));
+        if (rt->lmap[d] == NULL || cp_pos_map(rt->tsetid[d], coefs[rt->lci].setid[d], sets, se, rt->lmap[d]) == -1) {
+          printf("Error: Complementarity %s: cannot map quantifier elements onto %s's declaration sets\n", cp->name, cp->lower_name);
+          return -1;
+        }
+      }
+      if (rt->uci >= 0) {
+        rt->umap[d] = (offset_t *)malloc((tsz > 0 ? tsz : 1) * sizeof(offset_t));
+        if (rt->umap[d] == NULL || cp_pos_map(rt->tsetid[d], coefs[rt->uci].setid[d], sets, se, rt->umap[d]) == -1) {
+          printf("Error: Complementarity %s: cannot map quantifier elements onto %s's declaration sets\n", cp->name, cp->upper_name);
+          return -1;
+        }
+      }
+    }
+    rt->state = (signed char *)calloc(rt->ntuple, sizeof(signed char));
+    rt->prestate = (signed char *)calloc(rt->ntuple, sizeof(signed char));
+    rt->z0 = (double *)calloc(rt->ntuple, sizeof(double));
+    rt->l0 = (double *)calloc(rt->ntuple, sizeof(double));
+    rt->u0 = (double *)calloc(rt->ntuple, sizeof(double));
+    if (rt->state == NULL || rt->prestate == NULL || rt->z0 == NULL || rt->l0 == NULL || rt->u0 == NULL) {
+      printf("Error: out of memory in the complementarity state runtime\n");
+      return -1;
+    }
+    /* pre-simulation states + the 51.7.5 exactness check (warnings
+       only; GEMPACK takes no stronger action either) */
+    for (j = 0; j < rt->ntuple; j++) {
+      double X, E, L, U;
+      cp_eval_tuple(rt, cp, coefs, elem_vals, j, &X, &E, &L, &U);
+      rt->prestate[j] = (signed char)cp_plane_state(X - E, L, U);
+      if (cp_exact_state(X, E, L, U) == 0) {
+        char tn[NAMESIZE * MAXVARDIM];
+        cp_tuple_name(rt, sets, se, coefs, j, tn, sizeof(tn));
+        printf("Warning: Complementarity %s%s: the pre-simulation data is not accurately in any state (X %.6g, expression %.6g, bounds %.6g/%.6g; manual 51.7.5)\n",
+               cp->name, tn, X, E, L <= -CP_INF ? -9e99 : L, U >= CP_INF ? 9e99 : U);
       }
     }
   }
   return 0;
+}
+
+int comp_states_set(set_def *sets, dim_t nset, set_element *set_elems, array_def *coefs, offset_t ncof, array_def *vars, offset_t nvar, elem_value *elem_vals) {
+  dim_t k;
+  offset_t j;
+  (void)vars; (void)nvar;
+  if (!cprt_ready) {
+    if (cp_rt_init(sets, nset, set_elems, coefs, ncof, elem_vals) < 0) return -1;
+    cprt_ready = 1;
+  }
+  for (k = 0; k < teems_ncomp; k++) {
+    comp_def *cp = &teems_comps[k];
+    comp_rt *rt = &cprt[k];
+    for (j = 0; j < rt->ntuple; j++) {
+      double X, E, L, U;
+      int s;
+      cp_eval_tuple(rt, cp, coefs, elem_vals, j, &X, &E, &L, &U);
+      s = cp_plane_state(X - E, L, U);
+      rt->state[j] = (signed char)s;
+      rt->z0[j] = X - E;
+      rt->l0[j] = L;
+      rt->u0[j] = U;
+      elem_vals[coefs[rt->wxi].offset + j].value = (store_real)(s != 2 ? (cp->xpct ? X / 100 : 1) : 0);
+      elem_vals[coefs[rt->wei].offset + j].value = (store_real)(s == 2 ? 1 : 0);
+      if (rt->wli >= 0) elem_vals[coefs[rt->wli].offset + j].value = (store_real)(s == 1 ? (cp->lpct ? L / 100 : 1) : 0);
+      if (rt->wui >= 0) elem_vals[coefs[rt->wui].offset + j].value = (store_real)(s == 3 ? (cp->upct ? U / 100 : 1) : 0);
+      elem_vals[coefs[rt->wni].offset + j].value = (store_real)(s == 1 ? X - L : s == 3 ? X - U : E);
+    }
+  }
+  return 0;
+}
+
+int comp_states_check(set_def *sets, dim_t nset, set_element *set_elems, array_def *coefs, offset_t ncof, array_def *vars, offset_t nvar, elem_value *elem_vals, offset_t *nflip, double *minfrac) {
+  dim_t k;
+  offset_t j;
+  (void)nset; (void)ncof; (void)vars; (void)nvar;
+  *nflip = 0;
+  *minfrac = 1.0;
+  if (!cprt_ready) return -1;
+  for (k = 0; k < teems_ncomp; k++) {
+    comp_def *cp = &teems_comps[k];
+    comp_rt *rt = &cprt[k];
+    for (j = 0; j < rt->ntuple; j++) {
+      double X, E, L, U, z1, f, g0, g1;
+      int s;
+      cp_eval_tuple(rt, cp, coefs, elem_vals, j, &X, &E, &L, &U);
+      z1 = X - E;
+      s = cp_plane_state(z1, L, U);
+      if (s == rt->state[j]) continue;
+      (*nflip)++;
+      /* linear-interpolation crossing fraction along the step for the
+         crossed boundary (51.7.3); the earliest crossing governs */
+      f = 1.0;
+      /* a crossing exactly at the step base (g0 == 0, e.g. the prior
+         step landed on the bound) gives fraction 0: kept, so the redo
+         clamps to redo_min_frac and the flip lands just after the
+         redone step starts */
+      if (cp->lower_kind != 0) {
+        g0 = rt->z0[j] - rt->l0[j];
+        g1 = z1 - L;
+        if ((g0 >= 0) != (g1 >= 0) && g0 != g1) {
+          double fl = g0 / (g0 - g1);
+          if (fl >= 0 && fl < f) f = fl;
+        }
+      }
+      if (cp->upper_kind != 0) {
+        g0 = rt->u0[j] - rt->z0[j];
+        g1 = U - z1;
+        if ((g0 >= 0) != (g1 >= 0) && g0 != g1) {
+          double fu = g0 / (g0 - g1);
+          if (fu >= 0 && fu < f) f = fu;
+        }
+      }
+      if (f < *minfrac) *minfrac = f;
+      {
+        char tn[NAMESIZE * MAXVARDIM];
+        cp_tuple_name(rt, sets, set_elems, coefs, j, tn, sizeof(tn));
+        logmsg(1, "Complementarity %s%s: state %d -> %d during the step (crossing fraction %.4g)\n", cp->name, tn, (int)rt->state[j], s, f);
+      }
+    }
+  }
+  return 0;
+}
+
+int comp_states_report(set_def *sets, dim_t nset, set_element *set_elems, array_def *coefs, offset_t ncof, array_def *vars, offset_t nvar, elem_value *elem_vals) {
+  dim_t k;
+  offset_t j;
+  (void)nset; (void)ncof; (void)vars; (void)nvar;
+  if (!cprt_ready) return -1;
+  for (k = 0; k < teems_ncomp; k++) {
+    comp_def *cp = &teems_comps[k];
+    comp_rt *rt = &cprt[k];
+    for (j = 0; j < rt->ntuple; j++) {
+      double X, E, L, U;
+      int s;
+      char tn[NAMESIZE * MAXVARDIM];
+      cp_eval_tuple(rt, cp, coefs, elem_vals, j, &X, &E, &L, &U);
+      s = cp_plane_state(X - E, L, U);
+      cp_tuple_name(rt, sets, set_elems, coefs, j, tn, sizeof(tn));
+      if (s != rt->prestate[j])
+        printf("Complementarity %s%s: state change %d -> %d over the simulation (X %.6g, expression %.6g)\n",
+               cp->name, tn, (int)rt->prestate[j], s, X, E);
+      else
+        logmsg(1, "Complementarity %s%s: state %d unchanged (X %.6g, expression %.6g)\n", cp->name, tn, s, X, E);
+      if (cp_exact_state(X, E, L, U) == 0)
+        printf("Warning: Complementarity %s%s: the post-simulation point is not accurately in any state (X %.6g, expression %.6g, bounds %.6g/%.6g; manual 51.7.5)\n",
+               cp->name, tn, X, E, L <= -CP_INF ? -9e99 : L, U >= CP_INF ? 9e99 : U);
+    }
+  }
+  return 0;
+}
+
+void comp_states_free(void) {
+  dim_t k, d;
+  if (cprt == NULL) return;
+  for (k = 0; k < teems_ncomp; k++) {
+    comp_rt *rt = &cprt[k];
+    for (d = 0; d < rt->nd; d++) {
+      free(rt->xmap[d]);
+      free(rt->lmap[d]);
+      free(rt->umap[d]);
+    }
+    free(rt->state);
+    free(rt->prestate);
+    free(rt->z0);
+    free(rt->l0);
+    free(rt->u0);
+  }
+  free(cprt);
+  cprt = NULL;
+  cprt_ready = 0;
 }
 
 int tab_levels_transform(char *fname) {

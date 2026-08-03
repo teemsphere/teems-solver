@@ -301,12 +301,44 @@ typedef struct
   char xset[MAXVARDIM][NAMESIZE];   /* X's declared set per arg position */
   char lset[MAXVARDIM][NAMESIZE];   /* bound sets (kind 2/3 only) */
   char uset[MAXVARDIM][NAMESIZE];
+  /* C2 state machinery: value-side names of the levels pairs (the
+     pair coefficient name differs from the declared name for
+     gen_lvN-renamed p_-leading pairs) and whether the linear pair is
+     percent (column weight Xval/100) or change (weight 1). For a
+     parameter bound the "value name" is the coefficient itself. */
+  char xval[NAMESIZE], lval[NAMESIZE], uval[NAMESIZE];
+  int xpct, lpct, upct;
 } comp_def ;
 extern comp_def *teems_comps;
 extern dim_t teems_ncomp;
+/* count of complementarity-variable components left ENDOGENOUS by the
+   closure = components solved by the C2 approximate-run state
+   machinery (exogenous components stay inert: their dummy comp@d is
+   endogenous and absorbs the E_$comp row). Set by comp_closure_check
+   on the closure-reading rank, broadcast in main. */
+extern offset_t teems_comp_active;
 int tab_complementarity_transform(char *fname);
 int complementarities_validate(set_def *sets, dim_t nset, set_element *set_elems);
-int comp_closure_check(closure_entry *closure_vals, array_def *vars, offset_t nvar, offset_t *nexo);
+int comp_closure_check(closure_entry *closure_vals, array_def *vars, offset_t nvar, offset_t *nexo, set_def *sets, dim_t nset, set_element *set_elems);
+/* C2 per-step state machinery (design doc section 8; manual 51.1.2/
+   51.2/51.7.3/51.7.5). All three run on rank_hsl only (levels values
+   are updated there); the driver broadcasts redo decisions.
+   comp_states_set: evaluate the per-component state from the current
+   levels values, write the E_$comp weight coefficients and store the
+   step-start margins (lazy init on first call: resolve ids, pre-sim
+   51.7.5 exactness check). comp_states_check: recompute states from
+   the post-step values; returns the flip count and the smallest
+   linear-interpolation crossing fraction. comp_states_report:
+   post-sim 51.7.5 check + 51.5.3-style state-change log lines.
+   comp_states_free: teardown. Return -1 on resolution failure. */
+int comp_states_set(set_def *sets, dim_t nset, set_element *set_elems, array_def *coefs, offset_t ncof, array_def *vars, offset_t nvar, elem_value *elem_vals);
+int comp_states_check(set_def *sets, dim_t nset, set_element *set_elems, array_def *coefs, offset_t ncof, array_def *vars, offset_t nvar, elem_value *elem_vals, offset_t *nflip, double *minfrac);
+int comp_states_report(set_def *sets, dim_t nset, set_element *set_elems, array_def *coefs, offset_t ncof, array_def *vars, offset_t nvar, elem_value *elem_vals);
+void comp_states_free(void);
+/* CMF statements for complementarity simulations (manual 51.6):
+   "complementarity steps_approx_run = N ;", "complementarity
+   redo_steps = no ;", "complementarity redo_step_min_fraction = f ;" */
+void cmf_comp_options(char *filename, int *steps_approx, int *redo_steps, double *redo_min_frac);
 /* LinVar token resolution incl. declared p_-/c_-leading names
    (design doc section 6); -1 when nothing matches */
 offset_t linvar_resolve(char *vname, array_def *vars, offset_t nvar);
@@ -567,5 +599,12 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A,PetscInt dnz,PetscInt* 
    controller. accmetric2 receives the per-element cumulative error
    metrics (embedded flavors only; main writes them to the .acc file). */
 bool solve_rk(PetscBool nohsl,PetscInt VecSize,PetscInt dnz,PetscInt* dnnz,PetscInt onz,PetscInt* onnz,PetscInt dnzB,PetscInt* dnnzB,PetscInt onzB,PetscInt* onnzB,Vec *vece1,PetscInt rank,PetscInt rank_hsl,PetscInt mpisize,char* tabfile, char *commsyntax,set_def *sets,dim_t nset, set_element *set_elems, array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar, elem_value **elem_vals2,offset_t ncofele,offset_t nvarele,closure_entry **closure_vals2,offset_t alltimeset,offset_t allregset,offset_t nintraeq,dim_t matsol,PetscInt Istart,PetscInt Iend,offset_t nreg, offset_t ntime, offset_t *eq_addr, offset_t ndblock, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laDi,dim_t laD,PetscReal cntl3,PetscReal cntl6,dim_t nesteddbbd,int localsize,PetscInt *ndbbddrank1,fortran_int* indata,dim_t mc66,fortran_int *ptx,struct timeval begintime,MPI_Fint fcomm,int solmethod,int adaptive,double epstol,double retryadj,int maxretries,solve_real **xcf2,solve_real **accmetric2);
+/* solve_rk.c -- C2 complementarity approximate run (design doc
+   section 8; manual 51.1.2/51.7.3): single-solution forward Euler
+   with per-step state evaluation, the del_comp@ Newton correction
+   shocked 1 in full each step and step redo on state flips.
+   napprox = requested Euler steps (51.6), redo_steps 0/1,
+   redo_min_frac the minimum redone-step fraction (default 0.005). */
+bool solve_comp_approx(PetscBool nohsl,PetscInt VecSize,PetscInt dnz,PetscInt* dnnz,PetscInt onz,PetscInt* onnz,PetscInt dnzB,PetscInt* dnnzB,PetscInt onzB,PetscInt* onnzB,Vec *vece1,PetscInt rank,PetscInt rank_hsl,PetscInt mpisize,char* tabfile, char *commsyntax,set_def *sets,dim_t nset, set_element *set_elems, array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar, elem_value **elem_vals2,offset_t ncofele,offset_t nvarele,closure_entry **closure_vals2,offset_t alltimeset,offset_t allregset,offset_t nintraeq,dim_t matsol,PetscInt Istart,PetscInt Iend,offset_t nreg, offset_t ntime, offset_t *eq_addr, offset_t ndblock, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laDi,dim_t laD,PetscReal cntl3,PetscReal cntl6,dim_t nesteddbbd,int localsize,PetscInt *ndbbddrank1,fortran_int* indata,dim_t mc66,fortran_int *ptx,struct timeval begintime,MPI_Fint fcomm,int napprox,int redo_steps,double redo_min_frac,solve_real **xcf2);
 #endif // TEEMS_SOLVER_H_INCLUDED
 

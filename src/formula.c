@@ -5,6 +5,10 @@
 static char *novalue_warned[2]={NULL,NULL};   /* [0] coefficients, [1] variables */
 static offset_t novalue_warned_n[2]={0,0};
 static void warn_no_values(const char *name, offset_t idx, int which) {
+  /* '@' names are solver-derived (levels pairs, complementarity
+     machinery): their values are supplied by C passes, not by
+     reads/formulas, and the namespace is closed to users */
+  if(strchr(name,'@')!=NULL) return;
   if(idx>=novalue_warned_n[which]) {
     novalue_warned[which]=realloc(novalue_warned[which],idx+1);
     memset(novalue_warned[which]+novalue_warned_n[which],0,idx+1-novalue_warned_n[which]);

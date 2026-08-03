@@ -1082,6 +1082,13 @@ int main(int argc,char **args) {
         MPI_Bcast(maps[i].values,sets[maps[i].fromset].size*sizeof(dim_t), MPI_BYTE,0, PETSC_COMM_WORLD);
       }
     }
+    /* C2: comp records leave rank 0 (fixed-size PODs; the state
+       machinery and the closure/driver dispatch read them) */
+    MPI_Bcast(&teems_ncomp,sizeof(dim_t), MPI_BYTE,0, PETSC_COMM_WORLD);
+    if(teems_ncomp>0) {
+      if(rank!=0) teems_comps= (comp_def *) calloc (teems_ncomp,sizeof(comp_def));
+      MPI_Bcast(teems_comps,teems_ncomp*sizeof(comp_def), MPI_BYTE,0, PETSC_COMM_WORLD);
+    }
   }
   teems_maps=maps;
   teems_nmap=nmap;
@@ -1255,12 +1262,40 @@ int main(int argc,char **args) {
     if(backsolve_read(tabfile,vars,nvar,closure_vals)==-1)return 0;
     if(backsolve_validate_refs(tabfile,vars)==-1)return 0;
     if(nbacksolve>0)logmsg(1,"Backsolving %d variables (%ld elements) from retained defining equations\n",nbacksolve,nbselems);
-    /* C1: auto-exogenize the complementarity dummies and del_comp@
-       (51.7.2 (c)/(d); the marks and the nexo adjustment ride the
-       closure broadcast below), enforce the 11.14.1 backsolve guard
-       and the C2 state-machinery guard (design doc section 7) */
-    if(comp_closure_check(closure_vals,vars,nvar,&nexo)==-1)MPI_Abort(PETSC_COMM_WORLD,1);
+    /* C1/C2: auto-exogenize del_comp@ and the dummies of ACTIVE
+       (X-endogenous) complementarity components; inert components
+       keep their dummy endogenous so it absorbs the E_$comp row
+       (51.7.2 (c)/(d); design doc sections 7-8). The marks and the
+       nexo adjustment ride the closure broadcast below; the 11.14.1
+       backsolve guards stay fatal. */
+    if(comp_closure_check(closure_vals,vars,nvar,&nexo,sets,nset,set_elems)==-1)MPI_Abort(PETSC_COMM_WORLD,1);
     nexo1=nexo;
+  }
+  /* every rank dispatches on active-mode complementarities (C2) */
+  MPI_Bcast(&teems_comp_active,sizeof(offset_t), MPI_BYTE,0, PETSC_COMM_WORLD);
+  /* approximate-run controls (manual 51.6): default step count = the
+     accurate method's step sum; CMF statements override */
+  int comp_steps=0,comp_redo=1;
+  double comp_minfrac=0.005;
+  if(teems_comp_active>0) {
+    if(rank==0) {
+      comp_steps=(solmethod==SM_GRAGG||solmethod==SM_EULER)?steps1+steps2+steps3:steps1;
+      if(comp_steps<1)comp_steps=10;
+      cmf_comp_options(filename,&comp_steps,&comp_redo,&comp_minfrac);
+    }
+    MPI_Bcast(&comp_steps,sizeof(int), MPI_BYTE,0, PETSC_COMM_WORLD);
+    MPI_Bcast(&comp_redo,sizeof(int), MPI_BYTE,0, PETSC_COMM_WORLD);
+    MPI_Bcast(&comp_minfrac,sizeof(double), MPI_BYTE,0, PETSC_COMM_WORLD);
+    /* state flips change the filtered nonzero pattern between steps,
+       which breaks the persistent-pivot refactorization */
+    {
+      dim_t frchk=0;
+      PetscOptionsGetInt(NULL,NULL,"-fastrefac",&frchk,NULL);
+      if(frchk) {
+        if(rank==0)printf("Warning: -fastrefac is disabled for the complementarity approximate run (state changes alter the nonzero pattern between steps)\n");
+        PetscOptionsSetValue(NULL,"-fastrefac","0");
+      }
+    }
   }
   if(nohsl) {
     if(nvarele*sizeof(closure_entry)>1500000000) {
@@ -1977,18 +2012,36 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
       inmemory=0;
     } else if(rank==0)logmsg(1,"inmemory: keeping ~%ld MB of value arrays resident per rank\n",need/1048576);
   }
-  if(solmethod==SM_JOHANSEN)solve_johansen(nohsl,VecSize,A,dnz,dnnz,onz,onnz,B,dnzB,dnnzB,onzB,onnzB,vecb,vece,rank,rank_hsl,mpisize,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,&elem_vals,ncofele+nvarele,ncofele,nvarele,&closure_vals,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,eq_addr,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,&xcf);
-  
+  /* C2: any endogenous complementarity-variable component routes the
+     simulation to the approximate (Euler) run with the E_$comp state
+     machinery live (manual 51.1.2); the requested method becomes the
+     accurate run's method at C3 */
+  bool comp_dispatch=(teems_comp_active>0&&solmethod!=SM_PROBE);
+  if(comp_dispatch) {
+    if(rank==0)printf("Complementarity: %ld active (endogenous) component(s); running the approximate simulation as forward Euler with %d steps (the %s accurate run is not implemented yet -- C3; manual 51.1.2)\n",(long)teems_comp_active,comp_steps,solmed);
+    if(rank==0&&subints>1)printf("Warning: subintervals are ignored by the complementarity approximate run (per-subinterval approximate+accurate pairs arrive with C3; manual 51.7.4)\n");
+    solve_comp_approx(nohsl,VecSize,dnz,dnnz,onz,onnz,dnzB,dnnzB,onzB,onnzB,&vece,rank,rank_hsl,mpisize,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,&elem_vals,ncofele,nvarele,&closure_vals,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,eq_addr,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,fcomm,comp_steps,comp_redo,comp_minfrac,&xcf);
+  }
+
+  if(!comp_dispatch&&solmethod==SM_JOHANSEN)solve_johansen(nohsl,VecSize,A,dnz,dnnz,onz,onnz,B,dnzB,dnnzB,onzB,onnzB,vecb,vece,rank,rank_hsl,mpisize,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,&elem_vals,ncofele+nvarele,ncofele,nvarele,&closure_vals,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,eq_addr,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,&xcf);
+
   FILE* solution;
 
-  if(solmethod==SM_GRAGG||solmethod==SM_EULER)solve_gragg(nohsl,VecSize,&A,dnz,dnnz,onz,onnz,&B,dnzB,dnnzB,onzB,onnzB,&vecb,&vece,rank,rank_hsl,mpisize,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,&elem_vals,ncofele+nvarele,ncofele,nvarele,&closure_vals,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,eq_addr,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,subints,fcomm,solmethod,&xcf);
+  if(!comp_dispatch&&(solmethod==SM_GRAGG||solmethod==SM_EULER))solve_gragg(nohsl,VecSize,&A,dnz,dnnz,onz,onnz,&B,dnzB,dnnzB,onzB,onnzB,&vecb,&vece,rank,rank_hsl,mpisize,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,&elem_vals,ncofele+nvarele,ncofele,nvarele,&closure_vals,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,eq_addr,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,subints,fcomm,solmethod,&xcf);
 
-  if(isrk)solve_rk(nohsl,VecSize,dnz,dnnz,onz,onnz,dnzB,dnnzB,onzB,onnzB,&vece,rank,rank_hsl,mpisize,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,&elem_vals,ncofele,nvarele,&closure_vals,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,eq_addr,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,fcomm,solmethod,adaptive,(double)epstol,(double)retryadj,maxretries,&xcf,&accmetric);
+  if(!comp_dispatch&&isrk)solve_rk(nohsl,VecSize,dnz,dnnz,onz,onnz,dnzB,dnnzB,onzB,onnzB,&vece,rank,rank_hsl,mpisize,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,&elem_vals,ncofele,nvarele,&closure_vals,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,eq_addr,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,fcomm,solmethod,adaptive,(double)epstol,(double)retryadj,maxretries,&xcf,&accmetric);
 
   /* -solmed probe: MC79 structural diagnosis rides the probe after the
      (skipped) solve dispatch — assemble the Jacobian and run the
      matching / Dulmage-Mendelsohn analysis with named defects */
   if(solmethod==SM_PROBE) {
+    /* realize the pre-simulation complementarity states so the
+       E_$comp rows probe with their genuine (state-branch) pattern
+       rather than the all-zero weights */
+    if(rank==rank_hsl&&teems_ncomp>0) {
+      comp_states_set(sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals);
+      comp_states_free();
+    }
     probe_structural(VecSize,nvarele,ncofele,dnz,dnnz,dnzB,dnnzB,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,closure_vals,ndblock,alltimeset,allregset,eq_addr,counteq,nintraeq,eqmeta,neqmeta,iodata,niodata,noutdata,nsoldata,probefine,mpisize,rank);
     VecDestroy(&vece); /* the skipped solve driver would have destroyed it */
   }

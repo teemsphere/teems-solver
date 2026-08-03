@@ -51,13 +51,16 @@ bool *teems_coef_ifhdr = NULL;
 map_def *teems_maps = NULL;
 dim_t teems_nmap = 0;
 
-/* complementarities (manual 10.17/11.14; design doc section 7):
-   records filled by tab_complementarity_transform on rank 0, consumed
-   by complementarities_validate and comp_closure_check (rank 0 only
-   at C1 -- the per-step state machinery that needs them everywhere
-   is C2) */
+/* complementarities (manual 10.17/11.14; design doc sections 7-8):
+   records filled by tab_complementarity_transform on rank 0,
+   broadcast in main alongside the mappings; consumed by
+   complementarities_validate, comp_closure_check and the C2 state
+   machinery (comp_states_*) */
 comp_def *teems_comps = NULL;
 dim_t teems_ncomp = 0;
+/* endogenous complementarity-variable components (C2 active mode);
+   set by comp_closure_check, broadcast after the closure section */
+offset_t teems_comp_active = 0;
 
 /* CMF range-test modes (manual 25.4.4): 0 = no, 1 = warn (the
    GEMPACK default outside automatic accuracy), 2 = fatal */

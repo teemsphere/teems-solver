@@ -738,3 +738,247 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
   if(rank==0)logmsg(1,"%s solve time %.2f s (%d steps)\n",scheme.name,(endtime.tv_sec - begintime.tv_sec)+((double)(endtime.tv_usec - begintime.tv_usec))/ 1000000,stepno);
   return 1;
 }
+
+/* ------------------------------------------------------------------ */
+/* C2 complementarity approximate run (design doc section 8; manual
+   51.1.2/51.6/51.7.3): single-solution forward Euler over t in [0,1]
+   with the E_$comp state machinery live. Per step: the per-component
+   states and weight coefficients are evaluated from the step-base
+   levels values (comp_states_set), the Newton-correction variable
+   del_comp@ is shocked 1 IN FULL (NO_SPLIT semantics, 51.7.2 (d)),
+   one Euler step is solved and applied, and the states are
+   re-evaluated (comp_states_check); if any component changed state
+   the step is redone from its base with a shorter length so the
+   change lands just before the redone step's end (51.7.3), never
+   shorter than redo_min_frac of the original step, and a redone step
+   is accepted regardless. The accepted-step count can therefore
+   exceed the request (51.6). The accurate run (51.7.1) is C3; this
+   run's solution is the simulation result. */
+bool solve_comp_approx(PetscBool nohsl,PetscInt VecSize,PetscInt dnz,PetscInt* dnnz,PetscInt onz,PetscInt* onnz,PetscInt dnzB,PetscInt* dnnzB,PetscInt onzB,PetscInt* onnzB,Vec *vece1,PetscInt rank,PetscInt rank_hsl,PetscInt mpisize,char* tabfile, char *commsyntax,set_def *sets,dim_t nset, set_element *set_elems, array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar, elem_value **elem_vals2,offset_t ncofele,offset_t nvarele,closure_entry **closure_vals2,offset_t alltimeset,offset_t allregset,offset_t nintraeq,dim_t matsol,PetscInt Istart,PetscInt Iend,offset_t nreg, offset_t ntime, offset_t *eq_addr, offset_t ndblock, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laDi,dim_t laD,PetscReal cntl3,PetscReal cntl6,dim_t nesteddbbd,int localsize,PetscInt *ndbbddrank1,fortran_int* indata,dim_t mc66,fortran_int *ptx,struct timeval begintime,MPI_Fint fcomm,int napprox,int redo_steps,double redo_min_frac,solve_real **xcf2) {
+  PetscErrorCode ierr;
+  offset_t i;
+  fortran_int tindx1;
+  bool IsIni;
+  struct timeval endtime;
+  elem_value *elem_vals;
+  elem_value *elem_vals1;
+  closure_entry *closure_vals;
+  elem_vals=*elem_vals2;
+  closure_vals=*closure_vals2;
+  Vec vece;
+  vece=*vece1;
+  solve_real *xcf;
+
+  offset_t *counteqs= (offset_t *) calloc (ndblock+1,sizeof(offset_t));
+  offset_t *counteqnoadds= (offset_t *) calloc (ndblock,sizeof(offset_t));
+  offset_t *countvarintra1s= (offset_t *) calloc (ndblock+1,sizeof(offset_t));
+  memcpy(counteqs,counteq,(ndblock+1)*sizeof(offset_t));
+  memcpy(counteqnoadds,counteqnoadd,(ndblock)*sizeof(offset_t));
+  memcpy(countvarintra1s,countvarintra1,(ndblock+1)*sizeof(offset_t));
+
+  gettimeofday(&begintime, NULL);
+
+  PetscInt BSize;
+  BSize=(PetscInt)(nvarele-VecSize-nbselems);      /* nexo */
+  BSize=(BSize>VecSize)?BSize:VecSize;
+
+  solve_real *x1= (solve_real *) calloc (VecSize,sizeof(solve_real));
+  solve_real *base_X= (solve_real *) calloc (nvarele,sizeof(solve_real));
+  solve_real *newx= (solve_real *) calloc (nvarele,sizeof(solve_real));
+  solve_real *stagex= (solve_real *) calloc (nvarele,sizeof(solve_real));
+  solve_real *dx= (solve_real *) calloc (nvarele,sizeof(solve_real));
+  store_real *base_vals= (store_real *) calloc (ncofele+nvarele,sizeof(store_real));
+  solve_real *exo_z=NULL,*bsvals=NULL;
+  if(nbselems>0) {
+    exo_z= (solve_real *) calloc (nvarele,sizeof(solve_real));
+    bsvals= (solve_real *) calloc (nbselems,sizeof(solve_real));
+  }
+
+  /* the Newton-correction variable's single element (51.7.2 (iii)) */
+  offset_t deloff=-1;
+  for(i=0; i<nvar; i++)if(strcmp(vars[i].cofname,"del_comp@")==0) {
+      deloff=vars[i].offset;
+      break;
+    }
+  if(deloff<0) {
+    if(rank==0)printf("Error: complementarity approximate run without a del_comp@ variable (internal)\n");
+    MPI_Abort(PETSC_COMM_WORLD,1);
+  }
+
+  elem_vals1=elem_vals+ncofele;
+  for(i=0; i<ncofele; i++) {
+    elem_vals[i].initial=elem_vals[i].value;
+    base_vals[i]=elem_vals[i].value;
+  }
+  for(i=0; i<nvar; i++) {
+    for(tindx1=vars[i].offset; tindx1<vars[i].nelem+vars[i].offset; tindx1++) {
+      elem_vals1[tindx1].initial=elem_vals1[tindx1].value;
+      base_vals[ncofele+tindx1]=elem_vals1[tindx1].value;
+      base_X[tindx1]=0;
+      stagex[tindx1]=0;
+    }
+  }
+
+  double t=0,hdef=1.0/napprox,h=hdef;
+  int stepno=0,redoing=0;
+  bool firstsolve=true;
+  double stepdata[2];
+
+  while(t<1.0-1e-12) {
+    if(t+h>1.0)h=1.0-t;
+    /* per-step states + E_$comp weights from the step-base values
+       (a redo re-evaluates the same base: same states, shorter h) */
+    if(rank==rank_hsl) {
+      if(comp_states_set(sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals)<0)MPI_Abort(PETSC_COMM_WORLD,1);
+    }
+    if(!firstsolve) {
+      if(nohsl) {
+        VecCreate(PETSC_COMM_WORLD,&vece);
+        VecSetType(vece,VECMPI);
+      }
+      else {
+        VecCreate(PETSC_COMM_SELF,&vece);
+        VecSetType(vece,VECSEQ);
+      }
+      if(nesteddbbd==1)VecSetSizes(vece,localsize,VecSize);
+      else VecSetSizes(vece,PETSC_DECIDE,BSize);
+      VecSetOption(vece, VEC_IGNORE_NEGATIVE_INDICES,PETSC_TRUE);
+    }
+    firstsolve=false;
+    for(i=0; i<nvar; i++) {
+      if(vars[i].change_real) {
+        for(tindx1=vars[i].offset; tindx1<vars[i].nelem+vars[i].offset; tindx1++) {
+          if(closure_vals[tindx1].is_exogenous) {
+            solve_real ez=(tindx1==deloff)?1.0:h*closure_vals[tindx1].shock_value;
+            VecSetValue(vece,closure_vals[tindx1].exo_index,ez,INSERT_VALUES);
+            if(exo_z!=NULL)exo_z[tindx1]=ez;
+          }
+        }
+      }
+      else {
+        for(tindx1=vars[i].offset; tindx1<vars[i].nelem+vars[i].offset; tindx1++) {
+          if(closure_vals[tindx1].is_exogenous) {
+            solve_real ez=h*closure_vals[tindx1].shock_value/(1+stagex[tindx1]/100);
+            VecSetValue(vece,closure_vals[tindx1].exo_index,ez,INSERT_VALUES);
+            if(exo_z!=NULL)exo_z[tindx1]=ez;
+          }
+        }
+      }
+    }
+    MPI_Barrier(PETSC_COMM_WORLD);
+    ierr = VecAssemblyBegin(vece);CHKERRQ(ierr);
+    ierr = VecAssemblyEnd(vece);CHKERRQ(ierr);
+
+    rk_stage_solve(nohsl,VecSize,BSize,dnz,dnnz,onz,onnz,dnzB,dnnzB,onzB,onnzB,rank,rank_hsl,mpisize,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele,nvarele,closure_vals,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,eq_addr,ndblock,countvarintra1,counteq,counteqnoadd,countvarintra1s,counteqs,counteqnoadds,laA,laDi,laD,cntl3,cntl6,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,fcomm,&vece,x1);
+
+    if(rank==rank_hsl&&nbselems>0)backsolve_recover(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele,closure_vals,x1,exo_z,bsvals);
+
+    /* the Euler increment in X-space */
+    for(i=0; i<nvar; i++) {
+      if(vars[i].change_real) {
+        for(tindx1=vars[i].offset; tindx1<vars[i].nelem+vars[i].offset; tindx1++) {
+          if(closure_vals[tindx1].is_exogenous)dx[tindx1]=(tindx1==deloff)?1.0:h*closure_vals[tindx1].shock_value;
+          else if(closure_vals[tindx1].is_backsolved)dx[tindx1]=bsvals[closure_vals[tindx1].exo_index];
+          else dx[tindx1]=x1[closure_vals[tindx1].exo_index];
+        }
+      }
+      else {
+        for(tindx1=vars[i].offset; tindx1<vars[i].nelem+vars[i].offset; tindx1++) {
+          if(closure_vals[tindx1].is_exogenous)dx[tindx1]=h*closure_vals[tindx1].shock_value;
+          else if(closure_vals[tindx1].is_backsolved)dx[tindx1]=bsvals[closure_vals[tindx1].exo_index]*(1+stagex[tindx1]/100);
+          else dx[tindx1]=x1[closure_vals[tindx1].exo_index]*(1+stagex[tindx1]/100);
+        }
+      }
+    }
+    for(tindx1=0; tindx1<nvarele; tindx1++)newx[tindx1]=base_X[tindx1]+dx[tindx1];
+    /* trial advance: values, updates, formulas -- then the state check */
+    rk_state_set(vars,nvar,elem_vals,ncofele,nvarele,base_vals,base_X,dx,stagex);
+    if(rank==rank_hsl) {
+      updates_apply_product(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele);
+      strcpy(commsyntax,"formula");
+      IsIni=false;
+      formulas_execute(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,IsIni);
+      assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,IsIni,teems_assertions_mode,0);
+    }
+    {
+      offset_t nflip=0;
+      double frac=1.0;
+      if(rank==rank_hsl)comp_states_check(sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,&nflip,&frac);
+      stepdata[0]=(double)nflip;
+      stepdata[1]=frac;
+      MPI_Bcast(stepdata,2,MPI_DOUBLE,(int)rank_hsl,PETSC_COMM_WORLD);
+      nflip=(offset_t)stepdata[0];
+      frac=stepdata[1];
+      if(nflip>0&&redo_steps&&!redoing) {
+        double hnew=h*frac/0.995;
+        if(hnew<redo_min_frac*h)hnew=redo_min_frac*h;
+        if(hnew>h)hnew=h;
+        /* restore the step base: rk_state_set with a zero increment
+           returns every coefficient and variable slot to the base */
+        for(tindx1=0; tindx1<nvarele; tindx1++)dx[tindx1]=0;
+        rk_state_set(vars,nvar,elem_vals,ncofele,nvarele,base_vals,base_X,dx,stagex);
+        if(rank==0)logmsg(1,"Step %d: %ld complementarity state change(s); redoing the step at %.4g of its length (51.7.3)\n",stepno+1,(long)nflip,hnew/h);
+        h=hnew;
+        redoing=1;
+        continue;
+      }
+      redoing=0;
+    }
+    /* accept */
+    for(i=0; i<ncofele; i++)base_vals[i]=elem_vals[i].value;
+    for(i=0; i<nvar; i++) {
+      for(tindx1=vars[i].offset; tindx1<vars[i].nelem+vars[i].offset; tindx1++) {
+        base_vals[ncofele+tindx1]=elem_vals1[tindx1].value;
+        base_X[tindx1]=newx[tindx1];
+        stagex[tindx1]=newx[tindx1];
+      }
+    }
+    t+=h;
+    stepno++;
+    if(rank==0)logmsg(2,"approx step %d done, t %.6f h %.4g\n",stepno,t,h);
+    h=hdef;
+  }
+
+  *xcf2=(solve_real*)realloc (*xcf2,nvarele*sizeof(solve_real));
+  xcf=*xcf2;
+  for(tindx1=0; tindx1<nvarele; tindx1++)xcf[tindx1]=base_X[tindx1];
+
+  /* final data pass: rebase the coefficients on the pre-simulation
+     levels and apply the whole solution in one product update */
+  if(rank==rank_hsl) {
+    for(i=0; i<nvar; i++) {
+      for(tindx1=vars[i].offset; tindx1<vars[i].nelem+vars[i].offset; tindx1++) {
+        elem_vals1[tindx1].substep_base=xcf[tindx1];
+      }
+    }
+    for(i=0; i<ncofele; i++) elem_vals[i].value=elem_vals[i].initial;
+    updates_apply_product(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele);
+    strcpy(commsyntax,"formula");
+    IsIni=false;
+    formulas_execute(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,IsIni);
+    assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,IsIni,teems_assertions_mode,0);
+    for(i=0; i<nvar; i++) {
+      for(tindx1=vars[i].offset; tindx1<vars[i].nelem+vars[i].offset; tindx1++) {
+        elem_vals1[tindx1].substep_base=0;
+      }
+    }
+    /* 51.7.5 post-simulation state check + 51.5.3-style change lines */
+    comp_states_report(sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals);
+  }
+  comp_states_free();
+
+  free(x1);
+  free(base_X);
+  free(newx);
+  free(stagex);
+  free(dx);
+  free(base_vals);
+  free(exo_z);
+  free(bsvals);
+  free(counteqs);
+  free(counteqnoadds);
+  free(countvarintra1s);
+  gettimeofday(&endtime, NULL);
+  if(rank==0)logmsg(1,"Complementarity approximate run solve time %.2f s (%d Euler steps, %d requested)\n",(endtime.tv_sec - begintime.tv_sec)+((double)(endtime.tv_usec - begintime.tv_usec))/ 1000000,stepno,napprox);
+  return 1;
+}

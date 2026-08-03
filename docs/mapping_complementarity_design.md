@@ -527,3 +527,104 @@ E_$comp and arrives with C2. Inert mode does not need it (X
 exogenous removes both the row and the free variable). teems-R side
 mirrors this: at C1-R a TAB with a complementarity deploys only when
 the complementarity variable is exogenous over its full domain.
+
+## 8. C2 design: approximate-run state machinery (designed 2026-08-03)
+
+Scope per section 3: the linear equation E_$comp with its 3 state
+branches, per-step state evaluation, the $del_Comp Newton correction
+shocked 1 IN FULL each step, step redo on state flips (51.7.3), the
+`complementarity steps_approx_run` CMF option (51.6) and the 51.7.5
+pre/post-simulation state checks. The accurate run (closure/shock
+auto-modification, 51.7.1) stays C3; at C2 an active run's solution IS
+the approximate (Euler) run's solution.
+
+**Row mechanism -- static TAB text + C-written weight coefficients.**
+The C1 handoff feared E_$comp could not be TAB text because the IF is
+over runtime per-component state. It can: jacobian_preallocate counts
+STRUCTURALLY (one nnz per p_ reference per quantifier tuple,
+jacobian.c:2850-2966, independent of coefficient values), and the LU
+extraction filters zero VALUES per step anyway. So the runtime IF
+moves into per-component "weight" coefficients written by C code
+before every Jacobian fill, and the equation itself is static text
+emitted by cp_emit_derived (declarations before it, all post-preprocess
+form):
+
+    coefficient (non_parameter) <quants> <name>@wx<args> ;   [X column]
+    coefficient (non_parameter) <quants> <name>@we<args> ;   [comp@e column]
+    coefficient (non_parameter) <quants> <name>@wl<args> ;   [levels-var L only]
+    coefficient (non_parameter) <quants> <name>@wu<args> ;   [levels-var U only]
+    coefficient (non_parameter) <quants> <name>@wn<args> ;   [Newton bracket]
+    equation e_<name>@ <quants> 0+<name>@wx<args>*p_<X><args>
+        -<name>@wl<args>*p_<L><args>-<name>@wu<args>*p_<U><args>
+        +<name>@we<args>*p_<name>@e<args>
+        +<name>@wn<args>*p_del_comp@+p_<name>@d<args> = 0 ;
+
+Weight values per component, state s from the whole-plane division
+(51.7.5 fig 51.8; z = X - comp@E levels values; z<L -> 1, z>U -> 3,
+else 2; missing bound = infinite):
+  @wx = s!=2 ? (X percent-pair ? Xval/100 : 1) : 0
+  @wl = s==1 && L levels-var ? (L percent-pair ? Lval/100 : 1) : 0
+  @wu = s==3 && U levels-var ? (U percent-pair ? Uval/100 : 1) : 0
+  @we = s==2 ? 1 : 0
+  @wn = s==1 ? Xval-L : s==3 ? Xval-U : Eval
+This reproduces 11.14's E_$comp exactly: state 1 row is c_X - c_L +
+(X-L)*del_comp; state 2 is c_comp@E + comp@E*del_comp; state 3
+mirrored with U; + $comp@D. Constant/parameter bounds have no column
+(c_L = 0), matching GEMPACK. With del_comp@ shocked 1 in full, state
+1 forces the step change of (X-L) to -(X-L) (Newton pull onto the
+bound); state 2 pulls the expression to zero. Weight coefficients
+have no formulas/reads/updates, so nothing else ever writes them;
+consumers (jacobian_fill) run after the per-step write.
+
+**Squareness / closure integration.** E_$comp always exists once a
+complementarity is declared (+quantifier-size rows, 11.14 counting).
+comp_closure_check balances per component: X endogenous -> dummy
+comp@d component auto-EXOGENOUS (approximate-run semantics, 51.7.2
+(c)); X exogenous -> dummy left ENDOGENOUS, absorbing the row (C1
+inert semantics preserved bit-for-bit: the row determines only
+comp@d). del_comp@ stays auto-exogenous always. The C1 "state
+machinery is C2" fatal is lifted; teems_comp_active counts endogenous
+X components and is broadcast after the closure section.
+
+**Driver.** solve_comp_approx (solve_rk.c, reusing the static
+rk_stage_solve + rk_state_set): single-solution forward Euler over
+t in [0,1], default step count = steps1(+steps2+steps3 for
+Gragg/Euler accurate methods, manual 51.6 default = sum), overridden
+by `complementarity steps_approx_run = N ;` in the CMF
+(cmf_comp_options, cmf_io.c, cmf_postsim_on shape; also
+`redo_steps = no` and `redo_step_min_fraction = f`, default 0.005).
+Per step: comp_states_set on rank_hsl (states from current levels
+values, weights written, start margins stored) -> shock vector
+(exogenous h*shock; the del_comp@ element 1.0 in full regardless of
+h) -> rk_stage_solve -> state advance + updates_apply_product +
+formulas_execute -> comp_states_check (recompute states; flips +
+min linear-interpolation crossing fraction f0 = m0/(m0-m1)) ->
+Bcast(rank_hsl). On flips with redo enabled and the step not already
+a redo: restore base (rk_state_set with dx=0), h' =
+clamp(h*f0/0.995, redo_min_frac*h, h), rerun (the flip then lands
+just before the redone step's end, 51.7.3); the redone step is
+accepted regardless. After acceptance h returns to the default
+length; total steps may exceed the request (51.6). Active runs
+override the requested driver (the requested method becomes the C3
+accurate run's method; logged); -fastrefac is force-cleared when
+comps are active (state flips change the filtered nonzero pattern,
+breaking MA48 JOB=2 pivot reuse). Subintervals are ignored by the
+approximate run at C2 (51.7.4 is C3 territory; logged).
+
+**State runtime** (levels.c, rank_hsl only): comp_rt per comp resolves
+value-coefficient ids by name (X/L/U valnames recorded in comp_def at
+transform time -- gen_lvN-safe -- plus <name>@e and the weight
+coefficients), per-position statement-set -> declaration-set index
+maps (forward strcmp scan, valid by the ordered-subset validation),
+and per-tuple state/prestate/margin arrays. comp_states_init runs the
+51.7.5 pre-sim exactness check (each component near state 1, 2 or 3;
+tolerance 1e-4 relative; warnings only); comp_states_report reruns it
+post-sim and logs 51.5.3-style state-change lines
+(pre-sim -> post-sim per component).
+
+**teems-R mirror (C2-R, separate slice):** lift
+cls_err$comp_endogenous; chk_system_square counts one equation of
+quantifier size per complementarity component whose variable is
+endogenous (inert components add the dummy endogenously solver-side,
+net zero, so the R count stays as-is for them); .compose_var exposes
+comp@e (the '@' filter narrows to @d/@wx/@we/@wl/@wu/@wn/del_comp@).
