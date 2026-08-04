@@ -7,6 +7,24 @@ semantics, POSTSIM, others").
 
 ## Progress log
 
+- **2026-08-04 — C3 Complementarity accurate run landed (79770af;
+  ch. 51 parity approximate + accurate end to end)**: after the
+  approximate pass, the 51.7.1 closure/shock modification runs on
+  pre-simulation-restored values (state 2: comp@e exogenized shocked
+  to zero; state 1/3 constant/parameter bound: X shocked to the
+  bound, change/percent forms; levels-variable bound: the @l/@u
+  difference shocked to zero; all dummies endogenous; one-for-one
+  swap so the system size is unchanged), then main re-enters the
+  closure-dependent pipeline (numbering through preallocation) and
+  the REQUESTED method solves the accurate run. Post-accurate
+  51.5.4/51.7.5 verification (state match + bounds) is fatal by
+  default; CMF statements do_approx_run/do_acc_run/state_bound_error
+  join steps_approx_run/redo_steps/redo_step_min_fraction (51.6).
+  Remaining ch. 51 deferrals: per-subinterval approximate+accurate
+  pairs under automatic accuracy (51.7.4; the approximate run treats
+  the simulation as one interval and warns) and subtotals of
+  \$del_Comp (29.1).
+
 - **2026-08-03 — C2 Complementarity approximate-run state machinery
   landed (ed2b069; design doc section 8; C1 parse/validation/derived
   statements landed same day @ 298c0f1 with the C1a p_-leading
