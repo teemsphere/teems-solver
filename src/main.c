@@ -1273,33 +1273,55 @@ int main(int argc,char **args) {
   }
   /* every rank dispatches on active-mode complementarities (C2) */
   MPI_Bcast(&teems_comp_active,sizeof(offset_t), MPI_BYTE,0, PETSC_COMM_WORLD);
-  /* approximate/accurate-run controls (manual 51.6): default step
-     count = the accurate method's step sum; CMF statements override.
-     comp_acc_phase: 0 = approximate pass (or first pass), 1 = the
-     accurate pass after the 51.7.1 closure modification (C3). */
+  /* approximate/accurate-run controls (manual 51.6 semantics, TEEMS
+     command-line flags -- teems-R passes them from
+     ems_complementarity(); no CMF statements). Defaults: step count
+     = the accurate method's step sum, redo on, both runs on, errors
+     fatal. PetscOptions are identical on every rank, so no
+     broadcasts. comp_acc_phase: 0 = approximate pass (or first
+     pass), 1 = the accurate pass after the 51.7.1 closure
+     modification (C3). */
   int comp_steps=0,comp_redo=1,comp_do_approx=1,comp_do_acc=1,comp_sberr_warn=0,comp_acc_phase=0;
   double comp_minfrac=0.005;
   if(teems_comp_active>0) {
-    if(rank==0) {
-      /* 51.6 default = the accurate run's step sum; steps2/steps3
-         were folded into ratios above, so rebuild the three counts
-         the multistep driver will use */
-      comp_steps=(solmethod==SM_GRAGG||solmethod==SM_EULER)
-        ?steps1+(int)llround(steps1*step_ratio2)+(int)llround(steps1*step_ratio3)
-        :steps1;
-      if(comp_steps<1)comp_steps=10;
-      cmf_comp_options(filename,&comp_steps,&comp_redo,&comp_minfrac,&comp_do_approx,&comp_do_acc,&comp_sberr_warn);
-      if(!comp_do_approx&&!comp_do_acc) {
-        printf("Error: complementarity do_approx_run and do_acc_run cannot both be no\n");
-        MPI_Abort(PETSC_COMM_WORLD,1);
-      }
+    PetscReal minfrac_opt=comp_minfrac;
+    dim_t iopt;
+    /* 51.6 default = the accurate run's step sum; steps2/steps3 were
+       folded into ratios above, so rebuild the three counts the
+       multistep driver will use */
+    comp_steps=(solmethod==SM_GRAGG||solmethod==SM_EULER)
+      ?steps1+(int)llround(steps1*step_ratio2)+(int)llround(steps1*step_ratio3)
+      :steps1;
+    if(comp_steps<1)comp_steps=10;
+    iopt=comp_steps;
+    PetscOptionsGetInt(NULL,NULL,"-comp_steps",&iopt,NULL);
+    if(iopt<1) {
+      if(rank==0)printf("Error: -comp_steps must be a positive Euler step count (manual 51.6)\n");
+      MPI_Abort(PETSC_COMM_WORLD,1);
     }
-    MPI_Bcast(&comp_steps,sizeof(int), MPI_BYTE,0, PETSC_COMM_WORLD);
-    MPI_Bcast(&comp_redo,sizeof(int), MPI_BYTE,0, PETSC_COMM_WORLD);
-    MPI_Bcast(&comp_minfrac,sizeof(double), MPI_BYTE,0, PETSC_COMM_WORLD);
-    MPI_Bcast(&comp_do_approx,sizeof(int), MPI_BYTE,0, PETSC_COMM_WORLD);
-    MPI_Bcast(&comp_do_acc,sizeof(int), MPI_BYTE,0, PETSC_COMM_WORLD);
-    MPI_Bcast(&comp_sberr_warn,sizeof(int), MPI_BYTE,0, PETSC_COMM_WORLD);
+    comp_steps=(int)iopt;
+    iopt=comp_redo;
+    PetscOptionsGetInt(NULL,NULL,"-comp_redo",&iopt,NULL);
+    comp_redo=iopt?1:0;
+    PetscOptionsGetReal(NULL,NULL,"-comp_redo_min_frac",&minfrac_opt,NULL);
+    if(minfrac_opt<=0||minfrac_opt>1) {
+      if(rank==0)printf("Error: -comp_redo_min_frac must lie in (0,1] (manual 51.6)\n");
+      MPI_Abort(PETSC_COMM_WORLD,1);
+    }
+    comp_minfrac=(double)minfrac_opt;
+    iopt=comp_do_approx;
+    PetscOptionsGetInt(NULL,NULL,"-comp_do_approx",&iopt,NULL);
+    comp_do_approx=iopt?1:0;
+    iopt=comp_do_acc;
+    PetscOptionsGetInt(NULL,NULL,"-comp_do_acc",&iopt,NULL);
+    comp_do_acc=iopt?1:0;
+    iopt=comp_sberr_warn;
+    PetscOptionsGetInt(NULL,NULL,"-comp_sberr_warn",&iopt,NULL);
+    comp_sberr_warn=iopt?1:0;
+    if(!comp_do_approx&&!comp_do_acc) {
+      if(rank==0)printf("Error: -comp_do_approx and -comp_do_acc cannot both be 0\n");
+      MPI_Abort(PETSC_COMM_WORLD,1);
+    }
     /* state flips change the filtered nonzero pattern between steps,
        which breaks the persistent-pivot refactorization */
     {
@@ -2050,7 +2072,7 @@ comp_accurate_reentry:
       solve_comp_approx(nohsl,VecSize,dnz,dnnz,onz,onnz,dnzB,dnnzB,onzB,onnzB,&vece,rank,rank_hsl,mpisize,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,&elem_vals,ncofele,nvarele,&closure_vals,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,eq_addr,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,fcomm,comp_steps,comp_redo,comp_minfrac,&xcf);
     }
     else {
-      if(rank==0)printf("Complementarity: do_approx_run = no; taking the pre-simulation states as the accurate run's targets (manual 51.6)\n");
+      if(rank==0)printf("Complementarity: -comp_do_approx 0; taking the pre-simulation states as the accurate run's targets (manual 51.6)\n");
       VecDestroy(&vece); /* the skipped approximate driver would have consumed it */
     }
     if(comp_do_acc) {
@@ -2107,7 +2129,7 @@ comp_accurate_reentry:
       goto comp_accurate_reentry;
     }
     else {
-      if(rank==0)printf("Complementarity: do_acc_run = no; the approximate run's solution is the simulation result (manual 51.6)\n");
+      if(rank==0)printf("Complementarity: -comp_do_acc 0; the approximate run's solution is the simulation result (manual 51.6)\n");
       comp_states_free();
     }
   }
@@ -2123,14 +2145,14 @@ comp_accurate_reentry:
   /* C3: after the accurate run, every component must sit in its
      approximate-run state with the variable inside its bounds
      (manual 51.5.4/51.7.5); fatal unless the CMF downgrades with
-     `complementarity state/bound_error = warn` */
+     -comp_sberr_warn 1 */
   if(comp_acc_phase==1) {
     offset_t comp_nbad=0;
     if(rank==rank_hsl)comp_nbad=comp_verify_states(sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals);
     if(rank==rank_hsl&&comp_nbad>0) {
-      if(comp_sberr_warn)printf("Warning: %ld complementarity state/bound error(s) after the accurate run (treated as warnings per the CMF; check the log carefully, manual 51.6)\n",(long)comp_nbad);
+      if(comp_sberr_warn)printf("Warning: %ld complementarity state/bound error(s) after the accurate run (treated as warnings per -comp_sberr_warn; check the log carefully, manual 51.6)\n",(long)comp_nbad);
       else {
-        printf("Error: %ld complementarity state/bound error(s) after the accurate run; rerun with more Euler steps (complementarity steps_approx_run) or smaller shocks, or downgrade with 'complementarity state/bound_error = warn' (manual 51.5.4/51.6)\n",(long)comp_nbad);
+        printf("Error: %ld complementarity state/bound error(s) after the accurate run; rerun with more Euler steps (-comp_steps) or smaller shocks, or downgrade with -comp_sberr_warn 1 (manual 51.5.4/51.6)\n",(long)comp_nbad);
         MPI_Abort(PETSC_COMM_WORLD,1);
       }
     }

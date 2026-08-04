@@ -1560,60 +1560,6 @@ int tab_postsim_split(char *newtabfile, char *psfile) {
 }
 
 /* CMF "PostSim = yes|no ;" run-time switch (manual ch.12); default yes */
-/* CMF statements for complementarity simulations (manual 51.6):
-     complementarity steps_approx_run = N ;
-     complementarity redo_steps = no|yes ;
-     complementarity redo_step_min_fraction = f ;
-     complementarity do_approx_run = no|yes ;
-     complementarity do_acc_run = no|yes ;
-     complementarity state/bound_error = warn|fatal ;
-   Outputs are left untouched when the statement is absent (callers
-   pass the defaults: steps = accurate-run step sum, redo yes,
-   fraction 0.005, both runs on, errors fatal). */
-void cmf_comp_options(char *filename, int *steps_approx, int *redo_steps, double *redo_min_frac, int *do_approx, int *do_acc, int *sberr_warn) {
-  FILE *f;
-  char l[TABREADLINE];
-  char *p;
-  int k;
-  f=fopen(filename,"r");
-  if(f==NULL)return;
-  while(fgets(l,TABREADLINE,f)!=NULL) {
-    k=str_find_ci(l,"complementarity");
-    if(k<0)continue;
-    p=strchr(l+k,'=');
-    if(p==NULL)continue;
-    p++;
-    while(*p==' '||*p=='\t')p++;
-    if(str_find_ci(l+k,"steps_approx_run")>=0) {
-      int v=atoi(p);
-      if(v>0)*steps_approx=v;
-      else printf("Warning: ignoring non-positive complementarity steps_approx_run\n");
-    }
-    else if(str_find_ci(l+k,"redo_step_min_fraction")>=0) {
-      double v=atof(p);
-      if(v>0&&v<=1)*redo_min_frac=v;
-      else printf("Warning: ignoring out-of-range complementarity redo_step_min_fraction\n");
-    }
-    else if(str_find_ci(l+k,"redo_steps")>=0) {
-      if(str_find_ci(p,"no")==0)*redo_steps=0;
-      else if(str_find_ci(p,"yes")==0)*redo_steps=1;
-    }
-    else if(str_find_ci(l+k,"do_approx_run")>=0) {
-      if(str_find_ci(p,"no")==0)*do_approx=0;
-      else if(str_find_ci(p,"yes")==0)*do_approx=1;
-    }
-    else if(str_find_ci(l+k,"do_acc_run")>=0) {
-      if(str_find_ci(p,"no")==0)*do_acc=0;
-      else if(str_find_ci(p,"yes")==0)*do_acc=1;
-    }
-    else if(str_find_ci(l+k,"state/bound_error")>=0||str_find_ci(l+k,"state_bound_error")>=0) {
-      if(str_find_ci(p,"warn")==0)*sberr_warn=1;
-      else if(str_find_ci(p,"fatal")==0)*sberr_warn=0;
-    }
-  }
-  fclose(f);
-}
-
 int cmf_postsim_on(char *filename) {
   FILE *f;
   char l[TABREADLINE];

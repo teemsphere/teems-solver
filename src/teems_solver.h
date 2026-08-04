@@ -346,8 +346,10 @@ void comp_states_free(void);
 int comp_accurate_prepare(set_def *sets, dim_t nset, set_element *set_elems, array_def *coefs, offset_t ncof, array_def *vars, offset_t nvar, elem_value *elem_vals);
 int comp_accurate_closure(closure_entry *closure_vals, array_def *vars, offset_t nvar, array_def *coefs, offset_t ncof, set_def *sets, dim_t nset, set_element *set_elems, elem_value *elem_vals);
 offset_t comp_verify_states(set_def *sets, dim_t nset, set_element *set_elems, array_def *coefs, offset_t ncof, array_def *vars, offset_t nvar, elem_value *elem_vals);
-/* CMF statements for complementarity simulations (manual 51.6) */
-void cmf_comp_options(char *filename, int *steps_approx, int *redo_steps, double *redo_min_frac, int *do_approx, int *do_acc, int *sberr_warn);
+/* the 51.6 run controls arrive as command-line flags (-comp_steps,
+   -comp_redo, -comp_redo_min_frac, -comp_do_approx, -comp_do_acc,
+   -comp_sberr_warn), passed by teems-R's ems_complementarity();
+   there are no complementarity CMF statements */
 /* LinVar token resolution incl. declared p_-/c_-leading names
    (design doc section 6); -1 when nothing matches */
 offset_t linvar_resolve(char *vname, array_def *vars, offset_t nvar);

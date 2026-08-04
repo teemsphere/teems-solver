@@ -533,8 +533,18 @@ the complementarity variable is exogenous over its full domain.
 Scope per section 3: the linear equation E_$comp with its 3 state
 branches, per-step state evaluation, the $del_Comp Newton correction
 shocked 1 IN FULL each step, step redo on state flips (51.7.3), the
-`complementarity steps_approx_run` CMF option (51.6) and the 51.7.5
-pre/post-simulation state checks. The accurate run (closure/shock
+`complementarity steps_approx_run` control (51.6) and the 51.7.5
+pre/post-simulation state checks.
+
+**Interface note (2026-08-04, user decision):** the ch. 51 run
+controls are COMMAND-LINE FLAGS (-comp_steps, -comp_redo,
+-comp_redo_min_frac, -comp_do_approx, -comp_do_acc,
+-comp_sberr_warn), passed by teems-R's ems_complementarity() through
+ems_solve()/solve_in_situ(). The C2-era CMF statements
+(`complementarity steps_approx_run = ...` etc.) were removed as
+redundant: TEEMS generates the CMF, so run controls belong on the
+invocation, not in the artifact. GEMPACK's 51.6 statement spellings
+are a GEMPACK interface, not a TEEMS one. The accurate run (closure/shock
 auto-modification, 51.7.1) stays C3; at C2 an active run's solution IS
 the approximate (Euler) run's solution.
 
