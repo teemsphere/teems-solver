@@ -29,6 +29,8 @@ typedef struct {
   long subints;
   int adaptive;                 /* 0 fixed, 1 retry-on-check, 2 accuracy-only */
   double epstol;
+  int maxretries;
+  double retryadj;
   long laA, laDi, laD;
   int comp_steps, comp_redo, comp_do_approx, comp_do_acc, comp_sberr_warn;
   int comp_pass;                /* 0 approximate, 1 accurate (write of that pass) */
@@ -108,8 +110,8 @@ static void ordering_stats_write(cmf_file_entry *iodata, int niodata, int noutda
       fprintf(fp,"    \"steps\": null,\n");
     else fprintf(fp,"    \"steps\": [%d],\n",steps1);
     fprintf(fp,"    \"subintervals\": %ld,\n",ropt->subints);
-    if(isrk)fprintf(fp,"    \"adaptive\": %d,\n    \"eps_tolerance\": %g,\n",ropt->adaptive,ropt->epstol);
-    else fprintf(fp,"    \"adaptive\": null,\n    \"eps_tolerance\": null,\n");
+    if(isrk)fprintf(fp,"    \"adaptive\": %d,\n    \"eps_tolerance\": %g,\n    \"max_retries\": %d,\n    \"retry_adjust\": %g,\n",ropt->adaptive,ropt->epstol,ropt->maxretries,ropt->retryadj);
+    else fprintf(fp,"    \"adaptive\": null,\n    \"eps_tolerance\": null,\n    \"max_retries\": null,\n    \"retry_adjust\": null,\n");
     fprintf(fp,"    \"laA\": %ld,\n    \"laDi\": %ld,\n    \"laD\": %ld,\n",ropt->laA,ropt->laDi,ropt->laD);
     fprintf(fp,"    \"max_threads\": %d,\n",(int)max_threads);
     fprintf(fp,"    \"fastrefac\": %s,\n",frchk?"true":"false");
@@ -1997,6 +1999,8 @@ comp_accurate_reentry:
     ropt.subints=(long)subints;
     ropt.adaptive=(int)adaptive;
     ropt.epstol=(double)epstol;
+    ropt.maxretries=maxretries;
+    ropt.retryadj=(double)retryadj;
     ropt.laA=(long)laA;
     ropt.laDi=(long)laDi;
     ropt.laD=(long)laD;
