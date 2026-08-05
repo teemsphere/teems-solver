@@ -17,7 +17,24 @@ static char help[] = "Solves a CGE model in parallel with KSP.\n\
    chain_source/partition_source say how each dimension was determined
    ("structural" detection or "none"); auto_json
    carries the partition-candidate table (NULL when nothing was
-   probed). */
+   probed).
+   The "options" object is the run's EFFECTIVE-configuration record
+   (posterity/reproducibility; the CMF stays a file manifest by
+   design): resolved values after defaults, validation and forced
+   changes -- e.g. the complementarity step-sum default and the
+   fastrefac force-clear -- not merely what the caller passed.
+   teems-R renders it into model_diagnostics.txt after each solve. */
+typedef struct {
+  int postsim_on;
+  long subints;
+  int adaptive;                 /* 0 fixed, 1 retry-on-check, 2 accuracy-only */
+  double epstol;
+  long laA, laDi, laD;
+  int comp_steps, comp_redo, comp_do_approx, comp_do_acc, comp_sberr_warn;
+  int comp_pass;                /* 0 approximate, 1 accurate (write of that pass) */
+  double comp_minfrac;
+} stats_run_options;
+
 static void ordering_stats_write(cmf_file_entry *iodata, int niodata, int noutdata, int nsoldata,
                                  long VecSize, offset_t nvarele, offset_t nexo,
                                  dim_t matsol, char *solmed, dim_t nesteddbbd, long mpisize, dim_t mc66,
@@ -25,7 +42,8 @@ static void ordering_stats_write(cmf_file_entry *iodata, int niodata, int noutda
                                  offset_t ntime, offset_t nreg, offset_t ndblock,
                                  offset_t netcut, offset_t nintraeq,
                                  offset_t *countvarintra1, offset_t *counteqnoadd,
-                                 const char *chain_source, const char *partition_source, const char *auto_json) {
+                                 const char *chain_source, const char *partition_source, const char *auto_json,
+                                 const stats_run_options *ropt) {
   static const char *matsol_names[] = {"LU","SBBD","DBBD","NDBBD"};
   char statspath[TABREADLINE+16];
   int i;
@@ -76,7 +94,46 @@ static void ordering_stats_write(cmf_file_entry *iodata, int niodata, int noutda
   for (j=0; j<ndblock; j++)fprintf(fp,"%s%ld",j?",":"",countvarintra1[j+1]-countvarintra1[j]);
   fprintf(fp,"],\n  \"block_neq\": [");
   for (j=0; j<ndblock; j++)fprintf(fp,"%s%ld",j?",":"",counteqnoadd[j]);
-  fprintf(fp,"]\n}\n");
+  fprintf(fp,"],\n");
+  /* effective run-configuration record (see the header comment) */
+  {
+    static const char *mode_names[] = {"no","warn","fatal"};
+    dim_t frchk=0;
+    int isrk=(strcmp(solmed,"RK2")==0||strcmp(solmed,"RK4")==0||strcmp(solmed,"BoSha32")==0||strcmp(solmed,"DoPri54")==0);
+    PetscOptionsGetInt(NULL,NULL,"-fastrefac",&frchk,NULL); /* post force-clear = effective */
+    fprintf(fp,"  \"options\": {\n");
+    if(strcmp(solmed,"Gragg")==0||strcmp(solmed,"Euler")==0)
+      fprintf(fp,"    \"steps\": [%d,%d,%d],\n",steps1,(int)llround(steps1*step_ratio2),(int)llround(steps1*step_ratio3));
+    else if(strcmp(solmed,"Johansen")==0||strcmp(solmed,"probe")==0)
+      fprintf(fp,"    \"steps\": null,\n");
+    else fprintf(fp,"    \"steps\": [%d],\n",steps1);
+    fprintf(fp,"    \"subintervals\": %ld,\n",ropt->subints);
+    if(isrk)fprintf(fp,"    \"adaptive\": %d,\n    \"eps_tolerance\": %g,\n",ropt->adaptive,ropt->epstol);
+    else fprintf(fp,"    \"adaptive\": null,\n    \"eps_tolerance\": null,\n");
+    fprintf(fp,"    \"laA\": %ld,\n    \"laDi\": %ld,\n    \"laD\": %ld,\n",ropt->laA,ropt->laDi,ropt->laD);
+    fprintf(fp,"    \"max_threads\": %d,\n",(int)max_threads);
+    fprintf(fp,"    \"fastrefac\": %s,\n",frchk?"true":"false");
+    fprintf(fp,"    \"gpzerodivide\": %s,\n",teems_gpzerodivide?"true":"false");
+    fprintf(fp,"    \"assertions\": \"%s\",\n",mode_names[teems_assertions_mode>=0&&teems_assertions_mode<=2?teems_assertions_mode:2]);
+    fprintf(fp,"    \"range_test_initial\": \"%s\",\n",mode_names[teems_range_test_initial>=0&&teems_range_test_initial<=2?teems_range_test_initial:1]);
+    fprintf(fp,"    \"range_test_updated\": \"%s\",\n",mode_names[teems_range_test_updated>=0&&teems_range_test_updated<=2?teems_range_test_updated:1]);
+    fprintf(fp,"    \"postsim\": %s",ropt->postsim_on?"true":"false");
+    if(teems_comp_active>0) {
+      fprintf(fp,",\n    \"complementarity\": {\n");
+      fprintf(fp,"      \"active_components\": %ld,\n",(long)teems_comp_active);
+      fprintf(fp,"      \"steps_approx_run\": %d,\n",ropt->comp_steps);
+      fprintf(fp,"      \"redo_steps\": %s,\n",ropt->comp_redo?"true":"false");
+      fprintf(fp,"      \"redo_step_min_fraction\": %g,\n",ropt->comp_minfrac);
+      fprintf(fp,"      \"do_approx_run\": %s,\n",ropt->comp_do_approx?"true":"false");
+      fprintf(fp,"      \"do_acc_run\": %s,\n",ropt->comp_do_acc?"true":"false");
+      fprintf(fp,"      \"state_bound_error\": \"%s\",\n",ropt->comp_sberr_warn?"warn":"fatal");
+      fprintf(fp,"      \"pass\": \"%s\"\n",ropt->comp_pass?"accurate":"approximate");
+      fprintf(fp,"    }\n");
+    }
+    else fprintf(fp,"\n");
+    fprintf(fp,"  }\n");
+  }
+  fprintf(fp,"}\n");
   fclose(fp);
 }
 
@@ -1905,7 +1962,24 @@ comp_accurate_reentry:
   }
   /* rank 0 always holds valid ordering data: rank_hsl==0 under HSL, and
      under nohsl every rank computes the full ordering */
-  if(rank==0)ordering_stats_write(iodata,niodata,noutdata,nsoldata,(long)VecSize,nvarele,nexo,matsol,solmed,nesteddbbd,(long)mpisize,mc66,alltimeset,allregset,sets,ntime,nreg,ndblock,netcut,nintraeq,countvarintra1,counteqnoadd,chain_source,partition_source,partition_auto_json);
+  if(rank==0) {
+    stats_run_options ropt;
+    ropt.postsim_on=postsim_on;
+    ropt.subints=(long)subints;
+    ropt.adaptive=(int)adaptive;
+    ropt.epstol=(double)epstol;
+    ropt.laA=(long)laA;
+    ropt.laDi=(long)laDi;
+    ropt.laD=(long)laD;
+    ropt.comp_steps=comp_steps;
+    ropt.comp_redo=comp_redo;
+    ropt.comp_do_approx=comp_do_approx;
+    ropt.comp_do_acc=comp_do_acc;
+    ropt.comp_sberr_warn=comp_sberr_warn;
+    ropt.comp_pass=comp_acc_phase;
+    ropt.comp_minfrac=comp_minfrac;
+    ordering_stats_write(iodata,niodata,noutdata,nsoldata,(long)VecSize,nvarele,nexo,matsol,solmed,nesteddbbd,(long)mpisize,mc66,alltimeset,allregset,sets,ntime,nreg,ndblock,netcut,nintraeq,countvarintra1,counteqnoadd,chain_source,partition_source,partition_auto_json,&ropt);
+  }
   if(partition_auto_json!=NULL) {
     free(partition_auto_json);
     partition_auto_json=NULL;
