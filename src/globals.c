@@ -15,8 +15,8 @@ int nbacksolve = 0;
 offset_t nbselems = 0;
 int backsolve_scan_mode = BS_SCAN_SKIP;
 
-/* CMF "Assertions = yes|no|warn" (manual 25.3): 0 = no, 1 = warn,
-   2 = yes (default) -- consumed by assertions_execute */
+/* -assertions run switch (manual 25.3): 0 = off, 1 = warn,
+   2 = fatal (default) -- consumed by assertions_execute */
 int teems_assertions_mode = 2;
 
 /* (parameter)-qualified coefficients (PostSim foundation F2): parallel
@@ -62,8 +62,9 @@ dim_t teems_ncomp = 0;
    set by comp_closure_check, broadcast after the closure section */
 offset_t teems_comp_active = 0;
 
-/* CMF range-test modes (manual 25.4.4): 0 = no, 1 = warn (the
-   GEMPACK default outside automatic accuracy), 2 = fatal */
+/* -range_test_initial/-range_test_updated run switches (manual
+   25.4.4): 0 = off, 1 = warn (the GEMPACK default outside automatic
+   accuracy), 2 = fatal */
 int teems_range_test_initial = 1;
 int teems_range_test_updated = 1;
 

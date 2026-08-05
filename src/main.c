@@ -976,11 +976,40 @@ int main(int argc,char **args) {
     MPI_Bcast(&nsoldata,sizeof(int), MPI_BYTE,0, PETSC_COMM_WORLD);
   }
   cmf_file_entry *iodata= (cmf_file_entry *) calloc (niodata+noutdata+nsoldata,sizeof(cmf_file_entry));
+  /* run-mode switches travel on the invocation like every other run
+     control (the CMF is a file manifest by design); parsed on every
+     rank from the shared argv, recorded in stats.json's options
+     object. -assertions / -range_test_initial / -range_test_updated:
+     0 = off, 1 = warn, 2 = fatal. -postsim: 0|1. */
+  {
+    dim_t mopt;
+    mopt=teems_assertions_mode;
+    PetscOptionsGetInt(NULL,NULL,"-assertions",&mopt,NULL);
+    if(mopt<0||mopt>2) {
+      if(rank==0)printf("Error: -assertions must be 0 (off), 1 (warn) or 2 (fatal)\n");
+      MPI_Abort(PETSC_COMM_WORLD,1);
+    }
+    teems_assertions_mode=(int)mopt;
+    mopt=teems_range_test_initial;
+    PetscOptionsGetInt(NULL,NULL,"-range_test_initial",&mopt,NULL);
+    if(mopt<0||mopt>2) {
+      if(rank==0)printf("Error: -range_test_initial must be 0 (off), 1 (warn) or 2 (fatal)\n");
+      MPI_Abort(PETSC_COMM_WORLD,1);
+    }
+    teems_range_test_initial=(int)mopt;
+    mopt=teems_range_test_updated;
+    PetscOptionsGetInt(NULL,NULL,"-range_test_updated",&mopt,NULL);
+    if(mopt<0||mopt>2) {
+      if(rank==0)printf("Error: -range_test_updated must be 0 (off), 1 (warn) or 2 (fatal)\n");
+      MPI_Abort(PETSC_COMM_WORLD,1);
+    }
+    teems_range_test_updated=(int)mopt;
+    mopt=postsim_on;
+    PetscOptionsGetInt(NULL,NULL,"-postsim",&mopt,NULL);
+    postsim_on=mopt?1:0;
+  }
   if(rank==rank_hsl) {
     cmf_read(filename,niodata,iodata,tabfile,closure,shock);
-    teems_assertions_mode=cmf_assertions_mode(filename);
-    cmf_range_test_modes(filename,&teems_range_test_initial,&teems_range_test_updated);
-    postsim_on=cmf_postsim_on(filename);
     for (nj=0; nj<niodata+noutdata+nsoldata; nj++) logmsg(2,"rank %d logname %s fname %s\n",rank,iodata[nj].logname,iodata[nj].filname);
     if(tab_preprocess(tabfile,newtabfile)==-1)return 0;
     /* audit A6: fail fast on unsupported/unknown Default statements

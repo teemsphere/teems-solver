@@ -1225,70 +1225,7 @@ int tab_read_set_name(char *filename, char *varname, int indx, char *setname) {
 }
 
 
-/* CMF "Assertions = yes|no|warn ;" (GEMPACK manual 25.3).
-   Returns 0/1/2 (no/warn/yes); default yes. */
-int cmf_assertions_mode(char *filename) {
-  FILE *f;
-  char l[TABREADLINE];
-  char *p;
-  int k,mode=2;
-  f=fopen(filename,"r");
-  if(f==NULL)return 2;
-  while(fgets(l,TABREADLINE,f)!=NULL) {
-    k=str_find_ci(l,"assertions");
-    if(k<0)continue;
-    p=strchr(l+k,'=');
-    if(p==NULL)continue;
-    p++;
-    while(*p==' '||*p=='\t')p++;
-    if(str_find_ci(p,"no")==0)mode=0;
-    else if(str_find_ci(p,"warn")==0)mode=1;
-    else if(str_find_ci(p,"yes")==0)mode=2;
-  }
-  fclose(f);
-  return mode;
-}
 
-/* CMF "range test initial values = yes|no|warn ;" and
-   "range test updated values = updated|extrapolated|both|no|warn ;"
-   (GEMPACK manual 25.4.4). Modes 0/1/2 = no/warn/fatal; the manual's
-   default outside automatic accuracy is WARN for both legs. The
-   updated-leg selectors updated/extrapolated/both all map to fatal at
-   our update-time checks (extrapolation is not separately
-   instrumented). */
-void cmf_range_test_modes(char *filename, int *ini, int *upd) {
-  FILE *f;
-  char l[TABREADLINE];
-  char *p;
-  int k;
-  *ini=1;
-  *upd=1;
-  f=fopen(filename,"r");
-  if(f==NULL)return;
-  while(fgets(l,TABREADLINE,f)!=NULL) {
-    k=str_find_ci(l,"range test initial values");
-    if(k>=0) {
-      p=strchr(l+k,'=');
-      if(p==NULL)continue;
-      p++;
-      while(*p==' '||*p=='\t')p++;
-      if(str_find_ci(p,"no")==0)*ini=0;
-      else if(str_find_ci(p,"warn")==0)*ini=1;
-      else if(str_find_ci(p,"yes")==0)*ini=2;
-      continue;
-    }
-    k=str_find_ci(l,"range test updated values");
-    if(k<0)continue;
-    p=strchr(l+k,'=');
-    if(p==NULL)continue;
-    p++;
-    while(*p==' '||*p=='\t')p++;
-    if(str_find_ci(p,"no")==0)*upd=0;
-    else if(str_find_ci(p,"warn")==0)*upd=1;
-    else if(str_find_ci(p,"updated")==0||str_find_ci(p,"extrapolated")==0||str_find_ci(p,"both")==0)*upd=2;
-  }
-  fclose(f);
-}
 
 /* Validate every Default statement up front (manual 10.19; audit A6),
    one scan of the preprocessed TAB (one statement per line,
@@ -1559,25 +1496,3 @@ int tab_postsim_split(char *newtabfile, char *psfile) {
   return nps;
 }
 
-/* CMF "PostSim = yes|no ;" run-time switch (manual ch.12); default yes */
-int cmf_postsim_on(char *filename) {
-  FILE *f;
-  char l[TABREADLINE];
-  char *p;
-  int k,on=1;
-  f=fopen(filename,"r");
-  if(f==NULL)return 1;
-  while(fgets(l,TABREADLINE,f)!=NULL) {
-    k=str_find_ci(l,"postsim");
-    if(k<0)continue;
-    if(str_find_ci(l,"xpostsim")>-1)continue;
-    p=strchr(l+k,'=');
-    if(p==NULL)continue;
-    p++;
-    while(*p==' '||*p=='\t')p++;
-    if(str_find_ci(p,"no")==0)on=0;
-    else if(str_find_ci(p,"yes")==0)on=1;
-  }
-  fclose(f);
-  return on;
-}

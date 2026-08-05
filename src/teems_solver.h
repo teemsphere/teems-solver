@@ -221,15 +221,13 @@ extern offset_t nbselems;         /* total backsolved variable elements */
    ONLY inverts the filter for the recovery-program build. */
 enum bs_scan_mode { BS_SCAN_SKIP=0, BS_SCAN_ONLY=1 };
 extern int backsolve_scan_mode;
-/* CMF "Assertions = yes|no|warn" (0/1/2, default 2 = abort on failure) */
+/* -assertions run switch (manual 25.3): 0 off, 1 warn, 2 fatal (default) */
 extern int teems_assertions_mode;
-int cmf_assertions_mode(char *filename);
 /* declared-range checks (manual 25.4.4): 0 no, 1 warn (default), 2
    fatal; initial leg = formulas passes with IsIni, updated leg = the
    update executors and later formulas passes */
 extern int teems_range_test_initial;
 extern int teems_range_test_updated;
-void cmf_range_test_modes(char *filename, int *ini, int *upd);
 /* (parameter)-qualified coefficients, parallel to coefs[] (F2) */
 extern bool *teems_coef_is_param;
 /* second range bound (one lower + one upper per declaration, manual
@@ -273,9 +271,9 @@ offset_t assertions_execute(char *fname,set_def *sets,dim_t nset,set_element *se
 void postsim_expose_results(elem_value *elem_vals,offset_t ncofele,offset_t nvarele,solve_real *xcf);
 int tab_has_postsim_assertions(char *fname);
 /* Tier 0: split POSTSIM sections out of the preprocessed TAB (returns
-   PostSim executable count; -1 on error) and the CMF run-time switch */
+   PostSim executable count; -1 on error); the -postsim run switch is
+   parsed in main */
 int tab_postsim_split(char *newtabfile, char *psfile);
-int cmf_postsim_on(char *filename);
 /* C0: levels-statement transform -- expand Formula&Equation, pair
    levels variables with value coefficients + updates, linearize
    Equation (levels) by change differentiation (design doc

@@ -2076,8 +2076,8 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
           int glviol=0;
           if(coefs[index].gltype>0)glviol|=coef_range_check(coefs,index,offset,varsize,elem_vals,glmode,coefs[index].gltype,coefs[index].glval);
           if(teems_coef_gltype2!=NULL&&teems_coef_gltype2[index]>0)glviol|=coef_range_check(coefs,index,offset,varsize,elem_vals,glmode,teems_coef_gltype2[index],teems_coef_glval2[index]);
-          /* fatal only when the CMF requests it (manual 25.4.4:
-             "range test ... = yes"); the GEMPACK default is warn */
+          /* fatal only when requested (-range_test_* 2; manual
+             25.4.4); the GEMPACK default is warn */
           if(glviol&&glmode==2)MPI_Abort(PETSC_COMM_WORLD,1);
         }
         
@@ -2382,8 +2382,8 @@ offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_el
           int glviol=0;
           if(coefs[index].gltype>0)glviol|=coef_range_check(coefs,index,offset,varsize,elem_vals,glmode,coefs[index].gltype,coefs[index].glval);
           if(teems_coef_gltype2!=NULL&&teems_coef_gltype2[index]>0)glviol|=coef_range_check(coefs,index,offset,varsize,elem_vals,glmode,teems_coef_gltype2[index],teems_coef_glval2[index]);
-          /* fatal only when the CMF requests it (manual 25.4.4:
-             "range test ... = yes"); the GEMPACK default is warn */
+          /* fatal only when requested (-range_test_* 2; manual
+             25.4.4); the GEMPACK default is warn */
           if(glviol&&glmode==2)MPI_Abort(PETSC_COMM_WORLD,1);
         }
     
@@ -2668,8 +2668,8 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
           int glviol=0;
           if(coefs[index].gltype>0)glviol|=coef_range_check(coefs,index,offset,varsize,elem_vals,glmode,coefs[index].gltype,coefs[index].glval);
           if(teems_coef_gltype2!=NULL&&teems_coef_gltype2[index]>0)glviol|=coef_range_check(coefs,index,offset,varsize,elem_vals,glmode,teems_coef_gltype2[index],teems_coef_glval2[index]);
-          /* fatal only when the CMF requests it (manual 25.4.4:
-             "range test ... = yes"); the GEMPACK default is warn */
+          /* fatal only when requested (-range_test_* 2; manual
+             25.4.4); the GEMPACK default is warn */
           if(glviol&&glmode==2)MPI_Abort(PETSC_COMM_WORLD,1);
         }
     
@@ -2907,7 +2907,7 @@ int sum_eval(char *formulain, char *commsyntax,set_def *sets,dim_t nset, set_ele
    through the ordinary formula engine, per quantifier tuple, against
    the current coefficient values -- so an (always) assertion rides
    every formulas_execute pass and an (initial) one only the first.
-   mode (CMF "Assertions = yes|no|warn", default yes): 0 = skip,
+   mode (-assertions run switch, default fatal): 0 = skip,
    1 = warn and continue, 2 = report failing elements and abort.
    Unsupported condition forms (conditional quantifiers, functions the
    compiler lacks) warn and skip the assertion rather than turning a
@@ -3184,7 +3184,7 @@ offset_t assertions_execute(char *fname,set_def *sets,dim_t nset,set_element *se
       printf("Assertion '%s' does not hold.\n",(msg[0]!='\0')?msg:linecopy);
       total_fail+=fails;
       if(mode==2) {
-        printf("Error: assertion failed (Assertions = warn/no in the CMF file suppresses/downgrades this abort)\n");
+        printf("Error: assertion failed (-assertions 1 downgrades this abort to a warning, -assertions 0 skips the checks)\n");
         MPI_Abort(PETSC_COMM_WORLD,1);
       }
     }
@@ -3195,7 +3195,7 @@ offset_t assertions_execute(char *fname,set_def *sets,dim_t nset,set_element *se
   }
   fclose(filehandle);
   zdiv_disable();
-  if(mode==1&&total_fail>0)printf("Warning: %ld assertion failure%s in this pass (Assertions = warn)\n",(long)total_fail,(total_fail==1)?"":"s");
+  if(mode==1&&total_fail>0)printf("Warning: %ld assertion failure%s in this pass (-assertions 1)\n",(long)total_fail,(total_fail==1)?"":"s");
   return total_fail;
 }
 
