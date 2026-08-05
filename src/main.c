@@ -97,7 +97,7 @@ static void ordering_stats_write(cmf_file_entry *iodata, int niodata, int noutda
   fprintf(fp,"],\n");
   /* effective run-configuration record (see the header comment) */
   {
-    static const char *mode_names[] = {"no","warn","fatal"};
+    static const char *mode_names[] = {"off","warn","fatal"};
     dim_t frchk=0;
     int isrk=(strcmp(solmed,"RK2")==0||strcmp(solmed,"RK4")==0||strcmp(solmed,"BoSha32")==0||strcmp(solmed,"DoPri54")==0);
     PetscOptionsGetInt(NULL,NULL,"-fastrefac",&frchk,NULL); /* post force-clear = effective */
