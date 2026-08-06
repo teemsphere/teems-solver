@@ -20,6 +20,70 @@ static int cmf_strcpy_bounded(char *dst, const char *src, size_t cap) {
   return 0;
 }
 
+/* Normalize the `:`-condition segments of a statement line (manual
+   11.4.11) ahead of the singleton-subset transform: the GEMPACK `EQ`
+   comparison spelling becomes `=`, and a quoted element RHS
+   immediately after `=` is unquoted and lowercased (quoted strings
+   elsewhere stay verbatim for the transform). A segment runs from a
+   ':' inside brackets to the next ',' or closing bracket at the same
+   depth; brace and paren sum forms both count. In-place (the result
+   never grows). */
+static int cond_is_namec(char ch) {
+  return (ch>='a'&&ch<='z')||(ch>='A'&&ch<='Z')||(ch>='0'&&ch<='9')||ch=='_'||ch=='@';
+}
+static void cond_segment_normalize(char *line) {
+  char buf[TABREADLINE];
+  int depth=0,incond=0,conddepth=0,changed=0;
+  char lastns='\0';
+  size_t bi=0,i;
+  for (i=0; line[i]!='\0'&&bi+1<sizeof(buf); i++) {
+    char ch=line[i];
+    if (!incond) {
+      if (ch=='('||ch=='{'||ch=='[') depth++;
+      else if (ch==')'||ch=='}'||ch==']') depth--;
+      else if (ch==':'&&depth>0) {
+        incond=1;
+        conddepth=depth;
+        lastns='\0';
+      }
+      buf[bi++]=ch;
+      continue;
+    }
+    if (ch=='('||ch=='{'||ch=='[') depth++;
+    else if (ch==')'||ch=='}'||ch==']') {
+      if (depth==conddepth) incond=0;
+      depth--;
+    }
+    else if (ch==','&&depth==conddepth) incond=0;
+    if (!incond) {
+      buf[bi++]=ch;
+      continue;
+    }
+    if ((ch=='e'||ch=='E')&&(line[i+1]=='q'||line[i+1]=='Q')&&
+        !cond_is_namec(line[i+2])&&i>0&&!cond_is_namec(line[i-1])) {
+      buf[bi++]='=';
+      lastns='=';
+      i++;
+      changed=1;
+      continue;
+    }
+    if (ch=='\"'&&lastns=='=') {
+      for (i++; line[i]!='\0'&&line[i]!='\"'&&bi+1<sizeof(buf); i++)
+        buf[bi++]=(char)tolower((int)line[i]);
+      if (line[i]!='\"') { changed=0; break; } /* unterminated: leave the line (and the fatal) to the readers */
+      changed=1;
+      lastns='\0';
+      continue;
+    }
+    buf[bi++]=ch;
+    if (ch!=' '&&ch!='\t') lastns=ch;
+  }
+  if (changed&&line[i]=='\0') {
+    buf[bi]='\0';
+    strcpy(line,buf);
+  }
+}
+
 int cmf_count_files(char *fname,char *comsyntax) {
   FILE * filehandle;
   char line[TABREADLINE]="\0";
@@ -739,6 +803,13 @@ int tab_preprocess(char *filename, char *newtabfile) {
           } else n=strstr(n+1,"c_");
         }
       }
+      /* normalize `:`-condition segments (manual 11.4.11) BEFORE the
+         singleton-subset transform below: the GEMPACK `EQ` spelling
+         becomes `=`, and a quoted element RHS (`= "ele"`) is
+         unquoted+lowercased -- otherwise the transform treats the
+         element as an index and rewrites it into a singleton subset
+         (the former M3 deferral) */
+      cond_segment_normalize(line);
       strcpy(line1,line);
       n=strchr(line1,'\"');
       if (n!=NULL) {
