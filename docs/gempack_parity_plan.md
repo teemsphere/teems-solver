@@ -7,6 +7,42 @@ semantics, POSTSIM, others").
 
 ## Progress log
 
+- **2026-08-06 — IF/condition-forms corpus survey (scopes the 6.4
+  "full IF semantics" item into a measured backlog)**: census over 84
+  unique TABs (full teems_archive sweep + original_tabs zips +
+  teems_tabs, content-hash deduped; comments/labels stripped).
+  COVERED ALREADY by the R IF-rewrite + solver condition machinery
+  (no work needed): formula quantifier conditions — 1216 of 1218
+  uses across 76 models are exactly `coefref <op> numconst`, the
+  natively-supported shape; IF() calls in formulas (534 uses / 52
+  models) and equations (~255 uses / 6 models incl. GTAP-REv1 and
+  the upstream v7 family) — the additive top-level placements with
+  `index IN set` / `index = "element"` / `coefref <op> const`
+  conditions, all six comparison spellings; mapping-equality
+  conditional sums incl. the `EQ` spelling and quoted element RHS
+  (closed 1931d17, same day). ZERO corpus uses: row-pruning equation
+  quantifier conditions — the named fatal is permanently
+  evidence-backed. THE TWO REAL GAPS, ranked: (1) **conditional set
+  builders** `Set X = (all,e,S: COEFREF(e,"ele") NE 0)` — 32 uses /
+  15 models INCLUDING the named validation targets GDYN v3.1/v3.6
+  and gtapep plus the upstream v7 family (the ENDWM/ENDWS endowment
+  classification from ENDOWFLAG data); data-dependent sets need
+  coefficient values before set resolution, a pipeline-ordering
+  mechanism TEEMS lacks (shipped models sidestep it via R-side
+  aggregation supplying explicit elements) — the one genuinely new
+  piece of machinery, top of the 6.4 backlog; (2) **general
+  conditional sums** (`sum{t,ENDWT: ENDOWFLAG(e,t) NE 0, 1}` —
+  coefficient-vs-constant conditions beyond the shipped
+  mapping-equality subset): 36 formula + 15 equation + 5 assertion
+  uses across ~9 models incl. the upstream v7 family; a contained
+  extension of the M3 build-time mask machinery, scoped to
+  read-static coefficient values. TAIL (named aborts stay): compound
+  AND/OR/NOT conditions — 7 uses, all in one data-checking utility
+  pair (10298 gtpvew/shocks); sums inside quantifier conditions — 2
+  uses, one LULC variant. Net: "full IF semantics" collapses to gap
+  (1) + gap (2); everything else is either already covered or has no
+  measured demand.
+
 - **2026-08-04 — C3 Complementarity accurate run landed (79770af;
   ch. 51 parity approximate + accurate end to end)**: after the
   approximate pass, the 51.7.1 closure/shock modification runs on
