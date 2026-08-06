@@ -7,6 +7,30 @@ semantics, POSTSIM, others").
 
 ## Progress log
 
+- **2026-08-06 (same day) — both IF-survey gaps CLOSED**: (1)
+  conditional set builders (fc0f7d5): `tab_setbuilder_transform`
+  evaluates the data-dependent condition straight from the input
+  files ahead of set resolution and rewrites the statement into an
+  explicit element list + subset relation — all three corpus shapes
+  (SLUG const comparison, ENDOWFLAG quoted-argument, and the
+  GTAP-E/-EP/-AEZ mapping-conditional-sum form), file-Read operands
+  only (formula-computed = named fatal), empty selection fatal; kit
+  `.audit/setbuild-test-kit` 17 checks. (2) general conditional sums
+  (ea10d23): `COEF(args) <op> const` conditions beside the M3
+  mapping equality, bound to the summed index / outer frame / fixed
+  elements, evaluated in the formula executor and equation sum
+  programs (assertions ride along); forced a depth-aware rewrite of
+  the sum tokenizers (settok/body extraction assumed comma-free
+  conditions — byte-identical on the golden corpus); kit
+  `.audit/condsum-test-kit` 12 checks. REMAINING measured residuals
+  (all named fatals, demand-free or utility-grade): coefref-vs-
+  coefref condition RHS (geelas + old gtap-pov), coefficient
+  conditions on variable-containing sums (linvar path stays
+  mapping-only), compound AND/OR/NOT (one data-checking utility
+  pair), row-pruning equation quantifier conditions (zero uses).
+  With these, the 6.4 "full IF semantics" item is CLOSED to measured
+  corpus demand.
+
 - **2026-08-06 — IF/condition-forms corpus survey (scopes the 6.4
   "full IF semantics" item into a measured backlog)**: census over 84
   unique TABs (full teems_archive sweep + original_tabs zips +
