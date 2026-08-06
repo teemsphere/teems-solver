@@ -2689,6 +2689,8 @@ int sum_eval(char *formulain, char *commsyntax,set_def *sets,dim_t nset, set_ele
   formula_op *ops1= NULL;
   offset_t arsetsize;
   int condpos=-1;
+  sum_cofcond cofcond;
+  cofcond.cofid=-1;
   offset_t condfix=-1;
   length=strlen(formulain);
   readitem=formulain;
@@ -2707,10 +2709,13 @@ int sum_eval(char *formulain, char *commsyntax,set_def *sets,dim_t nset, set_ele
         readitem=formulain+i;
       } else {
         strcpy(line1,line);
-        p=strtok(line,",");
-        p=strtok(NULL,",");
-        p=strtok(NULL,"\0");
-        p[strlen(p)-1]='\0';
+        /* depth-aware body extraction: a coefficient condition may
+           carry commas the old comma-splits broke on (gap 2) */
+        p=sum_body_extract(line1);
+        if (p==NULL) {
+          printf("Error: malformed sum statement '%s'\n",line1);
+          MPI_Abort(PETSC_COMM_WORLD,1);
+        }
         strcpy(line2,p);
         arsetsize=sum_cof[j].size+1;
         quantifier *arSet= (quantifier *) calloc (arsetsize,sizeof(quantifier));
@@ -2732,6 +2737,7 @@ int sum_eval(char *formulain, char *commsyntax,set_def *sets,dim_t nset, set_ele
         strcpy(arSet[sum_cof[j].size].index_name,sum_cof[j].sumindx);
         fdimsumcof=sum_cof[j].size+1;
         sum_cond_rhs_resolve(sum_cof[j].cond_mapid,sum_cof[j].cond_rhs,arSet,fdimsumcof,sets,set_elems,&condpos,&condfix);
+        sum_cond_coef_resolve(&sum_cof[j],arSet,fdimsumcof,sets,set_elems,coefs,ncof,&cofcond);
         nops=0;
         if(!formula_compile(p,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,&nops,arSet,fdimsumcof))MPI_Abort(PETSC_COMM_WORLD,1);
         #pragma omp parallel private(l,l1,l2,dcount,superset_pos,vval,arSet2,ops1) shared(elem_vals,arSet,sum_vals)
@@ -2761,6 +2767,8 @@ int sum_eval(char *formulain, char *commsyntax,set_def *sets,dim_t nset, set_ele
             /* mapping-equality condition (M3): only domain elements
                mapping to the target codomain position contribute */
             if (sum_cof[j].cond_mapid>0&&(offset_t)teems_maps[sum_cof[j].cond_mapid-1].values[l1]!=(condpos>=0?(offset_t)arSet2[condpos].indx:condfix)) continue;
+            /* coefficient-comparison condition (11.4.11; IF-survey gap 2) */
+            if (cofcond.cofid>=0&&!sum_cofcond_test(&cofcond,elem_vals,arSet2,l1)) continue;
             arSet2[sum_cof[j].size].indx=l1;
             vval+=formula_eval(elem_vals,sets,set_elems,sum_vals,ops1,nops,arSet2,fdimsumcof,zerodivide);
           }
@@ -2806,10 +2814,13 @@ int sum_eval(char *formulain, char *commsyntax,set_def *sets,dim_t nset, set_ele
         readitem=formulain+i;
       } else {
         strcpy(line1,line);
-        p=strtok(line,",");
-        p=strtok(NULL,",");
-        p=strtok(NULL,"\0");
-        p[strlen(p)-1]='\0';
+        /* depth-aware body extraction: a coefficient condition may
+           carry commas the old comma-splits broke on (gap 2) */
+        p=sum_body_extract(line1);
+        if (p==NULL) {
+          printf("Error: malformed sum statement '%s'\n",line1);
+          MPI_Abort(PETSC_COMM_WORLD,1);
+        }
         arsetsize=sum_cof[j].size+1;
         quantifier *arSet= (quantifier *) calloc (arsetsize,sizeof(quantifier));
         for (l=0; l<sum_cof[j].size; l++) {
@@ -2830,6 +2841,7 @@ int sum_eval(char *formulain, char *commsyntax,set_def *sets,dim_t nset, set_ele
         strcpy(arSet[sum_cof[j].size].index_name,sum_cof[j].sumindx);
         fdimsumcof=sum_cof[j].size+1;
         sum_cond_rhs_resolve(sum_cof[j].cond_mapid,sum_cof[j].cond_rhs,arSet,fdimsumcof,sets,set_elems,&condpos,&condfix);
+        sum_cond_coef_resolve(&sum_cof[j],arSet,fdimsumcof,sets,set_elems,coefs,ncof,&cofcond);
         nops=0;
         if(!formula_compile(p,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,&nops,arSet,fdimsumcof))MPI_Abort(PETSC_COMM_WORLD,1);
         #pragma omp parallel private(l,l1,l2,dcount,superset_pos,vval,arSet2,ops1) shared(elem_vals,arSet,sum_vals)
@@ -2859,6 +2871,8 @@ int sum_eval(char *formulain, char *commsyntax,set_def *sets,dim_t nset, set_ele
             /* mapping-equality condition (M3): only domain elements
                mapping to the target codomain position contribute */
             if (sum_cof[j].cond_mapid>0&&(offset_t)teems_maps[sum_cof[j].cond_mapid-1].values[l1]!=(condpos>=0?(offset_t)arSet2[condpos].indx:condfix)) continue;
+            /* coefficient-comparison condition (11.4.11; IF-survey gap 2) */
+            if (cofcond.cofid>=0&&!sum_cofcond_test(&cofcond,elem_vals,arSet2,l1)) continue;
             arSet2[sum_cof[j].size].indx=l1;
             vval+=formula_eval(elem_vals,sets,set_elems,sum_vals,ops1,nops,arSet2,fdimsumcof,zerodivide);
           }

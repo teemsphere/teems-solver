@@ -30,6 +30,7 @@ typedef struct
   int cond_mapid;                   /* >0: mapping-equality condition (M3) */
   int cond_pos;                     /* RHS frame position, or -1 */
   offset_t cond_fixed;              /* fixed codomain position, or -1 */
+  sum_cofcond cofcond;              /* coefficient comparison (gap 2); cofid -1 = none */
 } sum_prog;
 
 /* one linear-variable occurrence: the compiled coefficient program */
@@ -102,10 +103,13 @@ static int sum_prog_build(char *formulain, char *commsyntax, bool skip_linvar_su
       }
       else {
         strcpy(line1,line);
-        p=strtok(line,",");
-        p=strtok(NULL,",");
-        p=strtok(NULL,"\0");
-        p[strlen(p)-1]='\0';
+        /* depth-aware body extraction: a coefficient condition may
+           carry commas the old comma-splits broke on (gap 2) */
+        p=sum_body_extract(line1);
+        if (p==NULL) {
+          printf("Error: malformed sum statement '%s'\n",line1);
+          MPI_Abort(PETSC_COMM_WORLD,1);
+        }
         out->nouter=sum_cof[j].size;
         out->arSet= (quantifier *) calloc (sum_cof[j].size+1,sizeof(quantifier));
         for (l=0; l<sum_cof[j].size; l++) {
@@ -129,6 +133,7 @@ static int sum_prog_build(char *formulain, char *commsyntax, bool skip_linvar_su
         out->sumset_size=sets[sum_cof[j].sumsetid].size;
         out->cond_mapid=sum_cof[j].cond_mapid;
         sum_cond_rhs_resolve(out->cond_mapid,sum_cof[j].cond_rhs,out->arSet,(dim_t)(sum_cof[j].size+1),sets,set_elems,&out->cond_pos,&out->cond_fixed);
+        sum_cond_coef_resolve(&sum_cof[j],out->arSet,(dim_t)(sum_cof[j].size+1),sets,set_elems,coefs,ncof,&out->cofcond);
         nops=0;
         if(!formula_compile(p,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,&nops,out->arSet,(dim_t)(sum_cof[j].size+1)))MPI_Abort(PETSC_COMM_WORLD,1);
         out->ops= (formula_op *) malloc (nops*sizeof(formula_op));
@@ -200,6 +205,8 @@ static void sum_prog_eval(sum_prog *sp, set_def *sets, set_element *set_elems, e
       /* mapping-equality condition (M3): only domain elements mapping
          to the target codomain position contribute */
       if (sp->cond_mapid>0&&(offset_t)teems_maps[sp->cond_mapid-1].values[l1]!=(sp->cond_pos>=0?(offset_t)arSet2[sp->cond_pos].indx:sp->cond_fixed)) continue;
+      /* coefficient-comparison condition (11.4.11; IF-survey gap 2) */
+      if (sp->cofcond.cofid>=0&&!sum_cofcond_test(&sp->cofcond,elem_vals,arSet2,l1)) continue;
       arSet2[sp->nouter].indx=l1;
       vval+=formula_eval(elem_vals,sets,set_elems,sum_vals,ops1,sp->nops,arSet2,(dim_t)(sp->nouter+1),zerodivide);
     }
@@ -474,7 +481,7 @@ static void linvar_dim_read(char *p, char *linecopy, offset_t lvar,
       char *src=ref->dimsetnames[d],*dst=ref->dimsetnames[d];
       for (; *src!='\0'; src++) if (*src!=' ') *dst++=*src;
       *dst='\0';
-      sum_cond_parse(ref->dimsetnames[d],ref->dimnames[d],&ref->dimcondmap[d],ref->dimcondrhs[d]);
+      sum_cond_parse(ref->dimsetnames[d],ref->dimnames[d],&ref->dimcondmap[d],ref->dimcondrhs[d],NULL);
     }
   }
 }
@@ -1297,7 +1304,8 @@ int eq_sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifier 
           p = strtok(NULL,",");
           strcpy(sum_cof[j].sumindx,p);
           p = strtok(NULL,",");
-          sum_cond_parse(p,sum_cof[j].sumindx,&sum_cof[j].cond_mapid,sum_cof[j].cond_rhs);
+          { char *st_sc=sum_settok_extract(line1); if (st_sc!=NULL) p=st_sc; }
+          sum_cond_parse(p,sum_cof[j].sumindx,&sum_cof[j].cond_mapid,sum_cof[j].cond_rhs,&sum_cof[j]);
           for (l7=0; l7<nset; l7++) if(strcmp(p,sets[l7].setname)==0) {
               sum_cof[j].sumsetid=l7;
               break;
@@ -1458,7 +1466,8 @@ int eq_sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifier 
           p = strtok(NULL,",");
           strcpy(sum_cof[j].sumindx,p);
           p = strtok(NULL,",");
-          sum_cond_parse(p,sum_cof[j].sumindx,&sum_cof[j].cond_mapid,sum_cof[j].cond_rhs);
+          { char *st_sc=sum_settok_extract(line1); if (st_sc!=NULL) p=st_sc; }
+          sum_cond_parse(p,sum_cof[j].sumindx,&sum_cof[j].cond_mapid,sum_cof[j].cond_rhs,&sum_cof[j]);
           for (l7=0; l7<nset; l7++) if(strcmp(p,sets[l7].setname)==0) {
               sum_cof[j].sumsetid=l7;
               break;

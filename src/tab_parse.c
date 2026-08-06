@@ -1327,7 +1327,8 @@ offset_t sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
         p = strtok(NULL,",");
         strcpy(sum_cof[j].sumindx,p);
         p = strtok(NULL,",");
-        sum_cond_parse(p,sum_cof[j].sumindx,&sum_cof[j].cond_mapid,sum_cof[j].cond_rhs);
+        { char *st_sc=sum_settok_extract(line1); if (st_sc!=NULL) p=st_sc; }
+        sum_cond_parse(p,sum_cof[j].sumindx,&sum_cof[j].cond_mapid,sum_cof[j].cond_rhs,&sum_cof[j]);
         for (l7=0; l7<nset; l7++) if(strcmp(p,sets[l7].setname)==0) {
             sum_cof[j].sumsetid=l7;
             break;
@@ -1475,7 +1476,8 @@ offset_t sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
         p = strtok(NULL,",");
         strcpy(sum_cof[j].sumindx,p);
         p = strtok(NULL,",");
-        sum_cond_parse(p,sum_cof[j].sumindx,&sum_cof[j].cond_mapid,sum_cof[j].cond_rhs);
+        { char *st_sc=sum_settok_extract(line1); if (st_sc!=NULL) p=st_sc; }
+        sum_cond_parse(p,sum_cof[j].sumindx,&sum_cof[j].cond_mapid,sum_cof[j].cond_rhs,&sum_cof[j]);
         for (l7=0; l7<nset; l7++) if(strcmp(p,sets[l7].setname)==0) {
             sum_cof[j].sumsetid=l7;
             break;
@@ -2149,46 +2151,250 @@ char *sum_dim_identity(char *p) {
    place for the caller to resolve; the RHS token is kept raw and
    resolves at build/eval time against the frame (outer quantifier
    index) or the mapping's codomain elements. */
-void sum_cond_parse(char *settok, const char *sumindx, int *cond_mapid, char *cond_rhs) {
+/* Depth-aware extraction of a sum's "SET[:condition]" span from its
+   pristine text (the first bracket is the sum's own): a coefficient
+   condition may contain commas the callers' strtok cursor has
+   already split on. Returns an internal parse-time buffer (the sum
+   parsers run single-threaded), or NULL when no span exists. */
+char *sum_settok_extract(const char *sumtext) {
+  static char out[NAMESIZE*4];
+  const char *p=sumtext;
+  int depth=0,commas=0;
+  size_t oi=0;
+  for (; *p!='\0'; p++) {
+    if (*p=='('||*p=='{'||*p=='[') {
+      depth++;
+      if (depth==1) continue;
+    }
+    else if (*p==')'||*p=='}'||*p==']') {
+      if (depth==1) break;
+      depth--;
+    }
+    else if (*p==','&&depth==1) {
+      commas++;
+      if (commas==2) break;
+      continue;
+    }
+    if (depth>=1&&commas==1) {
+      if (oi+1>=sizeof(out)) return NULL;
+      out[oi++]=*p;
+    }
+  }
+  if (commas<1||oi==0) return NULL;
+  out[oi]='\0';
+  return out;
+}
+
+/* Sibling of sum_settok_extract: the sum BODY span -- after the
+   second depth-1 comma (index, then SET[:condition]) up to the sum's
+   closing bracket. Own static buffer (single-threaded parse). */
+char *sum_body_extract(const char *sumtext) {
+  static char out[TABREADLINE];
+  const char *p=sumtext;
+  int depth=0,commas=0;
+  size_t oi=0;
+  for (; *p!='\0'; p++) {
+    if (*p=='('||*p=='{'||*p=='[') {
+      depth++;
+      if (depth==1) continue;
+    }
+    else if (*p==')'||*p=='}'||*p==']') {
+      if (depth==1) break;
+      depth--;
+    }
+    else if (*p==','&&depth==1&&commas<2) {
+      commas++;
+      continue;
+    }
+    if (depth>=1&&commas==2) {
+      if (oi+1>=sizeof(out)) return NULL;
+      out[oi++]=*p;
+    }
+  }
+  if (commas<2||oi==0) return NULL;
+  out[oi]='\0';
+  return out;
+}
+
+void sum_cond_parse(char *settok, const char *sumindx, int *cond_mapid, char *cond_rhs, sum_def *sc) {
   char *colon,*eq,*lhs;
   int mp=0;
   *cond_mapid=0;
   cond_rhs[0]='\0';
+  if (sc!=NULL) { sc->cond_coef[0]='\0'; sc->cond_cofnargs=0; sc->cond_cofop=0; sc->cond_cofval=0; }
   colon=strchr(settok,':');
   if (colon==NULL) return;
   *colon='\0';
   lhs=colon+1;
   eq=strchr(lhs,'=');
-  if (eq==NULL) {
-    printf("Error: unsupported sum condition '%s'; only a mapping equality MAPPING(index) = value is supported (manual 11.4.11)\n",lhs);
-    MPI_Abort(PETSC_COMM_WORLD,1);
-    return;
+  if (eq!=NULL) {
+    char lhscpy[NAMESIZE*2];
+    if (strlen(lhs)<sizeof(lhscpy)) {
+      char *cond0=lhs;
+      strcpy(lhscpy,lhs);
+      lhscpy[eq-lhs]='\0';
+      lhs=mapping_token_split(lhscpy,&mp);
+      if (mp==0) lhs=cond0; /* not a mapping: the coefficient parse below needs the full untruncated condition */
+      if (mp>0) {
+        if (strcmp(lhs,sumindx)!=0) {
+          printf("Error: the sum condition on mapping %s must test the summed index %s, not %s\n",teems_maps[mp-1].mapname,sumindx,lhs);
+          MPI_Abort(PETSC_COMM_WORLD,1);
+          return;
+        }
+        if (eq[1]=='\0'||strlen(eq+1)>=NAMESIZE) {
+          printf("Error: malformed sum condition RHS for mapping %s\n",teems_maps[mp-1].mapname);
+          MPI_Abort(PETSC_COMM_WORLD,1);
+          return;
+        }
+        *cond_mapid=mp;
+        {
+          /* keep the RHS raw but unquoted: a fixed codomain element may
+             arrive as "ele" */
+          char *src=eq+1,*dst=cond_rhs;
+          for (; *src!='\0'; src++) if (*src!='\"') *dst++=*src;
+          *dst='\0';
+        }
+        return;
+      }
+    }
   }
-  *eq='\0';
-  lhs=mapping_token_split(lhs,&mp);
-  if (mp==0) {
-    printf("Error: unsupported sum condition on '%s'; only a mapping equality MAPPING(index) = value is supported (manual 11.4.11)\n",lhs);
-    MPI_Abort(PETSC_COMM_WORLD,1);
-    return;
-  }
-  if (strcmp(lhs,sumindx)!=0) {
-    printf("Error: the sum condition on mapping %s must test the summed index %s, not %s\n",teems_maps[mp-1].mapname,sumindx,lhs);
-    MPI_Abort(PETSC_COMM_WORLD,1);
-    return;
-  }
-  if (eq[1]=='\0'||strlen(eq+1)>=NAMESIZE) {
-    printf("Error: malformed sum condition RHS for mapping %s\n",teems_maps[mp-1].mapname);
-    MPI_Abort(PETSC_COMM_WORLD,1);
-    return;
-  }
-  *cond_mapid=mp;
+  /* coefficient comparison COEF(args) <op> <numeric const> (11.4.11;
+     IF-survey gap 2). The condition text arrives space-stripped, so
+     word operators sit glued after the closing bracket. */
   {
-    /* keep the RHS raw but unquoted: a fixed codomain element may
-       arrive as "ele" */
-    char *src=eq+1,*dst=cond_rhs;
-    for (; *src!='\0'; src++) if (*src!='\"') *dst++=*src;
-    *dst='\0';
+    char *p=lhs,*q;
+    int tl,opc=0,olen=0;
+    char *endp=NULL;
+    double cval;
+    if (sc==NULL) {
+      printf("Error: unsupported sum condition '%s' on a sum containing variables; only a mapping equality MAPPING(index) = value is supported there (manual 11.4.11)\n",lhs);
+      MPI_Abort(PETSC_COMM_WORLD,1);
+      return;
+    }
+    q=strpbrk(p,"({[");
+    if (q==NULL) goto badcond;
+    tl=(int)(q-p);
+    if (tl<=0||tl>=NAMESIZE) goto badcond;
+    strncpy(sc->cond_coef,p,tl);
+    sc->cond_coef[tl]='\0';
+    p=q+1;
+    while (*p!='\0'&&*p!=')'&&*p!='}'&&*p!=']'&&sc->cond_cofnargs<MAXVARDIM) {
+      tl=0;
+      if (*p=='\"') { p++; while (*p!='\0'&&*p!='\"'&&tl<NAMESIZE-1) sc->cond_cofargs[sc->cond_cofnargs][tl++]=*p++; if (*p=='\"') p++; }
+      else while (*p!='\0'&&*p!=','&&*p!=')'&&*p!='}'&&*p!=']'&&tl<NAMESIZE-1) sc->cond_cofargs[sc->cond_cofnargs][tl++]=*p++;
+      sc->cond_cofargs[sc->cond_cofnargs][tl]='\0';
+      sc->cond_cofnargs++;
+      if (*p==',') p++;
+    }
+    if (*p!=')'&&*p!='}'&&*p!=']') goto badcond;
+    p++;
+    if (strncmp(p,"<>",2)==0) { opc=2; olen=2; }
+    else if (strncmp(p,">=",2)==0) { opc=5; olen=2; }
+    else if (strncmp(p,"<=",2)==0) { opc=6; olen=2; }
+    else if (*p=='=') { opc=1; olen=1; }
+    else if (*p=='>') { opc=3; olen=1; }
+    else if (*p=='<') { opc=4; olen=1; }
+    else if (strncmp(p,"eq",2)==0) { opc=1; olen=2; }
+    else if (strncmp(p,"ne",2)==0) { opc=2; olen=2; }
+    else if (strncmp(p,"gt",2)==0) { opc=3; olen=2; }
+    else if (strncmp(p,"lt",2)==0) { opc=4; olen=2; }
+    else if (strncmp(p,"ge",2)==0) { opc=5; olen=2; }
+    else if (strncmp(p,"le",2)==0) { opc=6; olen=2; }
+    else goto badcond;
+    cval=strtod(p+olen,&endp);
+    if (endp==p+olen||endp==NULL||*endp!='\0') {
+      printf("Error: unsupported sum condition RHS '%s'; a coefficient condition compares against a NUMERIC constant (COEF(args) <op> const; manual 11.4.11)\n",p+olen);
+      MPI_Abort(PETSC_COMM_WORLD,1);
+      return;
+    }
+    sc->cond_cofop=opc;
+    sc->cond_cofval=cval;
+    return;
+badcond:
+    printf("Error: unsupported sum condition '%s'; supported forms are MAPPING(index) = value and COEF(args) <op> <numeric const> (manual 11.4.11)\n",lhs);
+    MPI_Abort(PETSC_COMM_WORLD,1);
+    return;
   }
+}
+
+/* Resolve a coefficient-comparison sum condition against an
+   evaluation frame: each argument binds to the summed index (its
+   dimension set must be the summed set exactly), a frame quantifier
+   of the same set, or a fixed element of the dimension set. */
+void sum_cond_coef_resolve(sum_def *sc, quantifier *frame, dim_t nframe, set_def *sets, set_element *set_elems, array_def *coefs, offset_t ncof, sum_cofcond *out) {
+  offset_t ci;
+  dim_t d,l;
+  out->cofid=-1;
+  if (sc->cond_coef[0]=='\0') return;
+  for (ci=0; ci<ncof; ci++) if (strcmp(coefs[ci].cofname,sc->cond_coef)==0) break;
+  if (ci==ncof) {
+    printf("Error: sum condition coefficient %s is not declared (manual 11.4.11)\n",sc->cond_coef);
+    MPI_Abort(PETSC_COMM_WORLD,1);
+    return;
+  }
+  if ((dim_t)coefs[ci].size!=sc->cond_cofnargs) {
+    printf("Error: sum condition %s has %d argument(s) but the coefficient has %d dimension(s)\n",sc->cond_coef,(int)sc->cond_cofnargs,(int)coefs[ci].size);
+    MPI_Abort(PETSC_COMM_WORLD,1);
+    return;
+  }
+  out->cofid=ci;
+  out->offset=coefs[ci].offset;
+  out->nd=coefs[ci].size;
+  out->op=sc->cond_cofop;
+  out->cval=sc->cond_cofval;
+  for (d=0; d<out->nd; d++) {
+    out->strides[d]=coefs[ci].strides[d];
+    out->fix[d]=-1;
+    if (strcmp(sc->cond_cofargs[d],sc->sumindx)==0) {
+      if (coefs[ci].setid[d]!=sc->sumsetid) {
+        printf("Error: sum condition %s: the summed index %s must range over the coefficient's dimension set %s exactly (manual 11.4.11)\n",sc->cond_coef,sc->sumindx,sets[coefs[ci].setid[d]].setname);
+        MPI_Abort(PETSC_COMM_WORLD,1);
+        return;
+      }
+      out->bind[d]=-2;
+      continue;
+    }
+    for (l=0; l<nframe; l++) if (strcmp(sc->cond_cofargs[d],frame[l].index_name)==0) break;
+    if (l<nframe) {
+      if (frame[l].setid!=coefs[ci].setid[d]) {
+        printf("Error: sum condition %s: index %s must range over the coefficient's dimension set %s exactly (manual 11.4.11)\n",sc->cond_coef,sc->cond_cofargs[d],sets[coefs[ci].setid[d]].setname);
+        MPI_Abort(PETSC_COMM_WORLD,1);
+        return;
+      }
+      out->bind[d]=(int)l;
+      continue;
+    }
+    /* fixed element of the dimension set */
+    for (l=0; l<(dim_t)sets[coefs[ci].setid[d]].size; l++)
+      if (strcmp(set_elems[sets[coefs[ci].setid[d]].offset+l].setele,sc->cond_cofargs[d])==0) break;
+    if (l==(dim_t)sets[coefs[ci].setid[d]].size) {
+      printf("Error: sum condition %s: argument %s is neither the summed index, a quantifier index nor an element of %s (manual 11.4.11)\n",sc->cond_coef,sc->cond_cofargs[d],sets[coefs[ci].setid[d]].setname);
+      MPI_Abort(PETSC_COMM_WORLD,1);
+      return;
+    }
+    out->bind[d]=-1;
+    out->fix[d]=(offset_t)l;
+  }
+}
+
+int sum_cofcond_test(const sum_cofcond *cc, elem_value *elem_vals, quantifier *frame, offset_t l1) {
+  offset_t off=cc->offset;
+  double v;
+  dim_t d;
+  for (d=0; d<cc->nd; d++) {
+    offset_t idx=(cc->bind[d]==-2)?l1:(cc->bind[d]>=0)?(offset_t)frame[cc->bind[d]].indx:cc->fix[d];
+    off+=idx*cc->strides[d];
+  }
+  v=(double)elem_vals[off].value;
+  switch (cc->op) {
+  case 1: return v==cc->cval;
+  case 2: return v!=cc->cval;
+  case 3: return v>cc->cval;
+  case 4: return v<cc->cval;
+  case 5: return v>=cc->cval;
+  case 6: return v<=cc->cval;
+  }
+  return 1;
 }
 
 /* Resolve a sum condition's RHS against an evaluation frame: an index

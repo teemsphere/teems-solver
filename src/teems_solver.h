@@ -190,7 +190,28 @@ typedef struct
   offset_t strides[MAXVARDIM];
   int cond_mapid;              /* >0: mapping-equality condition on the summed index (11.4.11, M3) */
   char cond_rhs[NAMESIZE];     /* its RHS token: outer quantifier index or codomain element */
+  /* coefficient-comparison condition (11.4.11; IF-survey gap 2):
+     COEF(args) <op> <numeric const>, e.g. ENDOWFLAG(e,t) NE 0 */
+  char cond_coef[NAMESIZE];    /* "" = none */
+  char cond_cofargs[MAXVARDIM][NAMESIZE];
+  dim_t cond_cofnargs;
+  int cond_cofop;              /* 1..6 = eq/ne/gt/lt/ge/le */
+  double cond_cofval;
 } sum_def ;
+
+/* a resolved coefficient-comparison sum condition: per-tuple value
+   lookup bound to the evaluation frame + the summed index */
+typedef struct
+{
+  offset_t cofid;              /* -1 = no coefficient condition */
+  offset_t offset;             /* coefs[cofid].offset */
+  dim_t nd;
+  int bind[MAXVARDIM];         /* -2 the summed index; >=0 frame slot; -1 fixed */
+  offset_t fix[MAXVARDIM];     /* fixed element position (bind -1) */
+  offset_t strides[MAXVARDIM];
+  int op;
+  double cval;
+} sum_cofcond ;
 
 typedef struct
 {
@@ -445,7 +466,14 @@ void mapping_lower_calls(char *line);
 void mapping_reject_in(char *line, const char *what);
 char *mapping_token_split(char *p, int *mp);
 char *sum_dim_identity(char *p);
-void sum_cond_parse(char *settok, const char *sumindx, int *cond_mapid, char *cond_rhs);
+char *sum_settok_extract(const char *sumtext);
+char *sum_body_extract(const char *sumtext);
+void sum_cond_parse(char *settok, const char *sumindx, int *cond_mapid, char *cond_rhs, sum_def *sc);
+/* resolve/evaluate a coefficient-comparison sum condition against an
+   evaluation frame (fatal on contract violations; no-op when the sum
+   has no coefficient condition) */
+void sum_cond_coef_resolve(sum_def *sc, quantifier *frame, dim_t nframe, set_def *sets, set_element *set_elems, array_def *coefs, offset_t ncof, sum_cofcond *out);
+int sum_cofcond_test(const sum_cofcond *cc, elem_value *elem_vals, quantifier *frame, offset_t l1);
 void sum_cond_domain_check(sum_def *sc, set_def *sets);
 dim_t sum_cond_carry_rhs(sum_def *sc, quantifier *arSet, dim_t fdim, dim_t l3, char *interchar);
 void sum_cond_rhs_resolve(int cond_mapid, const char *cond_rhs, quantifier *frame, dim_t nframe, set_def *sets, set_element *set_elems, int *condpos, offset_t *condfix);
