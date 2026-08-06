@@ -93,6 +93,12 @@ typedef struct
 int datafile_read_labels(char *varname, char *filename,dim_t d1, datafile_labels *record);
 int datafile_read_header_info(char *varname, char *filename,dim_t *vsize, char *longname,dim_t *d1);
 int cmf_read(char *filename, int niodata, cmf_file_entry *iodata, char *tabfile, char *closure, char *shock);
+/* conditional set builders `Set X = (all,i,SRC: cond);` (manual
+   10.1.2): data-dependent conditions evaluated straight from the
+   input files at transform time, the statement rewritten into an
+   explicit element list + subset relation; -1 on error, no-op when
+   the TAB has none */
+int tab_setbuilder_transform(char *fname, cmf_file_entry *iodata, int niodata);
 int tab_preprocess(char *filename, char *newtabfile);
 int tab_read_set_name(char *filename, char *varname, int indx, char *setname);
 

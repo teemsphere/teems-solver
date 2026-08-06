@@ -1567,3 +1567,544 @@ int tab_postsim_split(char *newtabfile, char *psfile) {
   return nps;
 }
 
+
+/* ---------- conditional set builders (manual 10.1.2; survey
+   2026-08-06) --------------------------------------------------------
+   `Set NAME = (all,i,SRC: <cond>);` where <cond> is one of the three
+   corpus shapes:
+     COEF(i)               <op> <const>          [GDYN/gtapep SLUG]
+     COEF(i,"ele")/COEF("ele",i)... <op> <const> [v7 ENDOWFLAG]
+     sum{j,S2: MAP(j) = i, COEF2(j)} <op> <const> [GTAP-E/-EP/-AEZ
+                                                   UNITD* flags]
+   The condition is DATA-dependent, so it is evaluated here -- before
+   set resolution -- straight from the input files (the condition
+   coefficient and any mapping must be file-Read; formula-computed
+   operands are a named fatal), and the statement is rewritten into an
+   explicit element list plus the subset relation:
+     set NAME (e1,...);  subset NAME is subset of SRC ;
+   Everything downstream (sets_read, subset_map_build, superset_pos)
+   then works untouched. Elements keep SRC order; an empty selection
+   is a named fatal. Zero-cost when the TAB has no builder statements. */
+
+static char *sb_iodata_path(cmf_file_entry *iodata, int nio, const char *logname) {
+  int i;
+  size_t j;
+  for (i=0; i<nio; i++) {
+    /* logical file names are case-insensitive (TAB text is lowercased
+       by the preprocess; CMF entries keep the author's case) */
+    for (j=0; ; j++) {
+      if (tolower((int)iodata[i].logname[j])!=tolower((int)logname[j])) break;
+      if (logname[j]=='\0') return iodata[i].filname;
+    }
+  }
+  return NULL;
+}
+
+/* elements of a set declared with an explicit list or a
+   read-elements statement; returns count or -1 */
+#define SB_MAXELE 4096
+static int sb_elements(char *tabfile, cmf_file_entry *iodata, int nio, const char *setname, char (*ele)[NAMESIZE]) {
+  FILE *f;
+  char line[TABREADLINE];
+  int n=-1;
+  size_t snlen=strlen(setname);
+  f=fopen(tabfile,"r");
+  if (f==NULL) return -1;
+  while (fgets(line,TABREADLINE,f)) {
+    char *p=line,*q;
+    if (strncmp(p,"set",3)!=0) continue;
+    p+=3;
+    while (*p==' ') p++;
+    if (strncmp(p,setname,snlen)!=0||(p[snlen]!=' '&&p[snlen]!='('&&p[snlen]!='#')) continue;
+    p+=snlen;
+    while (*p==' ') p++;
+    if (*p=='#') { p=strchr(p+1,'#'); if (p==NULL) break; p++; while (*p==' ') p++; }
+    if (*p=='(') {
+      /* explicit list */
+      n=0;
+      p++;
+      while (*p!='\0'&&*p!=')') {
+        int tl=0;
+        while (*p==' '||*p==',') p++;
+        while (*p!='\0'&&*p!=','&&*p!=')'&&*p!=' '&&tl<NAMESIZE-1) ele[n][tl++]=*p++;
+        ele[n][tl]='\0';
+        if (tl>0) n++;
+        if (n>=SB_MAXELE) break;
+      }
+      break;
+    }
+    if (strstr(p,"read")!=NULL) {
+      char *hd=strstr(p,"header");
+      char *fl=strstr(p,"file");
+      char logname[NAMESIZE],header[NAMESIZE],*path;
+      int tl=0;
+      if (hd==NULL||fl==NULL) break;
+      fl+=4;
+      while (*fl==' ') fl++;
+      while (*fl!='\0'&&*fl!=' '&&tl<NAMESIZE-1) logname[tl++]=*fl++;
+      logname[tl]='\0';
+      hd=strchr(hd,'\"');
+      if (hd==NULL) break;
+      hd++;
+      tl=0;
+      while (*hd!='\0'&&*hd!='\"'&&tl<NAMESIZE-1) header[tl++]=*hd++;
+      header[tl]='\0';
+      path=sb_iodata_path(iodata,nio,logname);
+      if (path==NULL) break;
+      {
+        datafile_labels *lab=(datafile_labels *)calloc(SB_MAXELE,sizeof(datafile_labels));
+        int i;
+        if (lab==NULL) break;
+        datafile_read_labels(header,path,SB_MAXELE,lab);
+        n=0;
+        for (i=0; i<SB_MAXELE&&lab[i].ch[0]!='\0'; i++) {
+          strncpy(ele[n],lab[i].ch,NAMESIZE-1);
+          ele[n][NAMESIZE-1]='\0';
+          n++;
+        }
+        free(lab);
+      }
+      break;
+    }
+    break;
+  }
+  fclose(f);
+  return n;
+}
+
+/* numeric text header: dims from the header line, values row-wise
+   (comma/space separated, last dimension across columns); returns
+   total count or -1 */
+static int sb_read_reals(const char *path, const char *header, double **vals) {
+  FILE *f;
+  char line[DATREADLINE];
+  int total=0,got=0;
+  *vals=NULL;
+  f=fopen((char *)path,"r");
+  if (f==NULL) return -1;
+  while (fgets(line,DATREADLINE,f)) {
+    char *q=strchr(line,'\"');
+    char hdr[NAMESIZE];
+    int tl=0,dims[8],nd=0;
+    if (q==NULL||strstr(line,"Header")==NULL) continue;
+    q++;
+    while (*q!='\0'&&*q!='\"'&&tl<NAMESIZE-1) hdr[tl++]=*q++;
+    hdr[tl]='\0';
+    if (strcmp(hdr,header)!=0) continue;
+    {
+      char *p=line;
+      while (*p==' ') p++;
+      while (*p>='0'&&*p<='9') {
+        if (nd<8) dims[nd++]=atoi(p);
+        while (*p>='0'&&*p<='9') p++;
+        while (*p==' ') p++;
+      }
+    }
+    if (nd==0) { fclose(f); return -1; }
+    total=1;
+    { int i; for (i=0; i<nd; i++) total*=dims[i]; }
+    *vals=(double *)malloc((size_t)total*sizeof(double));
+    if (*vals==NULL) { fclose(f); return -1; }
+    while (got<total&&fgets(line,DATREADLINE,f)) {
+      char *p=line;
+      if (line[0]=='\n'||line[0]=='\r') break;
+      while (*p!='\0'&&got<total) {
+        while (*p==' '||*p==','||*p=='\t') p++;
+        if (*p=='\0'||*p=='\n'||*p=='\r') break;
+        (*vals)[got++]=strtod(p,&p);
+      }
+    }
+    fclose(f);
+    if (got!=total) { free(*vals); *vals=NULL; return -1; }
+    return total;
+  }
+  fclose(f);
+  return -1;
+}
+
+/* the coefficient's Read statement: logical file + header */
+static int sb_coef_read_stmt(char *tabfile, const char *coef, char *logname, char *header) {
+  FILE *f;
+  char line[TABREADLINE];
+  size_t cl=strlen(coef);
+  int found=0;
+  f=fopen(tabfile,"r");
+  if (f==NULL) return 0;
+  while (fgets(line,TABREADLINE,f)) {
+    char *p=line,*hd,*fl;
+    int tl;
+    if (strncmp(p,"read",4)!=0) continue;
+    p+=4;
+    while (*p==' ') p++;
+    if (*p=='(') { p=strchr(p,')'); if (p==NULL) continue; p++; while (*p==' ') p++; }
+    if (strncmp(p,coef,cl)!=0||(p[cl]!=' '&&p[cl]!='f')) continue;
+    fl=strstr(p,"file");
+    hd=strstr(p,"header");
+    if (fl==NULL||hd==NULL) continue;
+    fl+=4;
+    while (*fl==' ') fl++;
+    tl=0;
+    while (*fl!='\0'&&*fl!=' '&&tl<NAMESIZE-1) logname[tl++]=*fl++;
+    logname[tl]='\0';
+    hd=strchr(hd,'\"');
+    if (hd==NULL) continue;
+    hd++;
+    tl=0;
+    while (*hd!='\0'&&*hd!='\"'&&tl<NAMESIZE-1) header[tl++]=*hd++;
+    header[tl]='\0';
+    found=1;
+    break;
+  }
+  fclose(f);
+  return found;
+}
+
+/* the coefficient declaration's per-dimension set names */
+static int sb_coef_dims(char *tabfile, const char *coef, char dimset[][NAMESIZE]) {
+  FILE *f;
+  char line[TABREADLINE];
+  int nd=-1;
+  size_t cl=strlen(coef);
+  f=fopen(tabfile,"r");
+  if (f==NULL) return -1;
+  while (fgets(line,TABREADLINE,f)) {
+    char *p=line,*nm;
+    if (strncmp(p,"coefficient",11)!=0) continue;
+    /* find " <coef>(" or " <coef> " after the quantifiers */
+    nm=strstr(line,coef);
+    while (nm!=NULL) {
+      char before=(nm==line)?' ':nm[-1];
+      char after=nm[cl];
+      if ((before==' '||before==')')&&(after=='('||after==' '||after=='#'||after==';')) break;
+      nm=strstr(nm+1,coef);
+    }
+    if (nm==NULL) continue;
+    /* count and read the (all,idx,SET) quantifiers before the name */
+    nd=0;
+    p=line;
+    while ((p=strstr(p,"(all,"))!=NULL&&p<nm) {
+      char *c1=strchr(p+5,','),*c2;
+      int tl=0;
+      if (c1==NULL) { nd=-1; break; }
+      c2=c1+1;
+      while (*c2!='\0'&&*c2!=')'&&tl<NAMESIZE-1) dimset[nd][tl++]=*c2++;
+      dimset[nd][tl]='\0';
+      { /* trim spaces */
+        char *s=dimset[nd],*d=dimset[nd];
+        for (; *s!='\0'; s++) if (*s!=' ') *d++=*s;
+        *d='\0';
+      }
+      nd++;
+      if (nd>=MAXVARDIM) break;
+      p=c2;
+    }
+    break;
+  }
+  fclose(f);
+  return nd;
+}
+
+static int sb_ele_find(char (*ele)[NAMESIZE], int n, const char *name) {
+  int i;
+  for (i=0; i<n; i++) if (strcmp(ele[i],name)==0) return i;
+  return -1;
+}
+
+static int sb_op_test(double v, const char *op, double c) {
+  if (strcmp(op,"ne")==0||strcmp(op,"<>")==0) return v!=c;
+  if (strcmp(op,"eq")==0||strcmp(op,"=")==0) return v==c;
+  if (strcmp(op,"gt")==0||strcmp(op,">")==0) return v>c;
+  if (strcmp(op,"lt")==0||strcmp(op,"<")==0) return v<c;
+  if (strcmp(op,"ge")==0||strcmp(op,">=")==0) return v>=c;
+  if (strcmp(op,"le")==0||strcmp(op,"<=")==0) return v<=c;
+  return -1;
+}
+
+int tab_setbuilder_transform(char *fname, cmf_file_entry *iodata, int niodata) {
+  FILE *f,*fout;
+  char line[TABREADLINE],tmpname[TABREADLINE];
+  int any=0,rc=0;
+  f=fopen(fname,"r");
+  if (f==NULL) { printf("Error: cannot open %s\n",fname); return -1; }
+  while (fgets(line,TABREADLINE,f)) {
+    if (strncmp(line,"set",3)==0&&strstr(line,"(all,")!=NULL&&strchr(line,':')!=NULL&&strchr(line,'=')!=NULL) any=1;
+  }
+  fclose(f);
+  if (!any) return 0;
+  f=fopen(fname,"r");
+  strcpy(tmpname,fname);
+  strcat(tmpname,"_sb");
+  fout=f==NULL?NULL:fopen(tmpname,"w");
+  if (f==NULL||fout==NULL) {
+    if (f!=NULL) fclose(f);
+    printf("Error: cannot open set-builder scratch file\n");
+    return -1;
+  }
+  while (rc==0&&fgets(line,TABREADLINE,f)) {
+    char name[NAMESIZE],idx[NAMESIZE],src[NAMESIZE],op[8],cond[TABREADLINE];
+    char *p,*q;
+    int tl;
+    double cval;
+    if (!(strncmp(line,"set",3)==0&&(p=strstr(line,"="))!=NULL&&(q=strstr(line,"(all,"))!=NULL&&q>p&&strchr(q,':')!=NULL)) {
+      fputs(line,fout);
+      continue;
+    }
+    /* set NAME [# label #] = (all,idx,SRC: cond) ; */
+    p=line+3;
+    while (*p==' ') p++;
+    tl=0;
+    while (*p!='\0'&&*p!=' '&&*p!='='&&*p!='#'&&tl<NAMESIZE-1) name[tl++]=*p++;
+    name[tl]='\0';
+    q=strstr(line,"(all,")+5;
+    tl=0;
+    while (*q!='\0'&&*q!=','&&tl<NAMESIZE-1) { if (*q!=' ') idx[tl++]=*q; q++; }
+    idx[tl]='\0';
+    if (*q==',') q++;
+    tl=0;
+    while (*q!='\0'&&*q!=':'&&tl<NAMESIZE-1) { if (*q!=' ') src[tl++]=*q; q++; }
+    src[tl]='\0';
+    if (*q!=':') { printf("Error: malformed set-builder statement: %s",line); rc=-1; break; }
+    q++;
+    /* condition text up to the builder's closing ')' (depth-aware) */
+    {
+      int depth=0;
+      tl=0;
+      for (; *q!='\0'; q++) {
+        if (*q=='('||*q=='{'||*q=='[') depth++;
+        else if (*q==')'||*q=='}'||*q==']') { if (depth==0) break; depth--; }
+        if (tl<TABREADLINE-1) cond[tl++]=*q;
+      }
+      cond[tl]='\0';
+    }
+    {
+      /* split <operand> <op> <const>: find the comparison at depth 0,
+         word ops need surrounding blanks stripped later */
+      char opnd[TABREADLINE];
+      int depth=0,i,oi=-1,olen=0;
+      for (i=0; cond[i]!='\0'; i++) {
+        char c=cond[i];
+        if (c=='('||c=='{'||c=='[') depth++;
+        else if (c==')'||c=='}'||c==']') depth--;
+        else if (depth==0) {
+          if (c=='<'||c=='>') { oi=i; olen=(cond[i+1]=='='||cond[i+1]=='>')?2:1; break; }
+          if (c=='='&&(i==0||cond[i-1]!='<'&&cond[i-1]!='>')) { oi=i; olen=1; break; }
+          if ((c==' ')&&((strncmp(cond+i+1,"ne ",3)==0)||(strncmp(cond+i+1,"eq ",3)==0)||
+                         (strncmp(cond+i+1,"gt ",3)==0)||(strncmp(cond+i+1,"lt ",3)==0)||
+                         (strncmp(cond+i+1,"ge ",3)==0)||(strncmp(cond+i+1,"le ",3)==0))) { oi=i+1; olen=2; break; }
+        }
+      }
+      if (oi<0) {
+        printf("Error: set builder %s: unsupported condition '%s' (supported: COEF(...) <op> const, or a mapping-conditional sum <op> const; manual 10.1.2)\n",name,cond);
+        rc=-1;
+        break;
+      }
+      strncpy(op,cond+oi,olen);
+      op[olen]='\0';
+      {
+        char *endp=NULL;
+        cval=strtod(cond+oi+olen,&endp);
+        while (endp!=NULL&&*endp==' ') endp++;
+        if (endp==cond+oi+olen||endp==NULL||*endp!='\0') {
+          printf("Error: set builder %s: unsupported condition '%s' (a single comparison against a numeric constant; compound conditions are not supported; manual 10.1.2)\n",name,cond);
+          rc=-1;
+          break;
+        }
+      }
+      strncpy(opnd,cond,oi);
+      opnd[oi]='\0';
+      { /* trim operand blanks at both ends */
+        char *s=opnd;
+        int e=(int)strlen(opnd);
+        while (*s==' ') s++;
+        while (e>0&&(opnd[e-1]==' ')) opnd[--e]='\0';
+        memmove(opnd,s,strlen(s)+1);
+      }
+      /* SRC elements */
+      {
+        char (*srcele)[NAMESIZE]=calloc(SB_MAXELE,NAMESIZE);
+        char keep[SB_MAXELE];
+        int nsrc,k,nkept=0;
+        if (srcele==NULL) { rc=-1; break; }
+        nsrc=sb_elements(fname,iodata,niodata,src,srcele);
+        if (nsrc<=0) {
+          printf("Error: set builder %s: cannot resolve the elements of source set %s (explicit list or read-elements declarations only)\n",name,src);
+          free(srcele);
+          rc=-1;
+          break;
+        }
+        memset(keep,0,sizeof(keep));
+        if (strncmp(opnd,"sum",3)==0) {
+          /* sum{j,S2: MAP(j) = idx, COEF2(j)} */
+          char sidx[NAMESIZE],sset[NAMESIZE],mapname[NAMESIZE],c2[NAMESIZE];
+          char logname[NAMESIZE],header[NAMESIZE],*path;
+          char (*s2ele)[NAMESIZE]=NULL;
+          datafile_labels *mlab=NULL;
+          double *v2=NULL;
+          int ns2,j,ok=1;
+          p=opnd+3;
+          while (*p=='('||*p=='{'||*p=='['||*p==' ') p++;
+          tl=0; while (*p!='\0'&&*p!=','&&tl<NAMESIZE-1) { if (*p!=' ') sidx[tl++]=*p; p++; }
+          sidx[tl]='\0'; if (*p==',') p++;
+          tl=0; while (*p!='\0'&&*p!=':'&&tl<NAMESIZE-1) { if (*p!=' ') sset[tl++]=*p; p++; }
+          sset[tl]='\0'; if (*p==':') p++;
+          while (*p==' ') p++;
+          tl=0; while (*p!='\0'&&*p!='('&&*p!='{'&&tl<NAMESIZE-1) { if (*p!=' ') mapname[tl++]=*p; p++; }
+          mapname[tl]='\0';
+          /* require MAP(sidx) = idx , COEF2(sidx) */
+          q=strchr(p,',');
+          if (q==NULL) ok=0;
+          else {
+            char inner[NAMESIZE*2];
+            tl=0; q++;
+            while (*q==' ') q++;
+            while (*q!='\0'&&*q!='('&&*q!='{'&&tl<(int)sizeof(inner)-1) { if (*q!=' ') inner[tl++]=*q; q++; }
+            inner[tl]='\0';
+            strncpy(c2,inner,NAMESIZE-1);
+            c2[NAMESIZE-1]='\0';
+          }
+          if (ok) {
+            s2ele=calloc(SB_MAXELE,NAMESIZE);
+            mlab=calloc(SB_MAXELE,sizeof(datafile_labels));
+            ns2=(s2ele!=NULL&&mlab!=NULL)?sb_elements(fname,iodata,niodata,sset,s2ele):-1;
+            if (ns2<=0) ok=0;
+            else {
+              /* the mapping's by_elements read */
+              if (!sb_coef_read_stmt(fname,mapname,logname,header)) ok=0;
+              else {
+                path=sb_iodata_path(iodata,niodata,logname);
+                if (path==NULL) ok=0;
+                else datafile_read_labels(header,path,ns2,mlab);
+              }
+            }
+            if (ok) {
+              if (!sb_coef_read_stmt(fname,c2,logname,header)) ok=0;
+              else {
+                path=sb_iodata_path(iodata,niodata,logname);
+                if (path==NULL||sb_read_reals(path,header,&v2)!=ns2) ok=0;
+              }
+            }
+            if (ok) {
+              for (k=0; k<nsrc; k++) {
+                double acc=0;
+                for (j=0; j<ns2; j++) if (strcmp(mlab[j].ch,srcele[k])==0) acc+=v2[j];
+                keep[k]=(char)sb_op_test(acc,op,cval);
+              }
+            }
+          }
+          free(s2ele);
+          free(mlab);
+          free(v2);
+          if (!ok) {
+            printf("Error: set builder %s: cannot evaluate the mapping-conditional sum '%s' (the mapping and the summed coefficient must be file-Read; manual 10.1.2)\n",name,opnd);
+            free(srcele);
+            rc=-1;
+            break;
+          }
+        }
+        else {
+          /* COEF(args) with the loop index and optional quoted elements */
+          char coef[NAMESIZE],args[MAXVARDIM][NAMESIZE];
+          char dimset[MAXVARDIM][NAMESIZE];
+          char logname[NAMESIZE],header[NAMESIZE],*path;
+          double *cv=NULL;
+          int nargs=0,nd,k,d,ok=1,loopdim=-1;
+          long stride[MAXVARDIM],fixoff;
+          int dsz[MAXVARDIM];
+          p=opnd;
+          tl=0;
+          while (*p!='\0'&&*p!='('&&*p!='{'&&tl<NAMESIZE-1) { if (*p!=' ') coef[tl++]=*p; p++; }
+          coef[tl]='\0';
+          if (*p!='\0') p++;
+          while (*p!='\0'&&*p!=')'&&*p!='}'&&nargs<MAXVARDIM) {
+            tl=0;
+            while (*p==' ') p++;
+            if (*p=='\"') { p++; while (*p!='\0'&&*p!='\"'&&tl<NAMESIZE-1) args[nargs][tl++]=*p++; if (*p=='\"') p++; }
+            else while (*p!='\0'&&*p!=','&&*p!=')'&&*p!='}'&&tl<NAMESIZE-1) { if (*p!=' ') args[nargs][tl++]=*p; p++; }
+            args[nargs][tl]='\0';
+            nargs++;
+            if (*p==',') p++;
+          }
+          nd=sb_coef_dims(fname,coef,dimset);
+          if (nd!=nargs||nd<=0) ok=0;
+          if (ok&&!sb_coef_read_stmt(fname,coef,logname,header)) {
+            printf("Error: set builder %s: condition coefficient %s must be Read from an input file (formula-computed operands cannot drive set resolution; manual 10.1.2)\n",name,coef);
+            free(srcele);
+            rc=-1;
+            break;
+          }
+          if (ok) {
+            /* per-dim sizes + fixed-element offsets */
+            char (*dele)[NAMESIZE]=calloc(SB_MAXELE,NAMESIZE);
+            int nde;
+            fixoff=0;
+            if (dele==NULL) ok=0;
+            for (d=0; ok&&d<nd; d++) {
+              nde=sb_elements(fname,iodata,niodata,dimset[d],dele);
+              if (nde<=0) { ok=0; break; }
+              dsz[d]=nde;
+              if (strcmp(args[d],idx)==0) loopdim=d;
+              else {
+                int e=sb_ele_find(dele,nde,args[d]);
+                if (e<0) { ok=0; break; }
+                stride[d]=e; /* park the element position; strides resolved below */
+              }
+            }
+            free(dele);
+            if (ok&&loopdim>=0) {
+              long st=1;
+              for (d=nd-1; d>=0; d--) { long tmpst=st; st*=dsz[d]; stride[d]=(d==loopdim)?tmpst:stride[d]*tmpst; }
+              for (d=0; d<nd; d++) if (d!=loopdim) fixoff+=stride[d];
+            }
+            else ok=0;
+            if (ok) {
+              path=sb_iodata_path(iodata,niodata,logname);
+              if (path==NULL) ok=0;
+              else {
+                long total=1;
+                for (d=0; d<nd; d++) total*=dsz[d];
+                if (sb_read_reals(path,header,&cv)!=total) ok=0;
+              }
+            }
+            if (ok) {
+              if (dsz[loopdim]!=nsrc) {
+                printf("Error: set builder %s: the loop index %s must range over %s's dimension set %s exactly\n",name,idx,coef,dimset[loopdim]);
+                ok=0;
+              }
+            }
+            if (ok) for (k=0; k<nsrc; k++) keep[k]=(char)sb_op_test(cv[fixoff+(long)k*stride[loopdim]],op,cval);
+            free(cv);
+          }
+          if (!ok&&rc==0) {
+            printf("Error: set builder %s: cannot evaluate condition '%s' (declaration/read/dimension resolution failed; manual 10.1.2)\n",name,cond);
+            free(srcele);
+            rc=-1;
+            break;
+          }
+        }
+        for (k=0; k<nsrc; k++) if (keep[k]) nkept++;
+        if (nkept==0) {
+          printf("Error: set builder %s selected no elements of %s (an empty set cannot enter the model; manual 10.1.2)\n",name,src);
+          free(srcele);
+          rc=-1;
+          break;
+        }
+        fprintf(fout,"set %s (",name);
+        {
+          int first=1,k2;
+          for (k2=0; k2<nsrc; k2++) if (keep[k2]) { fprintf(fout,"%s%s",first?"":",",srcele[k2]); first=0; }
+        }
+        fprintf(fout,");\n");
+        fprintf(fout,"subset %s is subset of %s ;\n",name,src);
+        printf("set builder %s: %d of %d elements of %s selected\n",name,nkept,nsrc,src);
+        free(srcele);
+      }
+    }
+  }
+  fclose(f);
+  fclose(fout);
+  if (rc==0) {
+    if (rename(tmpname,fname)!=0) { printf("Error: cannot rename %s\n",tmpname); rc=-1; }
+  }
+  else remove(tmpname);
+  return rc;
+}

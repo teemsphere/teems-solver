@@ -1024,6 +1024,10 @@ int main(int argc,char **args) {
     npostsim=tab_postsim_split(newtabfile,psfile);
     /* fail-fast: exit 0 here used to mask section errors */
     if(npostsim<0)MPI_Abort(PETSC_COMM_WORLD,1);
+    /* conditional set builders (manual 10.1.2): data-dependent
+       conditions evaluated from the input files, statements rewritten
+       into explicit lists + subset relations BEFORE set resolution */
+    if(tab_setbuilder_transform(newtabfile,iodata,niodata)<0)MPI_Abort(PETSC_COMM_WORLD,1);
     /* C1: parse Complementarity statements, validate (10.17/11.14)
        and replace them with their derived levels statements (51.7.2)
        BEFORE the levels transform expands those; untouched when the
