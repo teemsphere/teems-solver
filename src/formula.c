@@ -2695,7 +2695,7 @@ int sum_eval(char *formulain, char *commsyntax,set_def *sets,dim_t nset, set_ele
   length=strlen(formulain);
   readitem=formulain;
   while (i<length) {
-    k=str_find_ci(readitem,commsyntax);
+    k=str_find_token_ci(formulain,readitem,commsyntax);
     if (k==-1) {
       return 0;
     }
@@ -2703,7 +2703,7 @@ int sum_eval(char *formulain, char *commsyntax,set_def *sets,dim_t nset, set_ele
       readitem=formulain+i+k;
       strcpy(line,readitem);
       sum_extract(line);
-      k1=str_find_ci(line+4,commsyntax);
+      k1=str_find_token_ci(line,line+4,commsyntax);
       if (k1!=-1) {
         i=i+k+4;
         readitem=formulain+i;
@@ -2808,7 +2808,7 @@ int sum_eval(char *formulain, char *commsyntax,set_def *sets,dim_t nset, set_ele
       readitem=formulain+i+k;
       strcpy(line,readitem);
       sum_extract(line);
-      k1=str_find_ci(line+4,commsyntax);
+      k1=str_find_token_ci(line,line+4,commsyntax);
       if (k1!=-1) {
         i=i+k+4;
         readitem=formulain+i;

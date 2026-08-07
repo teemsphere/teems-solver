@@ -282,6 +282,10 @@ int cmf_read(char *filename, int niodata, cmf_file_entry *iodata, char *tabfile,
   return 1;
 }
 
+/* token-boundary finds throughout: "wsum(b," must not scan as a
+   repeated-index sum over b (the *sum-name class the bordered-map
+   kit's condsum leg caught -- the rename here rewrote a variable's
+   argument list) */
 int sum_dedup_indices(char *formulain) {
   char line[TABREADLINE],finditem[TABREADLINE],replitem[TABREADLINE],newreplitem[TABREADLINE],temp[TABREADLINE],replitem1[TABREADLINE],newreplitem1[TABREADLINE];
   char*readitem,*line1;
@@ -293,13 +297,13 @@ int sum_dedup_indices(char *formulain) {
   l=0;
   for(i=0;i<nsum-1;i++){
     strcpy(line,formulain);
-    k=str_find_ci(readitem,syntax);
+    k=str_find_token_ci(line,readitem,syntax);
     readitem=readitem+k;
     k1=str_find_ci(readitem,",");
     for(j=0;j<k1+1;j++)finditem[j]=readitem[j];
     finditem[j]='\0';
     readitem=readitem+k1;
-    k2=str_find_ci(readitem,finditem);
+    k2=str_find_token_ci(line,readitem,finditem);
     while(k2!=-1) {
       line1=readitem+k2;
       sprintf(temp, "%d", l);
@@ -567,7 +571,7 @@ int sum_dedup_indices(char *formulain) {
 
       str_replace_all(formulain,temp,line1);
       strcpy(line,formulain);
-      k2=str_find_ci(readitem,finditem);
+      k2=str_find_token_ci(line,readitem,finditem);
     }
   }
   return 0;

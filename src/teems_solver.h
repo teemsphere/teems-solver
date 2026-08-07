@@ -442,6 +442,8 @@ char *closure_next_statement(char *commsyntax, FILE *filehandle, char *readline)
 char *tab_next_statement(char *commsyntax, FILE *filehandle, char *readline,offset_t rlinesize);
 char *tab_next_statement_resolved(char *commsyntax, FILE *filehandle, char *readline, elem_value *record, array_def *coefs,offset_t ncof,solve_real *zerodivide,offset_t rlinesize);
 int str_find_ci(char *line, char *finditem);
+int str_find_token_ci(const char *base, const char *s, const char *pat);
+int str_count_token_ci(const char *base, const char *s, const char *pat);
 char *str_replace_all(char *line, char *finditem, char *replitem);
 int str_replace_char_all(char *line, int finditem, int replitem);
 char *str_replace_all_bounded(char *line, char *finditem, char *replitem,dim_t nbuffer);
@@ -477,7 +479,6 @@ int sum_cofcond_test(const sum_cofcond *cc, elem_value *elem_vals, quantifier *f
 void sum_cond_domain_check(sum_def *sc, set_def *sets);
 dim_t sum_cond_carry_rhs(sum_def *sc, quantifier *arSet, dim_t fdim, dim_t l3, char *interchar);
 void sum_cond_rhs_resolve(int cond_mapid, const char *cond_rhs, quantifier *frame, dim_t nframe, set_def *sets, set_element *set_elems, int *condpos, offset_t *condfix);
-void mapping_eq_matsol_guard(char *fname);
 int mappings_validate(map_def *maps, dim_t nmap, set_def *sets, set_element *set_elems);
 offset_t postsim_reads_execute(char *psname, int niodata, cmf_file_entry *iodata, set_def *sets, dim_t nset, set_element *set_elems, array_def *coefs, offset_t ncof, offset_t ncofele, array_def *vars, offset_t nvar, offset_t nvarele, elem_value *elem_vals);
 /* Default-statement helpers (manual 10.19; audit A6): positional

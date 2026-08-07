@@ -1284,7 +1284,7 @@ offset_t sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
   length=strlen(formulain);
   readitem=formulain;
   while (i<length) {
-    k=str_find_ci(readitem,commsyntax);
+    k=str_find_token_ci(formulain,readitem,commsyntax);
     if (k==-1) {
       return 0;
     }
@@ -1293,7 +1293,7 @@ offset_t sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
       strcpy(line,readitem);
       strcpy(line1,readitem);
       sum_extract(line);
-      k1=str_find_ci(line+4,commsyntax);
+      k1=str_find_token_ci(line,line+4,commsyntax);
       if (k1!=-1) {
         i=i+k+4;
         readitem=formulain+i;
@@ -1442,7 +1442,7 @@ offset_t sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
       strcpy(line,readitem);
       strcpy(line1,readitem);
       sum_extract(line);
-      k1=str_find_ci(line+4,commsyntax);
+      k1=str_find_token_ci(line,line+4,commsyntax);
       if (k1!=-1) {
         i=i+k+4;
         readitem=formulain+i;
@@ -1600,7 +1600,7 @@ int sum_count(char *formulain, char *commsyntax) {
   length=strlen(formulain);
   readitem=formulain;
   while (i<length) {
-    k=str_find_ci(readitem,commsyntax);
+    k=str_find_token_ci(formulain,readitem,commsyntax);
     if (k==-1) {
       break;
     }
@@ -2474,28 +2474,6 @@ void mapping_reject_in(char *line, const char *what) {
       MPI_Abort(PETSC_COMM_WORLD,1);
     }
   }
-}
-
-/* Interim guard for the bordered matrix methods (design doc M2b): a
-   mapped variable reference can place a column in another diagonal
-   block invisibly to the SBBD/DBBD/NDBBD border classification, so a
-   tabfile whose equations carry lowered mapping tokens runs only under
-   -matsol 0 (LU) until the border marking learns mapped references.
-   Scans the post-lowering tabfile; caller gates on the matrix method. */
-void mapping_eq_matsol_guard(char *fname) {
-  FILE *filehandle;
-  char line[TABREADLINE]="\0";
-  if (teems_nmap==0) return;
-  filehandle = fopen(fname,"r");
-  if (filehandle==NULL) return;
-  while (tab_next_statement("equation",filehandle,line,TABREADLINE)) {
-    if (strchr(line,'@')!=NULL) {
-      printf("Error: mapping-valued indices in Equation statements need -matsol 0 (LU); the bordered methods' block classification does not follow mapped references yet\n");
-      fclose(filehandle);
-      MPI_Abort(PETSC_COMM_WORLD,1);
-    }
-  }
-  fclose(filehandle);
 }
 
 /* Pre-use mapping validation (manual 11.9.2/11.9.3): every mapping
@@ -5701,6 +5679,37 @@ int str_find_ci(char *line, char *finditem) {
   }
   return -1;
 }//ref: http://www.java2s.com/Code/C/String/Findsubstringourownfunction.htm
+
+/* First genuine occurrence of a keyword-like token pat ("sum(") at or
+   after s: an occurrence whose preceding character is not an
+   identifier character.  base is the true start of the buffer s
+   points into, so interior cursors can look one character left across
+   the caller's window.  Without the boundary test a coefficient or
+   variable named *sum (wsum, TOTSUM) scans as the sum keyword and the
+   statement silently mis-evaluates (solution zeros; found by the
+   bordered-map kit's condsum leg).  Returns the offset relative to s,
+   or -1. */
+int str_find_token_ci(const char *base, const char *s, const char *pat) {
+  const char *cur=s;
+  int k;
+  while ((k=str_find_ci((char *)cur,(char *)pat))!=-1) {
+    const char *hit=cur+k;
+    if (hit==base||(!isalnum((int)(unsigned char)hit[-1])&&hit[-1]!='_')) return (int)(hit-s);
+    cur=hit+1;
+  }
+  return -1;
+}
+
+/* Token-aware twin of str_count_ci for the same keyword scans. */
+int str_count_token_ci(const char *base, const char *s, const char *pat) {
+  const char *cur=s;
+  int n=0,k;
+  while ((k=str_find_token_ci(base,cur,pat))!=-1) {
+    n++;
+    cur=cur+k+1;
+  }
+  return n;
+}
 
 char *str_strip_comment(char *line, char *token) {
   char buffer[TABREADLINE];

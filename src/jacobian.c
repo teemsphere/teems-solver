@@ -84,7 +84,7 @@ static int sum_prog_build(char *formulain, char *commsyntax, bool skip_linvar_su
   length=strlen(formulain);
   readitem=formulain;
   while (i<length) {
-    k=str_find_ci(readitem,commsyntax);
+    k=str_find_token_ci(formulain,readitem,commsyntax);
     if (k==-1) {
       return 0;
     }
@@ -92,7 +92,7 @@ static int sum_prog_build(char *formulain, char *commsyntax, bool skip_linvar_su
       readitem=formulain+i+k;
       strcpy(line,readitem);
       sum_extract(line);
-      k1=str_find_ci(line+4,commsyntax);
+      k1=str_find_token_ci(line,line+4,commsyntax);
       if (k1!=-1) {
         i=i+k+4;
         readitem=formulain+i;
@@ -390,7 +390,8 @@ static void stmt_prog_execute(stmt_prog *st, offset_t matrow, offset_t *eq_addr,
    is kept, so it matches no quantifier and the reference classifies
    as crossing blocks (the conservative direction), and dimsetnames
    gets the codomain so border marking resolves it to the declared
-   set's full range. */
+   set's full range; dimmapid is recorded in both modes so the scans
+   can route mapped references to the border explicitly. */
 /* resolve a LinVar name token (the text after the p_ prefix) to a
    declared variable: bare TEEMS convention first, then declared
    p_-/c_-leading names -- the GEMPACK hand-linearized pair idiom (GTAP-AEZ
@@ -435,6 +436,7 @@ static void linvar_dim_read(char *p, char *linecopy, offset_t lvar,
     }
     else {
       *(idx-1)='@';
+      ref->dimmapid[d]=mp;
       strcpy(ref->dimnames[d],p);
       strcpy(ref->dimsetnames[d],sets[teems_maps[mp-1].toset].setname);
       return;
@@ -453,8 +455,8 @@ static void linvar_dim_read(char *p, char *linecopy, offset_t lvar,
     strcpy(lintmp,"sum(");
     strcat(lintmp,p);
     strcat(lintmp,",");
-    lvar1=str_count_ci(linecopy,lintmp);
-    lvar3=str_find_ci(linecopy,lintmp);
+    lvar1=str_count_token_ci(linecopy,linecopy,lintmp);
+    lvar3=str_find_token_ci(linecopy,linecopy,lintmp);
     if (mp>0&&lvar3==-1) {
       /* mapped index with no quantifier or enclosing sum in sight:
          fall back to the declared domain (cannot crash on the miss) */
@@ -462,7 +464,7 @@ static void linvar_dim_read(char *p, char *linecopy, offset_t lvar,
       return;
     }
     if (lvar1>1) for(lvar2=0; lvar2<lvar1; lvar2++) {
-        lvar4=str_find_ci(&linecopy[lvar3+4],lintmp);
+        lvar4=str_find_token_ci(linecopy,&linecopy[lvar3+4],lintmp);
         if (lvar4>-1&&lvar4<lvar) {
           lvar3=lvar3+lvar4+4;
         }
@@ -1255,7 +1257,7 @@ int eq_sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifier 
   length=strlen(formulain);
   readitem=formulain;
   while (i<length) {
-    k=str_find_ci(readitem,commsyntax);
+    k=str_find_token_ci(formulain,readitem,commsyntax);
     if (k==-1) {
       return 0;
     }
@@ -1264,7 +1266,7 @@ int eq_sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifier 
       strcpy(line,readitem);
       strcpy(line1,readitem);
       sum_extract(line);
-      k1=str_find_ci(line+4,commsyntax);
+      k1=str_find_token_ci(line,line+4,commsyntax);
       if (k1!=-1) {
         i=i+k+4;
         readitem=formulain+i;
@@ -1426,7 +1428,7 @@ int eq_sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifier 
       strcpy(line,readitem);
       strcpy(line1,readitem);
       sum_extract(line);
-      k1=str_find_ci(line+4,commsyntax);
+      k1=str_find_token_ci(line,line+4,commsyntax);
       if (k1!=-1) {
         i=i+k+4;
         readitem=formulain+i;
@@ -1598,7 +1600,7 @@ int eq_sum_replace(char *formulain, char *commsyntax,int LinIndx, eq_var_ref *Li
   length=strlen(formulain);
   readitem=formulain;
   while (i<length) {
-    k=str_find_ci(formulain+i,commsyntax);
+    k=str_find_token_ci(formulain,formulain+i,commsyntax);
     if (k==-1) {
       return 0;
     }
@@ -2119,12 +2121,18 @@ int equation_order_read(char *fname, char *commsyntax,set_def *sets,dim_t nset,s
          chain quantifier) a chain-dim index other than that quantifier
          (sum indices, fixed elements, other quantifiers) — border at
          element level; must run before the partition rules below,
-         which read var_inter */
+         which read var_inter.  A dim routed through a mapping
+         (dimmapid, keep mode) or gated by a mapping-equality sum
+         condition (dimcondmap, M3) can place the column in any block
+         of its codomain/domain, so such references border too — the
+         mapped dim resolves to the declared set's full range, which
+         collapses to the whole-variable flag unless another dim
+         narrows the mark */
       {
         const char *eqchain=alltimeset>=0?eq_chain_index(arSet,fdim,sets):NULL;
         for (i4=0; i4<nlinvars; i4++) {
           l=LinVars[i4].LinVarIndx;
-          for(i=0; i<vars[l].size; i++)if(LinVars[i4].dimleadlag[i]!=0)break;
+          for(i=0; i<vars[l].size; i++)if(LinVars[i4].dimleadlag[i]!=0||LinVars[i4].dimmapid[i]>0||LinVars[i4].dimcondmap[i]>0)break;
           if(i==vars[l].size) {
             if(eqchain==NULL||var_inter[l]||orderintra[l]<0)continue;
             if(strcmp(LinVars[i4].dimnames[orderintra[l]],eqchain)==0)continue;
@@ -2457,14 +2465,15 @@ int equation_order_read_nested(char *fname, char *commsyntax,set_def *sets,dim_t
 
       /* 6.5 E3: references that are not block-safe on the chain
          dimension border at element level (see the non-nested reader);
-         must run before the rules below, which read var_inter (a
-         collapse to the whole-variable flag also resets the order dims,
-         as the inline flagging used to) */
+         mapped and mapping-equality-conditioned dims border too, same
+         rationale as there; must run before the rules below, which
+         read var_inter (a collapse to the whole-variable flag also
+         resets the order dims, as the inline flagging used to) */
       {
         const char *eqchain=alltimeset>=0?eq_chain_index(arSet,fdim,sets):NULL;
         for (i4=0; i4<nlinvars; i4++) {
           l=LinVars[i4].LinVarIndx;
-          for(i=0; i<vars[l].size; i++)if(LinVars[i4].dimleadlag[i]!=0)break;
+          for(i=0; i<vars[l].size; i++)if(LinVars[i4].dimleadlag[i]!=0||LinVars[i4].dimmapid[i]>0||LinVars[i4].dimcondmap[i]>0)break;
           if(i==vars[l].size) {
             if(eqchain==NULL||var_inter[l]||orderintra[l]<0)continue;
             if(strcmp(LinVars[i4].dimnames[orderintra[l]],eqchain)==0)continue;

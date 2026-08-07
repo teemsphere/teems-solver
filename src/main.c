@@ -1296,9 +1296,14 @@ int main(int argc,char **args) {
 
   if(rank==rank_hsl) {
     tab_write_variables(tabfile,newtabfile1,vars,nvar);
-    /* interim M2b guard: mapped equation columns are invisible to the
-       bordered methods' block classification, so they run only under LU */
-    if(matsol!=MM_LU)mapping_eq_matsol_guard(newtabfile1);
+    /* interim guard: complementarities have never been exercised under
+       the bordered methods (the two-pass re-entry and the scalar
+       del_comp@ border column are untested there), so they run only
+       under LU until the bordered comp kit clears */
+    if(matsol!=MM_LU&&teems_ncomp>0) {
+      printf("Error: complementarities with a bordered matrix method (-matsol 1/2/3) are not supported yet; use -matsol 0 (LU)\n");
+      MPI_Abort(PETSC_COMM_WORLD,1);
+    }
   }
   strcpy(tabfile,newtabfile1);
   if(nohsl) {
