@@ -116,7 +116,7 @@ leave manual; N/A = workflow flag, no tuning content.
 | adaptive | POLICY | method chosen by auto | adaptive-vs-fixed wall at equal achieved accuracy; retry-rate at 32 ranks (collective accept/reject validated at 2) — then default "yes" for embedded methods |
 | eps_tolerance | AUTO (derived) | accuracy tier | epstol→achieved-error transfer curve at scale (toy kit shows `.acc` over-reads 2–30×; need the production mapping) |
 | max_retries / retry_adjust | EXPERT (defaults confirmed) | — | stiff large-shock sweep to confirm defaults don't bind |
-| laA / laD / laDi | AUTO (retry-escalation + sized initial guess) | system size, method; MA48 "LA too small" failure is machine-readable | required-LA distribution across the ladder × methods; overshoot RSS cost (cheap at 128 GB → generous instance defaults); R-side catch-and-escalate loop on the fail-fast abort |
+| laA / laD / laDi | AUTO (in-solver grow-and-retry; see note below the table) | MA48 reports the needed size itself: INFO(1) = −3 with the suggestion in INFO(3)/INFO(4), and the measured fill ratio is available even on success | port the fastrefac-LU grow loop (solve_drivers.c) to the fatal −3 sites; starved-la kit legs per method (goldens must stay bit-identical — LA is workspace, not pivot policy); required-ratio distribution across the ladder × methods for defaults |
 | inmemory | POLICY (solver auto exists; widen at 128 GB) | solver memory estimate vs host RAM | inmemory 0/1 × method × size wall/RSS; estimator-vs-measured audit; tmpfs scratch A/B |
 | verbosity | N/A | — | — |
 | assertions / range_test_* / postsim | N/A (semantic switches; defaults already conservative) | — | — |
@@ -126,6 +126,41 @@ leave manual; N/A = workflow flag, no tuning content.
 | append_args: nsbbdblocks / withmc66 | EXPERT (possible later auto from ndblock/ranks) | — | SBBD block-count sweep vs ranks, only if SBBD wins cells in §3 |
 | append_args: cntl_3 / cntl_6 / tempdir / nowrites / gpzerodivide | EXPERT / N/A | — | — |
 | suppress_outputs / terminal_run | N/A | — | — |
+
+### la* sizing note (survey 2026-08-12)
+
+All three parameters are the same quantity at different factorization
+sites — workspace as a % of that matrix's nonzeros
+(`lasize = ceil(la/100 * nz)`): laA at the main-system/diagonal-block
+analyses (LU, SBBD, DBBD/NDBBD blocks), laD at the DBBD/NDBBD final
+interface system, laDi at NDBBD's intermediate per-block interfaces.
+The infrastructure for full auto-sizing already half-exists:
+
+- The persistent LU kernel (fastrefac path) already does in-run
+  reallocate-and-retry on INFO(1) = −3, growing to
+  max(2×, MA48's suggested size) and logging the equivalent -laA
+  (solve_drivers.c). MP48 (the SBBD block path) grows LA internally
+  on FLAG = −3 as well (`LA = MAX(ICONTROL(6)*LA, INFO_MA60(3,...))`).
+- Every remaining −3 site (one-shot LU, DBBD/NDBBD block and
+  interface solves — 16 fatal MA48 sites in hsl_kernels.f90) aborts
+  today with "increase -laA"; the −3/suggested-size return protocol
+  (INSIZE(5)/INSIZE(6)) is already defined and just needs wiring to
+  those callers. Growth at collective sites must broadcast the redo
+  decision (sbbd_fastrefac precedent; rank_hsl-as-root gotchas
+  apply), and NDBBD's disk-staged presolve blocks need a check that a
+  regrow between stages doesn't invalidate staged sizes.
+- On SUCCESS the analyse reports the measured fill ratio
+  (INFO(3)/NE, currently printed at verbosity 2 only) — record
+  la*_used per site in stats.json so repeat runs of a deployment
+  warm-start at the measured ratio, and the HPC sweep can set
+  cold-start defaults at the observed P95 instead of today's
+  guessed 300/500/200.
+
+With in-solver grow, la* stop being user decisions entirely:
+undershoot costs a redone analyse (seconds), overshoot costs
+transient RSS. The args stay as expert overrides. This supersedes
+the earlier idea of an R-side catch-and-escalate loop, which would
+pay a full pipeline re-run per retry.
 
 ## 6. Proposed user-facing surface
 
