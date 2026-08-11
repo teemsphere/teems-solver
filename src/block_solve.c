@@ -984,6 +984,9 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
 
     logmsg(2,"nz1 %ld\n",nz1);
     ldsize=ceil((laD/100.0)*nz1);
+    /* a starved -laD (<100) must still stage all NE entries; MA48 then
+       returns -3 and the growth loop below takes over */
+    if(ldsize<nz1)ldsize=nz1;
     vecbivi=realloc(vecbivi,ldsize*sizeof(solve_real));
     int *irn1=(int *) calloc (nz1,sizeof(int));
     int *jcn=(int *) calloc (ldsize,sizeof(int));
@@ -1006,13 +1009,46 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
     insizeD[3]=laD;
     insizeD[5]=ldsize;
     xd=(solve_real *) calloc (vecbiuisize,sizeof(solve_real));//realloc (xd,vecbiuisize*sizeof(ha_cgetype));
+    /* MA48 clobbers the staged triplet in place and its sources are
+       gone (border reduction output + destroyed D block), so keep a
+       pristine copy for the workspace-growth retries */
+    int *sirn=(int *) malloc (lnz*sizeof(int));
+    int *sjcn=(int *) malloc (lnz*sizeof(int));
+    solve_real *sva=(solve_real *) malloc (lnz*sizeof(solve_real));
+    memcpy(sirn,irn1,lnz*sizeof(int));
+    memcpy(sjcn,jcn,lnz*sizeof(int));
+    memcpy(sva,vecbivi,lnz*sizeof(solve_real));
     probe_onfail_scope_set(NULL,nrow,ncol,"DBBD interface (border Schur) system",-1,NULL,NULL,0,0,0,0);
-    spec48_ssol2la_(insizeD,irn1,jcn,vecbivi,vecbiui,xd);
-    probe_onfail_scope_clear();
-    if(insizeD[4]==-3) {
-      printf("MA48 workspace (-laD) too small for the DBBD interface system\n");
-      MPI_Abort(PETSC_COMM_WORLD,1);
+    {
+      int tries;
+      for(tries=0; tries<6; tries++) {
+        spec48_ssol2la_(insizeD,irn1,jcn,vecbivi,vecbiui,xd);
+        if(insizeD[4]!=-3)break;
+        {
+          offset_t newla=insizeD[5];
+          if(newla<2*ldsize)newla=2*ldsize;
+          logmsg(1,"Note: MA48 workspace grown from %ld to %ld reals (equivalent -laD %ld)\n",
+                 (long)ldsize,(long)newla,(long)ceil((100.0*newla)/lnz));
+          ldsize=newla;
+        }
+        vecbivi=realloc(vecbivi,ldsize*sizeof(solve_real));
+        irn1=realloc(irn1,ldsize*sizeof(int));
+        jcn=realloc(jcn,ldsize*sizeof(int));
+        memcpy(irn1,sirn,lnz*sizeof(int));
+        memcpy(jcn,sjcn,lnz*sizeof(int));
+        memcpy(vecbivi,sva,lnz*sizeof(solve_real));
+        insizeD[4]=0;
+        insizeD[5]=ldsize;
+      }
+      if(insizeD[4]==-3) {
+        printf("MA48 workspace growth did not converge after %d attempts\n",tries);
+        MPI_Abort(PETSC_COMM_WORLD,1);
+      }
     }
+    probe_onfail_scope_clear();
+    free(sirn);
+    free(sjcn);
+    free(sva);
     free(vecbivi);
     vecbivi=NULL;
     free(vecbiui);
@@ -3055,6 +3091,9 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
     my_spar_compl_(biviindx1,&nz0,biviindx0,&lnz,&nz1);
     logmsg(2,"nz0 %ld nz %ld nz1 %ld\n",nz0,lnz,nz1);
     ldsize=ceil((laD/100.0)*nz1);
+    /* a starved -laD (<100) must still stage all NE entries; MA48 then
+       returns -3 and the growth loop below takes over */
+    if(ldsize<nz1)ldsize=nz1;
     vecbivi=realloc(vecbivi,ldsize*sizeof(solve_real));
     int *irn1=(int *) calloc (nz1,sizeof(int));
     int *jcn=(int *) calloc (ldsize,sizeof(int));
@@ -3075,9 +3114,46 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
     insizeD[3]=laD;
     insizeD[5]=ldsize;
     xd=(solve_real *) calloc (vecbiuisize,sizeof(solve_real));//realloc (xd,vecbiuisize*sizeof(ha_cgetype));
+    /* MA48 clobbers the staged triplet in place and its sources are
+       gone (border reduction output + destroyed D block), so keep a
+       pristine copy for the workspace-growth retries */
+    int *sirn=(int *) malloc (lnz*sizeof(int));
+    int *sjcn=(int *) malloc (lnz*sizeof(int));
+    solve_real *sva=(solve_real *) malloc (lnz*sizeof(solve_real));
+    memcpy(sirn,irn1,lnz*sizeof(int));
+    memcpy(sjcn,jcn,lnz*sizeof(int));
+    memcpy(sva,vecbivi,lnz*sizeof(solve_real));
     probe_onfail_scope_set(NULL,nrow,ncol,"NDBBD interface (border Schur) system",-1,NULL,NULL,0,0,0,0);
-    spec48m_ssol2la_(insizeD,irn1,jcn,vecbivi,vecbiui,xd);
+    {
+      int tries;
+      for(tries=0; tries<6; tries++) {
+        spec48m_ssol2la_(insizeD,irn1,jcn,vecbivi,vecbiui,xd);
+        if(insizeD[4]!=-3)break;
+        {
+          offset_t newla=insizeD[5];
+          if(newla<2*ldsize)newla=2*ldsize;
+          logmsg(1,"Note: MA48 workspace grown from %ld to %ld reals (equivalent -laD %ld)\n",
+                 (long)ldsize,(long)newla,(long)ceil((100.0*newla)/lnz));
+          ldsize=newla;
+        }
+        vecbivi=realloc(vecbivi,ldsize*sizeof(solve_real));
+        irn1=realloc(irn1,ldsize*sizeof(int));
+        jcn=realloc(jcn,ldsize*sizeof(int));
+        memcpy(irn1,sirn,lnz*sizeof(int));
+        memcpy(jcn,sjcn,lnz*sizeof(int));
+        memcpy(vecbivi,sva,lnz*sizeof(solve_real));
+        insizeD[4]=0;
+        insizeD[5]=ldsize;
+      }
+      if(insizeD[4]==-3) {
+        printf("MA48 workspace growth did not converge after %d attempts\n",tries);
+        MPI_Abort(PETSC_COMM_WORLD,1);
+      }
+    }
     probe_onfail_scope_clear();
+    free(sirn);
+    free(sjcn);
+    free(sva);
     free(vecbivi);
     vecbivi=NULL;
     free(vecbiui);

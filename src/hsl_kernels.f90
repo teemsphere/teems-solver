@@ -1309,6 +1309,12 @@ SUBROUTINE SPEC48_PERSIST_FREE()
 END SUBROUTINE SPEC48_PERSIST_FREE
 
 SUBROUTINE SPEC48M_SSOL2LA(INSIZE,IRN,JCN,VA,B,X)
+  ! One-shot LU solve, explicit-LA variant (NDBBD final interface).
+  ! INSIZE: 1=M 2=N 3=NE 4=LA percent, 6=explicit LA (always used),
+  ! 5 (out): 0 = solved, -3 = workspace too small (INSIZE(6) then
+  ! holds MA48's suggested LA; caller reallocates IRN/JCN/VA, refills
+  ! them -- MA48 clobbers all three in place -- and retries);
+  ! other MA48 failures abort here.
   use constants
   IMPLICIT NONE
 
@@ -1333,6 +1339,7 @@ SUBROUTINE SPEC48M_SSOL2LA(INSIZE,IRN,JCN,VA,B,X)
   if(LA.NE.INSIZE(6)) then
     LA=INSIZE(6)
   end if
+  INSIZE(5)=0
   MAXN=N
   IF (N.LT.M) THEN
     MAXN=M
@@ -1356,6 +1363,14 @@ SUBROUTINE SPEC48M_SSOL2LA(INSIZE,IRN,JCN,VA,B,X)
   else
     CALL MA48A(M,N,NE,JOB,LA,VA,IRN,JCN,KEEP,CNTL,ICNTL,IW,INFO,RINFO)
   endif
+  IF (INFO(1).EQ.-3) THEN
+    ! workspace too small: hand the suggested size back for a
+    ! caller-side reallocate-and-retry
+    INSIZE(5)=-3
+    INSIZE(6)=max(INFO(3),INFO(4))
+    deallocate(CNTL,RINFO,ERROR1,ICNTL,INFO,IW,KEEP)
+    RETURN
+  END IF
   ! the analyse itself fails on structural singularity (INFO(1)=-5);
   ! previously unchecked, which corrupted the follow-on factorize
   IF (INFO(1).LT.0) THEN
@@ -1375,6 +1390,12 @@ SUBROUTINE SPEC48M_SSOL2LA(INSIZE,IRN,JCN,VA,B,X)
                 RINFO)
   endif
   if (teems_verbosity()>=2) WRITE (6,FMT='(A,I3/A)') 'INFO(4) =',INFO(4)/NE
+  IF (INFO(1).EQ.-3) THEN
+    INSIZE(5)=-3
+    INSIZE(6)=INFO(4)
+    deallocate(CNTL,RINFO,W,ERROR1,ICNTL,INFO,IW,KEEP)
+    RETURN
+  END IF
   IF (INFO(1).NE.0) THEN
     WRITE (6,FMT='(A,I3/A)') 'STOP from MA48B/BD with INFO(1) =',&
     INFO(1),'Solution not possible'
