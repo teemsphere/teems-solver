@@ -51,7 +51,18 @@ typedef int dim_t;           /* set sizes, dimension counts */
 typedef long int offset_t;   /* element offsets into value arrays */
 typedef int exo_idx_t;       /* exogenous-variable index; widen if nvarele > 2^31 */
 typedef long int fortran_int;/* INTEGER(8) interop with hsl_kernels.f90 */
-typedef float store_real;    /* coefficient storage precision (halves memory traffic) */
+/* Coefficient storage precision. float halves memory traffic and is the
+   production default; -DTEEMS_STORE_F64 (the teems-solver-f64 binary)
+   stores double for deep-ladder accuracy — f32 update rounding
+   anti-converges with pass count (ROADMAP 6.3(f3)). In-memory only:
+   file formats and MPI messages carry solve_real or structs of it. */
+#ifdef TEEMS_STORE_F64
+typedef double store_real;
+#define TEEMS_STORE_PRECISION "double"
+#else
+typedef float store_real;
+#define TEEMS_STORE_PRECISION "single"
+#endif
 
 /* -matsol matrix method (Ha & Kompas 2016; Kompas & Ha 2019).
    Values match teems-R's matrix_method argument. */

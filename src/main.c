@@ -114,6 +114,7 @@ static void ordering_stats_write(cmf_file_entry *iodata, int niodata, int noutda
     else fprintf(fp,"    \"adaptive\": null,\n    \"eps_tolerance\": null,\n    \"max_retries\": null,\n    \"retry_adjust\": null,\n");
     fprintf(fp,"    \"laA\": %ld,\n    \"laDi\": %ld,\n    \"laD\": %ld,\n",ropt->laA,ropt->laDi,ropt->laD);
     fprintf(fp,"    \"max_threads\": %d,\n",(int)max_threads);
+    fprintf(fp,"    \"store_precision\": \"%s\",\n",TEEMS_STORE_PRECISION);
     fprintf(fp,"    \"fastrefac\": %s,\n",frchk?"true":"false");
     fprintf(fp,"    \"gpzerodivide\": %s,\n",teems_gpzerodivide?"true":"false");
     fprintf(fp,"    \"assertions\": \"%s\",\n",mode_names[teems_assertions_mode>=0&&teems_assertions_mode<=2?teems_assertions_mode:2]);
@@ -686,6 +687,7 @@ int main(int argc,char **args) {
   PetscBool nohsl=false;
   char ch='y';
   if(rank==0) {
+    logmsg(1,"Coefficient storage: %s precision\n",TEEMS_STORE_PRECISION);
     logmsg(2,"Notes:\n  Shock statement values follow GEMPACK ordering (first subscript varies fastest).\n  Declare intertemporal variables with minimum dimension to minimise the net cut,\n  e.g. capital(REG,TIME)=qo(\"capital\",REG,TIME) rather than shocking qo(COM,REG,TIME).\n  laA/laDi control solver workspace sizes; use the smallest that solves.\n  Beware CRLF line endings in model text files.\n");
   }
   MPI_Barrier(PETSC_COMM_WORLD);

@@ -58,7 +58,7 @@ RUN ARCH_FLAGS="$(cat ${BUILD_DIR}/archflags 2>/dev/null || true)" \
     && cp ${BUILD_DIR}/lib/mc79/include/hsl_mc79i.h ${BUILD_DIR}/src \
     # final build — solver objects at the same ISA level as the base libs
     && cd ${BUILD_DIR}/src \
-    && make OPT="-Ofast $ARCH_FLAGS" \
+    && make OPT="-Ofast $ARCH_FLAGS" teems-solver teems-solver-f64 \
     && mv ${BUILD_DIR}/src ${BUILD_DIR}/solver \
     && rm -rf ${BUILD_DIR}/hsl \
     && mkdir -p ${BUILD_DIR}/mpi-runtime/lib ${BUILD_DIR}/mpi-runtime/bin \
@@ -93,7 +93,8 @@ ENV PATH="${BUILD_DIR}/lib/mpi/bin:$PATH"
 ENV OPENBLAS_NUM_THREADS=1
 
 # solver binary and LICENSES
-COPY --from=builder ${BUILD_DIR}/solver/teems-solver ${BUILD_DIR}/solver/teems-solver
+COPY --from=builder ${BUILD_DIR}/solver/teems-solver     ${BUILD_DIR}/solver/teems-solver
+COPY --from=builder ${BUILD_DIR}/solver/teems-solver-f64 ${BUILD_DIR}/solver/teems-solver-f64
 COPY --from=builder ${BUILD_DIR}/LICENSES            ${BUILD_DIR}/LICENSES
 
 # HSL shared libraries (MA48 and MA51 are linked dynamically)
