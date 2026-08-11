@@ -7,6 +7,23 @@ semantics, POSTSIM, others").
 
 ## Progress log
 
+- **2026-08-11 — the "bordered pair" (ROADMAP 6.14) DONE + a
+  token-boundary parser fix**: mapped equations and complementarities
+  now solve under SBBD/DBBD/NDBBD (`7e40701` + `be3d631`; teems-R
+  `046ef88`). The ordering scans border any `dimmapid`/`dimcondmap`
+  reference; `mapping_eq_matsol_guard` and the R-side LU restriction
+  are gone — the mapping major (2.4) no longer carries a matrix-method
+  caveat, and the ch.51 complementarity machinery (approx pass +
+  two-pass accurate re-entry) is value-pinned under all four matrix
+  methods at 2 ranks (three rank-coverage defects fixed:
+  HSL-worker `del_comp@` fatal, a `rank_hsl`-rooted broadcast that
+  deadlocked (N)DBBD at approx step 2, a comp-records leak).
+  Rider parity fix: identifiers ending in `sum` (`wsum`, `TOTSUM` —
+  legal TABLO names) mis-scanned as the `sum(` keyword and silently
+  zeroed the enclosing sum's pickup; every sum scan is now
+  token-boundary-aware (`str_find_token_ci`). Kits:
+  `run_bordered_map_tests.sh`, `run_bordered_comp_tests.sh`.
+
 - **2026-08-06 (same day) — both IF-survey gaps CLOSED**: (1)
   conditional set builders (fc0f7d5): `tab_setbuilder_transform`
   evaluates the data-dependent condition straight from the input
