@@ -1009,6 +1009,10 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
     probe_onfail_scope_set(NULL,nrow,ncol,"DBBD interface (border Schur) system",-1,NULL,NULL,0,0,0,0);
     spec48_ssol2la_(insizeD,irn1,jcn,vecbivi,vecbiui,xd);
     probe_onfail_scope_clear();
+    if(insizeD[4]==-3) {
+      printf("MA48 workspace (-laD) too small for the DBBD interface system\n");
+      MPI_Abort(PETSC_COMM_WORLD,1);
+    }
     free(vecbivi);
     vecbivi=NULL;
     free(vecbiui);

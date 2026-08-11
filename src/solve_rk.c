@@ -105,7 +105,7 @@ static void rk_stage_solve(PetscBool nohsl,PetscInt VecSize,PetscInt BSize,
     fastrefac=0;
     PetscOptionsGetInt(NULL,NULL,"-fastrefac",&fastrefac,NULL);
   }
-  offset_t i,j,lasize;
+  offset_t i,j;
   solve_real *b1=NULL;
   PetscBool presol;
   Mat A,B;
@@ -290,51 +290,14 @@ static void rk_stage_solve(PetscBool nohsl,PetscInt VecSize,PetscInt BSize,
       ierr = VecDestroy(&vecb);CHKERRV(ierr);
     }
     else {
+      /* A stays live through the factorize so a workspace-growth
+         retry can re-stage the COO (MA48 clobbers it in place) */
       if(rank==rank_hsl) {
-        Mat_SeqAIJ *aa=(Mat_SeqAIJ*)A->data;
-        ai= aa->i;
-        aj= aa->j;
-        vals=aa->a;
-        nz01=aa->nz;
-        count=0;
-        for(i=0; i<nz01; i++) if(vals[i]!=0) {
-            count++;
-          }
-      }
-      lasize=ceil((laA/100.0)*count);
-      int *irn=(int *) calloc (lasize,sizeof(int));
-      int *irn1=(int *) calloc (nz01,sizeof(int));
-      int *jcn=(int *) calloc (lasize,sizeof(int));
-      solve_real *values= (solve_real *) calloc (lasize,sizeof(solve_real));
-      if(rank==rank_hsl) {
-        for(i=0; i<VecSize-1; i++)for(j=ai[i]; j<ai[i+1]; j++) {
-            irn1[j]=i+1;
-          }
-        for(j=ai[VecSize-1]; j<nz01; j++) {
-          irn1[j]=VecSize;
-        }
-        j=0;
-        for(i=0; i<nz01; i++) if(vals[i]!=0) {
-            irn[j]=irn1[i];
-            jcn[j]=aj[i]+1;
-            values[j]=vals[i];
-            j++;
-          }
         VecGetArray(vecb,&vals);
+        lu_grow_solve(A,VecSize,laA,vals,x1);
       }
       ierr = MatDestroy(&A);CHKERRV(ierr);
-      free(irn1);
-      int *insize=(int *) calloc (4,sizeof(int));
-      insize[0]=VecSize;
-      insize[1]=VecSize;
-      insize[2]=count;
-      insize[3]=laA;
-      if(rank==rank_hsl)spec48_ssol2la_(insize,irn,jcn,values,vals,x1);
       ierr = VecDestroy(&vecb);CHKERRV(ierr);
-      free(insize);
-      free(irn);
-      free(jcn);
-      free(values);
     }
   }
 }

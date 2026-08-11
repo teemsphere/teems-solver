@@ -22,6 +22,8 @@ static void lu_fastrefac_extract(Mat A,PetscInt VecSize,dim_t laA) {
   free(fr_values);
   fr_nz=aa->nz;
   floorla=ceil((laA/100.0)*fr_nz);
+  /* a starved -laA (<100) must still stage all NE entries */
+  if(floorla<fr_nz)floorla=fr_nz;
   if(fr_lasize<floorla)fr_lasize=floorla;
   fr_irn=(int *) calloc (fr_lasize,sizeof(int));
   fr_jcn=(int *) calloc (fr_lasize,sizeof(int));
@@ -86,6 +88,56 @@ void lu_fastrefac_free(void) {
   fr_lasize=0;
   fr_ready=0;
   spec48_persist_free_();
+}
+
+/* One-shot sequential LU with MA48 workspace growth: stages the
+   nonzero COO from A -- which must stay live across the call, since
+   MA48 clobbers the staged arrays in place -- and on a -3 workspace
+   return grows LA to max(MA48's suggested size, 2x) and re-stages.
+   rank_hsl only. */
+void lu_grow_solve(Mat A,PetscInt VecSize,dim_t laA,solve_real *rhs,solve_real *x) {
+  Mat_SeqAIJ *aa=(Mat_SeqAIJ*)A->data;
+  PetscInt i,j;
+  offset_t count=0,k,lasize;
+  int tries;
+  int insize[6];
+  for(i=0; i<aa->nz; i++) if(aa->a[i]!=0)count++;
+  lasize=ceil((laA/100.0)*count);
+  /* a starved -laA (<100) must still stage all NE entries; MA48 then
+     returns -3 with its suggested size and the growth loop takes over */
+  if(lasize<count)lasize=count;
+  for(tries=0; tries<6; tries++) {
+    int *irn=(int *) calloc (lasize,sizeof(int));
+    int *jcn=(int *) calloc (lasize,sizeof(int));
+    solve_real *values=(solve_real *) calloc (lasize,sizeof(solve_real));
+    k=0;
+    for(i=0; i<VecSize; i++)for(j=aa->i[i]; j<aa->i[i+1]; j++) if(aa->a[j]!=0) {
+          irn[k]=i+1;
+          jcn[k]=aa->j[j]+1;
+          values[k]=aa->a[j];
+          k++;
+        }
+    insize[0]=VecSize;
+    insize[1]=VecSize;
+    insize[2]=count;
+    insize[3]=laA;
+    insize[4]=0;
+    insize[5]=(int)lasize;
+    spec48_ssol2la_(insize,irn,jcn,values,rhs,x);
+    free(irn);
+    free(jcn);
+    free(values);
+    if(insize[4]!=-3)return;
+    {
+      offset_t newla=insize[5];
+      if(newla<2*lasize)newla=2*lasize;
+      logmsg(1,"Note: MA48 workspace grown from %ld to %ld reals (equivalent -laA %ld)\n",
+             (long)lasize,(long)newla,(long)ceil((100.0*newla)/count));
+      lasize=newla;
+    }
+  }
+  printf("MA48 workspace growth did not converge after %d attempts\n",tries);
+  MPI_Abort(PETSC_COMM_WORLD,1);
 }
 
 /* SBBD persistent MP48 instance (-fastrefac): border lists, per-block
@@ -175,7 +227,7 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
   PetscErrorCode ierr;
   PetscInt count=0,nz01=0,*ai=NULL,*aj=NULL; /* stay 0 on ranks != rank_hsl */
   fortran_int k=0,m=1;
-  offset_t i,j,lasize;
+  offset_t i,j;
   solve_real *b1=NULL,*x0=NULL;
   PetscBool presol;/* NDBBD phase flag: presolve pass writes the interface files, solve pass consumes them */
   bool IsIni;
@@ -478,52 +530,21 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
       }
       else {
         x0=realloc (x0,VecSize*sizeof(solve_real));
-        lasize=ceil((laA/100.0)*count);
-        int *irn=(int *) calloc (lasize,sizeof(int));
-        int *irn1=(int *) calloc (nz01,sizeof(int));
-        int *jcn=(int *) calloc (lasize,sizeof(int));
-        solve_real *values= (solve_real *) calloc (lasize,sizeof(solve_real));
-
-        if(rank==rank_hsl) {
-          for(i=0; i<VecSize-1; i++)for(j=ai[i]; j<ai[i+1]; j++) {
-              irn1[j]=i+1;
-            }
-          for(j=ai[VecSize-1]; j<nz01; j++) {
-            irn1[j]=VecSize;
-          }
-          j=0;
-          for(i=0; i<nz01; i++) if(vals[i]!=0) {
-              irn[j]=irn1[i];
-              jcn[j]=aj[i]+1;
-              values[j]=vals[i];
-              j++;
-            }
-          VecGetArray(vecb,&vals);
-        }
-        free(irn1);
+        if(rank==rank_hsl)VecGetArray(vecb,&vals);
         PetscViewerDrawOpen(PETSC_COMM_WORLD,0,"",0,0,500,500,&viewer);
         ierr = MatView(A,viewer);
         PetscViewerDestroy(&viewer);
 
-        int *insize=(int *) calloc (4,sizeof(int));
-        insize[0]=VecSize;
-        insize[1]=VecSize;
-        insize[2]=count;
-        insize[3]=laA;
-        /* A stays live through the factorize so the on-failure
-           diagnosis can read the pattern (the staged COO is MA48
-           workspace and is clobbered) */
+        /* A stays live through the factorize for the on-failure
+           diagnosis and the workspace-growth re-staging (the staged
+           COO is MA48 workspace and is clobbered) */
         if(rank==rank_hsl) {
           probe_onfail_scope_set(A,VecSize,VecSize,"condensed system",-1,NULL,NULL,0,0,0,0);
-          spec48_ssol2la_(insize,irn,jcn,values,vals,x0);
+          lu_grow_solve(A,VecSize,laA,vals,x0);
           probe_onfail_scope_clear();
         }
         ierr = MatDestroy(&A);
         CHKERRQ(ierr);
-        free(insize);
-        free(irn);
-        free(jcn);
-        free(values);
         ierr = VecDestroy(&vecb);
         CHKERRQ(ierr);
       }
@@ -633,7 +654,7 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
   fortran_int k=0,m=1;
   fortran_int tindx1;//,tindx2;
   solve_real temp1,temp2;
-  offset_t i,j,lasize;
+  offset_t i,j;
   dim_t subindx;
   solve_real *b1=NULL;
   solve_real *x1=NULL;
@@ -1104,40 +1125,7 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
               CHKERRQ(ierr);
             }
             else {
-              if(rank==rank_hsl) {
-                Mat_SeqAIJ *aa=(Mat_SeqAIJ*)A->data;
-                ai= aa->i;
-                aj= aa->j;
-                vals=aa->a;
-                nz01=aa->nz;
-                count=0;
-                for(i=0; i<nz01; i++) if(vals[i]!=0) {
-                    count++;
-                  }
-
-              }
-              lasize=ceil((laA/100.0)*count);
-              int *irn=(int *) calloc (lasize,sizeof(int));
-              int *irn1=(int *) calloc (nz01,sizeof(int));
-              int *jcn=(int *) calloc (lasize,sizeof(int));
-              solve_real *values= (solve_real *) calloc (lasize,sizeof(solve_real));
-              if(rank==rank_hsl) {
-                for(i=0; i<VecSize-1; i++)for(j=ai[i]; j<ai[i+1]; j++) {
-                    irn1[j]=i+1;
-                  }
-                for(j=ai[VecSize-1]; j<nz01; j++) {
-                  irn1[j]=VecSize;
-                }
-                j=0;
-                for(i=0; i<nz01; i++) if(vals[i]!=0) {
-                    irn[j]=irn1[i];
-                    jcn[j]=aj[i]+1;
-                    values[j]=vals[i];
-                    j++;
-                  }
-                VecGetArray(vecb,&vals);
-              }
-              free(irn1);
+              if(rank==rank_hsl)VecGetArray(vecb,&vals);
               x1=realloc (x1,VecSize*sizeof(solve_real));
               ierr = PetscGetCPUTime(&time1);
               CHKERRQ(ierr);
@@ -1145,32 +1133,24 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
               CHKERRQ(ierr);
               ierr = PetscGetCPUTime(&time0);
               CHKERRQ(ierr);
-              int *insize=(int *) calloc (4,sizeof(int));
-              insize[0]=VecSize;
-              insize[1]=VecSize;
-              insize[2]=count;
-              insize[3]=laA;
               /* A stays live through the factorize for the on-failure
-                 diagnosis (staged COO is MA48 workspace) */
+                 diagnosis and the workspace-growth re-staging (staged
+                 COO is MA48 workspace) */
               if(rank==rank_hsl) {
                 probe_onfail_scope_set(A,VecSize,VecSize,"condensed system",-1,NULL,NULL,0,0,0,0);
-                spec48_ssol2la_(insize,irn,jcn,values,vals,x1);
+                lu_grow_solve(A,VecSize,laA,vals,x1);
                 probe_onfail_scope_clear();
               }
               ierr = MatDestroy(&A);
               CHKERRQ(ierr);
               ierr = VecDestroy(&vecb);
               CHKERRQ(ierr);
-              free(insize);
               ierr = PetscGetCPUTime(&time1);
               CHKERRQ(ierr);
               if(verbosity>=1){ierr = PetscPrintf(PETSC_COMM_WORLD,"LU time %f\n",time1-time0);}
               CHKERRQ(ierr);
               ierr = PetscGetCPUTime(&time0);
               CHKERRQ(ierr);
-              free(irn);
-              free(jcn);
-              free(values);
             }
           }
           if(rank==rank_hsl) {
@@ -1753,39 +1733,7 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
             CHKERRQ(ierr);
           }
           else {
-            if(rank==rank_hsl) {
-              Mat_SeqAIJ *aa=(Mat_SeqAIJ*)A->data;
-              ai= aa->i;
-              aj= aa->j;
-              vals=aa->a;
-              nz01=aa->nz;
-              count=0;
-              for(i=0; i<nz01; i++) if(vals[i]!=0) {
-                  count++;
-                }
-            }
-            lasize=ceil((laA/100.0)*count);
-            int *irn=(int *) calloc (lasize,sizeof(int));
-            int *irn1=(int *) calloc (nz01,sizeof(int));
-            int *jcn=(int *) calloc (lasize,sizeof(int));
-            solve_real *values= (solve_real *) calloc (lasize,sizeof(solve_real));
-            if(rank==rank_hsl) {
-              for(i=0; i<VecSize-1; i++)for(j=ai[i]; j<ai[i+1]; j++) {
-                  irn1[j]=i+1;
-                }
-              for(j=ai[VecSize-1]; j<nz01; j++) {
-                irn1[j]=VecSize;
-              }
-              j=0;
-              for(i=0; i<nz01; i++) if(vals[i]!=0) {
-                  irn[j]=irn1[i];
-                  jcn[j]=aj[i]+1;
-                  values[j]=vals[i];
-                  j++;
-                }
-              VecGetArray(vecb,&vals);
-            }
-            free(irn1);
+            if(rank==rank_hsl)VecGetArray(vecb,&vals);
             x1=realloc (x1,VecSize*sizeof(solve_real));
             ierr = PetscGetCPUTime(&time1);
             CHKERRQ(ierr);
@@ -1793,21 +1741,16 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
             CHKERRQ(ierr);
             ierr = PetscGetCPUTime(&time0);
             CHKERRQ(ierr);
-            int *insize=(int *) calloc (4,sizeof(int));
-            insize[0]=VecSize;
-            insize[1]=VecSize;
-            insize[2]=count;
-            insize[3]=laA;
             /* A stays live through the factorize for the on-failure
-               diagnosis (staged COO is MA48 workspace) */
+               diagnosis and the workspace-growth re-staging (staged
+               COO is MA48 workspace) */
             if(rank==rank_hsl) {
               probe_onfail_scope_set(A,VecSize,VecSize,"condensed system",-1,NULL,NULL,0,0,0,0);
-              spec48_ssol2la_(insize,irn,jcn,values,vals,x1);
+              lu_grow_solve(A,VecSize,laA,vals,x1);
               probe_onfail_scope_clear();
             }
             ierr = MatDestroy(&A);
             CHKERRQ(ierr);
-            free(insize);
             ierr = PetscGetCPUTime(&time1);
             CHKERRQ(ierr);
             if(verbosity>=1){ierr = PetscPrintf(PETSC_COMM_WORLD,"LU time %f\n",time1-time0);}
@@ -1816,9 +1759,6 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
             CHKERRQ(ierr);
             ierr = VecDestroy(&vecb);
             CHKERRQ(ierr);
-            free(irn);
-            free(jcn);
-            free(values);
           }
         }
         if(rank==rank_hsl) {
