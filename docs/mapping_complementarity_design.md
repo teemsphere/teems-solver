@@ -177,9 +177,14 @@ search, jacobian.c:466-492) needs a mapping-aware source (codomain
 set from the declaration); dcountdim3 (jacobian.c:772-779) needs a
 domain-position+map-id mode; DBBD/NDBBD border classification must
 mark mapped references border (`ele_inter`) since they can cross
-blocks invisibly; backsolve row↔element bijection check breaks under
-mapped indices (reject backsolving variables referenced through
-mappings).
+blocks invisibly [DONE 2026-08-11, the "bordered pair" slice: the
+ordering scans route any dimmapid/dimcondmap reference through
+border_mark_ref (keep mode records dimmapid); mapping_eq_matsol_guard
+removed; complementarities cleared under the bordered methods in the
+same slice — value-pinned kits run_bordered_map_tests.sh /
+run_bordered_comp_tests.sh]; backsolve row↔element bijection check
+breaks under mapped indices (reject backsolving variables referenced
+through mappings).
 
 **Reads.** `datafile_read_labels` (cmf_io.c:86-127) is a complete
 string reader (the GTAPSETS element reader) — by_elements mapping
