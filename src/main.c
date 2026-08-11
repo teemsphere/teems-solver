@@ -1178,7 +1178,13 @@ int main(int argc,char **args) {
        machinery and the closure/driver dispatch read them) */
     MPI_Bcast(&teems_ncomp,sizeof(dim_t), MPI_BYTE,0, PETSC_COMM_WORLD);
     if(teems_ncomp>0) {
-      if(rank!=0) teems_comps= (comp_def *) calloc (teems_ncomp,sizeof(comp_def));
+      if(rank!=0) {
+        /* under nohsl every rank ran the transform and already holds
+           its own records; rank 0's are canonical -- drop ours before
+           the replacement or the transform's array leaks */
+        free(teems_comps);
+        teems_comps= (comp_def *) calloc (teems_ncomp,sizeof(comp_def));
+      }
       MPI_Bcast(teems_comps,teems_ncomp*sizeof(comp_def), MPI_BYTE,0, PETSC_COMM_WORLD);
     }
   }
@@ -1296,14 +1302,6 @@ int main(int argc,char **args) {
 
   if(rank==rank_hsl) {
     tab_write_variables(tabfile,newtabfile1,vars,nvar);
-    /* interim guard: complementarities have never been exercised under
-       the bordered methods (the two-pass re-entry and the scalar
-       del_comp@ border column are untested there), so they run only
-       under LU until the bordered comp kit clears */
-    if(matsol!=MM_LU&&teems_ncomp>0) {
-      printf("Error: complementarities with a bordered matrix method (-matsol 1/2/3) are not supported yet; use -matsol 0 (LU)\n");
-      MPI_Abort(PETSC_COMM_WORLD,1);
-    }
   }
   strcpy(tabfile,newtabfile1);
   if(nohsl) {

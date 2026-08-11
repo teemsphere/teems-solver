@@ -150,7 +150,6 @@ static void rk_stage_solve(PetscBool nohsl,PetscInt VecSize,PetscInt BSize,
   if(rank==rank_hsl) {
     jacobian_fill(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,closure_vals,ndblock,alltimeset,allregset,eq_addr,counteq,nintraeq,A,B);
   }
-
   MPI_Barrier(PETSC_COMM_WORLD);
   ierr = MatAssemblyBegin(A,MAT_FINAL_ASSEMBLY);CHKERRV(ierr);
   ierr = MatAssemblyEnd(A,MAT_FINAL_ASSEMBLY);CHKERRV(ierr);
@@ -794,14 +793,18 @@ bool solve_comp_approx(PetscBool nohsl,PetscInt VecSize,PetscInt dnz,PetscInt* d
     bsvals= (solve_real *) calloc (nbselems,sizeof(solve_real));
   }
 
-  /* the Newton-correction variable's single element (51.7.2 (iii)) */
+  /* the Newton-correction variable's single element (51.7.2 (iii)).
+     Only the model-owning rank validates: under HSL the worker ranks
+     carry an empty model (nvar 0) and every deloff consumer below
+     sits in an nvar-bounded loop, so deloff=-1 is inert there --
+     the unconditional abort here deadlocked/killed SBBD comp runs */
   offset_t deloff=-1;
   for(i=0; i<nvar; i++)if(strcmp(vars[i].cofname,"del_comp@")==0) {
       deloff=vars[i].offset;
       break;
     }
-  if(deloff<0) {
-    if(rank==0)printf("Error: complementarity approximate run without a del_comp@ variable (internal)\n");
+  if(deloff<0&&rank==rank_hsl) {
+    printf("Error: complementarity approximate run without a del_comp@ variable (internal)\n");
     MPI_Abort(PETSC_COMM_WORLD,1);
   }
 
@@ -906,7 +909,14 @@ bool solve_comp_approx(PetscBool nohsl,PetscInt VecSize,PetscInt dnz,PetscInt* d
       if(rank==rank_hsl)comp_states_check(sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,&nflip,&frac);
       stepdata[0]=(double)nflip;
       stepdata[1]=frac;
-      MPI_Bcast(stepdata,2,MPI_DOUBLE,(int)rank_hsl,PETSC_COMM_WORLD);
+      /* root 0, NOT rank_hsl: under nohsl rank_hsl==rank on every
+         rank, so a rank_hsl root made every rank the broadcaster --
+         the orphaned eager sends then mis-matched the raw
+         PETSC_COMM_WORLD collectives inside the next step's
+         (N)DBBD ordering (deadlock at approx step 2).  Rank 0 holds
+         valid data in both modes: it is rank_hsl under HSL, and under
+         nohsl every rank computes the state check itself. */
+      MPI_Bcast(stepdata,2,MPI_DOUBLE,0,PETSC_COMM_WORLD);
       nflip=(offset_t)stepdata[0];
       frac=stepdata[1];
       if(nflip>0&&redo_steps&&!redoing) {
