@@ -141,20 +141,22 @@ The infrastructure for full auto-sizing already half-exists:
   max(2×, MA48's suggested size) and logging the equivalent -laA
   (solve_drivers.c). MP48 (the SBBD block path) grows LA internally
   on FLAG = −3 as well (`LA = MAX(ICONTROL(6)*LA, INFO_MA60(3,...))`).
-- Every remaining −3 site (one-shot LU, DBBD/NDBBD block and
-  interface solves — 16 fatal MA48 sites in hsl_kernels.f90) aborts
-  today with "increase -laA"; the −3/suggested-size return protocol
-  (INSIZE(5)/INSIZE(6)) is already defined and just needs wiring to
-  those callers. Growth at collective sites must broadcast the redo
-  decision (sbbd_fastrefac precedent; rank_hsl-as-root gotchas
-  apply), and NDBBD's disk-staged presolve blocks need a check that a
-  regrow between stages doesn't invalidate staged sizes.
-- On SUCCESS the analyse reports the measured fill ratio
-  (INFO(3)/NE, currently printed at verbosity 2 only) — record
-  la*_used per site in stats.json so repeat runs of a deployment
-  warm-start at the measured ratio, and the HPC sweep can set
-  cold-start defaults at the observed P95 instead of today's
-  guessed 300/500/200.
+- IMPLEMENTED 2026-08-12: every −3 site now grows and retries
+  (one-shot LU via the shared lu_grow_solve; laD interfaces with
+  pristine staged-triplet copies; DBBD/NDBBD blocks, both plain and
+  -fastrefac with per-block persisted LA; the MA48-based rank probes;
+  the NDBBD laDi legs with the disk-staged handoff reading recorded
+  LA instead of recomputing the percent). Starved -la* (<100) staging
+  floors close the pre-existing overflow class. Kit:
+  .audit/la-test-kit/run_la_tests.sh (bit-identity + self-heal +
+  la_used, 11 legs).
+- IMPLEMENTED 2026-08-12: the run's effective sizes are recorded as
+  a top-level "la_used" object in stats.json (max grown equivalent
+  percent per knob, MPI-reduced post-solve; equal to the configured
+  percent when nothing grew), so repeat runs of a deployment can
+  warm-start there and the HPC sweep can set cold-start defaults at
+  the observed P95 instead of today's guessed 300/500/200.
+  teems-R surfacing of la_used is the remaining follow-on.
 
 With in-solver grow, la* stop being user decisions entirely:
 undershoot costs a redone analyse (seconds), overshoot costs
