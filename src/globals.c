@@ -73,6 +73,13 @@ int teems_range_test_updated = 1;
 zdiv_state teems_zdiv_scan = { 0, 0, 1, 0 };
 int teems_gpzerodivide = 0;
 
+/* la* auto-sizing record: max grown -la* equivalent percent observed
+   this run (0 = the configured size never grew); reduced across ranks
+   and patched into stats.json after the solve */
+long teems_laA_used = 0;
+long teems_laDi_used = 0;
+long teems_laD_used = 0;
+
 void zdiv_scan_reset(void) {
   teems_zdiv_scan.zbz_val=0;
   teems_zdiv_scan.nbz_val=0;

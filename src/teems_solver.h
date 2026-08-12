@@ -292,6 +292,7 @@ typedef struct {
 } zdiv_state ;
 extern zdiv_state teems_zdiv_scan;
 extern int teems_gpzerodivide;
+extern long teems_laA_used,teems_laDi_used,teems_laD_used; /* max grown -la* equivalent percent (la auto-sizing) */
 void zdiv_scan_reset(void);
 void zdiv_capture(void);
 void zdiv_disable(void);

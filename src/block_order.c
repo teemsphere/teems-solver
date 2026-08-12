@@ -115,6 +115,11 @@ int dbbd_order(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscIn
       if(newla<2*lasize)newla=2*lasize;
       logmsg(1,"Note: MA48 workspace grown from %ld to %ld reals (equivalent -laA %ld)\n",
              (long)lasize,(long)newla,(long)ceil((100.0*newla)/nz1));
+           {
+             long eqpct=(long)ceil((100.0*newla)/nz1);
+             #pragma omp critical(laused)
+             if(eqpct>teems_laA_used)teems_laA_used=eqpct;
+           }
       lasize=newla;
     }
     irn=realloc(irn,lasize*sizeof(int));
@@ -332,6 +337,11 @@ int ndbbd_order_presolve(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt ran
         if(newla<2*lasize)newla=2*lasize;
         logmsg(1,"Note: MA48 workspace grown from %ld to %ld reals (equivalent -laA %ld)\n",
                (long)lasize,(long)newla,(long)ceil((100.0*newla)/nz1));
+             {
+               long eqpct=(long)ceil((100.0*newla)/nz1);
+               #pragma omp critical(laused)
+               if(eqpct>teems_laA_used)teems_laA_used=eqpct;
+             }
         lasize=newla;
       }
       if(lasize>alloc_la) {

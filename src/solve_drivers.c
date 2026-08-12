@@ -68,6 +68,11 @@ void lu_fastrefac_solve(Mat A,PetscInt VecSize,dim_t laA,solve_real *rhs,solve_r
       if(newla<2*fr_lasize)newla=2*fr_lasize;
       logmsg(1,"Note: MA48 workspace grown from %ld to %ld reals (equivalent -laA %ld)\n",
              (long)fr_lasize,(long)newla,(long)ceil((100.0*newla)/fr_nz));
+           {
+             long eqpct=(long)ceil((100.0*newla)/fr_nz);
+             #pragma omp critical(laused)
+             if(eqpct>teems_laA_used)teems_laA_used=eqpct;
+           }
       fr_lasize=newla;
     }
     /* -3 or fast-factorize declined: fresh analyse on current values */
@@ -133,6 +138,11 @@ void lu_grow_solve(Mat A,PetscInt VecSize,dim_t laA,solve_real *rhs,solve_real *
       if(newla<2*lasize)newla=2*lasize;
       logmsg(1,"Note: MA48 workspace grown from %ld to %ld reals (equivalent -laA %ld)\n",
              (long)lasize,(long)newla,(long)ceil((100.0*newla)/count));
+           {
+             long eqpct=(long)ceil((100.0*newla)/count);
+             #pragma omp critical(laused)
+             if(eqpct>teems_laA_used)teems_laA_used=eqpct;
+           }
       lasize=newla;
     }
   }

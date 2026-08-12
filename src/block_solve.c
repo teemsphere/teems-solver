@@ -717,6 +717,11 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
             if(newla<2*dfr_la[j1])newla=2*dfr_la[j1];
             logmsg(1,"Note: MA48 workspace grown from %ld to %ld reals (equivalent -laA %ld)\n",
                    (long)dfr_la[j1],(long)newla,(long)ceil((100.0*newla)/dfr_nz[j1]));
+                 {
+                   long eqpct=(long)ceil((100.0*newla)/dfr_nz[j1]);
+                   #pragma omp critical(laused)
+                   if(eqpct>teems_laA_used)teems_laA_used=eqpct;
+                 }
             dfr_la[j1]=newla;
             dfr_irn[j1]=realloc(dfr_irn[j1],newla*sizeof(int));
             dfr_jcn[j1]=realloc(dfr_jcn[j1],newla*sizeof(int));
@@ -750,6 +755,11 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
           if(newla<2*lasize)newla=2*lasize;
           logmsg(1,"Note: MA48 workspace grown from %ld to %ld reals (equivalent -laA %ld)\n",
                  (long)lasize,(long)newla,(long)ceil((100.0*newla)/insize[j1*insizes+2]));
+               {
+                 long eqpct=(long)ceil((100.0*newla)/insize[j1*insizes+2]);
+                 #pragma omp critical(laused)
+                 if(eqpct>teems_laA_used)teems_laA_used=eqpct;
+               }
           lasize=newla;
         }
         irn=realloc(irn,lasize*sizeof(int));
@@ -1091,6 +1101,11 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
           if(newla<2*ldsize)newla=2*ldsize;
           logmsg(1,"Note: MA48 workspace grown from %ld to %ld reals (equivalent -laD %ld)\n",
                  (long)ldsize,(long)newla,(long)ceil((100.0*newla)/lnz));
+               {
+                 long eqpct=(long)ceil((100.0*newla)/lnz);
+                 #pragma omp critical(laused)
+                 if(eqpct>teems_laD_used)teems_laD_used=eqpct;
+               }
           ldsize=newla;
         }
         vecbivi=realloc(vecbivi,ldsize*sizeof(solve_real));
@@ -1752,6 +1767,11 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
             if(newla<2*ndbbd_fac_la[j4])newla=2*ndbbd_fac_la[j4];
             logmsg(1,"Note: MA48 workspace grown from %ld to %ld reals (equivalent -laA %ld)\n",
                    (long)ndbbd_fac_la[j4],(long)newla,(long)ceil((100.0*newla)/ndbbd_fac_nz[j4]));
+                 {
+                   long eqpct=(long)ceil((100.0*newla)/ndbbd_fac_nz[j4]);
+                   #pragma omp critical(laused)
+                   if(eqpct>teems_laA_used)teems_laA_used=eqpct;
+                 }
             ndbbd_fac_la[j4]=newla;
             ndbbd_fac_irn[j4]=realloc(ndbbd_fac_irn[j4],newla*sizeof(int));
             ndbbd_fac_jcn[j4]=realloc(ndbbd_fac_jcn[j4],newla*sizeof(int));
@@ -1784,6 +1804,11 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
           if(newla<2*lasize)newla=2*lasize;
           logmsg(1,"Note: MA48 workspace grown from %ld to %ld reals (equivalent -laA %ld)\n",
                  (long)lasize,(long)newla,(long)ceil((100.0*newla)/insize[j4*insizes+2]));
+               {
+                 long eqpct=(long)ceil((100.0*newla)/insize[j4*insizes+2]);
+                 #pragma omp critical(laused)
+                 if(eqpct>teems_laA_used)teems_laA_used=eqpct;
+               }
           lasize=newla;
         }
         if(lasize>alloc_la) {
@@ -2090,6 +2115,11 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
           if(newla<2*ldsize)newla=2*ldsize;
           logmsg(1,"Note: MA48 workspace grown from %ld to %ld reals (equivalent -laDi %ld)\n",
                  (long)ldsize,(long)newla,(long)ceil((100.0*newla)/nz));
+               {
+                 long eqpct=(long)ceil((100.0*newla)/nz);
+                 #pragma omp critical(laused)
+                 if(eqpct>teems_laDi_used)teems_laDi_used=eqpct;
+               }
           ldsize=newla;
           insized[5]=ldsize;
         }
@@ -2836,6 +2866,11 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
           if(newla<2*ldsize)newla=2*ldsize;
           logmsg(1,"Note: MA48 workspace grown from %ld to %ld reals (equivalent -laDi %ld)\n",
                  (long)ldsize,(long)newla,(long)ceil((100.0*newla)/nz1));
+               {
+                 long eqpct=(long)ceil((100.0*newla)/nz1);
+                 #pragma omp critical(laused)
+                 if(eqpct>teems_laDi_used)teems_laDi_used=eqpct;
+               }
           ldsize=newla;
         }
         if(ldsize>insizeda2) {
@@ -3364,6 +3399,11 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
           if(newla<2*ldsize)newla=2*ldsize;
           logmsg(1,"Note: MA48 workspace grown from %ld to %ld reals (equivalent -laD %ld)\n",
                  (long)ldsize,(long)newla,(long)ceil((100.0*newla)/lnz));
+               {
+                 long eqpct=(long)ceil((100.0*newla)/lnz);
+                 #pragma omp critical(laused)
+                 if(eqpct>teems_laD_used)teems_laD_used=eqpct;
+               }
           ldsize=newla;
         }
         vecbivi=realloc(vecbivi,ldsize*sizeof(solve_real));

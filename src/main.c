@@ -140,6 +140,50 @@ static void ordering_stats_write(cmf_file_entry *iodata, int niodata, int noutda
   fclose(fp);
 }
 
+/* Post-solve companion to ordering_stats_write: MA48 workspace growth
+   during the solve can raise the effective -la* sizes above the
+   recorded options, so patch a top-level "la_used" object (equivalent
+   percents; the configured value when nothing grew) into the existing
+   stats.json.  Feeds warm-start -la* defaults. */
+static void stats_la_used_patch(cmf_file_entry *iodata, int niodata, int noutdata, int nsoldata,
+                                long laA_used, long laDi_used, long laD_used) {
+  char statspath[TABREADLINE+16];
+  int i;
+  for (i=niodata+noutdata; i<niodata+noutdata+nsoldata; i++) {
+    if (strcmp("solfiles",iodata[i].logname)==0)break;
+  }
+  if(i<niodata+noutdata+nsoldata)strcpy(statspath,iodata[i].filname);
+  else strcpy(statspath,"solution");
+  strcat(statspath,".stats.json");
+  FILE *fp=fopen(statspath,"r");
+  if (fp==NULL)return;
+  fseek(fp,0,SEEK_END);
+  long len=ftell(fp);
+  fseek(fp,0,SEEK_SET);
+  char *buf=(char *) malloc (len+1);
+  size_t rd=fread(buf,1,len,fp);
+  fclose(fp);
+  if((long)rd!=len) {
+    free(buf);
+    return;
+  }
+  buf[len]='\0';
+  char *end=strrchr(buf,'}');
+  if(end==NULL) {
+    free(buf);
+    return;
+  }
+  *end='\0';
+  fp=fopen(statspath,"w");
+  if (fp==NULL) {
+    free(buf);
+    return;
+  }
+  fprintf(fp,"%s,\n  \"la_used\": {\"laA\": %ld, \"laDi\": %ld, \"laD\": %ld}\n}\n",buf,laA_used,laDi_used,laD_used);
+  fclose(fp);
+  free(buf);
+}
+
 /* ====================================================================
    Structural partition detection
 
@@ -2373,6 +2417,16 @@ comp_accurate_reentry:
     fclose(solution);
   }
   MPI_Barrier(PETSC_COMM_WORLD);
+  /* la* auto-sizing record: reduce the per-rank grown maxima and patch
+     the effective percents into stats.json */
+  {
+    long laused[3]={teems_laA_used,teems_laDi_used,teems_laD_used},lamax[3];
+    MPI_Allreduce(laused,lamax,3,MPI_LONG,MPI_MAX,PETSC_COMM_WORLD);
+    if(rank==0)stats_la_used_patch(iodata,niodata,noutdata,nsoldata,
+                                   lamax[0]>(long)laA?lamax[0]:(long)laA,
+                                   lamax[1]>(long)laDi?lamax[1]:(long)laDi,
+                                   lamax[2]>(long)laD?lamax[2]:(long)laD);
+  }
   /* PostSim foundation F3 (early Tier 0): after the solve, coefficient
      slots hold post-simulation (updated) values and xcf holds the
      composed solution; expose the solution to the formula engine and
