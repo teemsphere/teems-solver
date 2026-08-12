@@ -73,6 +73,9 @@ int dbbd_order(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscIn
     if(nz1<nrow)nz1=nrow;
     if(nz1<ncol)nz1=ncol;
     lasize=ceil((laA/100.0)*nz1);
+    /* a starved -laA (<100) must still stage all NE entries; MA48
+       then returns -3 and the growth loop below takes over */
+    if(lasize<nz1)lasize=nz1;
     int *irn=(int *) calloc (lasize,sizeof(int));
     int *jcn=(int *) calloc (lasize,sizeof(int));
     int *irn1=(int *)malloc(nrow*sizeof(int));
@@ -83,12 +86,15 @@ int dbbd_order(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscIn
   if(nrow>ncol) w51=(solve_real *) malloc ((5*nrow)*sizeof(solve_real));
   else w51=(solve_real *) malloc ((5*ncol)*sizeof(solve_real));
   int *iw51=(int *) malloc ((6*nrow+3*ncol)*sizeof(int));
-    int *insize=(int *) calloc (6,sizeof(int));
+    int *insize=(int *) calloc (8,sizeof(int));
+    int tries;
+    for(tries=0; tries<6; tries++) {
     insize[0]=nrow;
     insize[1]=ncol;
     insize[2]=nz;
     insize[4]=laA;
     insize[5]=lasize;
+    insize[6]=0;
     for(i=0; i<nrow-1; i++)for(j=ai[i]; j<ai[i+1]; j++) {
         irn[j]=i+1;
         jcn[j]=aj[j]+1;
@@ -101,6 +107,24 @@ int dbbd_order(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscIn
     }
     j=0;
     spec51m_rank_(insize,&cntl6,irn,jcn,values,irn1,jcn1,keep,w51,iw51);
+    if(insize[6]!=-3)break;
+    {
+      /* MA48 workspace too small for the rank probe: grow and
+         re-stage (MA48 clobbers the staged triplet in place) */
+      offset_t newla=insize[7];
+      if(newla<2*lasize)newla=2*lasize;
+      logmsg(1,"Note: MA48 workspace grown from %ld to %ld reals (equivalent -laA %ld)\n",
+             (long)lasize,(long)newla,(long)ceil((100.0*newla)/nz1));
+      lasize=newla;
+    }
+    irn=realloc(irn,lasize*sizeof(int));
+    jcn=realloc(jcn,lasize*sizeof(int));
+    values=realloc(values,lasize*sizeof(solve_real));
+    }
+    if(insize[6]==-3) {
+      printf("MA48 workspace growth did not converge after %d attempts\n",tries);
+      MPI_Abort(PETSC_COMM_WORLD,1);
+    }
     for(i=0; i<nrow; i++) {
       row_order1[i+counteq[j1+begblock[rank]]]=irn1[i]-1;
     }
@@ -238,11 +262,14 @@ int ndbbd_order_presolve(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt ran
       if(nz1<nrow)nz1=nrow;
       if(nz1<ncol)nz1=ncol;
       lasize=ceil((laA/100.0)*nz1);
+      /* starved -laA: staging still needs all NE entries per block */
+      if(lasize<nz1)lasize=nz1;
       if(lasizemax<lasize)lasizemax=lasize;
       j8++;
     }
   }
   lasizemax+=10;
+    long int alloc_la=lasizemax; /* current array length; grows on MA48 -3 */
     int *irn=(int *) calloc (lasizemax,sizeof(int));
     int *jcn=(int *) calloc (lasizemax,sizeof(int));
     int*irn1=NULL,*jcn1=NULL;
@@ -254,7 +281,7 @@ int ndbbd_order_presolve(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt ran
   if(nrowmax>ncolmax) w51=(solve_real *) malloc ((5*nrowmax)*sizeof(solve_real));
   else w51=(solve_real *) malloc ((5*ncolmax)*sizeof(solve_real));
   int *iw51=(int *) malloc ((6*nrowmax+3*ncolmax)*sizeof(int));
-    int *insize=(int *) calloc (6,sizeof(int));
+    int *insize=(int *) calloc (8,sizeof(int));
   #pragma omp for schedule (static)
   for(j1=0; j1<nmatint; j1++) {
     j4=0;
@@ -275,11 +302,15 @@ int ndbbd_order_presolve(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt ran
       if(nz1<nrow)nz1=nrow;
       if(nz1<ncol)nz1=ncol;
       lasize=ceil((laA/100.0)*nz1);
+      if(lasize<nz1)lasize=nz1;
+      int tries;
+      for(tries=0; tries<6; tries++) {
       insize[0]=nrow;
       insize[1]=ncol;
       insize[2]=nz;
       insize[4]=laA;
       insize[5]=lasize;
+      insize[6]=0;
       for(i=0; i<nrow-1; i++) {
         for(j=ai[i]; j<ai[i+1]; j++) {
           irn[j]=i+1;
@@ -293,6 +324,27 @@ int ndbbd_order_presolve(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt ran
         values[j]=vals[j];
       }
       spec51m_rank_(insize,&cntl6in,irn,jcn,values,irn1,jcn1,keep,w51,iw51);
+      if(insize[6]!=-3)break;
+      {
+        /* MA48 workspace too small for the rank probe: grow and
+           re-stage (MA48 clobbers the staged triplet in place) */
+        offset_t newla=insize[7];
+        if(newla<2*lasize)newla=2*lasize;
+        logmsg(1,"Note: MA48 workspace grown from %ld to %ld reals (equivalent -laA %ld)\n",
+               (long)lasize,(long)newla,(long)ceil((100.0*newla)/nz1));
+        lasize=newla;
+      }
+      if(lasize>alloc_la) {
+        alloc_la=lasize;
+        irn=realloc(irn,alloc_la*sizeof(int));
+        jcn=realloc(jcn,alloc_la*sizeof(int));
+        values=realloc(values,alloc_la*sizeof(solve_real));
+      }
+      }
+      if(insize[6]==-3) {
+        printf("MA48 workspace growth did not converge after %d attempts\n",tries);
+        MPI_Abort(PETSC_COMM_WORLD,1);
+      }
       bfirst=counteq[j3+begblock[rank]];
       for(i=0; i<nrow; i++) {
         row_order2[i+counteq[j3+begblock[rank]]]=irn1[i]-1+bfirst;

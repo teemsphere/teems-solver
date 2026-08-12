@@ -486,15 +486,43 @@ SUBROUTINE SPEC51M_RANK(INSIZE,CNTL6,IRN,JCN,VA,IRNA,JCNA,KEEP,W,IW)
       CNTL(4)=CNTL6(1)!1e-4!0.0000000001
     ENDIF
     ICNTL(7)=0
+    ! INSIZE(7) (out): 0 = done, -3 = MA48 workspace too small
+    ! (INSIZE(8) then holds the suggested LA; caller reallocates,
+    ! re-stages IRN/JCN/VA and retries with INSIZE(6) = the new size)
+    INSIZE(7)=0
     IF (FSORD.EQ.1) THEN
       CALL MA48AD(M,N,NE,1,LA,VA,IRN,JCN,KEEP,CNTL,ICNTL,IW,INFO,RINFO)
+      IF (INFO(1).EQ.-3) THEN
+        INSIZE(7)=-3
+        INSIZE(8)=max(INFO(3),INFO(4))
+        deallocate(CNTL,RINFO,ICNTL,INFO)
+        RETURN
+      END IF
       CALL MA48BD(M,N,NE,1,LA,VA,IRN,JCN,KEEP,CNTL,ICNTL,W,IW,INFO,RINFO)
+      IF (INFO(1).EQ.-3) THEN
+        INSIZE(7)=-3
+        INSIZE(8)=INFO(4)
+        deallocate(CNTL,RINFO,ICNTL,INFO)
+        RETURN
+      END IF
 
 !     Compute the determinant
       CALL MA51CD(M,N,LA,VA,IRN,KEEP,SGNDET,LOGDET,W)
     ELSE
       CALL MA48A(M,N,NE,1,LA,VA,IRN,JCN,KEEP,CNTL,ICNTL,IW,INFO,RINFO)
+      IF (INFO(1).EQ.-3) THEN
+        INSIZE(7)=-3
+        INSIZE(8)=max(INFO(3),INFO(4))
+        deallocate(CNTL,RINFO,ICNTL,INFO)
+        RETURN
+      END IF
       CALL MA48B(M,N,NE,1,LA,VA,IRN,JCN,KEEP,CNTL,ICNTL,W,IW,INFO,RINFO)
+      IF (INFO(1).EQ.-3) THEN
+        INSIZE(7)=-3
+        INSIZE(8)=INFO(4)
+        deallocate(CNTL,RINFO,ICNTL,INFO)
+        RETURN
+      END IF
       CALL MA51C(M,N,LA,VA,IRN,KEEP,SGNDET,LOGDET,W)
     ENDIF
 
@@ -615,6 +643,11 @@ SUBROUTINE SPEC48M_MSOL(INSIZE,IRN,JCN,VA,B,X,IRNC,JCNC,VAC,IRNB,JCNB,VALUESB,VE
   if(LA.NE.INSIZE(17)) then
     LA=INSIZE(17)
   end if
+  ! INSIZE(18) (out): 0 = factorized, -3 = workspace too small
+  ! (INSIZE(19) then holds MA48's suggested LA; caller reallocates and
+  ! re-stages IRN/JCN/VA -- clobbered by the conversion above and by
+  ! MA48 -- and retries with INSIZE(17) = the new size)
+  INSIZE(18)=0
   MAXN=N
   IF (N.LT.M) THEN
     MAXN=M
@@ -640,6 +673,13 @@ SUBROUTINE SPEC48M_MSOL(INSIZE,IRN,JCN,VA,B,X,IRNC,JCNC,VAC,IRNB,JCNB,VALUESB,VE
   ELSE
     CALL MA48A(M,N,NE,1,LA,VA,IRN,JCN,KEEP,CNTL,ICNTL,IW,INFO,RINFO)
   ENDIF
+  IF (INFO(1).EQ.-3) THEN
+    INSIZE(18)=-3
+    INSIZE(19)=max(INFO(3),INFO(4))
+    deallocate(CNTL,RINFO,ERROR1,SOL,JCNB1)
+    deallocate(ICNTL,INFO,IW)
+    RETURN
+  END IF
   IF (INFO(1).LT.0) THEN
   WRITE (6,'(A,I3)') 'Error STOP from MA48A/AD with INFO(1) =',INFO(1)
   CALL TEEMS_ONFAIL_DIAG(INFO(1))
@@ -652,6 +692,13 @@ SUBROUTINE SPEC48M_MSOL(INSIZE,IRN,JCN,VA,B,X,IRNC,JCNC,VAC,IRNB,JCNB,VALUESB,VE
   else
     CALL MA48B(M,N,NE,1,LA,VA,IRN,JCN,KEEP,CNTL,ICNTL,W,IW,INFO,RINFO)
   ENDIF
+  IF (INFO(1).EQ.-3) THEN
+    INSIZE(18)=-3
+    INSIZE(19)=INFO(4)
+    deallocate(CNTL,RINFO,W,ERROR1,SOL,JCNB1)
+    deallocate(ICNTL,INFO,IW)
+    RETURN
+  END IF
   IF (INFO(1).NE.0) THEN
     WRITE (6,FMT='(A,I3/A)') 'STOP from MA48B/BD with INFO(1) =',&
     INFO(1),'Solution not possible'
@@ -801,6 +848,12 @@ SUBROUTINE SPEC48M_MSOL_P(INSIZE,IRN,JCN,VA,B,X,IRNC,JCNC,VAC,IRNB,JCNB,VALUESB,
   if(LA.NE.INSIZE(17)) then
     LA=INSIZE(17)
   end if
+  ! INSIZE(18) (out): 0 = factorized, -3 = workspace too small
+  ! (INSIZE(19) then holds MA48's suggested LA; caller reallocates the
+  ! persisted arrays, re-stages and retries with REDO(1)=0 and
+  ! INSIZE(17) = the new size); REDO(1) is also set to -3 so the
+  ! caller's decline channel sees the failure
+  INSIZE(18)=0
   MAXN=N
   IF (N.LT.M) THEN
     MAXN=M
@@ -830,6 +883,14 @@ SUBROUTINE SPEC48M_MSOL_P(INSIZE,IRN,JCN,VA,B,X,IRNC,JCNC,VAC,IRNB,JCNB,VALUESB,
     ELSE
       CALL MA48A(M,N,NE,1,LA,VA,IRN,JCN,KEEP,CNTL,ICNTL,IW,INFO,RINFO)
     ENDIF
+    IF (INFO(1).EQ.-3) THEN
+      INSIZE(18)=-3
+      INSIZE(19)=max(INFO(3),INFO(4))
+      REDO(1)=-3
+      deallocate(CNTL,RINFO,ERROR1,SOL,JCNB1)
+      deallocate(ICNTL,INFO,IW)
+      RETURN
+    END IF
     IF (INFO(1).LT.0) THEN
     WRITE (6,'(A,I3)') 'Error STOP from MA48A/AD with INFO(1) =',INFO(1)
     CALL TEEMS_ONFAIL_DIAG(INFO(1))
@@ -842,6 +903,14 @@ SUBROUTINE SPEC48M_MSOL_P(INSIZE,IRN,JCN,VA,B,X,IRNC,JCNC,VAC,IRNB,JCNB,VALUESB,
     else
       CALL MA48B(M,N,NE,1,LA,VA,IRN,JCN,KEEP,CNTL,ICNTL,W,IW,INFO,RINFO)
     ENDIF
+    IF (INFO(1).EQ.-3) THEN
+      INSIZE(18)=-3
+      INSIZE(19)=INFO(4)
+      REDO(1)=-3
+      deallocate(CNTL,RINFO,W,ERROR1,SOL,JCNB1)
+      deallocate(ICNTL,INFO,IW)
+      RETURN
+    END IF
     IF (INFO(1).NE.0) THEN
       WRITE (6,FMT='(A,I3/A)') 'STOP from MA48B/BD with INFO(1) =',&
       INFO(1),'Solution not possible'
@@ -857,6 +926,16 @@ SUBROUTINE SPEC48M_MSOL_P(INSIZE,IRN,JCN,VA,B,X,IRNC,JCNC,VAC,IRNB,JCNB,VALUESB,
     else
       CALL MA48B(M,N,NE,2,LA,VA,IRN,JCN,KEEP,CNTL,ICNTL,W,IW,INFO,RINFO)
     ENDIF
+    IF (INFO(1).EQ.-3) THEN
+      ! workspace too small for the kept factors: report -3 so the
+      ! caller grows the arrays and redoes the analyse
+      INSIZE(18)=-3
+      INSIZE(19)=INFO(4)
+      REDO(1)=-3
+      deallocate(CNTL,RINFO,W,ERROR1,SOL,JCNB1)
+      deallocate(ICNTL,INFO,IW)
+      RETURN
+    END IF
     IF (INFO(1).LT.0) THEN
       if (teems_verbosity()>=1) WRITE (6,'(A,I3)') &
         'Note: fast block refactorize declined, MA48B/BD INFO(1) =',INFO(1)

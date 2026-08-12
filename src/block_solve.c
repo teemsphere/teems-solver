@@ -43,6 +43,7 @@ static int nfr_flag(void) {
 static int **dfr_irn=NULL,**dfr_jcn=NULL,**dfr_keep=NULL;
 static solve_real **dfr_va=NULL;
 static PetscInt *dfr_nz=NULL;
+static offset_t *dfr_la=NULL; /* per-block LA; grows on MA48 -3 returns and stays grown */
 static int dfr_nblocks=0,dfr_ready=0;
 
 /* -fastrefac DBBD extraction persistence: the five submatrix arrays
@@ -99,11 +100,13 @@ void dbbd_fastrefac_free(void) {
   free(dfr_keep);
   free(dfr_va);
   free(dfr_nz);
+  free(dfr_la);
   dfr_irn=NULL;
   dfr_jcn=NULL;
   dfr_keep=NULL;
   dfr_va=NULL;
   dfr_nz=NULL;
+  dfr_la=NULL;
   dfr_nblocks=0;
   dfr_ready=0;
 }
@@ -250,6 +253,7 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
     dfr_keep=(int**)calloc(nmatin,sizeof(int*));
     dfr_va=(solve_real**)calloc(nmatin,sizeof(solve_real*));
     dfr_nz=(PetscInt*)calloc(nmatin,sizeof(PetscInt));
+    dfr_la=(offset_t*)calloc(nmatin,sizeof(offset_t));
     for(i=0; i<nmatin; i++)dfr_nz[i]=-1;
     dfr_nblocks=nmatin;
   }
@@ -523,7 +527,7 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
   }
   CHKERRQ(ierr);
   solve_real *xi1 = (solve_real*)calloc(sumrowcolin,sizeof(solve_real));
-  int insizes=17;
+  int insizes=19;
   int *insize=(int *) calloc (insizes*nmatin,sizeof(int));
   int *bivinzrow=(int *) calloc (VecSize-sumrowcolin,sizeof(int));
   int *bivinzcol=(int *) calloc (VecSize-sumrowcolin,sizeof(int));
@@ -617,14 +621,20 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
       nrow=submatA[j1]->rmap->n;
       ncol=submatA[j1]->cmap->n;
       lasize=ceil((laA/100.0)*nz);
+      /* the IRN tail carries the CSR row pointers (nz+nrow+1 ints) and
+         a starved -laA (<100) must still stage all entries; MA48 then
+         returns -3 and the growth loop below takes over */
+      if(lasize<nz+nrow+1)lasize=nz+nrow+1;
       int *irn=NULL,*jcn=NULL;
       solve_real *values=NULL;
       int dfr_redo=0;
       if(dbbd_fastrefac) {
         if(dfr_ready&&dfr_nz[j1]==nz) {
-          /* pattern unchanged: refill values, keep the pivot sequence */
+          /* pattern unchanged: refill values, keep the pivot sequence
+             (and the possibly grown workspace size that built it) */
           memcpy (dfr_va[j1],vals,nz*sizeof(solve_real));
           dfr_redo=1;
+          lasize=dfr_la[j1];
         }
         else {
           free(dfr_irn[j1]);
@@ -632,6 +642,7 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
           free(dfr_keep[j1]);
           free(dfr_va[j1]);
           dfr_nz[j1]=nz;
+          dfr_la[j1]=lasize;
           dfr_irn[j1]=(int *) calloc (lasize,sizeof(int));
           dfr_jcn[j1]=(int *) calloc (lasize,sizeof(int));
           dfr_va[j1]=(solve_real *) calloc (lasize,sizeof(solve_real));
@@ -690,10 +701,24 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
       probe_onfail_scope_set(submatA[j1],nrow,ncol,"DBBD diagonal block",(int)(j1+begblock[rank]),row_order,col_order,counteq[j1+begblock[rank]],countvarintra1[j1+begblock[rank]],counteq[j1+begblock[rank]],countvarintra1[j1+begblock[rank]]);
       if(dbbd_fastrefac) {
         int redo_io=dfr_redo;
+        int tries;
         spec48m_msol_p_(insize+j1*insizes,dfr_irn[j1],dfr_jcn[j1],dfr_va[j1],yi1[j1],xi1point,aic,ajc,valsc,ai,aj,vals,vecbivi,bivinzrow,bivinzcol,dfr_keep[j1],&redo_io);
-        if(redo_io<0) {
-          /* fast refactorize declined: re-stage the block from the
-             still-live submatrix and redo the analyse */
+        for(tries=0; tries<6&&redo_io<0; tries++) {
+          if(insize[j1*insizes+17]==-3) {
+            /* MA48 workspace too small: grow the persisted arrays to
+               at least its suggested size before the redo */
+            offset_t newla=insize[j1*insizes+18];
+            if(newla<2*dfr_la[j1])newla=2*dfr_la[j1];
+            logmsg(1,"Note: MA48 workspace grown from %ld to %ld reals (equivalent -laA %ld)\n",
+                   (long)dfr_la[j1],(long)newla,(long)ceil((100.0*newla)/dfr_nz[j1]));
+            dfr_la[j1]=newla;
+            dfr_irn[j1]=realloc(dfr_irn[j1],newla*sizeof(int));
+            dfr_jcn[j1]=realloc(dfr_jcn[j1],newla*sizeof(int));
+            dfr_va[j1]=realloc(dfr_va[j1],newla*sizeof(solve_real));
+            insize[j1*insizes+16]=(int)newla;
+          }
+          /* fast refactorize declined or workspace grown: re-stage the
+             block from the still-live submatrix and redo the analyse */
           Mat_SeqAIJ *aa2=(Mat_SeqAIJ*)submatA[j1]->data;
           memcpy (dfr_irn[j1]+dfr_nz[j1],aa2->i,(nrow+1)*sizeof(PetscInt));
           memcpy (dfr_jcn[j1],aa2->j,dfr_nz[j1]*sizeof(PetscInt));
@@ -701,10 +726,41 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
           redo_io=0;
           spec48m_msol_p_(insize+j1*insizes,dfr_irn[j1],dfr_jcn[j1],dfr_va[j1],yi1[j1],xi1point,aic,ajc,valsc,ai,aj,vals,vecbivi,bivinzrow,bivinzcol,dfr_keep[j1],&redo_io);
         }
+        if(redo_io<0) {
+          printf("MA48 block factorize did not converge after retries\n");
+          MPI_Abort(PETSC_COMM_WORLD,1);
+        }
       }
       else {
+      int tries;
       keep=(int *) calloc (nrow+9*ncol+7,sizeof(int));/* KEEP bound, ICNTL(6)=1; live length returned in insize[12] */
-      spec48m_msol_(insize+j1*insizes,irn,jcn,values,yi1[j1],xi1point,aic,ajc,valsc,ai,aj,vals,vecbivi,bivinzrow,bivinzcol,keep);
+      for(tries=0; tries<6; tries++) {
+        spec48m_msol_(insize+j1*insizes,irn,jcn,values,yi1[j1],xi1point,aic,ajc,valsc,ai,aj,vals,vecbivi,bivinzrow,bivinzcol,keep);
+        if(insize[j1*insizes+17]!=-3)break;
+        {
+          /* MA48 workspace too small: grow, re-stage from the
+             still-live submatrix (MA48 clobbered the staged copy) */
+          offset_t newla=insize[j1*insizes+18];
+          if(newla<2*lasize)newla=2*lasize;
+          logmsg(1,"Note: MA48 workspace grown from %ld to %ld reals (equivalent -laA %ld)\n",
+                 (long)lasize,(long)newla,(long)ceil((100.0*newla)/insize[j1*insizes+2]));
+          lasize=newla;
+        }
+        irn=realloc(irn,lasize*sizeof(int));
+        jcn=realloc(jcn,lasize*sizeof(int));
+        values=realloc(values,lasize*sizeof(solve_real));
+        {
+          Mat_SeqAIJ *aa2=(Mat_SeqAIJ*)submatA[j1]->data;
+          memcpy (irn+insize[j1*insizes+2],aa2->i,(nrow+1)*sizeof(PetscInt));
+          memcpy (jcn,aa2->j,insize[j1*insizes+2]*sizeof(PetscInt));
+          memcpy (values,aa2->a,insize[j1*insizes+2]*sizeof(solve_real));
+        }
+        insize[j1*insizes+16]=(int)lasize;
+      }
+      if(insize[j1*insizes+17]==-3) {
+        printf("MA48 workspace growth did not converge after %d attempts\n",tries);
+        MPI_Abort(PETSC_COMM_WORLD,1);
+      }
       MatDestroy(&submatA[j1]);
       }
       probe_onfail_scope_clear();
@@ -1086,7 +1142,10 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
       solve_real *biui0= (solve_real *) calloc (block_sizes[j1+begblock[rank]],sizeof(solve_real));
       int *irne,*keep;
       solve_real *vale;
-      la1=ceil((insize[j1*insizes+9]/100.0)*insize[j1*insizes+2]);
+      /* actual LA of the stored factors: the factorize records it in
+         insize[16] (it may exceed the -laA percent after workspace
+         growth), so read it back rather than recompute */
+      la1=insize[j1*insizes+16];
       if(dbbd_fastrefac) {
         irne=dfr_irn[j1];
         keep=dfr_keep[j1];
@@ -1134,7 +1193,6 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
         be0[i]+=vals[j]*xd[aj[j]];
       }
       if(!dbbd_fastrefac)MatDestroy(&submatC[j1]);
-      if(insize[j1*insizes+16]!=la1)insize[j1*insizes+16]=la1;
       spec48m_esol_(insize+j1*insizes,irne,vale,keep,be0,biui0);
       if(!dbbd_fastrefac) {
       free(irne);
@@ -1943,7 +2001,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
     insize[j4*insizes+15]=7+windx;//7+rank+jthrd+windx;//(j4+jthrd)%90+7;
     windx++;
     if(windx==eindx)windx=bindx;
-      int *insized=(int *) calloc (6,sizeof(int));
+      int *insized=(int *) calloc (8,sizeof(int));
       insized[0]=nrow;
       insized[1]=ncol;
       insized[2]=nz;
@@ -1953,6 +2011,10 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
       if(cntl6==0&&SORD==0)cntl6in=0.3;
       else cntl6in=cntl6;
       spec51m_rank_(insized,&cntl6in,irn1,jcn1,vecbivi,irn,jcn,keep,w51,iw51);
+      if(insized[6]==-3) {
+        printf("MA48 workspace (-laDi) too small for the time-block rank probe\n");
+        MPI_Abort(PETSC_COMM_WORLD,1);
+      }
       insized=realloc(insized,(5+nreg*insizes)*sizeof(int));
       for(i=0; i<nreg; i++) {
         for(j=0; j<insizes; j++) {
