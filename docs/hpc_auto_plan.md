@@ -153,10 +153,15 @@ The infrastructure for full auto-sizing already half-exists:
 - IMPLEMENTED 2026-08-12: the run's effective sizes are recorded as
   a top-level "la_used" object in stats.json (max grown equivalent
   percent per knob, MPI-reduced post-solve; equal to the configured
-  percent when nothing grew), so repeat runs of a deployment can
-  warm-start there and the HPC sweep can set cold-start defaults at
-  the observed P95 instead of today's guessed 300/500/200.
-  teems-R surfacing of la_used is the remaining follow-on.
+  percent when nothing grew). teems-R currently warm-starts repeat
+  runs of a deployment from this record.
+- DECISION 2026-08-13: the warm-start tier is interim only. When the
+  HPC sweep calibrates the defaults (observed P95 across the matrix
+  instead of today's guessed 300/500/200), the calibration slice
+  REMOVES the la_used warm-start read from teems-R — resolution
+  becomes user-passed > calibrated defaults, nothing else. The
+  la_used record itself stays: it is the sweep's measurement source
+  and the diagnostics surface.
 
 With in-solver grow, la* stop being user decisions entirely:
 undershoot costs a redone analyse (seconds), overshoot costs
