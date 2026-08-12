@@ -476,6 +476,11 @@ SUBROUTINE SPEC51M_RANK(INSIZE,CNTL6,IRN,JCN,VA,IRNA,JCNA,KEEP,W,IW)
     ENDIF
     ! errors only below debug verbosity (silences duplicate-entry notes)
     if (teems_verbosity()<2) ICNTL(3)=1
+    ! -3 workspace shortfalls are handled by caller-side growth, so
+    ! MA48's own 'Error return ... because LA is' print would read as
+    ! fatal in the logs; the wrappers print the diagnosis on genuinely
+    ! fatal INFO(1) codes
+    ICNTL(1)=0
     IF(CNTL6(1).EQ.0)THEN
       IF (FSORD.EQ.1) THEN
         CNTL(4)=1e-4
@@ -663,6 +668,11 @@ SUBROUTINE SPEC48M_MSOL(INSIZE,IRN,JCN,VA,B,X,IRNC,JCNC,VAC,IRNB,JCNB,VALUESB,VE
   ENDIF
   ! errors only below debug verbosity (silences duplicate-entry notes)
   if (teems_verbosity()<2) ICNTL(3)=1
+  ! -3 workspace shortfalls are handled by caller-side growth, so
+  ! MA48's own 'Error return ... because LA is' print would read as
+  ! fatal in the logs; the wrappers print the diagnosis on genuinely
+  ! fatal INFO(1) codes
+  ICNTL(1)=0
   T=M+5*N+4*N/ICNTL(6)+7
   INSIZE(13)=T
   ! KEEP is caller-allocated (bound M+9*N+7, i.e. ICNTL(6)=1); factors
@@ -867,6 +877,11 @@ SUBROUTINE SPEC48M_MSOL_P(INSIZE,IRN,JCN,VA,B,X,IRNC,JCNC,VAC,IRNB,JCNB,VALUESB,
   ENDIF
   ! errors only below debug verbosity (silences duplicate-entry notes)
   if (teems_verbosity()<2) ICNTL(3)=1
+  ! -3 workspace shortfalls are handled by caller-side growth, so
+  ! MA48's own 'Error return ... because LA is' print would read as
+  ! fatal in the logs; the wrappers print the diagnosis on genuinely
+  ! fatal INFO(1) codes
+  ICNTL(1)=0
   ! blocks whose entries turn unsuitable for the kept pivot sequence
   ! are refactorized as on a JOB=1 call
   ICNTL(11)=1
@@ -1183,6 +1198,11 @@ SUBROUTINE SPEC48_SSOL2LA(INSIZE,IRN,JCN,VA,B,X)
   endif
   ! errors only below debug verbosity (silences duplicate-entry notes)
   if (teems_verbosity()<2) ICNTL(3)=1
+  ! -3 workspace shortfalls are handled by caller-side growth, so
+  ! MA48's own 'Error return ... because LA is' print would read as
+  ! fatal in the logs; the wrappers print the diagnosis on genuinely
+  ! fatal INFO(1) codes
+  ICNTL(1)=0
   T=M+5*N+4*N/ICNTL(6)+7
   allocate(KEEP(T))
 
@@ -1302,6 +1322,11 @@ SUBROUTINE SPEC48_SSOL2LA_P(INSIZE,IRN,JCN,VA,B,X)
     endif
     ! errors only below debug verbosity (silences duplicate-entry notes)
     if (teems_verbosity()<2) pICNTL(3)=1
+    ! -3 workspace shortfalls are handled by caller-side growth, so
+    ! MA48's own 'Error return ... because LA is' print would read as
+    ! fatal in the logs; the wrappers print the diagnosis on genuinely
+    ! fatal INFO(1) codes
+    pICNTL(1)=0
     ! any block whose entries turn unsuitable for the kept pivot
     ! sequence is refactorized as on a JOB=1 call instead of failing
     pICNTL(11)=1
@@ -1433,6 +1458,11 @@ SUBROUTINE SPEC48M_SSOL2LA(INSIZE,IRN,JCN,VA,B,X)
   endif
   ! errors only below debug verbosity (silences duplicate-entry notes)
   if (teems_verbosity()<2) ICNTL(3)=1
+  ! -3 workspace shortfalls are handled by caller-side growth, so
+  ! MA48's own 'Error return ... because LA is' print would read as
+  ! fatal in the logs; the wrappers print the diagnosis on genuinely
+  ! fatal INFO(1) codes
+  ICNTL(1)=0
   T=M+5*N+4*N/ICNTL(6)+7
   allocate(KEEP(T))
 
@@ -1716,6 +1746,11 @@ SUBROUTINE PREP48_ALU1(INSIZE,IRN,JCN,VA,W,IW,KEEP)
   endif
   ! errors only below debug verbosity (silences duplicate-entry notes)
   if (teems_verbosity()<2) ICNTL(3)=1
+  ! -3 workspace shortfalls are handled by caller-side growth, so
+  ! MA48's own 'Error return ... because LA is' print would read as
+  ! fatal in the logs; the wrappers print the diagnosis on genuinely
+  ! fatal INFO(1) codes
+  ICNTL(1)=0
   T=M+5*N+4*N/ICNTL(6)+7
   INSIZE(13)=T
   JOB=1
@@ -1830,6 +1865,11 @@ SUBROUTINE PREP48M_MSOL(INSIZE,IRN,JCN,VA,IRNC,JCNC,VAC,IRNB,JCNB,VALUESB,VECBIV
   endif
   ! errors only below debug verbosity (silences duplicate-entry notes)
   if (teems_verbosity()<2) ICNTL(3)=1
+  ! -3 workspace shortfalls are handled by caller-side growth, so
+  ! MA48's own 'Error return ... because LA is' print would read as
+  ! fatal in the logs; the wrappers print the diagnosis on genuinely
+  ! fatal INFO(1) codes
+  ICNTL(1)=0
   T=M+5*N+4*N/ICNTL(6)+7
   INSIZE(13)=T
   JOB=1
@@ -2009,6 +2049,11 @@ SUBROUTINE PREP48M_MSOL_P(INSIZE,IRN,JCN,VA,IRNC,JCNC,VAC,IRNB,JCNB,VALUESB,VECB
   endif
   ! errors only below debug verbosity (silences duplicate-entry notes)
   if (teems_verbosity()<2) ICNTL(3)=1
+  ! -3 workspace shortfalls are handled by caller-side growth, so
+  ! MA48's own 'Error return ... because LA is' print would read as
+  ! fatal in the logs; the wrappers print the diagnosis on genuinely
+  ! fatal INFO(1) codes
+  ICNTL(1)=0
   ! blocks whose entries turn unsuitable for the kept pivot sequence
   ! are refactorized as on a JOB=1 call
   ICNTL(11)=1
