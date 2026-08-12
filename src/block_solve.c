@@ -22,6 +22,7 @@ static solve_real **ndbbd_fac_va=NULL;
    regardless of -inmemory. */
 static int **ndbbd_fac_jcn=NULL;
 static PetscInt *ndbbd_fac_nz=NULL;
+static offset_t *ndbbd_fac_la=NULL; /* per-block LA; grows on MA48 -3 returns and stays grown */
 static dim_t ndbbd_fastrefac=-1;
 static int nfr_flag(void) {
   if(ndbbd_fastrefac<0) {
@@ -119,12 +120,14 @@ static void ndbbd_fac_init(int n) {
     ndbbd_fac_va=realloc(ndbbd_fac_va,n*sizeof(solve_real*));
     ndbbd_fac_jcn=realloc(ndbbd_fac_jcn,n*sizeof(int*));
     ndbbd_fac_nz=realloc(ndbbd_fac_nz,n*sizeof(PetscInt));
+    ndbbd_fac_la=realloc(ndbbd_fac_la,n*sizeof(offset_t));
     for(i=ndbbd_fac_n; i<n; i++) {
       ndbbd_fac_irn[i]=NULL;
       ndbbd_fac_keep[i]=NULL;
       ndbbd_fac_va[i]=NULL;
       ndbbd_fac_jcn[i]=NULL;
       ndbbd_fac_nz[i]=-1;
+      ndbbd_fac_la[i]=0;
     }
     ndbbd_fac_n=n;
   }
@@ -150,6 +153,7 @@ static void ndbbd_fac_drop(int idx) {
     free(ndbbd_fac_jcn[idx]);
     ndbbd_fac_jcn[idx]=NULL;
     ndbbd_fac_nz[idx]=-1;
+    ndbbd_fac_la[idx]=0;
   }
 }
 
@@ -161,11 +165,13 @@ void ndbbd_fastrefac_free(void) {
   free(ndbbd_fac_va);
   free(ndbbd_fac_jcn);
   free(ndbbd_fac_nz);
+  free(ndbbd_fac_la);
   ndbbd_fac_irn=NULL;
   ndbbd_fac_keep=NULL;
   ndbbd_fac_va=NULL;
   ndbbd_fac_jcn=NULL;
   ndbbd_fac_nz=NULL;
+  ndbbd_fac_la=NULL;
   ndbbd_fac_n=0;
 }
 
@@ -1404,7 +1410,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
   }
   logmsg(2,"Begin preparation rank %d\n",rank);
   ierr = MatCreateSubMatrices(A,nmatin,rowindices,colindices,MAT_INITIAL_MATRIX,&submatAij);
-  int insizes=17;
+  int insizes=19;
   int *insize=(int *) calloc (insizes*nmatin,sizeof(int));
   PetscInt *indicesbbij=NULL;//(int *) calloc (1,sizeof(PetscInt));
   ierr = PetscMalloc(1*sizeof(IS **),&rowBBij);
@@ -1574,10 +1580,14 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
       if(ncolamax<ncol)ncolamax=ncol;
       nz=aa->nz;
       lasize=ceil((laA/100.0)*nz);
+      /* starved -laA: staging still needs nz entries + the CSR row
+         pointers in the IRN tail */
+      if(lasize<nz+nrow+1)lasize=nz+nrow+1;
       if(lasize>lasizemax)lasizemax=lasize;
     }
   }
   lasizemax+=10;
+  long int alloc_la=lasizemax; /* current array length; grows on MA48 -3 */
 
       int *insized=(int *) calloc (5+nreg*insizes,sizeof(int));
     bivinzrow1=realloc (bivinzrow1,bivirowsizemax*sizeof(long int));
@@ -1668,6 +1678,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
       nrow=submatAij[j4]->rmap->n;
       ncol=submatAij[j4]->cmap->n;
       lasize=ceil((laA/100.0)*nz);
+      if(lasize<nz+nrow+1)lasize=nz+nrow+1;
       insize[j4*insizes+13]=bivirowsize;
       insize[j4*insizes+14]=bivicolsize;
       insize[j4*insizes]=nrow;
@@ -1687,9 +1698,11 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
       int nfr_redo=0;
       if(nfr_flag()) {
         if(ndbbd_fac_nz[j4]==nz&&ndbbd_fac_jcn[j4]!=NULL) {
-          /* pattern unchanged: refill values, keep the pivot sequence */
+          /* pattern unchanged: refill values, keep the pivot sequence
+             (and the possibly grown workspace size that built it) */
           memcpy (ndbbd_fac_va[j4],vals,nz*sizeof(solve_real));
           nfr_redo=1;
+          lasize=ndbbd_fac_la[j4];
         }
         else {
           ndbbd_fac_drop(j4);
@@ -1701,6 +1714,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
           memcpy (ndbbd_fac_jcn[j4],aj,nz*sizeof(PetscInt));
           memcpy (ndbbd_fac_va[j4],vals,nz*sizeof(solve_real));
           ndbbd_fac_nz[j4]=nz;
+          ndbbd_fac_la[j4]=lasize;
         }
       }
       else {
@@ -1728,10 +1742,24 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
       probe_onfail_scope_set(submatAij[j4],nrow,ncol,"NDBBD diagonal block",(int)(j4+begblock0),row_order,col_order,counteq[j4+begblock0],countvarintra1[j4+begblock0],0,0);
       if(nfr_flag()) {
         int redo_io=nfr_redo;
+        int tries;
         prep48m_msol_p_(insize+j4*insizes,ndbbd_fac_irn[j4],ndbbd_fac_jcn[j4],ndbbd_fac_va[j4],aic,ajc,valsc,ai,aj,vals,vecbivi,bivinzrow,bivinzcol,jcnb1,sol48,b48,w51,iw51,ndbbd_fac_keep[j4],&redo_io);
-        if(redo_io<0) {
-          /* fast refactorize declined: re-stage from the still-live
-             submatrix and redo the analyse */
+        for(tries=0; tries<6&&redo_io<0; tries++) {
+          if(insize[j4*insizes+17]==-3) {
+            /* MA48 workspace too small: grow the persisted arrays to
+               at least its suggested size before the redo */
+            offset_t newla=insize[j4*insizes+18];
+            if(newla<2*ndbbd_fac_la[j4])newla=2*ndbbd_fac_la[j4];
+            logmsg(1,"Note: MA48 workspace grown from %ld to %ld reals (equivalent -laA %ld)\n",
+                   (long)ndbbd_fac_la[j4],(long)newla,(long)ceil((100.0*newla)/ndbbd_fac_nz[j4]));
+            ndbbd_fac_la[j4]=newla;
+            ndbbd_fac_irn[j4]=realloc(ndbbd_fac_irn[j4],newla*sizeof(int));
+            ndbbd_fac_jcn[j4]=realloc(ndbbd_fac_jcn[j4],newla*sizeof(int));
+            ndbbd_fac_va[j4]=realloc(ndbbd_fac_va[j4],newla*sizeof(solve_real));
+            insize[j4*insizes+16]=(int)newla;
+          }
+          /* fast refactorize declined or workspace grown: re-stage
+             from the still-live submatrix and redo the analyse */
           Mat_SeqAIJ *aa2=(Mat_SeqAIJ*)submatAij[j4]->data;
           memcpy (ndbbd_fac_irn[j4]+ndbbd_fac_nz[j4],aa2->i,(nrow+1)*sizeof(PetscInt));
           memcpy (ndbbd_fac_jcn[j4],aa2->j,ndbbd_fac_nz[j4]*sizeof(PetscInt));
@@ -1739,9 +1767,43 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
           redo_io=0;
           prep48m_msol_p_(insize+j4*insizes,ndbbd_fac_irn[j4],ndbbd_fac_jcn[j4],ndbbd_fac_va[j4],aic,ajc,valsc,ai,aj,vals,vecbivi,bivinzrow,bivinzcol,jcnb1,sol48,b48,w51,iw51,ndbbd_fac_keep[j4],&redo_io);
         }
+        if(redo_io<0) {
+          printf("MA48 block factorize did not converge after retries\n");
+          MPI_Abort(PETSC_COMM_WORLD,1);
+        }
       }
       else {
-      prep48m_msol_(insize+j4*insizes,irn,jcn,values,aic,ajc,valsc,ai,aj,vals,vecbivi,bivinzrow,bivinzcol,jcnb1,sol48,b48,w51,iw51,keep);
+      int tries;
+      for(tries=0; tries<6; tries++) {
+        prep48m_msol_(insize+j4*insizes,irn,jcn,values,aic,ajc,valsc,ai,aj,vals,vecbivi,bivinzrow,bivinzcol,jcnb1,sol48,b48,w51,iw51,keep);
+        if(insize[j4*insizes+17]!=-3)break;
+        {
+          /* MA48 workspace too small: grow, re-stage from the
+             still-live submatrix (MA48 clobbered the staged copy) */
+          offset_t newla=insize[j4*insizes+18];
+          if(newla<2*lasize)newla=2*lasize;
+          logmsg(1,"Note: MA48 workspace grown from %ld to %ld reals (equivalent -laA %ld)\n",
+                 (long)lasize,(long)newla,(long)ceil((100.0*newla)/insize[j4*insizes+2]));
+          lasize=newla;
+        }
+        if(lasize>alloc_la) {
+          alloc_la=lasize;
+          irn=realloc(irn,alloc_la*sizeof(int));
+          jcn=realloc(jcn,alloc_la*sizeof(int));
+          values=realloc(values,alloc_la*sizeof(solve_real));
+        }
+        {
+          Mat_SeqAIJ *aa2=(Mat_SeqAIJ*)submatAij[j4]->data;
+          memcpy (irn+insize[j4*insizes+2],aa2->i,(nrow+1)*sizeof(PetscInt));
+          memcpy (jcn,aa2->j,insize[j4*insizes+2]*sizeof(PetscInt));
+          memcpy (values,aa2->a,insize[j4*insizes+2]*sizeof(solve_real));
+        }
+        insize[j4*insizes+16]=(int)lasize;
+      }
+      if(insize[j4*insizes+17]==-3) {
+        printf("MA48 workspace growth did not converge after %d attempts\n",tries);
+        MPI_Abort(PETSC_COMM_WORLD,1);
+      }
       ndbbd_fac_emit(rank,j4,irn,keep,values,insize[j4*insizes+16],insize[j4*insizes+12]);
       }
       probe_onfail_scope_clear();
@@ -1918,6 +1980,8 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
     free(vecbivi);//1
     vecbivi=NULL;
   ldsize=ceil((laDi/100.0)*nz1max);
+  /* a starved -laDi (<100) must still hold all staged entries */
+  if(ldsize<nz1max)ldsize=nz1max;
   ldsize+=10;
   irn1=realloc(irn1,ldsize*sizeof(int));
   if(irn1==NULL)printf("Error: memory allocation failed for irn1\n");
@@ -1936,6 +2000,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
   if(iw51==NULL)printf("Error: memory allocation failed for iw51\n");
   vecbivi=realloc(vecbivi,ldsize*sizeof(solve_real));
   if(vecbivi==NULL)printf("Error: memory allocation failed for vecbivi\n");
+  long int probe_cap=ldsize; /* current array length; grows on MA48 -3 */
   int *insizeda=(int *) calloc (5+nreg*insizes,sizeof(int));
   #pragma omp for schedule (static)
   for(j3=0; j3<nmatint; j3++) {
@@ -2007,13 +2072,71 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
       insized[2]=nz;
       insized[4]=laDi;
     ldsize=ceil((laDi/100.0)*nz);
+    if(ldsize<nz)ldsize=nz;
       insized[5]=ldsize;
       if(cntl6==0&&SORD==0)cntl6in=0.3;
       else cntl6in=cntl6;
-      spec51m_rank_(insized,&cntl6in,irn1,jcn1,vecbivi,irn,jcn,keep,w51,iw51);
+      {
+      int tries;
+      for(tries=0; tries<6; tries++) {
+        insized[6]=0;
+        spec51m_rank_(insized,&cntl6in,irn1,jcn1,vecbivi,irn,jcn,keep,w51,iw51);
+        if(insized[6]!=-3)break;
+        {
+          /* MA48 workspace too small for the rank probe: grow and
+             re-read the staged COO (MA48 clobbered it in place; the
+             _bivi/_rbvi/_cbvi scratch files are still on disk) */
+          offset_t newla=insized[7];
+          if(newla<2*ldsize)newla=2*ldsize;
+          logmsg(1,"Note: MA48 workspace grown from %ld to %ld reals (equivalent -laDi %ld)\n",
+                 (long)ldsize,(long)newla,(long)ceil((100.0*newla)/nz));
+          ldsize=newla;
+          insized[5]=ldsize;
+        }
+        if(ldsize>probe_cap) {
+          probe_cap=ldsize;
+          irn1=realloc(irn1,probe_cap*sizeof(int));
+          jcn1=realloc(jcn1,probe_cap*sizeof(int));
+          vecbivi=realloc(vecbivi,probe_cap*sizeof(solve_real));
+        }
+        #pragma omp critical
+        {
+        strcpy(filename,scratch_dir);strcat(filename,"_bivi");
+        strcat(filename,rankname);
+        strcat(filename,j1name);
+        strcat(filename,".bin");
+        if((presolfile=fopen(filename, "r"))==NULL) {
+          printf("Error: cannot open scratch file %s\n",filename);
+        }
+        fwrt=fread(vecbivi, sizeof(solve_real), insized[2], presolfile);
+        if(fwrt== 0) printf("Error: short read on scratch file %s\n",filename);
+        fclose(presolfile);
+        strcpy(filename,scratch_dir);strcat(filename,"_rbvi");
+        strcat(filename,rankname);
+        strcat(filename,j1name);
+        strcat(filename,".bin");
+        if((presolfile=fopen(filename, "r"))==NULL) {
+          printf("Error: cannot open scratch file %s\n",filename);
+        }
+        fwrt=fread(irn1, sizeof(int), insized[2], presolfile);
+        if(fwrt== 0) printf("Error: short read on scratch file %s\n",filename);
+        fclose(presolfile);
+        strcpy(filename,scratch_dir);strcat(filename,"_cbvi");
+        strcat(filename,rankname);
+        strcat(filename,j1name);
+        strcat(filename,".bin");
+        if((presolfile=fopen(filename, "r"))==NULL) {
+          printf("Error: cannot open scratch file %s\n",filename);
+        }
+        fwrt=fread(jcn1, sizeof(int), insized[2], presolfile);
+        if(fwrt== 0) printf("Error: short read on scratch file %s\n",filename);
+        fclose(presolfile);
+        }
+      }
       if(insized[6]==-3) {
-        printf("MA48 workspace (-laDi) too small for the time-block rank probe\n");
+        printf("MA48 workspace growth did not converge after %d attempts\n",tries);
         MPI_Abort(PETSC_COMM_WORLD,1);
+      }
       }
       insized=realloc(insized,(5+nreg*insizes)*sizeof(int));
       for(i=0; i<nreg; i++) {
@@ -2390,7 +2513,7 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
   for(i=0; i<VecSize; i++)indexBB[i]=i;
   ISCreateGeneral(PETSC_COMM_SELF,VecSize,indexBB,PETSC_COPY_VALUES,BBindices);
   logmsg(2,"Begin preparation rank %d\n",rank);
-  int insizes=17;
+  int insizes=19;
   int *insize=(int *) calloc (insizes*nmatin,sizeof(int));
   PetscInt *indicesbbij=(int *) calloc (1,sizeof(PetscInt));
   ierr = PetscMalloc(1*sizeof(IS **),&rowBBij);
@@ -2562,6 +2685,8 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
     if(insizeda2<insizeda[2])insizeda2=insizeda[2];
   }
   ldsize=ceil((laDi/100.0)*insizeda2);
+  /* a starved -laDi (<100) must still hold all staged entries */
+  if(ldsize<insizeda2)ldsize=insizeda2;
   ldsize+=10;
   insizeda2=ldsize;
   int *irn1=(int *) malloc(ldsize*sizeof(int));
@@ -2677,6 +2802,8 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
     //end read from pre
     nz=nz1;
     ldsize=ceil((laDi/100.0)*nz1);
+    /* starved -laDi: LA must still cover the staged entries */
+    if(ldsize<nz1)ldsize=nz1;
     #pragma omp critical
     {
     insize[j4*insizes]=nrow;
@@ -2690,7 +2817,46 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
     }
     windx++;
     if(windx==eindx)windx=bindx;
-      prep48_alu1_(insize+j4*insizes,irn1,jcn1,vecbivi0,fw,fiw,fkeep);
+    {
+      /* MA48 clobbers the staged triplet in place and its scratch
+         files were removed above, so keep a pristine copy for the
+         workspace-growth retries */
+      int *sirn=(int *) malloc (nz1*sizeof(int));
+      int *sjcn=(int *) malloc (nz1*sizeof(int));
+      solve_real *sva=(solve_real *) malloc (nz1*sizeof(solve_real));
+      int tries;
+      memcpy(sirn,irn1,nz1*sizeof(int));
+      memcpy(sjcn,jcn1,nz1*sizeof(int));
+      memcpy(sva,vecbivi0,nz1*sizeof(solve_real));
+      for(tries=0; tries<6; tries++) {
+        prep48_alu1_(insize+j4*insizes,irn1,jcn1,vecbivi0,fw,fiw,fkeep);
+        if(insize[j4*insizes+17]!=-3)break;
+        {
+          offset_t newla=insize[j4*insizes+18];
+          if(newla<2*ldsize)newla=2*ldsize;
+          logmsg(1,"Note: MA48 workspace grown from %ld to %ld reals (equivalent -laDi %ld)\n",
+                 (long)ldsize,(long)newla,(long)ceil((100.0*newla)/nz1));
+          ldsize=newla;
+        }
+        if(ldsize>insizeda2) {
+          insizeda2=ldsize;
+          irn1=realloc(irn1,insizeda2*sizeof(int));
+          jcn1=realloc(jcn1,insizeda2*sizeof(int));
+          vecbivi0=realloc(vecbivi0,insizeda2*sizeof(solve_real));
+        }
+        memcpy(irn1,sirn,nz1*sizeof(int));
+        memcpy(jcn1,sjcn,nz1*sizeof(int));
+        memcpy(vecbivi0,sva,nz1*sizeof(solve_real));
+        insize[j4*insizes+16]=(int)ldsize;
+      }
+      if(insize[j4*insizes+17]==-3) {
+        printf("MA48 workspace growth did not converge after %d attempts\n",tries);
+        MPI_Abort(PETSC_COMM_WORLD,1);
+      }
+      free(sirn);
+      free(sjcn);
+      free(sva);
+    }
     ndbbd_fac_emit(rank,j4,irn1,fkeep,vecbivi0,insize[j4*insizes+16],insize[j4*insizes+12]);
     logmsg(2,"rank %d nz %ld nzmax %ld ldsize %ld\n",rank,nz1,insizeda2,ldsize);
   }
@@ -2859,7 +3025,9 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
       j2=j1*(nreg+1)+i;
       insize[j2*insizes+15]=j2%90+7;
       if(i!=nreg&&(submatCij[j2][0]->rmap->n)>maxrowcij)maxrowcij=submatCij[j2][0]->rmap->n;
-      la1=ceil((insize[j2*insizes+9]/100.0)*insize[j2*insizes+2]);
+      /* actual LA of the stored factors (may exceed the percent after
+         workspace growth); recorded at factorize time */
+      la1=insize[j2*insizes+16];
       if(inmemory||nfr_flag()) {/* alias the resident factors; per-element frees are skipped below */
         irnereg[i]=ndbbd_fac_irn[j2];
         keepreg[i]=ndbbd_fac_keep[j2];
@@ -3366,7 +3534,7 @@ bool ndbbd_block_solve(PetscInt rank, int begmat,int nreg,int * insize,int insiz
     if((submatCij[j1][0]->rmap->n)>maxrowcij)maxrowcij=submatCij[j1][0]->rmap->n;
     #pragma omp critical(nsol)
     {
-    la1=ceil((insize[j2+9]/100.0)*insize[j2+2]);
+    la1=insize[j2+16];
     irne = realloc(irne,la1*sizeof(int));//(int*)calloc(la1,sizeof(int));
     keep = realloc(keep,insize[j2+12]*sizeof(int));//(int*)calloc(insize[j1*insizes+12],sizeof(int));
     vale = realloc(vale,la1*sizeof(solve_real));//(ha_cgetype*)calloc(la1,sizeof(ha_cgetype));
@@ -3383,7 +3551,6 @@ bool ndbbd_block_solve(PetscInt rank, int begmat,int nreg,int * insize,int insiz
     freadresult=fread(vale,sizeof(solve_real),la1,fp3);
     fclose(fp3);
     }
-    if(insize[j2+16]!=la1)insize[j2+16]=la1;
     spec48m_esol_(insize+j2,irne,vale,keep,b01,sol1);
     b01+=insize[j2];
     sol1+=insize[j2];
@@ -3402,7 +3569,7 @@ bool ndbbd_block_solve(PetscInt rank, int begmat,int nreg,int * insize,int insiz
   j2=j1;//-begmat;
     #pragma omp critical(nsol)
     {
-  la1=ceil((insize[j1*insizes+9]/100.0)*insize[j1*insizes+2]);
+  la1=insize[j1*insizes+16];
   irne = realloc(irne,la1*sizeof(int));//(int*)calloc(la1,sizeof(int));
   keep = realloc(keep,insize[j1*insizes+12]*sizeof(int));//(int*)calloc(insize[j1*insizes+12],sizeof(int));
   vale = realloc(vale,la1*sizeof(solve_real));//(ha_cgetype*)calloc(la1,sizeof(ha_cgetype));
@@ -3422,7 +3589,6 @@ bool ndbbd_block_solve(PetscInt rank, int begmat,int nreg,int * insize,int insiz
   if(ifremove)remove(fn01[j2]);
   if(ifremove)remove(fn02[j2]);
   if(ifremove)remove(fn03[j2]);
-  if(insize[j1*insizes+16]!=la1)insize[j1*insizes+16]=la1;
   spec48m_esol_(insize+j1*insizes,irne,vale,keep,b01,sol1);
   sol2=sol;
   b03=b;
@@ -3431,7 +3597,7 @@ bool ndbbd_block_solve(PetscInt rank, int begmat,int nreg,int * insize,int insiz
     j2=j1;//-begmat;
     #pragma omp critical(nsol)
     {
-    la1=ceil((insize[j1*insizes+9]/100.0)*insize[j1*insizes+2]);
+    la1=insize[j1*insizes+16];
     irne = realloc(irne,la1*sizeof(int));//(int*)calloc(la1,sizeof(int));
     keep = realloc(keep,insize[j1*insizes+12]*sizeof(int));//(int*)calloc(insize[j1*insizes+12],sizeof(int));
     vale = realloc(vale,la1*sizeof(solve_real));//(ha_cgetype*)calloc(la1,sizeof(ha_cgetype));
@@ -3458,7 +3624,6 @@ bool ndbbd_block_solve(PetscInt rank, int begmat,int nreg,int * insize,int insiz
     nz=ac->nz;
     nrow=submatCij[j1][0]->rmap->n;
     spar_mulnoadd_(sol1,&nrow,&nz,ai,aj,vals,b02);
-    if(insize[j1*insizes+16]!=la1)insize[j1*insizes+16]=la1;
     spec48m_esol_(insize+j1*insizes,irne,vale,keep,b02,b03);
     for(j=0; j<nrow; j++)sol2[j]-=b03[j];
     sol2+=nrow;
@@ -3483,7 +3648,6 @@ bool ndbbd_block_solve_mem(PetscInt rank, int begmat,int nreg,int * insize,int i
     j2=j1-begmat;//-begmat;
     j=j1*insizes;
     insize1=insize+j;
-    insize1[16]=ceil((insize1[9]/100.0)*insize1[2]);
     spec48m_rpesol_(insize1,irnereg[j2],valereg[j2],keepreg[j2],b01,sol1,cntl,rinfo,error1,icntl,info,w,iw);//insize+j
     b01+=insize[j];
     sol1+=insize[j];
@@ -3501,7 +3665,6 @@ bool ndbbd_block_solve_mem(PetscInt rank, int begmat,int nreg,int * insize,int i
   }
   j2=j1-begmat;//-begmat;
   insize1=insize+j1*insizes;
-  insize1[16]=ceil((insize1[9]/100.0)*insize1[2]);
   spec48m_rpesol_(insize1,irnereg[j2],valereg[j2],keepreg[j2],b01,sol1,cntl,rinfo,error1,icntl,info,w,iw);//insize+j1*insizes
   sol2=sol;
   b03=b;
@@ -3515,7 +3678,6 @@ bool ndbbd_block_solve_mem(PetscInt rank, int begmat,int nreg,int * insize,int i
     nrow=submatCij[j1][0]->rmap->n;
     spar_mulnoadd_(sol1,&nrow,&nz,ai,aj,vals,b02);
     insize1=insize+j1*insizes;
-    insize1[16]=ceil((insize1[9]/100.0)*insize1[2]);
     spec48m_rpesol_(insize1,irnereg[j2],valereg[j2],keepreg[j2],b02,b03,cntl,rinfo,error1,icntl,info,w,iw);//insize+j1*insizes
     for(j=0; j<nrow; j++)sol2[j]-=b03[j];
     sol2+=nrow;
