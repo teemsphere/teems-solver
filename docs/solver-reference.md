@@ -263,7 +263,16 @@ Linearized-system assembly. `equation_order_read` (flat) and
 assign them to diagonal blocks by region/time, and produce the
 orderings plus `netcut` (border size) [HK16 §5]. `jacobian_preallocate`
 counts nonzeros per row for exact PETSc preallocation (diagonal and
-off-diagonal, for both A and B). `jacobian_fill` walks each equation
+off-diagonal, for both A and B). A's diagonal block follows this rank's
+row range; B's follows the exogenous column range the shock vector
+carries, which parts company with the rows once condensation leaves
+`nexo > VecSize` and B is wider than it is tall (`shock_vec_set_sizes` /
+`shock_mat_set_sizes` set both layouts; NDBBD's time-block split applies
+only while B stays square). The scan counts insertions rather than
+distinct entries, so each count is capped at its block's row length
+before PETSc sees it — a heavily substituted row can otherwise nominate
+more entries than the block has columns, which PETSc rejects outright.
+`jacobian_fill` walks each equation
 block, differentiates the linearized terms per element, and fills
 A (endogenous columns) and B (exogenous columns, whose product with the
 shock vector forms the RHS). Since the 6.2 phase-0 refactor each

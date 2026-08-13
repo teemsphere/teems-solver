@@ -600,7 +600,19 @@ void ndbbd_fastrefac_free(void);
 int backsolve_recover(char *fname, char *commsyntax,set_def *sets,offset_t nset, set_element *set_elems, array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar, elem_value *elem_vals,offset_t ncofele,closure_entry *closure_vals,solve_real *x,solve_real *exo_z,solve_real *bsvals);
 void backsolve_cache_free(void);
 int eq_linvar_read(char *formulain,eq_var_ref *LinVars,int linindx,array_def *vars);
-int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,set_element *set_elems,array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar,elem_value *elem_vals,offset_t ncofvar,offset_t ncofele, offset_t nexo,closure_entry *closure_vals,offset_t ndblock,offset_t alltimeset,offset_t allregset,bool *eq_intertemp,offset_t *eq_addr,dim_t *eq_time,dim_t *eq_reg,offset_t *counteq,offset_t nintraeq,bool *sbbd_overrid,PetscInt Istart,PetscInt Iend,PetscInt *dnz,PetscInt *dnnz,PetscInt *onz,PetscInt *onnz,PetscInt *dnzB,PetscInt *dnnzB,PetscInt *onzB,PetscInt *onnzB,int nesteddbbd,eq_probe_meta *eqmeta,offset_t *neqmeta);
+/* Istart/Iend delimit this rank's rows of A (and, A being square with a
+   matching layout, its diagonal-block columns); Cstart/Cend delimit the
+   exogenous columns of B, which follow the shock vector's layout.  The
+   two ranges coincide unless condensation left nexo > VecSize, where B
+   is wider than it is tall and carries its own column split. */
+int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,set_element *set_elems,array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar,elem_value *elem_vals,offset_t ncofvar,offset_t ncofele, offset_t nexo,closure_entry *closure_vals,offset_t ndblock,offset_t alltimeset,offset_t allregset,bool *eq_intertemp,offset_t *eq_addr,dim_t *eq_time,dim_t *eq_reg,offset_t *counteq,offset_t nintraeq,bool *sbbd_overrid,PetscInt VecSize,PetscInt Istart,PetscInt Iend,PetscInt Cstart,PetscInt Cend,PetscInt *dnz,PetscInt *dnnz,PetscInt *onz,PetscInt *onnz,PetscInt *dnzB,PetscInt *dnnzB,PetscInt *onzB,PetscInt *onnzB,int nesteddbbd,eq_probe_meta *eqmeta,offset_t *neqmeta);
+/* Exogenous-side layout (the shock vector and B's columns).  Normally
+   the exogenous columns mirror the equation rows and, under NDBBD,
+   follow the same time-block split; when heavy condensation leaves more
+   exogenous elements than unknowns the columns span BSize instead and
+   take PETSc's own split, which the row blocks cannot express. */
+void shock_vec_set_sizes(Vec v,int nesteddbbd,PetscInt localsize,PetscInt VecSize,PetscInt BSize);
+void shock_mat_set_sizes(Mat B,int nesteddbbd,PetscInt localsize,PetscInt VecSize,PetscInt BSize);
 /* -solmed probe: assemble the condensed Jacobian sequentially and run
    the HSL_MC79 maximum-matching / Dulmage-Mendelsohn structural
    diagnosis on it (full stored pattern + numerically realized

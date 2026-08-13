@@ -231,6 +231,22 @@ void sbbd_fastrefac_free(void) {
   spec48_nomc66_pfree_();
 }
 
+/* Exogenous-side layout, shared by every site that (re)builds the shock
+   vector or B (see the header comment).  A square B keeps the row split
+   -- including NDBBD's time blocks, which the interface machinery needs
+   -- while a wide B (nexo > VecSize under heavy condensation) takes
+   PETSc's split of BSize on both, so MatMult(B,vece,vecb) stays
+   layout-compatible. */
+void shock_vec_set_sizes(Vec v,int nesteddbbd,PetscInt localsize,PetscInt VecSize,PetscInt BSize) {
+  if(nesteddbbd==1&&BSize==VecSize)VecSetSizes(v,localsize,VecSize);
+  else VecSetSizes(v,PETSC_DECIDE,BSize);
+}
+
+void shock_mat_set_sizes(Mat B,int nesteddbbd,PetscInt localsize,PetscInt VecSize,PetscInt BSize) {
+  if(nesteddbbd==1)MatSetSizes(B,localsize,(BSize==VecSize)?localsize:PETSC_DECIDE,VecSize,BSize);
+  else MatSetSizes(B,PETSC_DECIDE,PETSC_DECIDE,VecSize,BSize);
+}
+
 bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt* dnnz,PetscInt onz,PetscInt* onnz,Mat B,PetscInt dnzB,PetscInt* dnnzB,PetscInt onzB,PetscInt* onnzB,Vec vecb,Vec vece,PetscInt rank,PetscInt rank_hsl,PetscInt mpisize,char* tabfile, char *commsyntax,set_def *sets,dim_t nset, set_element *set_elems, array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar, elem_value **elem_vals2,offset_t ncofvar,offset_t ncofele,offset_t nvarele,closure_entry **closure_vals2,offset_t alltimeset,offset_t allregset,offset_t nintraeq,dim_t matsol,PetscInt Istart,PetscInt Iend,  offset_t nreg, offset_t ntime, offset_t *eq_addr, offset_t ndblock, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laDi,dim_t laD,PetscReal cntl3,PetscReal cntl6,dim_t nesteddbbd,int localsize,PetscInt *ndbbddrank1,fortran_int* indata,dim_t mc66,fortran_int *ptx,struct timeval begintime,solve_real **xcf2){ //Johansen
   char tempfilenam[256],tempchar[256];
   PetscScalar value,*vals=NULL;
@@ -264,9 +280,8 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
     bsvals= (solve_real *) calloc (nbselems,sizeof(solve_real));
   }
   /* exogenous columns run 0..nexo-1; under heavy condensation nexo can
-     exceed VecSize, so vece and B's columns span BSize (the MPI methods
-     abort in main when nexo > VecSize, so nesteddbbd paths keep the
-     square layout) */
+     exceed VecSize, so vece and B's columns span BSize (see
+     shock_vec_set_sizes / shock_mat_set_sizes for the layout rule) */
   PetscInt BSize;
   BSize=(PetscInt)(nvarele-VecSize-nbselems);      /* nexo */
   BSize=(BSize>VecSize)?BSize:VecSize;
@@ -302,8 +317,7 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
     else {
       MatCreate(PETSC_COMM_SELF,&B);
     }
-    if(nesteddbbd==1)MatSetSizes(B,localsize,localsize,VecSize,VecSize);
-    else MatSetSizes(B,PETSC_DECIDE,PETSC_DECIDE,VecSize,BSize);
+    shock_mat_set_sizes(B,nesteddbbd,localsize,VecSize,BSize);
     if(nohsl) {
       MatSetType(B,MATMPIAIJ);
     }
@@ -729,8 +743,8 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
       bsvals= (solve_real *) calloc (nbselems,sizeof(solve_real));
     }
     /* exogenous columns run 0..nexo-1; under heavy condensation nexo can
-       exceed VecSize, so vece and B's columns span BSize (the MPI methods
-       abort in main when nexo > VecSize) */
+       exceed VecSize, so vece and B's columns span BSize (see
+       shock_vec_set_sizes / shock_mat_set_sizes for the layout rule) */
     PetscInt BSize;
     BSize=(PetscInt)(nvarele-VecSize-nbselems);      /* nexo */
     BSize=(BSize>VecSize)?BSize:VecSize;
@@ -762,8 +776,7 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
               else {
                 VecSetType(vece,VECSEQ);
               }
-              if(nesteddbbd==1)VecSetSizes(vece,localsize,VecSize);
-              else VecSetSizes(vece,PETSC_DECIDE,BSize);
+              shock_vec_set_sizes(vece,nesteddbbd,localsize,VecSize,BSize);
               VecSetOption(vece, VEC_IGNORE_NEGATIVE_INDICES,PETSC_TRUE);
             }
             if(sol==0)for(i=0; i<ncofele; i++) {
@@ -892,8 +905,7 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
           else {
             MatCreate(PETSC_COMM_SELF,&B);
           }
-          if(nesteddbbd==1)MatSetSizes(B,localsize,localsize,VecSize,VecSize);
-          else MatSetSizes(B,PETSC_DECIDE,PETSC_DECIDE,VecSize,BSize);
+          shock_mat_set_sizes(B,nesteddbbd,localsize,VecSize,BSize);
           if(nohsl) {
             MatSetType(B,MATMPIAIJ);
           }
@@ -1236,8 +1248,7 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
           else {
             VecSetType(vece,VECSEQ);
           }
-          if(nesteddbbd==1)VecSetSizes(vece,localsize,VecSize);
-          else VecSetSizes(vece,PETSC_DECIDE,BSize);
+          shock_vec_set_sizes(vece,nesteddbbd,localsize,VecSize,BSize);
           VecSetOption(vece, VEC_IGNORE_NEGATIVE_INDICES,PETSC_TRUE);
           elem_vals1=elem_vals+ncofele;
           /* recover the backsolved elements from their defining equations
@@ -1498,8 +1509,7 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
         else {
           MatCreate(PETSC_COMM_SELF,&B);
         }
-        if(nesteddbbd==1)MatSetSizes(B,localsize,localsize,VecSize,VecSize);
-        else MatSetSizes(B,PETSC_DECIDE,PETSC_DECIDE,VecSize,BSize);
+        shock_mat_set_sizes(B,nesteddbbd,localsize,VecSize,BSize);
         if(nohsl) {
           MatSetType(B,MATMPIAIJ);
         }

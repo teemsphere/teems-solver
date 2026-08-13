@@ -1531,15 +1531,6 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
     if(nbselems>0)logmsg(1,"System size %d equations (%ld exogenous, %ld backsolved)\n",VecSize,nexo,nbselems);
     else logmsg(1,"System size %d equations (%ld exogenous)\n",VecSize,nexo);
   }
-  /* Heavy condensation can leave fewer unknowns than exogenous elements.
-     The sequential methods handle that with a widened shock vector (BSize
-     columns in B), but the parallel-layout preallocation still assumes a
-     square B, so the MPI methods abort cleanly instead of corrupting. */
-  if(nohsl&&nexo>VecSize) {
-    if(rank==0)printf("Error: the condensed system has %d unknowns but %ld exogenous elements; DBBD/NDBBD (-matsol 2/3) do not yet support nexo > system size -- use -matsol 0 (LU) or 1 (SBBD), or condense fewer variables\n",VecSize,nexo);
-    PetscFinalize();
-    return 1;
-  }
   strcpy(commsyntax,"equation");
   offset_t neq=0,neq1;
   if(rank==0) {
@@ -2100,18 +2091,34 @@ comp_accurate_reentry:
     localsize=0;
     for (i=1; i<ndblock+1; i++)if(i>localbeg&&i<=localend)localsize+=counteq[i]-counteq[i-1];
     logmsg(2,"rank %d localsize %d\n",rank,localsize);
-    VecSetSizes(vece,localsize,VecSize);
   }
-  else {
-    /* exogenous columns run 0..nexo-1; condensation can push nexo past
-       VecSize, so the shock vector and B's columns span BSize */
-    VecSetSizes(vece,PETSC_DECIDE,(VecSize>(PetscInt)nexo)?VecSize:(PetscInt)nexo);
-  }
+  /* exogenous columns run 0..nexo-1; condensation can push nexo past
+     VecSize, so the shock vector and B's columns span BSize */
+  PetscInt BSize=(VecSize>(PetscInt)nexo)?VecSize:(PetscInt)nexo;
+  shock_vec_set_sizes(vece,nesteddbbd,localsize,VecSize,BSize);
   VecSetOption(vece, VEC_IGNORE_NEGATIVE_INDICES,PETSC_TRUE);
   free(locals);
-  if(rank==rank_hsl) {
-    ierr = VecGetOwnershipRange(vece,&Istart,&Iend);
+  /* Preallocation is indexed by this rank's rows of A, while B's diagonal
+     block is delimited by the exogenous column range vece carries.  The
+     two coincide for a square B -- the layout vece used to define on its
+     own -- but part company once nexo > VecSize, so A's row split is
+     taken from PETSc directly (the same PetscLayout arithmetic MatSetUp
+     will apply to A) instead of being read off the shock vector. */
+  PetscInt Cstart,Cend;
+  ierr = VecGetOwnershipRange(vece,&Cstart,&Cend);
+  CHKERRQ(ierr);
+  if(nohsl) {
+    PetscInt nrowlocal=(nesteddbbd==1)?(PetscInt)localsize:PETSC_DECIDE,nrows=VecSize;
+    ierr = PetscSplitOwnership(PETSC_COMM_WORLD,&nrowlocal,&nrows);
     CHKERRQ(ierr);
+    MPI_Scan(&nrowlocal,&Iend,1,MPIU_INT,MPI_SUM,PETSC_COMM_WORLD);
+    Istart=Iend-nrowlocal;
+  }
+  else {
+    Istart=0;
+    Iend=VecSize;
+  }
+  if(rank==rank_hsl) {
     ierr = PetscMalloc((Iend-Istart)*sizeof(PetscInt),&dnnz);
     CHKERRQ(ierr);
     ierr = PetscMalloc((Iend-Istart)*sizeof(PetscInt),&onnz);
@@ -2135,7 +2142,7 @@ comp_accurate_reentry:
   offset_t neqmeta=0;
   if(rank==rank_hsl)eqmeta= (eq_probe_meta *) calloc (neq+1,sizeof(eq_probe_meta));
   if(rank==rank_hsl) {
-    jacobian_preallocate(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,nexo,closure_vals,ndblock,alltimeset,allregset,eq_intertemp,eq_addr,eq_time,eq_reg,counteq,nintraeq,&sbbd_overrid,Istart,Iend,&dnz,dnnz,&onz,onnz,&dnzB,dnnzB,&onzB,onnzB,nesteddbbd,eqmeta,&neqmeta);
+    jacobian_preallocate(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,nexo,closure_vals,ndblock,alltimeset,allregset,eq_intertemp,eq_addr,eq_time,eq_reg,counteq,nintraeq,&sbbd_overrid,VecSize,Istart,Iend,Cstart,Cend,&dnz,dnnz,&onz,onnz,&dnzB,dnnzB,&onzB,onnzB,nesteddbbd,eqmeta,&neqmeta);
     probe_onfail_context(sets,set_elems,vars,nvar,closure_vals,nvarele,eq_addr,eqmeta,neqmeta,VecSize);
   }
   if(rank==0&&sbbd_overrid&&alltimeset<0) {

@@ -2575,7 +2575,7 @@ int equation_order_read_nested(char *fname, char *commsyntax,set_def *sets,dim_t
   return 1;
 }
 
-int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,set_element *set_elems,array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar,elem_value *elem_vals,offset_t ncofvar,offset_t ncofele, offset_t nexo,closure_entry *closure_vals,offset_t ndblock,offset_t alltimeset,offset_t allregset,bool *eq_intertemp,offset_t *eq_addr,dim_t *eq_time,dim_t *eq_reg,offset_t *counteq,offset_t nintraeq,bool *sbbd_overrid,PetscInt Istart,PetscInt Iend,PetscInt *dnz,PetscInt *dnnz,PetscInt *onz,PetscInt *onnz,PetscInt *dnzB,PetscInt *dnnzB,PetscInt *onzB,PetscInt *onnzB,int nesteddbbd,eq_probe_meta *eqmeta,offset_t *neqmeta) {
+int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,set_element *set_elems,array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar,elem_value *elem_vals,offset_t ncofvar,offset_t ncofele, offset_t nexo,closure_entry *closure_vals,offset_t ndblock,offset_t alltimeset,offset_t allregset,bool *eq_intertemp,offset_t *eq_addr,dim_t *eq_time,dim_t *eq_reg,offset_t *counteq,offset_t nintraeq,bool *sbbd_overrid,PetscInt VecSize,PetscInt Istart,PetscInt Iend,PetscInt Cstart,PetscInt Cend,PetscInt *dnz,PetscInt *dnnz,PetscInt *onz,PetscInt *onnz,PetscInt *dnzB,PetscInt *dnnzB,PetscInt *onzB,PetscInt *onnzB,int nesteddbbd,eq_probe_meta *eqmeta,offset_t *neqmeta) {
   FILE * filehandle;
   char tline[TABREADLINE],line[TABREADLINE],line1[TABREADLINE],linecopy[TABREADLINE];//,set1[NAMESIZE],set2[NAMESIZE];
   char vname[TABREADLINE],lintmp[TABREADLINE];//,*p1=NULL;
@@ -2974,7 +2974,9 @@ int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,
               }
             }
             if (closure_vals[vars[LinVars[i].LinVarIndx].offset+li3].is_exogenous) {
-              if (Istart<=Iindx&&Iindx<Iend) { //&&Iindx<nexo
+              /* B's diagonal block is delimited by ITS column range, which
+                 parts company with the row range once nexo > VecSize */
+              if (Cstart<=Iindx&&Iindx<Cend) {
                 dnnzB[Jindx-Istart]=dnnzB[Jindx-Istart]+1;
               }
               else {
@@ -3030,6 +3032,23 @@ int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,
     }
   }
   if(neqmeta!=NULL)*neqmeta=eqindx;
+  /* The scan counts insertions, not distinct entries: one column can be
+     referenced many times by a single row, and substitution multiplies
+     those repeats (a condensed GTAPv7 row reached 161,649 counted
+     insertions against 128,582 local columns).  PETSc rejects a hint
+     above the row length, so cap each count at what the block can hold --
+     over-counting only ever costs preallocated memory. */
+  {
+    PetscInt BSize=(VecSize>(PetscInt)nexo)?VecSize:(PetscInt)nexo;
+    PetscInt ndiagA=Iend-Istart,ndiagB=Cend-Cstart;
+    PetscInt noffA=VecSize-ndiagA,noffB=BSize-ndiagB,l;
+    for (l=0; l<Iend-Istart; l++) {
+      if(dnnz[l]>ndiagA)dnnz[l]=ndiagA;
+      if(onnz[l]>noffA)onnz[l]=noffA;
+      if(dnnzB[l]>ndiagB)dnnzB[l]=ndiagB;
+      if(onnzB[l]>noffB)onnzB[l]=noffB;
+    }
+  }
   free(counteq1);
   fclose(filehandle);
   return 1;

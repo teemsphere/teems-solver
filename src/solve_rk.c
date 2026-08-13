@@ -136,8 +136,7 @@ static void rk_stage_solve(PetscBool nohsl,PetscInt VecSize,PetscInt BSize,
   else {
     MatCreate(PETSC_COMM_SELF,&B);
   }
-  if(nesteddbbd==1)MatSetSizes(B,localsize,localsize,VecSize,VecSize);
-  else MatSetSizes(B,PETSC_DECIDE,PETSC_DECIDE,VecSize,BSize);
+  shock_mat_set_sizes(B,nesteddbbd,localsize,VecSize,BSize);
   if(nohsl) {
     MatSetType(B,MATMPIAIJ);
     MatMPIAIJSetPreallocation(B,dnzB,dnnzB,onzB,onnzB);
@@ -380,8 +379,8 @@ bool solve_rk(PetscBool nohsl,PetscInt VecSize,PetscInt dnz,PetscInt* dnnz,Petsc
   gettimeofday(&begintime, NULL);
 
   /* exogenous columns run 0..nexo-1; under heavy condensation nexo can
-     exceed VecSize, so vece and B's columns span BSize (the MPI methods
-     abort in main when nexo > VecSize) */
+     exceed VecSize, so vece and B's columns span BSize (see
+     shock_vec_set_sizes / shock_mat_set_sizes for the layout rule) */
   PetscInt BSize;
   BSize=(PetscInt)(nvarele-VecSize-nbselems);      /* nexo */
   BSize=(BSize>VecSize)?BSize:VecSize;
@@ -466,8 +465,7 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
           VecCreate(PETSC_COMM_SELF,&vece);
           VecSetType(vece,VECSEQ);
         }
-        if(nesteddbbd==1)VecSetSizes(vece,localsize,VecSize);
-        else VecSetSizes(vece,PETSC_DECIDE,BSize);
+        shock_vec_set_sizes(vece,nesteddbbd,localsize,VecSize,BSize);
         VecSetOption(vece, VEC_IGNORE_NEGATIVE_INDICES,PETSC_TRUE);
       }
       firstsolve=false;
@@ -806,8 +804,7 @@ bool solve_comp_approx(PetscBool nohsl,PetscInt VecSize,PetscInt dnz,PetscInt* d
         VecCreate(PETSC_COMM_SELF,&vece);
         VecSetType(vece,VECSEQ);
       }
-      if(nesteddbbd==1)VecSetSizes(vece,localsize,VecSize);
-      else VecSetSizes(vece,PETSC_DECIDE,BSize);
+      shock_vec_set_sizes(vece,nesteddbbd,localsize,VecSize,BSize);
       VecSetOption(vece, VEC_IGNORE_NEGATIVE_INDICES,PETSC_TRUE);
     }
     firstsolve=false;
