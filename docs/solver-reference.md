@@ -648,6 +648,40 @@ method (basis of the golden-run verification, below).
 - `zerodivide` defaults substitute configured values on 0/0 per [GM].
 - Levels bounds (`bound_type`) are enforced during formula evaluation.
 
+Solve-quality diagnostics (`-condest 1`, sequential LU): each linear
+solve is measured with HSL MA60 — iterative refinement plus the
+Arioli–Demmel–Duff componentwise backward error ω₁/ω₂, a forward-error
+bound, and the corresponding scaled condition numbers κω₁/κω₂ (Hager
+1-norm estimation via MC71 internally). MA60 drives the estimate by
+reverse communication, requesting `A⁻¹y` and `A⁻ᵀy` products that the
+kept MA48 factors supply through `MA48CD` with `TRANS` set per `KASE`;
+this transpose-solve requirement is why the flag is LU-only — the
+bordered methods never factorize the composed system and have no
+transpose path through their block+interface flows.
+
+The measurement is *diagnostic-only*: refinement runs on a copy of the
+solution and the caller's `X` is never updated, so a run's outputs are
+bit-identical with the flag on or off (gated in both `-fastrefac`
+states). Cost is a handful of back-solves per step — 0.18 s against a
+2.7 s factorize at 1.35M — plus one pristine copy of the staged system
+(the `-fastrefac` path already keeps one for its refill).
+
+Reading the numbers: ω is the backward error (how far the solved
+problem sits from the stated one); a backward-stable solve of a
+near-singular system legitimately reports ω ≈ 0 *and* a near-zero
+forward-error bound, so κω₂ — not `ERX` — is the conditioning signal.
+Raw 1-norm condition numbers are useless here (CGE Jacobians mix
+$-million and percent rows, so healthy systems already estimate ~1e18);
+the scaled κω₂ has real dynamic range, and κω₂ > 1e15 raises a
+near-singularity warning. That is precisely the class the MC79
+structural probe cannot see: a system whose entries are all present and
+nonzero, and structurally full-rank on both probe patterns, but
+numerically degenerate at the base data (§5). Null-shock solves are
+skipped with a note — with b = 0 there is nothing to measure. No
+f32/f64 advisory is derived from κω₂: healthy models already exceed a
+naive κ·ε test while validating to 1e-8 in f32, so a useful threshold
+needs corpus calibration.
+
 ## 11. Command-line reference
 
 | option | default | meaning |
@@ -668,6 +702,7 @@ method (basis of the golden-run verification, below).
 | `-inmemory {0,1}` | 1 except NDBBD | §8 |
 | `-nsbbdblocks n` | 2 | SBBD block-count hint |
 | `-probefine {0,1}` | 0 | with `-solmed probe`: add the MC79 fine-DM strongly-connected-component report (§5) |
+| `-condest {0,1}` | 0 | sequential LU only: per-solve quality diagnostics (MA60/MC71) — componentwise backward error ω₁/ω₂ with iterative refinement, forward-error bound, and the Arioli–Demmel–Duff scaled condition numbers κω₁/κω₂ — logged per linear solve and recorded as run maxima in `stats.json` (`condest` object). Diagnostic-only: solutions are bit-identical with the flag on or off (refinement runs on a copy). Null-shock (zero-rhs) solves are skipped with a note; κω₂ > 1e15 adds a numerically-near-singular warning — the class the structural probe cannot see. Ignored (with a warning) for the bordered methods, whose composed systems have no transpose-solve path |
 | `-nowrites n` | 0 | suppress output writes |
 | `-verbosity {0,1,2}` | 1 | 0 = errors/warnings + accuracy summary only; 1 = phase progress and timings; 2 = per-rank/per-block debug detail (also exported as `TEEMS_VERBOSITY` for the Fortran kernels; MA48 duplicate-entry notes appear only at 2) |
 | `-nox` | — | PETSc: no X output |

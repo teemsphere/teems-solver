@@ -293,6 +293,15 @@ typedef struct {
 extern zdiv_state teems_zdiv_scan;
 extern int teems_gpzerodivide;
 extern long teems_laA_used,teems_laDi_used,teems_laD_used; /* max grown -la* equivalent percent (la auto-sizing) */
+/* -condest solve-quality diagnostics (MA60/MC71, sequential LU path);
+   scope gate set by the LU wrappers, accumulators reduced into
+   stats.json post-solve.  teems_condest_active_/report_ are the
+   Fortran-visible entries used by SPEC48_SSOL2LA(_P). */
+extern int teems_condest,teems_condest_scope;
+extern double teems_condest_kw1max,teems_condest_kw2max,teems_condest_omegamax;
+extern long teems_condest_solves,teems_condest_skips;
+int teems_condest_active_(void);
+void teems_condest_report_(int *status,double *omega1,double *omega2,double *erx,double *cond1,double *cond2,int *noiter);
 void zdiv_scan_reset(void);
 void zdiv_capture(void);
 void zdiv_disable(void);
@@ -624,6 +633,7 @@ int probe_structural(PetscInt VecSize,offset_t nvarele,offset_t ncofele,PetscInt
    to be factorized (live Mat + local->condensed row/col maps). */
 void probe_onfail_context(set_def *sets,set_element *set_elems,array_def *vars,offset_t nvar,closure_entry *closure_vals,offset_t nvarele,offset_t *eq_addr,eq_probe_meta *eqmeta,offset_t neqmeta,PetscInt VecSize);
 void probe_onfail_scope_set(Mat A,PetscInt m,PetscInt n,const char *label,int block_id,int *row_order,int *col_order,offset_t row_base,offset_t col_base,offset_t row_add,offset_t col_add);
+void probe_onfail_scope_set_coo(const int *irn,const int *jcn,const solve_real *va,const int *rowlen,long nz,PetscInt m,PetscInt n,const char *label,int *row_map,int *col_map);
 void probe_onfail_scope_clear(void);
 void teems_onfail_diag_(int *info1);
 void teems_onfail_abort_(void);

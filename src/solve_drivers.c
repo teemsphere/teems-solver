@@ -48,6 +48,7 @@ void lu_fastrefac_solve(Mat A,PetscInt VecSize,dim_t laA,solve_real *rhs,solve_r
     for(i=0; i<fr_nz; i++)fr_values[i]=aa->a[i];
   }
   probe_onfail_scope_set(A,VecSize,VecSize,"condensed system",-1,NULL,NULL,0,0,0,0);
+  teems_condest_scope=teems_condest;
   for(tries=0; tries<6; tries++) {
     insize[0]=VecSize;
     insize[1]=VecSize;
@@ -58,6 +59,7 @@ void lu_fastrefac_solve(Mat A,PetscInt VecSize,dim_t laA,solve_real *rhs,solve_r
     spec48_ssol2la_p_(insize,fr_irn,fr_jcn,fr_values,rhs,x);
     if(insize[4]==0) {
       fr_ready=1;
+      teems_condest_scope=0;
       probe_onfail_scope_clear();
       return;
     }
@@ -128,7 +130,9 @@ void lu_grow_solve(Mat A,PetscInt VecSize,dim_t laA,solve_real *rhs,solve_real *
     insize[3]=laA;
     insize[4]=0;
     insize[5]=(int)lasize;
+    teems_condest_scope=teems_condest;
     spec48_ssol2la_(insize,irn,jcn,values,rhs,x);
+    teems_condest_scope=0;
     free(irn);
     free(jcn);
     free(values);
@@ -204,6 +208,7 @@ void sbbd_fastrefac_solve(Mat *A,Vec *vecb,PetscInt VecSize,PetscInt rank,PetscI
   indata[0]=sb_nz;
   indata[1]=VecSize;
   int redo_io=redo;
+  if(rank==rank_hsl)probe_onfail_scope_set_coo(NULL,sb_jcn,sb_values,sb_neleperrow,sb_nz,VecSize,VecSize,"SBBD system (MP48, persistent)",NULL,NULL);
   spec48_nomc66_p_(indata,sb_jcn,sb_b1,sb_values,x,sb_neleperrow,&fcomm,counteq,countvarintra1,&redo_io);
   if(redo_io<0) {
     /* fast refactorize declined: rebuild the instance on current values */
@@ -211,9 +216,23 @@ void sbbd_fastrefac_solve(Mat *A,Vec *vecb,PetscInt VecSize,PetscInt rank,PetscI
     spec48_nomc66_p_(indata,sb_jcn,sb_b1,sb_values,x,sb_neleperrow,&fcomm,counteq,countvarintra1,&redo_io);
     if(redo_io<0) {
       printf("MP48 instance rebuild failed with code %d\n",redo_io);
+      /* -21 = structurally rank-deficient interface matrix (singular
+         system; +2 warnings are mapped here by the kernel): name the
+         defects before dying.  Other codes are setup/allocation/IO —
+         a matching would be noise (the MC64/-3 lesson). */
+      if(rank==rank_hsl&&redo_io==-21) {
+        int zdiag=0;
+        teems_onfail_diag_(&zdiag);
+      }
+      /* redo_io is replicated (the kernel sets it from pdata%ERROR on
+         every rank), so all ranks are here: hold the siblings until
+         the diagnosing rank has printed, or its output is truncated
+         by their abort */
+      MPI_Barrier(PETSC_COMM_WORLD);
       MPI_Abort(PETSC_COMM_WORLD,1);
     }
   }
+  probe_onfail_scope_clear();
   sb_ready=1;
 }
 
@@ -542,9 +561,11 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
           ai1[k]=ai1[k-1]+neleperrow[k-1];
         }
         x0=realloc (x0,VecSize*sizeof(solve_real));
+        if(rank==rank_hsl)probe_onfail_scope_set_coo(irn,jcn,values,NULL,count,VecSize,VecSize,"SBBD system (MP48)",NULL,NULL);
         if(mc66!=0)spec48_single_(ptx,irn,jcn,b1,values,x0,neleperrow,ai1,&fcomm);
-        free(irn);
         if(mc66==0)spec48_nomc66_(ptx,jcn,b1,values,x0,neleperrow,&fcomm,counteq,countvarintra1);
+        probe_onfail_scope_clear();
+        free(irn);
         free(jcn);
         free(values);
         free(neleperrow);
@@ -1107,9 +1128,11 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
               CHKERRQ(ierr);
               ierr = PetscGetCPUTime(&time0);
               CHKERRQ(ierr);
+              if(rank==rank_hsl)probe_onfail_scope_set_coo(irn,jcn,values,NULL,count,VecSize,VecSize,"SBBD system (MP48)",NULL,NULL);
               if(mc66!=0)spec48_single_(ptx,irn,jcn,b1,values,x1,neleperrow,ai1,&fcomm);
-              free(irn);
               if(mc66==0)spec48_nomc66_(ptx,jcn,b1,values,x1,neleperrow,&fcomm,counteq,countvarintra1);
+              probe_onfail_scope_clear();
+              free(irn);
               ierr = PetscGetCPUTime(&time1);
               CHKERRQ(ierr);
               if(verbosity>=1){ierr = PetscPrintf(PETSC_COMM_WORLD,"LU time %f\n",time1-time0);}
@@ -1713,9 +1736,11 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
             CHKERRQ(ierr);
             ierr = PetscGetCPUTime(&time0);
             CHKERRQ(ierr);
+            if(rank==rank_hsl)probe_onfail_scope_set_coo(irn,jcn,values,NULL,count,VecSize,VecSize,"SBBD system (MP48)",NULL,NULL);
             if(mc66!=0)spec48_single_(ptx,irn,jcn,b1,values,x1,neleperrow,ai1,&fcomm);
-            free(irn);
             if(mc66==0)spec48_nomc66_(ptx,jcn,b1,values,x1,neleperrow,&fcomm,counteq,countvarintra1);
+            probe_onfail_scope_clear();
+            free(irn);
             ierr = PetscGetCPUTime(&time1);
             CHKERRQ(ierr);
             if(verbosity>=1){ierr = PetscPrintf(PETSC_COMM_WORLD,"LU time %f\n",time1-time0);}

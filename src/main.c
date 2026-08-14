@@ -116,6 +116,7 @@ static void ordering_stats_write(cmf_file_entry *iodata, int niodata, int noutda
     fprintf(fp,"    \"max_threads\": %d,\n",(int)max_threads);
     fprintf(fp,"    \"store_precision\": \"%s\",\n",TEEMS_STORE_PRECISION);
     fprintf(fp,"    \"fastrefac\": %s,\n",frchk?"true":"false");
+    fprintf(fp,"    \"condest\": %s,\n",teems_condest?"true":"false");
     fprintf(fp,"    \"gpzerodivide\": %s,\n",teems_gpzerodivide?"true":"false");
     fprintf(fp,"    \"assertions\": \"%s\",\n",mode_names[teems_assertions_mode>=0&&teems_assertions_mode<=2?teems_assertions_mode:2]);
     fprintf(fp,"    \"range_test_initial\": \"%s\",\n",mode_names[teems_range_test_initial>=0&&teems_range_test_initial<=2?teems_range_test_initial:1]);
@@ -180,6 +181,49 @@ static void stats_la_used_patch(cmf_file_entry *iodata, int niodata, int noutdat
     return;
   }
   fprintf(fp,"%s,\n  \"la_used\": {\"laA\": %ld, \"laDi\": %ld, \"laD\": %ld}\n}\n",buf,laA_used,laDi_used,laD_used);
+  fclose(fp);
+  free(buf);
+}
+
+/* -condest record: per-run maxima of the MA60 solve-quality measures,
+   patched into stats.json like la_used (same append-at-tail flow) */
+static void stats_condest_patch(cmf_file_entry *iodata, int niodata, int noutdata, int nsoldata,
+                                double kw1max, double kw2max, double omegamax,
+                                long solves, long skips) {
+  char statspath[TABREADLINE+16];
+  int i;
+  for (i=niodata+noutdata; i<niodata+noutdata+nsoldata; i++) {
+    if (strcmp("solfiles",iodata[i].logname)==0)break;
+  }
+  if(i<niodata+noutdata+nsoldata)strcpy(statspath,iodata[i].filname);
+  else strcpy(statspath,"solution");
+  strcat(statspath,".stats.json");
+  FILE *fp=fopen(statspath,"r");
+  if (fp==NULL)return;
+  fseek(fp,0,SEEK_END);
+  long len=ftell(fp);
+  fseek(fp,0,SEEK_SET);
+  char *buf=(char *) malloc (len+1);
+  size_t rd=fread(buf,1,len,fp);
+  fclose(fp);
+  if((long)rd!=len) {
+    free(buf);
+    return;
+  }
+  buf[len]='\0';
+  char *end=strrchr(buf,'}');
+  if(end==NULL) {
+    free(buf);
+    return;
+  }
+  *end='\0';
+  fp=fopen(statspath,"w");
+  if (fp==NULL) {
+    free(buf);
+    return;
+  }
+  fprintf(fp,"%s,\n  \"condest\": {\"kappa_w1_max\": %.6e, \"kappa_w2_max\": %.6e, \"omega_max\": %.6e, \"solves\": %ld, \"zero_rhs_skips\": %ld}\n}\n",
+          buf,kw1max,kw2max,omegamax,solves,skips);
   fclose(fp);
   free(buf);
 }
@@ -901,6 +945,21 @@ int main(int argc,char **args) {
      report (strongly connected components of the well-determined block) */
   dim_t probefine=0;
   PetscOptionsGetInt(NULL,NULL,"-probefine",&probefine,NULL);
+  /* -condest: opt-in per-solve quality diagnostics (MA60 iterative
+     refinement + Arioli-Demmel-Duff backward/forward error and scaled
+     condition numbers) on the sequential LU path.  Diagnostic-only:
+     solutions are untouched.  Not implemented for the bordered
+     methods (condition estimation needs transpose solves on the
+     composed system, which only the LU path has). */
+  {
+    dim_t condest=0;
+    PetscOptionsGetInt(NULL,NULL,"-condest",&condest,NULL);
+    teems_condest=(condest!=0);
+    if(teems_condest&&matsol!=MM_LU) {
+      if(rank==0)printf("Warning: -condest is implemented for the sequential LU path (-matsol 0) only; ignored for this run\n");
+      teems_condest=0;
+    }
+  }
   bool isrk=(solmethod==SM_RK2||solmethod==SM_RK4||solmethod==SM_BOSHA32||solmethod==SM_DOPRI54);
   bool isrk_embedded=(solmethod==SM_BOSHA32||solmethod==SM_DOPRI54);
   /* Runge-Kutta controls (GEMPACK 26.5.1/26.5.2): -adaptive
@@ -2433,6 +2492,16 @@ comp_accurate_reentry:
                                    lamax[0]>(long)laA?lamax[0]:(long)laA,
                                    lamax[1]>(long)laDi?lamax[1]:(long)laDi,
                                    lamax[2]>(long)laD?lamax[2]:(long)laD);
+  }
+  /* -condest record: the measures accumulate on the solving rank
+     (rank_hsl); reduce and patch alongside la_used */
+  if(teems_condest) {
+    double cdd[3]={teems_condest_kw1max,teems_condest_kw2max,teems_condest_omegamax},cddmax[3];
+    long cdl[2]={teems_condest_solves,teems_condest_skips},cdlsum[2];
+    MPI_Allreduce(cdd,cddmax,3,MPI_DOUBLE,MPI_MAX,PETSC_COMM_WORLD);
+    MPI_Allreduce(cdl,cdlsum,2,MPI_LONG,MPI_SUM,PETSC_COMM_WORLD);
+    if(rank==0)stats_condest_patch(iodata,niodata,noutdata,nsoldata,
+                                   cddmax[0],cddmax[1],cddmax[2],cdlsum[0],cdlsum[1]);
   }
   /* PostSim foundation F3 (early Tier 0): after the solve, coefficient
      slots hold post-simulation (updated) values and xcf holds the

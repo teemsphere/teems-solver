@@ -69,6 +69,7 @@ SUBROUTINE SPEC48_SINGLE(indata,irn1,jcn1,b1,values1,x,neleperrow,ai1,fcomm)
   integer i,j,k,h,o,p
   TYPE (MP48_DATA) data
   INTEGER ERCODE,ST
+  INTEGER (4) ZDIAG
   LOGICAL FLAG
   integer myid, numprocs
   fcomm1=fcomm(1)
@@ -149,8 +150,17 @@ SUBROUTINE SPEC48_SINGLE(indata,irn1,jcn1,b1,values1,x,neleperrow,ai1,fcomm)
   data%JOB = 25
   CALL MP48AD(data)
   IF (data%RANK.EQ.0) THEN
-    IF (data%ERROR.LT.0) THEN
-      WRITE (6,*) ' Unexpected error return'
+    IF (data%ERROR.LT.0 .OR. data%ERROR.EQ.2) THEN
+      ! fail fast with named diagnosis for the singularity classes,
+      ! mirroring SPEC48_NOMC66 (see the comment there)
+      WRITE (6,'(A,I4)') 'Error STOP from MP48 with data%ERROR = ',data%ERROR
+      IF (data%ERROR.EQ.-21) WRITE (6,*) ' (the SBBD interface matrix is structurally rank deficient)'
+      IF (data%ERROR.EQ.2) WRITE (6,*) ' (MP48 reports the matrix is singular)'
+      IF (data%ERROR.EQ.-21 .OR. data%ERROR.EQ.2) THEN
+        ZDIAG=0
+        CALL TEEMS_ONFAIL_DIAG(ZDIAG)
+      END IF
+      CALL TEEMS_ONFAIL_ABORT()
     ELSE
       do o=1,m
         x(column_order(o))=data%X(o)
@@ -176,6 +186,7 @@ SUBROUTINE SPEC48_NOMC66(indata,jcn1,b1,values1,x,neleperrow,fcomm,rowptrin,colp
 
   TYPE (MP48_DATA) data
   INTEGER ERCODE,ST
+  INTEGER (4) ZDIAG
   LOGICAL FLAG
   integer (4) fcomm(*),fcomm1
   integer(4) neleperrow(*),jcn1(*)
@@ -245,8 +256,20 @@ SUBROUTINE SPEC48_NOMC66(indata,jcn1,b1,values1,x,neleperrow,fcomm,rowptrin,colp
   CALL MP48AD(data)
   if (teems_verbosity()>=2) print *, "Processa ", myid, " of ", numprocs, " is alive1"
   IF (data%RANK.EQ.0) THEN
-    IF (data%ERROR.LT.0) THEN
-      WRITE (6,*) ' Unexpected error return'
+    IF (data%ERROR.LT.0 .OR. data%ERROR.EQ.2) THEN
+      ! fail fast: the old path printed one line and CONTINUED with a
+      ! stale x.  ERROR=-21 (interface matrix structurally rank
+      ! deficient) and the ERROR=+2 warning (matrix is singular, the
+      ! "solution" is not usable) are singularity-class: name the
+      ! defects.  Other codes are setup/allocation/IO.
+      WRITE (6,'(A,I4)') 'Error STOP from MP48 with data%ERROR = ',data%ERROR
+      IF (data%ERROR.EQ.-21) WRITE (6,*) ' (the SBBD interface matrix is structurally rank deficient)'
+      IF (data%ERROR.EQ.2) WRITE (6,*) ' (MP48 reports the matrix is singular)'
+      IF (data%ERROR.EQ.-21 .OR. data%ERROR.EQ.2) THEN
+        ZDIAG=0
+        CALL TEEMS_ONFAIL_DIAG(ZDIAG)
+      END IF
+      CALL TEEMS_ONFAIL_ABORT()
     ELSE
       do o=1,m
         x(o)=data%X(o)
@@ -285,6 +308,7 @@ SUBROUTINE SPEC48_NOMC66_P(indata,jcn1,b1,values1,x,neleperrow,fcomm,rowptrin,co
   integer (8) :: i,j,o,h
   integer (8) :: nblocks,maxsbcols,ncols
   INTEGER ERCODE,ST
+  INTEGER (4) ZDIAG
   integer (4) fcomm(*),fcomm1
   integer (4) redo(*)
   integer(4) neleperrow(*),jcn1(*)
@@ -312,6 +336,13 @@ SUBROUTINE SPEC48_NOMC66_P(indata,jcn1,b1,values1,x,neleperrow,fcomm,rowptrin,co
       if (teems_verbosity()>=1 .AND. pdata%RANK.EQ.0) WRITE (6,'(A,I4)') &
         'Note: fast SBBD refactorize declined, MP48 code ',pdata%ERROR
       redo(1)=pdata%ERROR
+      RETURN
+    END IF
+    IF (pdata%ERROR.EQ.2) THEN
+      ! MP48 "matrix is singular" warning: the solution would be
+      ! garbage — surface as -21 so the caller diagnoses and aborts
+      IF (pdata%RANK.EQ.0) WRITE (6,*) ' MP48 reports the matrix is singular'
+      redo(1)=-21
       RETURN
     END IF
     pdata%JOB = 5
@@ -401,6 +432,12 @@ SUBROUTINE SPEC48_NOMC66_P(indata,jcn1,b1,values1,x,neleperrow,fcomm,rowptrin,co
   IF (pdata%ERROR.LT.0) THEN
     WRITE (6,*) ' Unexpected MP48 factorize code on rank ',pdata%RANK
     redo(1)=pdata%ERROR
+    RETURN
+  END IF
+  IF (pdata%ERROR.EQ.2) THEN
+    ! singular-matrix warning on the rebuild: fatal (see fast leg)
+    IF (pdata%RANK.EQ.0) WRITE (6,*) ' MP48 reports the matrix is singular'
+    redo(1)=-21
     RETURN
   END IF
   pinit=.true.
@@ -1171,6 +1208,15 @@ SUBROUTINE SPEC48_SSOL2LA(INSIZE,IRN,JCN,VA,B,X)
   LOGICAL TRANS,checksol
   real(kind=DPC), pointer :: CNTL(:),RINFO(:),W(:),ERROR1(:),LOGDET!A(:),,R(:),C(:)!,RHS(:),SOL(:)
   integer, pointer :: ICNTL(:),INFO(:),IW(:),KEEP(:)!,JCN1(:),IRN1(:)
+  ! -condest (MA60/MC71 solve-quality diagnostics; active only when the
+  ! LU wrappers gate it on -- this kernel also serves the DBBD interface)
+  LOGICAL CONDEST_ON
+  integer(4) CDSTATUS,CDNOITER,CDKASE,CDIT
+  integer(4) ICNTL60(5),KEEP60(10),JOB60(2)
+  real(kind=DPC) OMEGA60(2),COND60(2),ERX60,RKEEP60(10)
+  integer(4), allocatable :: CIRN(:),CJCN(:),C60IW(:)
+  real(kind=DPC), allocatable :: CVA(:),CB(:),CX(:),CY(:),CRX(:),CD(:),C60W(:)
+  integer(4), external :: TEEMS_CONDEST_ACTIVE
   M=INSIZE(1)
   N=INSIZE(2)
   NE=INSIZE(3)
@@ -1184,6 +1230,38 @@ SUBROUTINE SPEC48_SSOL2LA(INSIZE,IRN,JCN,VA,B,X)
     LA=INSIZE(6)
   endif
   INSIZE(5)=0
+  ! pristine copy for the -condest diagnostics: MA48 clobbers the
+  ! staged arrays in place, and MA60 needs the original system
+  CONDEST_ON=.FALSE.
+  IF (FSORD.EQ.1 .AND. TEEMS_CONDEST_ACTIVE().NE.0) THEN
+    CDSTATUS=1
+    DO I=1,M
+      IF (B(I).NE.0.0) THEN
+        CDSTATUS=0
+        EXIT
+      END IF
+    END DO
+    IF (CDSTATUS.EQ.1) THEN
+      ! zero right-hand side (null-shock step): nothing to measure
+      OMEGA60=0.0D0
+      COND60=0.0D0
+      ERX60=0.0D0
+      CDNOITER=0
+      CALL TEEMS_CONDEST_REPORT(CDSTATUS,OMEGA60(1),OMEGA60(2),ERX60,&
+                                COND60(1),COND60(2),CDNOITER)
+    ELSE
+      CONDEST_ON=.TRUE.
+      allocate(CIRN(NE),CJCN(NE),CVA(NE),CB(M))
+      DO I=1,NE
+        CIRN(I)=IRN(I)
+        CJCN(I)=JCN(I)
+        CVA(I)=VA(I)
+      END DO
+      DO I=1,M
+        CB(I)=B(I)
+      END DO
+    END IF
+  END IF
   MAXN=N
   IF (N.LT.M) THEN
     MAXN=M
@@ -1218,6 +1296,7 @@ SUBROUTINE SPEC48_SSOL2LA(INSIZE,IRN,JCN,VA,B,X)
     INSIZE(5)=-3
     INSIZE(6)=max(INFO(3),INFO(4))
     deallocate(CNTL,RINFO,ERROR1,ICNTL,INFO,IW,KEEP)
+    IF (CONDEST_ON) deallocate(CIRN,CJCN,CVA,CB)
     RETURN
   END IF
   ! the analyse itself fails on structural singularity (INFO(1)=-5);
@@ -1243,6 +1322,7 @@ SUBROUTINE SPEC48_SSOL2LA(INSIZE,IRN,JCN,VA,B,X)
     INSIZE(5)=-3
     INSIZE(6)=INFO(4)
     deallocate(CNTL,RINFO,W,ERROR1,ICNTL,INFO,IW,KEEP)
+    IF (CONDEST_ON) deallocate(CIRN,CJCN,CVA,CB)
     RETURN
   END IF
   IF (INFO(1).NE.0) THEN
@@ -1270,6 +1350,45 @@ SUBROUTINE SPEC48_SSOL2LA(INSIZE,IRN,JCN,VA,B,X)
               B,X,ERROR1,W,IW,INFO)
   endif
   if (teems_verbosity()>=2) WRITE (6,FMT='(A,I3/A)') 'INFO(1) =',INFO(1)
+  IF (CONDEST_ON) THEN
+    ! MA60 iterative refinement + Arioli-Demmel-Duff backward/forward
+    ! error and scaled condition numbers on the pristine copy, using
+    ! the kept factors for the inv(A)/inv(A^T) products (MA48CD, trans
+    ! per KASE).  Refinement runs on a COPY of X: the solution the
+    ! caller receives is bit-identical with the flag on or off.
+    allocate(CX(M),CY(M),CRX(M),CD(M),C60W(3*M),C60IW(2*M))
+    DO I=1,M
+      CX(I)=X(I)
+      CD(I)=1.0D0
+    END DO
+    CALL MA60ID(ICNTL60,KEEP60,RKEEP60)
+    ! no direct MA60 prints: the reporter owns the log line
+    ICNTL60(1)=0
+    JOB60(1)=1
+    JOB60(2)=0
+    CDKASE=0
+    CDSTATUS=0
+    DO CDIT=1,200
+      CALL MA60AD(M,NE,CVA,CIRN,CJCN,CB,CX,CY,CD,C60W,C60IW,CDKASE,&
+                  OMEGA60,ERX60,JOB60,COND60,CDNOITER,ICNTL60,KEEP60,RKEEP60)
+      IF (CDKASE.EQ.0) EXIT
+      IF (CDKASE.LT.0) THEN
+        CDSTATUS=2
+        IF (CDKASE.EQ.-3) CDSTATUS=3
+        EXIT
+      END IF
+      TRANS=(CDKASE.EQ.1)
+      CALL MA48CD(M,N,TRANS,JOB,LA,VA,IRN,KEEP,CNTL,ICNTL,&
+                  CY,CRX,ERROR1,W,IW,INFO)
+      DO I=1,M
+        CY(I)=CRX(I)
+      END DO
+    END DO
+    CALL TEEMS_CONDEST_REPORT(CDSTATUS,OMEGA60(1),OMEGA60(2),ERX60,&
+                              COND60(1),COND60(2),CDNOITER)
+    deallocate(CX,CY,CRX,CD,C60W,C60IW)
+    deallocate(CIRN,CJCN,CVA,CB)
+  END IF
   deallocate(CNTL,RINFO,W,ERROR1)!A,,RHS,SOL
   deallocate(ICNTL,INFO,IW,KEEP)!IRN1,
 END SUBROUTINE SPEC48_SSOL2LA
@@ -1284,6 +1403,11 @@ module ma48_persist
   real(kind=DPC), allocatable, save :: pCNTL(:),pRINFO(:),pW(:),pERROR1(:)
   integer, allocatable, save :: pICNTL(:),pINFO(:),pIW(:),pKEEP(:)
   logical, save :: pready=.false.
+  ! -condest pattern copy: on fast (JOB=2) steps IRN/JCN hold MA48
+  ! state, not the original indices, so the pristine pattern is saved
+  ! at rebuild time (VA(1:NE) is refilled in staging order each step,
+  ! so values pair with this saved pattern)
+  integer(4), allocatable, save :: pCIRN(:),pCJCN(:)
 end module ma48_persist
 
 SUBROUTINE SPEC48_SSOL2LA_P(INSIZE,IRN,JCN,VA,B,X)
@@ -1303,6 +1427,14 @@ SUBROUTINE SPEC48_SSOL2LA_P(INSIZE,IRN,JCN,VA,B,X)
   real(kind=DPC) VA(*),B(*),X(*)
   integer M,N,NE,LA,MAXN,T
   LOGICAL TRANS
+  ! -condest locals (see SPEC48_SSOL2LA; pattern copy lives in the module)
+  LOGICAL CONDEST_ON
+  integer(4) CDSTATUS,CDNOITER,CDKASE,CDIT,I
+  integer(4) ICNTL60(5),KEEP60(10),JOB60(2)
+  real(kind=DPC) OMEGA60(2),COND60(2),ERX60,RKEEP60(10)
+  integer(4), allocatable :: C60IW(:)
+  real(kind=DPC), allocatable :: CVA(:),CB(:),CX(:),CY(:),CRX(:),CD(:),C60W(:)
+  integer(4), external :: TEEMS_CONDEST_ACTIVE
   M=INSIZE(1)
   N=INSIZE(2)
   NE=INSIZE(3)
@@ -1311,7 +1443,54 @@ SUBROUTINE SPEC48_SSOL2LA_P(INSIZE,IRN,JCN,VA,B,X)
   IF (N.LT.M) THEN
     MAXN=M
   END IF
+  ! -condest: copy values and rhs before MA48 clobbers VA; the pattern
+  ! is saved (module) on rebuild entries, where IRN/JCN are original
+  CONDEST_ON=.FALSE.
+  IF (FSORD.EQ.1 .AND. TEEMS_CONDEST_ACTIVE().NE.0) THEN
+    CDSTATUS=1
+    DO I=1,M
+      IF (B(I).NE.0.0) THEN
+        CDSTATUS=0
+        EXIT
+      END IF
+    END DO
+    IF (CDSTATUS.EQ.1) THEN
+      OMEGA60=0.0D0
+      COND60=0.0D0
+      ERX60=0.0D0
+      CDNOITER=0
+      CALL TEEMS_CONDEST_REPORT(CDSTATUS,OMEGA60(1),OMEGA60(2),ERX60,&
+                                COND60(1),COND60(2),CDNOITER)
+    ELSE IF (INSIZE(5).NE.0 .AND. pready .AND. .NOT.allocated(pCIRN)) THEN
+      ! fast step but no saved pattern (flag mid-run edge): no estimate
+      CDSTATUS=2
+      OMEGA60=0.0D0
+      COND60=0.0D0
+      ERX60=0.0D0
+      CDNOITER=0
+      CALL TEEMS_CONDEST_REPORT(CDSTATUS,OMEGA60(1),OMEGA60(2),ERX60,&
+                                COND60(1),COND60(2),CDNOITER)
+    ELSE
+      CONDEST_ON=.TRUE.
+      allocate(CVA(NE),CB(M))
+      DO I=1,NE
+        CVA(I)=VA(I)
+      END DO
+      DO I=1,M
+        CB(I)=B(I)
+      END DO
+    END IF
+  END IF
   IF (INSIZE(5).EQ.0 .OR. .NOT.pready) THEN
+    IF (CONDEST_ON) THEN
+      ! rebuild entry: IRN/JCN hold the original pattern -- save it
+      if(allocated(pCIRN)) deallocate(pCIRN,pCJCN)
+      allocate(pCIRN(NE),pCJCN(NE))
+      DO I=1,NE
+        pCIRN(I)=IRN(I)
+        pCJCN(I)=JCN(I)
+      END DO
+    END IF
     if(allocated(pCNTL)) deallocate(pCNTL,pRINFO,pW,pERROR1,pICNTL,pINFO,pIW,pKEEP)
     allocate(pCNTL(10),pRINFO(10),pW(4*MAXN),pERROR1(3))
     allocate(pICNTL(20),pINFO(20),pIW(6*M+3*N))
@@ -1343,6 +1522,7 @@ SUBROUTINE SPEC48_SSOL2LA_P(INSIZE,IRN,JCN,VA,B,X)
       INSIZE(5)=-3
       INSIZE(6)=max(pINFO(3),pINFO(4))
       pready=.false.
+      IF (CONDEST_ON) deallocate(CVA,CB)
       RETURN
     END IF
     IF (pINFO(1).LT.0) THEN
@@ -1361,6 +1541,7 @@ SUBROUTINE SPEC48_SSOL2LA_P(INSIZE,IRN,JCN,VA,B,X)
       INSIZE(5)=-3
       INSIZE(6)=pINFO(4)
       pready=.false.
+      IF (CONDEST_ON) deallocate(CVA,CB)
       RETURN
     END IF
     IF (pINFO(1).NE.0) THEN
@@ -1383,6 +1564,7 @@ SUBROUTINE SPEC48_SSOL2LA_P(INSIZE,IRN,JCN,VA,B,X)
       INSIZE(5)=-3
       INSIZE(6)=pINFO(4)
       pready=.false.
+      IF (CONDEST_ON) deallocate(CVA,CB)
       RETURN
     END IF
     IF (pINFO(1).LT.0) THEN
@@ -1391,6 +1573,7 @@ SUBROUTINE SPEC48_SSOL2LA_P(INSIZE,IRN,JCN,VA,B,X)
       if (teems_verbosity()>=1) WRITE (6,'(A,I3)') &
         'Note: fast refactorize declined, MA48B/BD INFO(1) =',pINFO(1)
       INSIZE(5)=pINFO(1)
+      IF (CONDEST_ON) deallocate(CVA,CB)
       RETURN
     END IF
   END IF
@@ -1402,6 +1585,42 @@ SUBROUTINE SPEC48_SSOL2LA_P(INSIZE,IRN,JCN,VA,B,X)
     CALL MA48C(M,N,TRANS,1,LA,VA,IRN,pKEEP,pCNTL,pICNTL,&
               B,X,pERROR1,pW,pIW,pINFO)
   endif
+  IF (CONDEST_ON) THEN
+    ! MA60 on the values/rhs copy + the module-saved pattern, solving
+    ! with the persistent factors; X itself is never updated (see
+    ! SPEC48_SSOL2LA)
+    allocate(CX(M),CY(M),CRX(M),CD(M),C60W(3*M),C60IW(2*M))
+    DO I=1,M
+      CX(I)=X(I)
+      CD(I)=1.0D0
+    END DO
+    CALL MA60ID(ICNTL60,KEEP60,RKEEP60)
+    ICNTL60(1)=0
+    JOB60(1)=1
+    JOB60(2)=0
+    CDKASE=0
+    CDSTATUS=0
+    DO CDIT=1,200
+      CALL MA60AD(M,NE,CVA,pCIRN,pCJCN,CB,CX,CY,CD,C60W,C60IW,CDKASE,&
+                  OMEGA60,ERX60,JOB60,COND60,CDNOITER,ICNTL60,KEEP60,RKEEP60)
+      IF (CDKASE.EQ.0) EXIT
+      IF (CDKASE.LT.0) THEN
+        CDSTATUS=2
+        IF (CDKASE.EQ.-3) CDSTATUS=3
+        EXIT
+      END IF
+      TRANS=(CDKASE.EQ.1)
+      CALL MA48CD(M,N,TRANS,1,LA,VA,IRN,pKEEP,pCNTL,pICNTL,&
+                  CY,CRX,pERROR1,pW,pIW,pINFO)
+      DO I=1,M
+        CY(I)=CRX(I)
+      END DO
+    END DO
+    CALL TEEMS_CONDEST_REPORT(CDSTATUS,OMEGA60(1),OMEGA60(2),ERX60,&
+                              COND60(1),COND60(2),CDNOITER)
+    deallocate(CX,CY,CRX,CD,C60W,C60IW)
+    deallocate(CVA,CB)
+  END IF
   INSIZE(5)=0
 END SUBROUTINE SPEC48_SSOL2LA_P
 
@@ -1409,6 +1628,7 @@ SUBROUTINE SPEC48_PERSIST_FREE()
   use ma48_persist
   IMPLICIT NONE
   if(allocated(pCNTL)) deallocate(pCNTL,pRINFO,pW,pERROR1,pICNTL,pINFO,pIW,pKEEP)
+  if(allocated(pCIRN)) deallocate(pCIRN,pCJCN)
   pready=.false.
 END SUBROUTINE SPEC48_PERSIST_FREE
 

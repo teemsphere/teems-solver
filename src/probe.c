@@ -61,6 +61,65 @@ static PetscInt probe_csc_build(Mat A,PetscInt n,int realized,int **ptr_out,int 
   return nkeep;
 }
 
+/* 1-based CSC from a 1-based MA48-staged COO (the interface-system
+   pristine copy).  realized!=0 drops entries whose value is zero.  The
+   staged COO arrives row-major sorted (my_spar_add4l_ merges sorted
+   position lists), which makes each column's rows come out ascending —
+   but border systems are netcut-sized, so a defensive per-column
+   insertion sort costs nothing if that invariant ever breaks. */
+static PetscInt probe_csc_build_coo(const int *irn,const int *jcn,const solve_real *va,const int *rowlen,long nz,PetscInt m,PetscInt n,int realized,int **ptr_out,int **row_out) {
+  long k;
+  PetscInt i,r,nkeep=0;
+  int *irn_w=NULL;
+  if(irn==NULL) {
+    /* CSR-style staging (rowlen[r] entries for row r+1, in row order,
+       empty rows included — the -fastrefac SBBD form): synthesize the
+       row indices */
+    long tot=0;
+    for(i=0; i<m; i++)tot+=rowlen[i];
+    if(tot!=nz) {
+      printf("probe: staging row-length descriptor inconsistent (sum %ld != nz %ld), diagnosis skipped\n",tot,nz);
+      *ptr_out=NULL;
+      *row_out=NULL;
+      return -1;
+    }
+    irn_w= (int *) malloc ((nz>0)?nz*sizeof(int):sizeof(int));
+    k=0;
+    for(r=0; r<m; r++)for(i=0; i<rowlen[r]; i++)irn_w[k++]=(int)r+1;
+    irn=irn_w;
+  }
+  int *ptr= (int *) calloc (n+1,sizeof(int));
+  for(k=0; k<nz; k++) {
+    if(realized&&va[k]==0.0)continue;
+    if(jcn[k]<1||jcn[k]>n||irn[k]<1)continue;
+    ptr[jcn[k]]++;
+    nkeep++;
+  }
+  ptr[0]=1;
+  for(i=1; i<=n; i++)ptr[i]+=ptr[i-1];
+  int *row= (int *) calloc ((nkeep>0)?nkeep:1,sizeof(int));
+  for(k=0; k<nz; k++) {
+    if(realized&&va[k]==0.0)continue;
+    if(jcn[k]<1||jcn[k]>n||irn[k]<1)continue;
+    row[ptr[jcn[k]-1]-1]=irn[k];
+    ptr[jcn[k]-1]++;
+  }
+  free(irn_w);
+  for(i=n; i>0; i--)ptr[i]=ptr[i-1];
+  ptr[0]=1;
+  for(i=0; i<n; i++) {
+    int a=ptr[i]-1,b=ptr[i+1]-1,p,q,v;
+    for(p=a+1; p<b; p++) {
+      v=row[p];
+      for(q=p; q>a&&row[q-1]>v; q--)row[q]=row[q-1];
+      row[q]=v;
+    }
+  }
+  *ptr_out=ptr;
+  *row_out=row;
+  return nkeep;
+}
+
 /* variable index owning closure position j5 (vars[] offsets ascend) */
 static offset_t probe_var_of_ele(offset_t j5,array_def *vars,offset_t nvar) {
   offset_t lo=0,hi=nvar-1,mid;
@@ -273,14 +332,23 @@ static struct {
 } onfail_ctx;
 
 typedef struct {
-  Mat A;                        /* live matrix (NULL = label-only note) */
+  Mat A;                        /* live matrix (NULL: COO scope or label-only note) */
+  const int *coo_irn,*coo_jcn;  /* 1-based staged COO (interface systems:
+                                   the pristine grow-retry copy) */
+  const int *coo_rowlen;        /* alternative to coo_irn: per-row entry
+                                   counts of a row-major staging (SBBD
+                                   -fastrefac form), empty rows included */
+  const solve_real *coo_va;
+  long coo_nz;                  /* >0 selects the COO leg when A is NULL */
   PetscInt m,n;
   const char *label;
   int block_id;                 /* >=0: printed with the label */
   int *row_order,*col_order;    /* NULL = identity map */
   offset_t row_base,col_base;   /* index offset into the order arrays */
   offset_t row_add,col_add;     /* added to the order-array value
-                                   (DBBD: the base again; NDBBD: 0) */
+                                   (DBBD: the base again; NDBBD: 0;
+                                   interface: 0, order = the global
+                                   border row/col lists themselves) */
   int set;
 } probe_onfail_scope_t;
 static __thread probe_onfail_scope_t onfail_scope;
@@ -314,6 +382,11 @@ void probe_onfail_context(set_def *sets,set_element *set_elems,array_def *vars,o
 
 void probe_onfail_scope_set(Mat A,PetscInt m,PetscInt n,const char *label,int block_id,int *row_order,int *col_order,offset_t row_base,offset_t col_base,offset_t row_add,offset_t col_add) {
   onfail_scope.A=A;
+  onfail_scope.coo_irn=NULL;
+  onfail_scope.coo_jcn=NULL;
+  onfail_scope.coo_rowlen=NULL;
+  onfail_scope.coo_va=NULL;
+  onfail_scope.coo_nz=0;
   onfail_scope.m=m;
   onfail_scope.n=n;
   onfail_scope.label=label;
@@ -327,9 +400,31 @@ void probe_onfail_scope_set(Mat A,PetscInt m,PetscInt n,const char *label,int bl
   onfail_scope.set=1;
 }
 
+/* register a system that lives only as a staged 1-based COO (the
+   interface / border-Schur systems: their PETSc sources are destroyed
+   before the factorize and MA48 clobbers the staged triplet, but the
+   grow-retry pristine copy survives).  row_map/col_map are the global
+   border row/col lists: interface position i is condensed position
+   row_map[i] / col_map[i] (NULL = identity, e.g. the full SBBD system).
+   Either irn (explicit row indices) or rowlen (per-row entry counts of
+   a row-major staging) describes the rows — pass the other as NULL. */
+void probe_onfail_scope_set_coo(const int *irn,const int *jcn,const solve_real *va,const int *rowlen,long nz,PetscInt m,PetscInt n,const char *label,int *row_map,int *col_map) {
+  probe_onfail_scope_set(NULL,m,n,label,-1,row_map,col_map,0,0,0,0);
+  onfail_scope.coo_irn=irn;
+  onfail_scope.coo_jcn=jcn;
+  onfail_scope.coo_rowlen=rowlen;
+  onfail_scope.coo_va=va;
+  onfail_scope.coo_nz=nz;
+}
+
 void probe_onfail_scope_clear(void) {
   onfail_scope.set=0;
   onfail_scope.A=NULL;
+  onfail_scope.coo_irn=NULL;
+  onfail_scope.coo_jcn=NULL;
+  onfail_scope.coo_rowlen=NULL;
+  onfail_scope.coo_va=NULL;
+  onfail_scope.coo_nz=0;
 }
 
 /* Fortran entry: collective abort after a diagnosed failure — a plain
@@ -364,7 +459,7 @@ void teems_onfail_diag_(int *info1) {
     else {
       if(s->block_id>=0)printf("probe: diagnosing the failed factorization: %s %d (%ld x %ld)\n",s->label,s->block_id,(long)s->m,(long)s->n);
       else printf("probe: diagnosing the failed factorization: %s (%ld x %ld)\n",s->label,(long)s->m,(long)s->n);
-      if(s->A==NULL) {
+      if(s->A==NULL&&s->coo_nz<=0) {
         printf("probe: structural diagnosis is not wired for this system yet; run -solmed probe for the deploy-level diagnosis\n");
       }
       else if(s->m!=s->n) {
@@ -389,9 +484,15 @@ void teems_onfail_diag_(int *info1) {
         mc79_default_control_i(&control);
         control.f_arrays=1;
         int defect=0;
+        if(s->A==NULL&&s->row_order!=NULL)printf("probe: note: this is a border (Schur complement) system — the named defects below are the border image of the problem; the root cause can live in an eliminated diagonal block, so run -solmed probe for the full structural analysis\n");
         for(pass=0; pass<2; pass++) {
           const char *pname=(pass==0)?"stored pattern":"currently nonzero pattern";
-          nz=probe_csc_build(s->A,s->n,pass,&ptr,&row);
+          nz=(s->A!=NULL)?probe_csc_build(s->A,s->n,pass,&ptr,&row)
+                         :probe_csc_build_coo(s->coo_irn,s->coo_jcn,s->coo_va,s->coo_rowlen,s->coo_nz,s->m,s->n,pass,&ptr,&row);
+          if(nz<0) {
+            defect=-1; /* builder bailed: neither verdict applies */
+            break;
+          }
           mc79_matching_i(s->m,s->n,ptr,row,rowmatch,colmatch,&control,&info);
           if(info.flag<0) {
             printf("probe: MC79 matching failed (%s, flag %d)\n",pname,info.flag);
@@ -423,7 +524,7 @@ void teems_onfail_diag_(int *info1) {
           ptr=NULL;
           row=NULL;
         }
-        if(!defect)printf("probe: both patterns have full structural rank at the failure state — the failure is numerical (near-singular values / ill-conditioning), not structural; the MA48 rank output above is the primary evidence\n");
+        if(defect==0)printf("probe: both patterns have full structural rank at the failure state — the failure is numerical (near-singular values / ill-conditioning), not structural; the MA48 rank output above is the primary evidence\n");
         free(rowmatch);
         free(colmatch);
         free(items);

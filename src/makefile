@@ -19,7 +19,7 @@ LIBS      = ${PETSC_KSP_LIB} $(BUILD_DIR)/lib/ma48/src/.libs/libma48.so $(BUILD_
 
 all-redirect: teems-solver
 C_OBJECTS = main.o globals.o cmf_io.o str_util.o tab_parse.o formula.o jacobian.o block_order.o block_solve.o solve_drivers.o solve_rk.o probe.o levels.o
-F_OBJECTS = hsl_kernels.o hsl_mp48d.o ddeps.o hsl_mc66d.o ddeps90.o hsl_mc79i.o hsl_mc79i_ciface.o
+F_OBJECTS = hsl_kernels.o hsl_mp48d.o ddeps.o hsl_mc66d.o ddeps90.o hsl_mc79i.o hsl_mc79i_ciface.o ma60d.o mc71d.o fd15d.o
 OBJECTS = $(C_OBJECTS) $(F_OBJECTS)
 teems-solver: $(OBJECTS)
 	${CLINKER} -o $@ $^ $(LIBS)
@@ -48,6 +48,15 @@ clean::
 	-rm -f *.o
 	-rm -f teems-solver teems-solver-f64
 	@test -f hsl_mp01.mod || cp $(BUILD_DIR)/lib/mp48/src/hsl_mp01.mod . 2>/dev/null || true
+
+# vendored F77 diagnostics (MA60/MC71/FD15, the -condest path): compiled
+# with -w so 1980s-era style noise cannot move the warnings baseline
+ma60d.o: ma60d.f
+	$(F77) $(F77FLAGS) -w $(OPT) -c $<
+mc71d.o: mc71d.f
+	$(F77) $(F77FLAGS) -w $(OPT) -c $<
+fd15d.o: fd15d.f
+	$(F77) $(F77FLAGS) -w $(OPT) -c $<
 
 # dependencies
 hsl_mp48d.o: ddeps.o

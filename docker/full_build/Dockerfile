@@ -6,7 +6,9 @@ ARG TARGETARCH
 ARG MARCH=""
 ARG PATH_HSL_MA48
 ARG PATH_HSL_MA51
+ARG PATH_HSL_MA60
 ARG PATH_HSL_MC66
+ARG PATH_HSL_MC71
 ARG PATH_HSL_MC79
 ARG PATH_HSL_MP48
 ARG BUILD_DIR=/opt/teems-solver
@@ -20,7 +22,9 @@ ENV PATH="${BUILD_DIR}/lib/mpi/bin:$PATH"
 
 COPY ${PATH_HSL_MA48} ${BUILD_DIR}/hsl/ma48.tar.gz
 COPY ${PATH_HSL_MA51} ${BUILD_DIR}/hsl/ma51.tar.gz
+COPY ${PATH_HSL_MA60} ${BUILD_DIR}/hsl/ma60.tar.gz
 COPY ${PATH_HSL_MC66} ${BUILD_DIR}/hsl/mc66.tar.gz
+COPY ${PATH_HSL_MC71} ${BUILD_DIR}/hsl/mc71.tar.gz
 COPY ${PATH_HSL_MC79} ${BUILD_DIR}/hsl/mc79.tar.gz
 COPY ${PATH_HSL_MP48} ${BUILD_DIR}/hsl/mp48.tar.gz
 COPY ./src ${BUILD_DIR}/src
@@ -114,6 +118,10 @@ RUN echo 'APT::Install-Suggests "0";' >> /etc/apt/apt.conf.d/00-docker \
     && cp ${BUILD_DIR}/lib/ma48/LICENCE ${BUILD_DIR}/LICENSES/hsl \
     && mkdir ${BUILD_DIR}/lib/ma51 \
     && tar xfz ${BUILD_DIR}/hsl/ma51.tar.gz --strip-components=1 -C ${BUILD_DIR}/lib/ma51 \
+    && mkdir ${BUILD_DIR}/lib/ma60 \
+    && tar xfz ${BUILD_DIR}/hsl/ma60.tar.gz --strip-components=1 -C ${BUILD_DIR}/lib/ma60 \
+    && mkdir ${BUILD_DIR}/lib/mc71 \
+    && tar xfz ${BUILD_DIR}/hsl/mc71.tar.gz --strip-components=1 -C ${BUILD_DIR}/lib/mc71 \
     && mkdir ${BUILD_DIR}/lib/mc66 \
     && tar xfz ${BUILD_DIR}/hsl/mc66.tar.gz --strip-components=1 -C ${BUILD_DIR}/lib/mc66 \
     && mkdir ${BUILD_DIR}/lib/mc79 \
@@ -143,6 +151,13 @@ RUN echo 'APT::Install-Suggests "0";' >> /etc/apt/apt.conf.d/00-docker \
     && cp ${BUILD_DIR}/lib/mc79/src/hsl_mc79i.f90 ${BUILD_DIR}/src \
     && cp ${BUILD_DIR}/lib/mc79/src/hsl_mc79i_ciface.f90 ${BUILD_DIR}/src \
     && cp ${BUILD_DIR}/lib/mc79/include/hsl_mc79i.h ${BUILD_DIR}/src \
+    # -condest diagnostics (MA60/MC71): sources compile into the solver;
+    # FD15AD is extracted alone -- ma60's ddeps.f bundles duplicate
+    # MA48/MC59/MC71 and must never be compiled whole
+    && cp ${BUILD_DIR}/lib/ma60/src/ma60d.f ${BUILD_DIR}/src \
+    && cp ${BUILD_DIR}/lib/mc71/src/mc71d.f ${BUILD_DIR}/src \
+    && awk '/DOUBLE PRECISION FUNCTION FD15AD/{f=1} f&&/^      SUBROUTINE/{exit} f' \
+       ${BUILD_DIR}/lib/ma60/src/ddeps.f > ${BUILD_DIR}/src/fd15d.f \
     # final build — solver objects at the same ISA level as the libraries
     && cd ${BUILD_DIR}/src \
     && make OPT="-Ofast $ARCH_FLAGS" teems-solver teems-solver-f64 \

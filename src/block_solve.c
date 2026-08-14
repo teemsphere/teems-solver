@@ -448,6 +448,19 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
     ISCreateGeneral(PETSC_COMM_SELF,VecSize-sumrowcolin,indicesC,PETSC_COPY_VALUES,Cindices+i);
     ISCreateGeneral(PETSC_COMM_SELF,VecSize-sumrowcolin,indicesB,PETSC_COPY_VALUES,Bindices+i);
   }
+  /* the interface (border Schur) system inherits these lists as its
+     position -> condensed maps (RHS gathers in indicesB order, xd
+     scatters back in indicesC order); keep int copies alive on the
+     rank that factorizes it — indicesB is freed here */
+  int *ifc_rowmap=NULL,*ifc_colmap=NULL;
+  if(rank==mpisize-1) {
+    ifc_rowmap= (int *) malloc ((VecSize-sumrowcolin)*sizeof(int));
+    ifc_colmap= (int *) malloc ((VecSize-sumrowcolin)*sizeof(int));
+    for(i=0; i<VecSize-sumrowcolin; i++) {
+      ifc_rowmap[i]=(int)indicesB[i];
+      ifc_colmap[i]=(int)indicesC[i];
+    }
+  }
   free(indicesB);
   free(offblock);
   free(offblockrow);
@@ -1090,7 +1103,7 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
     memcpy(sirn,irn1,lnz*sizeof(int));
     memcpy(sjcn,jcn,lnz*sizeof(int));
     memcpy(sva,vecbivi,lnz*sizeof(solve_real));
-    probe_onfail_scope_set(NULL,nrow,ncol,"DBBD interface (border Schur) system",-1,NULL,NULL,0,0,0,0);
+    probe_onfail_scope_set_coo(sirn,sjcn,sva,NULL,lnz,nrow,ncol,"DBBD interface (border Schur) system",ifc_rowmap,ifc_colmap);
     {
       int tries;
       for(tries=0; tries<6; tries++) {
@@ -1151,6 +1164,8 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
     xd=(solve_real *) calloc (vecbiuisize,sizeof(solve_real));//realloc (xd,vecbiuisize*sizeof(ha_cgetype));
     x0=(solve_real *) calloc (VecSize,sizeof(solve_real));//realloc (x0,*sizeof(ha_cgetype));
   }
+  free(ifc_rowmap);
+  free(ifc_colmap);
   if(!dbbd_fastrefac)PetscFree(submatD);
   MPI_Barrier(PETSC_COMM_WORLD);
   if(SORD==1)MPI_Bcast(xd, vecbiuisize, MPI_DOUBLE,mpisize-1, PETSC_COMM_WORLD);
@@ -2536,6 +2551,19 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
     Cindices[i]=Cindicesc;
     Bindices[i]=Bindicesc;
   }
+  /* the interface (border Schur) system inherits these lists as its
+     position -> condensed maps (RHS gathers in indicesB order, xd
+     scatters back in indicesC order); keep int copies alive on the
+     rank that factorizes it — indicesB is freed here */
+  int *ifc_rowmap=NULL,*ifc_colmap=NULL;
+  if(rank==mpisize-1) {
+    ifc_rowmap= (int *) malloc ((VecSize-sumrowcolin)*sizeof(int));
+    ifc_colmap= (int *) malloc ((VecSize-sumrowcolin)*sizeof(int));
+    for(i=0; i<VecSize-sumrowcolin; i++) {
+      ifc_rowmap[i]=(int)indicesB[i];
+      ifc_colmap[i]=(int)indicesC[i];
+    }
+  }
   free(indicesB);
   free(offblock);
   free(offblockrow);
@@ -3388,7 +3416,7 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
     memcpy(sirn,irn1,lnz*sizeof(int));
     memcpy(sjcn,jcn,lnz*sizeof(int));
     memcpy(sva,vecbivi,lnz*sizeof(solve_real));
-    probe_onfail_scope_set(NULL,nrow,ncol,"NDBBD interface (border Schur) system",-1,NULL,NULL,0,0,0,0);
+    probe_onfail_scope_set_coo(sirn,sjcn,sva,NULL,lnz,nrow,ncol,"NDBBD interface (border Schur) system",ifc_rowmap,ifc_colmap);
     {
       int tries;
       for(tries=0; tries<6; tries++) {
@@ -3447,6 +3475,8 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
     xd=(solve_real *) calloc (vecbiuisize,sizeof(solve_real));//realloc (xd,vecbiuisize*sizeof(ha_cgetype));
     x0=(solve_real *) calloc (VecSize,sizeof(solve_real));//realloc (x0,*sizeof(ha_cgetype));
   }
+  free(ifc_rowmap);
+  free(ifc_colmap);
   PetscFree(submatD);
   MPI_Barrier(PETSC_COMM_WORLD);
   if(SORD==1)MPI_Bcast(xd, vecbiuisize, MPI_DOUBLE,mpisize-1, PETSC_COMM_WORLD);
