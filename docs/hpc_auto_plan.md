@@ -71,7 +71,22 @@ The matrix everything else rides on:
   (b) memory-per-rank model (HSL workspaces and border replication) →
   the `mem_budget` term of the n_tasks auto rule;
   (c) recalibrated matrix_method crossovers at real rank counts —
-  the current auto was fit at ≤4 tasks;
+  the current auto was fit at ≤4 tasks. **6.10 split (2026-08-17):**
+  the *plumbing* of the structure-informed auto (teems-R runs the
+  structural probe — `-solmed probe -matsol 2` static / `-matsol 3`
+  intertemporal, ~0.5 s on the goldens — and decides from the
+  measured `partition_auto` table, `netcut`, `border_neq`, block
+  sizes and `chain_source`, not from deploy metadata alone) is built
+  BEFORE the matrix, on this machine, with today's laptop-fitted
+  numbers as placeholder thresholds; what the matrix owes 6.10 is the
+  *thresholds*: the LU→SBBD/DBBD and SBBD→NDBBD crossovers expressed
+  in probe metrics (netcut/VecSize, border_neq/VecSize, block count
+  vs ranks, min/max block size) at 1–32 ranks, plus the probe cost
+  curve vs system size (skip threshold below which LU is a foregone
+  conclusion), measured on the condensed deployments the probe now
+  sees. Every placeholder threshold is a named constant reported in
+  the auto message and recorded in stats.json options so the
+  recalibration is a constants change, not a plumbing change;
   (d) oversubscription penalty (n_tasks 32 + n_threads 2, and 48
   ranks) so the auto can refuse gracefully.
 
@@ -107,7 +122,7 @@ leave manual; N/A = workflow flag, no tuning content.
 | Argument | Verdict | Decision signal | Calibration tests |
 |---|---|---|---|
 | solution_method | AUTO (via accuracy profile) | requested accuracy tier + shock magnitude + model class | §4 fixed-accuracy ranking; failure behavior on stiff/large shocks |
-| matrix_method | AUTO (exists; recalibrate) | intertemporal flag, system size, n_reg — extend with netcut/border size from a prior stats.json or deploy metadata | §3 crossovers at 8–32 ranks; validate chosen-vs-best gap ≤10% across the ladder |
+| matrix_method | AUTO (exists; recalibrate) | 6.10 plumbing (pre-matrix): structural probe evidence — `partition_auto` candidates, netcut, border_neq, block sizes, chain_source — with intertemporal flag / system size / n_tasks; placeholder thresholds = today's laptop fits | §3(c): probe-metric crossovers at 1–32 ranks + probe cost curve; validate chosen-vs-best gap ≤10% across the ladder |
 | n_tasks | AUTO (new; HPC-critical) | ndblock, system size, host cores, memory-per-rank estimate | §3 knees + per-rank RSS; rule `min(knee(size, method), ndblock, cores, mem_budget/rank_rss)`; oversubscription penalty |
 | n_threads | POLICY (likely stay 1) | idle cores after n_tasks chosen | tasks×threads grid at fixed product 32 (32×1, 16×2, 8×4, 4×8) + `-smllthreads`; only promote if a grid cell wins reproducibly; TSan gate first |
 | precision | AUTO | accuracy tier below f32 floor (~3e-6 rel), deep ladders, large shock × many subintervals | §4 precision-at-scale; floor map on S-full/I-long; post-solve advisory when the accuracy summary is floor-limited |
