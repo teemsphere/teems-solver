@@ -52,8 +52,11 @@ by teems-R.
 
 Solver outputs, consumed by `ems_compose()`:
 
-- `out/sets/*.csv`, `out/coefficients/*.csv` — post-simulation set
-  listings and updated coefficient values.
+- `out/sets/*.csv` — set listings; `out/coefficients/*.csv` /
+  `out/postsim/*.csv` — updated coefficient values, one CSV per
+  `Write` statement in the TAB (opt-in from teems-R since the
+  coefficient dump below became the default transport; `%f`
+  formatting, six fixed decimals).
 - Solution binaries (prefix from `soldata`, default `solution`):
 
 | file | contents |
@@ -63,6 +66,8 @@ Solver outputs, consumed by `ems_compose()`:
 | `.set` | `nset × set_def` — set definitions |
 | `.sel` | `nsetspace × set_element` — set elements with superset positions |
 | `.mds` | 4 × long: `nsetspace, nvar, nvarele, nset` |
+| `.cof` | coefficient dump header + declarations (`-cofdump`, default on): 4 × long `{version=1, ncof, ncofele, reserved}`, then `ncof × array_def` (same struct as `.var`), then `ncof × uint8 kind` (bit 0 = PostSim coefficient, bit 1 = `(parameter)`). Written after PostSim, so PostSim coefficients carry their computed values |
+| `.cbin` | `ncofele × double` — updated (post-simulation) coefficient values, the coefficient slice of the value vector in `array_def.offset` order; the coefficient twin of `.bin`. Together with `.cof` this replaces the per-coefficient CSVs as teems-R's coefficient transport (ROADMAP 6.13) |
 | `.stats.json` | per-run ordering statistics (v2): system size, method, `netcut`, border sizes, per-block variable/equation counts (null/empty when no bordered ordering was built), plus `chain_set`/`partition_set` with `chain_source`/`partition_source` (`explicit`/`structural`/`none`) and, when the partition probe ran, the full `partition_auto` candidate table (§6). Written before the solve, so failed runs still record their ordering; feeds `matrix_method` auto-calibration |
 
 The structs are written raw; teems-R's `parse_solution.cpp` mirrors their
@@ -704,6 +709,7 @@ needs corpus calibration.
 | `-probefine {0,1}` | 0 | with `-solmed probe`: add the MC79 fine-DM strongly-connected-component report (§5) |
 | `-condest {0,1}` | 0 | sequential LU only: per-solve quality diagnostics (MA60/MC71) — componentwise backward error ω₁/ω₂ with iterative refinement, forward-error bound, and the Arioli–Demmel–Duff scaled condition numbers κω₁/κω₂ — logged per linear solve and recorded as run maxima in `stats.json` (`condest` object). Diagnostic-only: solutions are bit-identical with the flag on or off (refinement runs on a copy). Null-shock (zero-rhs) solves are skipped with a note; κω₂ > 1e15 adds a numerically-near-singular warning — the class the structural probe cannot see. Ignored (with a warning) for the bordered methods, whose composed systems have no transpose-solve path |
 | `-nowrites n` | 0 | suppress output writes |
+| `-cofdump {0,1}` | 1 | write the `.cof`/`.cbin` coefficient dump (recorded in `stats.json` `options`) |
 | `-verbosity {0,1,2}` | 1 | 0 = errors/warnings + accuracy summary only; 1 = phase progress and timings; 2 = per-rank/per-block debug detail (also exported as `TEEMS_VERBOSITY` for the Fortran kernels; MA48 duplicate-entry notes appear only at 2) |
 | `-nox` | — | PETSc: no X output |
 

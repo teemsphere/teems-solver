@@ -9,6 +9,58 @@ static char help[] = "Solves a CGE model in parallel with KSP.\n\
            Input parameters include:\n\
            -None at the moment\n\n";
 
+/* Coefficient dump (<stem>.cof + <stem>.cbin): the coefficient twin of
+   sol.var + sol.bin, written after PostSim so PostSim coefficients carry
+   their computed values.  .cof = int64 header {version, ncof, ncofele,
+   reserved} + array_def x ncof (the sol.var struct, binary-locked) +
+   uint8 kind x ncof (bit0 postsim, bit1 parameter).  .cbin = solve_real
+   x ncofele, the value slice of elem_vals in offset order (file formats
+   carry solve_real; store_real is in-memory only).  Replaces the
+   per-coefficient CSV dump as teems-R's coefficient transport (ROADMAP
+   6.13). */
+static int coefficients_dump(const char *stem, array_def *coefs, offset_t ncof, offset_t ncofele, elem_value *elem_vals) {
+  char path[TABREADLINE];
+  FILE *fp;
+  offset_t i,hdr[4];
+  strcpy(path,stem);
+  strcat(path,".cof");
+  if((fp=fopen(path,"wb"))==NULL) {
+    printf("Error: cannot open %s for writing\n",path);
+    return 1;
+  }
+  hdr[0]=1; hdr[1]=ncof; hdr[2]=ncofele; hdr[3]=0;
+  fwrite(hdr,sizeof(offset_t),4,fp);
+  fwrite(coefs,sizeof(array_def),ncof,fp);
+  for(i=0; i<ncof; i++) {
+    unsigned char kind=0;
+    if(teems_coef_is_ps!=NULL&&teems_coef_is_ps[i])kind|=1;
+    if(teems_coef_is_param!=NULL&&teems_coef_is_param[i])kind|=2;
+    fwrite(&kind,1,1,fp);
+  }
+  fclose(fp);
+  strcpy(path,stem);
+  strcat(path,".cbin");
+  if((fp=fopen(path,"wb"))==NULL) {
+    printf("Error: cannot open %s for writing\n",path);
+    return 1;
+  }
+  {
+    /* stream through a fixed buffer: elem_value is a struct, so the value
+       field is not contiguous */
+    enum { CHUNK=1<<14 };
+    solve_real buf[CHUNK];
+    offset_t k=0,n;
+    while(k<ncofele) {
+      n=ncofele-k; if(n>CHUNK)n=CHUNK;
+      for(i=0; i<n; i++)buf[i]=(solve_real)elem_vals[k+i].value;
+      fwrite(buf,sizeof(solve_real),n,fp);
+      k+=n;
+    }
+  }
+  fclose(fp);
+  return 0;
+}
+
 /* Per-run ordering statistics (<solfiles>.stats.json): netcut, border
    sizes and per-block variable/equation counts. Written before the
    solve so failed runs still record their ordering; consumed by
@@ -26,6 +78,7 @@ static char help[] = "Solves a CGE model in parallel with KSP.\n\
    teems-R renders it into model_diagnostics.txt after each solve. */
 typedef struct {
   int postsim_on;
+  int cofdump;
   long subints;
   int adaptive;                 /* 0 fixed, 1 retry-on-check, 2 accuracy-only */
   double epstol;
@@ -121,7 +174,8 @@ static void ordering_stats_write(cmf_file_entry *iodata, int niodata, int noutda
     fprintf(fp,"    \"assertions\": \"%s\",\n",mode_names[teems_assertions_mode>=0&&teems_assertions_mode<=2?teems_assertions_mode:2]);
     fprintf(fp,"    \"range_test_initial\": \"%s\",\n",mode_names[teems_range_test_initial>=0&&teems_range_test_initial<=2?teems_range_test_initial:1]);
     fprintf(fp,"    \"range_test_updated\": \"%s\",\n",mode_names[teems_range_test_updated>=0&&teems_range_test_updated<=2?teems_range_test_updated:1]);
-    fprintf(fp,"    \"postsim\": %s",ropt->postsim_on?"true":"false");
+    fprintf(fp,"    \"postsim\": %s,\n",ropt->postsim_on?"true":"false");
+    fprintf(fp,"    \"cofdump\": %s",ropt->cofdump?"true":"false");
     if(teems_comp_active>0) {
       fprintf(fp,",\n    \"complementarity\": {\n");
       fprintf(fp,"      \"active_components\": %ld,\n",(long)teems_comp_active);
@@ -786,7 +840,7 @@ int main(int argc,char **args) {
   char psfile[TABREADLINE]="\0";
   int npostsim=0,postsim_on=1;
   char tempfilenam[255],tempchar[255],solmed[NAMESIZE],solchar[255];
-  int niodata=0,nj,mem_fac=0,noutdata=0,nsoldata=0,nowrites=0;
+  int niodata=0,nj,mem_fac=0,noutdata=0,nsoldata=0,nowrites=0,cofdump=1;
   offset_t nsetspace=0,dcount,ndblock=0,netcut=0,ndblock1,nreg=0,ntime=0;
   dim_t nset=0,vsize,dim1,nlength=0,matsol=0,laA=2,laDi=2,laD=2,nsbbdblocks=2,nesteddbbd=0,mc66=0,subints=1,subindx;
   offset_t alltimeset=-1,allregset=-1;
@@ -846,6 +900,7 @@ int main(int argc,char **args) {
   PetscOptionsGetInt(NULL,NULL,"-nsbbdblocks",&nsbbdblocks,NULL);
   nesteddbbd=(matsol==MM_NDBBD)?1:0;/* nested ordering exists only for the NDBBD solve; any other pairing is broken */
   PetscOptionsGetInt(NULL,NULL,"-nowrites",&nowrites,NULL);
+  PetscOptionsGetInt(NULL,NULL,"-cofdump",&cofdump,NULL); /* <stem>.cof/.cbin coefficient dump, default on */
   PetscOptionsGetReal(NULL,NULL,"-cntl_6",&cntl6,NULL); /* CNTL6 in Mat Order */
   PetscOptionsGetReal(NULL,NULL,"-cntl_3",&cntl3,NULL);/*Iterative threshold */
   {
@@ -2099,6 +2154,7 @@ comp_accurate_reentry:
   if(rank==0) {
     stats_run_options ropt;
     ropt.postsim_on=postsim_on;
+    ropt.cofdump=cofdump;
     ropt.subints=(long)subints;
     ropt.adaptive=(int)adaptive;
     ropt.epstol=(double)epstol;
@@ -2521,6 +2577,12 @@ comp_accurate_reentry:
       teems_ps_pass=0;
     }
     assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,true,teems_assertions_mode,1);
+  }
+  if(cofdump&&rank==0&&elem_vals!=NULL) {
+    for (i=niodata+noutdata; i<niodata+noutdata+nsoldata; i++)
+      if (strcmp("solfiles",iodata[i].logname)==0)break;
+    if(coefficients_dump(i<niodata+noutdata+nsoldata?iodata[i].filname:"solution",coefs,ncof,ncofele,elem_vals))MPI_Abort(PETSC_COMM_WORLD,1);
+    logmsg(1,"Wrote coefficient dump (%ld coefficients, %ld elements)\n",(long)ncof,(long)ncofele);
   }
   if(nowrites==0&&rank==0)for(i=0; i<noutdata; i++){
     outputs_write_csv(tabfile,iodata[i+niodata].logname,iodata[i+niodata].filname,sets,nset,set_elems,coefs,ncof,ncofele,vars,nvar,nvarele,elem_vals);
