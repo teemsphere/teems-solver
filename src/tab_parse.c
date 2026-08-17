@@ -4336,6 +4336,27 @@ int sets_read(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,
               if (*p=='&'||*p=='('||*p=='"') special=1;
               if (*p=='&') nops++;
             }
+            /* an operand whose size is only an upper bound at this point
+               (an expression-route set, exact count fixed at build) forces
+               the expression route: the single-operator branches size the
+               result arithmetically from operand sizes at parse time */
+            if (!special) {
+              char nm[NAMESIZE];
+              int ni=0;
+              for (p=crhs;; p++) {
+                if (*p=='+'||*p=='-'||*p=='^'||*p==';'||*p=='\0') {
+                  if (ni>0) {
+                    nm[ni]='\0';
+                    ni=0;
+                    for (i=0; i<nset; i++) if (strcmp(nm,record[i].setname)==0) break;
+                    if (i<nset&&record[i].readele[0]=='@') special=1;
+                  }
+                  if (*p==';'||*p=='\0') break;
+                } else if (ni<NAMESIZE-1) {
+                  nm[ni++]=*p;
+                }
+              }
+            }
             if (nops>=2||special) {
               expr_route=1;
               /* size upper bound: sum of named-operand sizes plus one
