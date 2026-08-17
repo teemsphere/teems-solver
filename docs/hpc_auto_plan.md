@@ -73,12 +73,17 @@ The matrix everything else rides on:
   (c) recalibrated matrix_method crossovers at real rank counts —
   the current auto was fit at ≤4 tasks. **6.10 split (2026-08-17):**
   the *plumbing* of the structure-informed auto (teems-R runs the
-  structural probe — `-solmed probe -matsol 2` static / `-matsol 3`
-  intertemporal, ~0.5 s on the goldens — and decides from the
+  structural probe — `-solmed probe`, which since 2026-08-17 detects
+  both dimensions irrespective of `-matsol` (nested geometry when a
+  chain exists), ~0.5 s on the goldens — and decides from the
   measured `partition_auto` table, `netcut`, `border_neq`, block
   sizes and `chain_source`, not from deploy metadata alone) is built
   BEFORE the matrix, on this machine, with today's laptop-fitted
-  numbers as placeholder thresholds; what the matrix owes 6.10 is the
+  numbers as placeholder thresholds — DONE 2026-08-17: constants in
+  teems-R `R/auto_method.R` `.auto_thresholds()` (`probe_min_size`
+  1.5e6, `dbbd_size` 2e6, `dbbd_size_many_blocks` 1.5e6,
+  `dbbd_n_blocks` 100, `border_share_max` 0.10, `ndbbd_n_tasks` Inf =
+  dormant escalation); what the matrix owes 6.10 is the
   *thresholds*: the LU→SBBD/DBBD and SBBD→NDBBD crossovers expressed
   in probe metrics (netcut/VecSize, border_neq/VecSize, block count
   vs ranks, min/max block size) at 1–32 ranks, plus the probe cost

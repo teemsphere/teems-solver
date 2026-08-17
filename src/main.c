@@ -996,6 +996,15 @@ int main(int argc,char **args) {
     return 1;
   }
   logmsg(2,"Sol med %d\n",solmethod);
+  /* -solmed probe measures the system's structure irrespective of the
+     requested -matsol: both structural detections run (chain dimension
+     and diagonal-block partition, nested geometry when a chain exists),
+     the method-vs-structure aborts below are skipped (nothing is
+     solved), and the ordering rides the nohsl path like DBBD/NDBBD so
+     the nested layout is valid. The stats.json this produces is what
+     teems-R's matrix_method = "auto" consults (ROADMAP 6.10); the MC79
+     diagnosis itself is ordering-invariant. */
+  if(solmethod==SM_PROBE)nohsl=true;
   /* -probefine: with -solmed probe, add the MC79 fine Dulmage-Mendelsohn
      report (strongly connected components of the well-determined block) */
   dim_t probefine=0;
@@ -1353,8 +1362,8 @@ int main(int argc,char **args) {
   /* The chain dimension and the diagonal-block partition are derived
      structurally just before the ordering, once the equations are
      readable. Only the bordered methods consume these dimensions. */
-  bool structural_time=(matsol==MM_SBBD||matsol==MM_DBBD||matsol==MM_NDBBD);
-  bool structural_reg=(matsol==MM_DBBD||matsol==MM_NDBBD);
+  bool structural_time=(matsol==MM_SBBD||matsol==MM_DBBD||matsol==MM_NDBBD||solmethod==SM_PROBE);
+  bool structural_reg=(matsol==MM_DBBD||matsol==MM_NDBBD||solmethod==SM_PROBE);
   ndblock=ndblock1;
 
   //**************************************************************************************
@@ -1680,6 +1689,10 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
       }
     }
     if(alltimeset>=0)ntime=sets[alltimeset].size;
+    /* the probe measures the nested (NDBBD) partition geometry when a
+       chain exists, the flat (DBBD) one otherwise; the -matsol it was
+       launched with does not decide */
+    if(solmethod==SM_PROBE)nesteddbbd=(alltimeset>=0)?1:0;
     if(structural_reg) {
       allregset=partition_auto_select(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele,nvarele,closure_vals,neq,(offset_t)VecSize,alltimeset,ntime,nesteddbbd,(long)mpisize,rank,&partition_auto_json);
       if(allregset>=0) {
@@ -1697,7 +1710,7 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
     else if(allregset>=0)ndblock=nreg;
     ndblock1=ndblock;
   }
-  if((structural_time||structural_reg)&&matsol==MM_NDBBD&&(alltimeset<0||allregset<0)) {
+  if(solmethod!=SM_PROBE&&matsol==MM_NDBBD&&(alltimeset<0||allregset<0)) {
     if(rank==0) {
       if(alltimeset<0)printf("Error: NDBBD (-matsol 3) needs a chain dimension, but no equation couples set elements through lead/lag offsets.\n");
       if(allregset<0)printf("Error: NDBBD (-matsol 3) needs a diagonal-block partition and no viable set was detected (see the candidate table above); choose another -matsol.\n");
@@ -1705,7 +1718,7 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
     PetscFinalize();
     return 1;
   }
-  if(structural_reg&&matsol==MM_DBBD&&alltimeset<0&&allregset<0) {
+  if(solmethod!=SM_PROBE&&matsol==MM_DBBD&&alltimeset<0&&allregset<0) {
     if(rank==0)printf("Error: DBBD (-matsol 2) needs a diagonal-block partition and no viable set was detected (see the candidate table above); use -matsol 0 (LU).\n");
     PetscFinalize();
     return 1;
@@ -1715,7 +1728,7 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
      used to finish with exit 0 and no solution. Abort cleanly instead.
      Under HSL only rank 0 resolves alltimeset, so the verdict is
      broadcast to keep the exit collective. */
-  if(matsol==MM_SBBD) {
+  if(solmethod!=SM_PROBE&&matsol==MM_SBBD) {
     int sbbd_nochain=(rank==0&&alltimeset<0)?1:0;
     MPI_Bcast(&sbbd_nochain,1,MPI_INT,0,PETSC_COMM_WORLD);
     if(sbbd_nochain) {

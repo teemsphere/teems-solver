@@ -364,7 +364,7 @@ from tarball build-args.
 | `Johansen` | one-step solution of the linearized system [D20; Johansen 1960] |
 | `Gragg` | Gragg's method (smoothed modified midpoint) with Richardson extrapolation over `-step1/-step2/-step3` step counts (default 2-4-8), per subinterval [GM "Gragg"; Pearson 1991 eq. 6.1/Alg. 7.1.2]; `Mmid` accepted as a deprecated alias (warns) |
 | `Euler` | forward Euler multistep with Richardson extrapolation over the same three step counts [GM "Euler"] — shares the Gragg driver with the leapfrog and terminal smoothing disabled; the truncation error series is `h` (not `h²`), so the extrapolation weights use the step ratios unsquared and each extra solution gains one order (not two). Any strictly increasing step counts are allowed (no parity rule) |
-| `probe` | preparation only — runs the full pre-solve pipeline (data, formulas, structural detection, ordering, `stats.json`) and skips the solve; a sub-second structure probe of a model (§6); `NoSol` accepted as a deprecated alias (warns). On a single rank the probe then assembles the condensed Jacobian and runs the HSL_MC79 maximum-matching / Dulmage-Mendelsohn structural diagnosis on (a) the full stored pattern — structural closure validity — and (b) the numerically realized pattern (entries nonzero at base data) — the zero-flow singularity class. Defects are reported as *named* variable and equation elements (under-determined variables = unmatched columns, over-constrained equations = unmatched rows, plus the coarse-DM entangled blocks), to the log and to `<solfiles>.probe.json` (version 2). The report also carries the statement-level equation-system structure — per statement its quantifier sets, row count and referenced variables with element-level incidence weights — and aggregates every defect/entangled set by variable and by equation statement, so the diagnosis stays readable at any scale. `-probefine 1` adds the fine decomposition's strongly-connected-component report: core-size histogram plus the composition (by equation and variable) of the largest simultaneous cores — the model's irreducible simultaneous structure vs its recursive remainder. Catches structural and zero-data singularity classes, not numerical near-singularity |
+| `probe` | preparation only — runs the full pre-solve pipeline (data, formulas, structural detection of both the chain dimension and the block partition irrespective of `-matsol`, ordering, `stats.json`) and skips the solve; a sub-second structure probe of a model (§6); `NoSol` accepted as a deprecated alias (warns). On a single rank the probe then assembles the condensed Jacobian and runs the HSL_MC79 maximum-matching / Dulmage-Mendelsohn structural diagnosis on (a) the full stored pattern — structural closure validity — and (b) the numerically realized pattern (entries nonzero at base data) — the zero-flow singularity class. Defects are reported as *named* variable and equation elements (under-determined variables = unmatched columns, over-constrained equations = unmatched rows, plus the coarse-DM entangled blocks), to the log and to `<solfiles>.probe.json` (version 2). The report also carries the statement-level equation-system structure — per statement its quantifier sets, row count and referenced variables with element-level incidence weights — and aggregates every defect/entangled set by variable and by equation statement, so the diagnosis stays readable at any scale. `-probefine 1` adds the fine decomposition's strongly-connected-component report: core-size histogram plus the composition (by equation and variable) of the largest simultaneous cores — the model's irreducible simultaneous structure vs its recursive remainder. Catches structural and zero-data singularity classes, not numerical near-singularity |
 
 Gragg mechanics: for each step count `s`, the shock is applied in `s`
 sub-steps — Euler first step, then midpoint leapfrog (value advances
@@ -439,8 +439,16 @@ flags below resolve the dimensions explicitly. The full candidate table
 (set, blocks, border, min/max block, viable) is logged at verbosity 1
 and recorded in `stats.json` under `partition_auto`, with
 `chain_source`/`partition_source` saying how each dimension was
-resolved — the structural evidence for future matrix-method selection
-(a `-solmed probe` run yields it without solving). The scan sees
+resolved — the structural evidence teems-R's `matrix_method = "auto"`
+consults (ROADMAP 6.10). A `-solmed probe` run yields it without
+solving, and independently of the `-matsol` it is launched with: the
+probe always runs both detections, measures the nested (NDBBD)
+partition geometry when a chain exists and the flat (DBBD) one
+otherwise, and never aborts on a method-vs-structure mismatch (there is
+no method to mismatch); the MC79 diagnosis it then runs is invariant to
+the ordering, so the report is identical under any `-matsol`. Under a
+real solve the detections are gated on the requested method (SBBD:
+chain; DBBD/NDBBD: chain and partition). The scan sees
 *declared* structure only; value-aware element-level classification
 (e.g. recognising a banded adjacency coefficient as nearly
 partitionable) is roadmap 6.5/E3.
