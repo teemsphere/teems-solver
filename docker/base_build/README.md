@@ -1,7 +1,7 @@
 # TEEMS Solver Base Layer
 
 [![License](https://img.shields.io/badge/License-AGPL_v3.0-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.0.0-green.svg)](https://github.com/matthewcantele/teems-solver/releases)
+[![Version](https://img.shields.io/badge/version-2.0.0-dev.1-green.svg)](https://github.com/matthewcantele/teems-solver/releases)
 
 This Dockerfile builds the base layer for the TEEMS solver, containing all open-source dependencies required for the full solver build. This base layer approach significantly reduces build times for end users who only need to add their HSL libraries to complete the installation.
 
