@@ -584,6 +584,7 @@ int tab_preprocess(char *filename, char *newtabfile) {
   char setname[NAMESIZE],newset[NAMESIZE],varname[NAMESIZE],*n1,setelement[TABREADLINE];//,*ne,*np;//,*n2;
   char msetele[MAXVARDIM][NAMESIZE],msetsymb[MAXVARDIM][NAMESIZE],mset[MAXVARDIM][NAMESIZE];
   char assertmsg[TABREADLINE],*am1,*am2;
+  char rawline[TABLINESIZE],*rawpos;
   filehandle = fopen(filename,"r");
   if(filehandle==NULL){
     printf("Error: cannot open %s\n",filename);
@@ -595,10 +596,44 @@ int tab_preprocess(char *filename, char *newtabfile) {
   fout = fopen(newtabfile1,"w");
   readline[0]='\0';
   commsyntax[0]='\0';
-  while (fgets(line,TABLINESIZE,filehandle)) {
-    str_replace_all(line,"\v"," ");
-    str_replace_all(line,"![[!","\v");
-    str_replace_all(line,"!]]!","\v");
+  /* GEMPACK allows several statements on one physical line: each raw
+     line is fed to the accumulator piecewise, cut after every ';' that
+     lies outside a ! comment, a ![[! !]]! block comment and a # label #
+     (parity taken over the pending statement + the piece so far) and
+     is followed by further text, so every iteration below sees at most
+     one statement terminator */
+  rawpos=NULL;
+  while (rawpos!=NULL||fgets(rawline,TABLINESIZE,filehandle)) {
+    if (rawpos==NULL) {
+      str_replace_all(rawline,"\v"," ");
+      str_replace_all(rawline,"![[!","\v");
+      str_replace_all(rawline,"!]]!","\v");
+      rawpos=rawline;
+    }
+    {
+      int pb=str_count_char(readline,'!')%2,pv=str_count_char(readline,'\v')%2,ph=str_count_char(readline,'#')%2;
+      char *c,*cut=NULL;
+      for (c=rawpos; *c!='\0'; c++) {
+        if (*c=='!') pb^=1;
+        else if (*c=='\v') pv^=1;
+        else if (*c=='#') ph^=1;
+        else if (*c==';'&&!pb&&!pv&&!ph) {
+          char *d=c+1;
+          while (*d==' '||*d=='\t') d++;
+          if (*d!='\0'&&*d!='\n'&&*d!='\r') cut=c+1;
+          break;
+        }
+      }
+      if (cut!=NULL) {
+        size_t len=(size_t)(cut-rawpos);
+        memcpy(line,rawpos,len);
+        line[len]='\0';
+        rawpos=cut;
+      } else {
+        strcpy(line,rawpos);
+        rawpos=NULL;
+      }
+    }
     if (strlen(readline)+strlen(line)>=sizeof(readline)) {
       printf("Error: TAB statement too long (exceeds %d chars)\n",TABREADLINE);
       return -1;
@@ -1676,13 +1711,18 @@ static int sb_elements(char *tabfile, cmf_file_entry *iodata, int nio, const cha
   return n;
 }
 
-/* numeric text header: dims from the header line, values row-wise
-   (comma/space separated, last dimension across columns); returns
-   total count or -1 */
+/* numeric text header: dims from the header line, values in the
+   text-file layout the main reader (tab_parse.c Read) uses -- 2-D
+   slices of dim-1 rows x dim-2 columns, slices over dims 3+ with dim 3
+   fastest, blank lines between slices (the teems-R writer's layout;
+   1-D/2-D degenerate to plain row-major). Values are returned
+   re-ordered to C order (last dimension fastest) so the caller's
+   stride arithmetic is layout-agnostic. Returns total count or -1 */
 static int sb_read_reals(const char *path, const char *header, double **vals) {
   FILE *f;
   char line[DATREADLINE];
   int total=0,got=0;
+  double *seq=NULL;
   *vals=NULL;
   f=fopen((char *)path,"r");
   if (f==NULL) return -1;
@@ -1707,19 +1747,49 @@ static int sb_read_reals(const char *path, const char *header, double **vals) {
     if (nd==0) { fclose(f); return -1; }
     total=1;
     { int i; for (i=0; i<nd; i++) total*=dims[i]; }
+    seq=(double *)malloc((size_t)total*sizeof(double));
     *vals=(double *)malloc((size_t)total*sizeof(double));
-    if (*vals==NULL) { fclose(f); return -1; }
+    if (seq==NULL||*vals==NULL) { free(seq); free(*vals); *vals=NULL; fclose(f); return -1; }
     while (got<total&&fgets(line,DATREADLINE,f)) {
       char *p=line;
-      if (line[0]=='\n'||line[0]=='\r') break;
+      while (*p==' '||*p=='\t') p++;
+      if (*p=='\n'||*p=='\r'||*p=='\0') continue; /* slice separator */
+      if (strchr(line,'\"')!=NULL) break;          /* next header */
       while (*p!='\0'&&got<total) {
         while (*p==' '||*p==','||*p=='\t') p++;
         if (*p=='\0'||*p=='\n'||*p=='\r') break;
-        (*vals)[got++]=strtod(p,&p);
+        seq[got++]=strtod(p,&p);
       }
     }
     fclose(f);
-    if (got!=total) { free(*vals); *vals=NULL; return -1; }
+    if (got!=total) { free(seq); free(*vals); *vals=NULL; return -1; }
+    {
+      /* sequential position -> per-dimension index (antidim scheme of
+         the main reader) -> C-order position */
+      long antidim[8],cstride[8];
+      int i,d;
+      if (nd==1) { antidim[0]=1; }
+      else {
+        antidim[1]=1;
+        antidim[0]=dims[1];
+        for (d=2; d<nd; d++) antidim[d]=(d==2)?(long)dims[0]*dims[1]:antidim[d-1]*dims[d-1];
+      }
+      cstride[nd-1]=1;
+      for (d=nd-2; d>=0; d--) cstride[d]=cstride[d+1]*dims[d+1];
+      for (i=0; i<total; i++) {
+        long l1=i,cpos=0;
+        int idx[8];
+        if (nd==1) idx[0]=(int)l1;
+        else {
+          for (d=nd-1; d>1; d--) { idx[d]=(int)(l1/antidim[d]); l1-=antidim[d]*idx[d]; }
+          idx[0]=(int)(l1/antidim[0]); l1-=antidim[0]*idx[0];
+          idx[1]=(int)(l1/antidim[1]);
+        }
+        for (d=0; d<nd; d++) cpos+=idx[d]*cstride[d];
+        (*vals)[cpos]=seq[i];
+      }
+    }
+    free(seq);
     return total;
   }
   fclose(f);

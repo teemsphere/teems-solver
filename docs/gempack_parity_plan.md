@@ -7,6 +7,38 @@ semantics, POSTSIM, others").
 
 ## Progress log
 
+- **2026-08-18 — 6.4 model-corpus gap slice (R-front-end re-survey
+  findings A-C) landed; two solver defects fixed on the way.**
+  Solver: `sb_read_reals` (cmf_io.c) read the builder's condition
+  coefficient in C order and stopped at the first blank line, so
+  every ≥3-D teems-written header (blank-line-separated dim-1 x dim-2
+  slices, dims 3+ column-major — the main reader's `antidim` layout)
+  failed "cannot evaluate condition"; it now skips separators and
+  remaps to C order (kit `sb3d`, GTAPv7 EVFB, pinned against the
+  independent conditional-sum machinery). `tab_preprocess` treated a
+  physical line holding several statements as one (last `;`); it now
+  feeds the accumulator piecewise after every top-level `;` (parity
+  with GEMPACK; the R deploy always wrote one per line, so only
+  hand-fed TABs saw it). teems-R (uncommitted at log time): front-end
+  normalisation (glued keywords `Coefficient(all,..)`, `![[! !]]!`,
+  `;;`, Latin-1/BOM, labels vs qualifier scans, empty labels, stray
+  label = named), `Read (IfHeaderExists)` accepted (deploy header
+  check exempts it), conditional set builders opened R-side
+  (parse + pre-flight mirrors of the solver fatals + deploy-time
+  evaluation from the aggregated tables so R and solver resolve the
+  same elements; e2e pin on GTAPv7 EVFB; mapsum form parses but
+  aborts at deploy), same-index multi-membership IF partition in
+  equations (GTAPv7 `E_CNTqfr`, mrio `E_qamds`), expression IF
+  conditions via synthesized `IFX*` helper coefficients (LULC
+  `THETAi*YDONOFF<=0`, coefref-vs-coefref), `$POS`/set-product named
+  rejects, `full_exclude` sweep no longer silently deletes Set
+  declarations. Corpus (65 model TABs, R gate): 9 → 53 PASS; the rest
+  named. Solver-side residuals now measured behind the old R gate:
+  GTAP-E/EP condition on a formula-computed coefficient (`UNITD*`),
+  GTAP-AEZ formula-assigned mappings (`MAP(a) = 1`), upstream v7
+  PostSim welfare block (`x`/`$POS`, intentional). Row inventory:
+  validation_table.md F/IF/S13-18/U3/U7.
+
 - **2026-08-11 — the "bordered pair" (ROADMAP 6.14) DONE + a
   token-boundary parser fix**: mapped equations and complementarities
   now solve under SBBD/DBBD/NDBBD (`7e40701` + `be3d631`; teems-R
