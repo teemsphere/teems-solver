@@ -1,7 +1,7 @@
 FROM debian:bookworm-slim
 
 LABEL org.opencontainers.image.name="TEEMS solver base layer Dockerfile"
-LABEL org.opencontainers.image.version="2.0.0-dev.1"
+LABEL org.opencontainers.image.version="1.1.0-dev.1"
 LABEL org.opencontainers.image.description="Base layer Docker build for TEEMS solver (open-source components)"
 LABEL org.opencontainers.image.author="Matthew Cantele <matthew.cantele@protonmail.com>"
 LABEL org.opencontainers.image.maintainer="Matthew Cantele <matthew.cantele@protonmail.com>"

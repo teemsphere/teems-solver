@@ -786,47 +786,26 @@ the CMF (which is a file manifest only), and are echoed in
 `stats.json`'s `options` object. Stale flags from older commands
 (`-regset`, `-enable_time`, `-presol`, `-nesteddbbd`) are ignored.
 
-## 12. Verification and development infrastructure
+## 12. Verifying a build
 
-- **Golden runs** (`.audit/verify.sh`, dev-machine): rebuilds from the
-  working tree in the `teems-audit` container (an `x86-64-v2` base
-  since 2026-07-14; build mirrors the expedited image's
-  `make OPT="-Ofast $ARCH_FLAGS"`) and checks 14 solves bit-identically
-  against manifests anchored 2026-07-14 to the v2 flag scheme with
-  flag-free commands (the original anchors traced back to the
-  pre-refactor binary; the v2 re-anchor was proven to carry exactly
-  the flag-removal delta — the v2 build itself changed no output bit):
-  GTAPv7 static LU/Johansen; GTAP-RE intertemporal LU/Gragg; GTAP-RE
-  SBBD, DBBD, NDBBD at 2 ranks; three real-shock runs (2D probe, 4D,
-  swap); a GEMPACK-orientation matrix shock (2D, both dims free); and
-  four subinterval gates spanning method × ranks × nsubints × inmemory.
-  Any behavior change fails the gate.
-- **Structural-detection acceptance** (`.audit/accept_structural.sh`):
-  reruns the NDBBD, DBBD (intertemporal + static) and SBBD golden
-  configurations flag-free and requires the structurally detected
-  ordering to reproduce the golden manifests bit-identically (this
-  gate is what licensed removing the transitional
-  `-regset`/`-enable_time` overrides).
-- **Benchmark rigs**: `.audit/bench_run.sh` (wall/RSS via `time -v`),
-  `.audit/strace_run.sh` (per-file write-byte accounting), deployments
-  under `.audit/bench-*` produced by teems-R scripts.
-- **Feature kits** (`.audit/*-test-kit/run_*_tests.sh`): per-feature
-  acceptance rigs on copies of the golden runs — set builders, set
-  expressions, conditional sums, mapping, complementarity, levels,
-  PostSim, qualifiers/defaults/bounds/names, intrinsics, zerodivide,
-  condest, closure, methods (analytic and polynomial-exactness anchors
-  for the stepping methods), probe. Each pins values with in-TAB
-  `Assertion`s or against an independent computation of the same
-  quantity.
-- **Memory safety**: ASan/TSan builds of the golden suite
-  (`.audit/verify-asan.sh`, `verify-tsan.sh`) and AFL++ fuzzing of the
-  TAB/CMF/closure/shock readers (batches landed 2026-07); the
-  `-fastrefac` and grow-and-retry paths were added under the same
-  gates.
-- Build: see `src/BUILDING.md` (HSL staging, `src/patches/` applied by
-  `mp48_mod.sh`, serial make requirement, `OPT` knob) and the README's
-  expedited image recipe. `.audit/` is developer tooling on the
-  maintainer's machine, not part of the distributed tree.
+- **Determinism**: repeated runs of the same binary on the same inputs
+  are bit-identical for every solution and matrix method and rank
+  count, so a locally built image can be checked against a reference
+  run by comparing output files byte for byte (the maintainers keep
+  such golden manifests across methods × ranks × subintervals ×
+  in-memory modes and gate every change on them).
+- **Smoke test**: the README's *Verification* section runs the shipped
+  example through the image; the teems R package's test suite
+  exercises the full pipeline against a local `teems:<tag>`
+  (`ems_option_set(docker_tag=)`).
+- **Structure before solving**: `-solmed probe` (or `ems_probe()`)
+  reports the model's ordering statistics and any structural
+  singularity by name without solving; `-condest 1` measures each
+  linear solve's backward error and scaled condition number under
+  sequential LU (§10).
+- Build details: `src/BUILDING.md` (HSL staging, `src/patches/`
+  applied by `mp48_mod.sh`, serial make requirement, `OPT` knob) and
+  the README's expedited-image recipe.
 
 ## 13. Known limitations and planned work
 
@@ -846,11 +825,18 @@ the CMF (which is a file manifest only), and are echoed in
   expressions are not evaluated by the solver; the R front end
   rewrites the supported `IF` forms into conditional quantifiers,
   helper coefficients and domain splits before deployment.
-- **Version handshake**: solver and teems-R are versioned together
-  (v2.0.0 series; the `hsl` compatibility symlink is dropped at 2.0.0).
-  A `-version` flag / banner / `stats.json` field surfacing one version
-  constant, with a teems-R pre-flight, is planned for the 2.0.0
-  release; until then the image label is the only version hint.
+- **Version handshake**: the solver image and the R package are
+  versioned independently. The image moves 1.0.0 → 1.1.0: everything
+  since 1.0.0 is additive for the package that drives it (the `hsl`
+  compatibility symlink, deprecated aliases such as `-solmed Mmid`,
+  and ignored legacy flags are kept precisely so that the released
+  1.0.0-era package still runs bit-identically against it), while a
+  newer R package may *require* a minimum image (the coefficient dump
+  needs ≥ 1.1.0). A `-version` flag / banner / `stats.json` field
+  surfacing one version constant, checked by the R package as a
+  minimum (no response = pre-1.1 image), is planned for the 1.1.0
+  release; until then the image label is the only version hint. The
+  symlink and aliases are removed only at a real 2.0.0.
 - **Calibration**: the `matrix_method`/`n_tasks` auto rules, the
   `-fastrefac` and MA48 pivot-threshold default flips, the NDBBD
   `-inmemory` default, RK-vs-Gragg rankings, and the structural-probe

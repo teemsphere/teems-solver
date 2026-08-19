@@ -88,7 +88,7 @@ RUN ARCH_FLAGS="$(cat ${BUILD_DIR}/archflags 2>/dev/null || true)" \
 FROM debian:bookworm-slim
 
 LABEL org.opencontainers.image.name="TEEMS solver expedited build Dockerfile"
-LABEL org.opencontainers.image.version="2.0.0-dev.1"
+LABEL org.opencontainers.image.version="1.1.0-dev.1"
 LABEL org.opencontainers.image.description="Expedited Docker build for TEEMS solver"
 LABEL org.opencontainers.image.author="Matthew Cantele <matthew.cantele@protonmail.com>"
 LABEL org.opencontainers.image.maintainer="Matthew Cantele <matthew.cantele@protonmail.com>"
