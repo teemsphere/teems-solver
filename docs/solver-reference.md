@@ -756,6 +756,7 @@ needs corpus calibration.
 | `-nsubints n` | 1 | shock subintervals |
 | `-laA/-laDi/-laD n` | 2 (teems-R: 300/500/200) | workspace sizing, % of nnz |
 | `-fastrefac {0,1}` | 0 | all matrix methods: analyse once, fast refactorize per step (MA48 JOB=2 / MP48 FACT_JOB=2); LU auto-grows `laA` (§6) |
+| `-ma48u x` | library defaults | MA48 / HSL_MP48 pivot threshold `CNTL(2)`, 0 < x ≤ 1, applied at every factorization site (sequential LU, DBBD/NDBBD blocks and rank probes, SBBD's MP48 instance). Absent = each library's own default (MA48 0.1, MP48 0.01), bit-identical to builds without the option; recorded in `stats.json` (`ma48u`, null when default). A calibration knob, not a tuning recommendation |
 | `-cntl_3 x` | — | HSL iterative-refinement threshold |
 | `-cntl_6 x` | 0 | MA50 ordering control |
 | `-withmc66 {0,1}` | 0 | MC66 ordering for SBBD |

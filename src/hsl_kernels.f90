@@ -17,6 +17,28 @@ contains
       if (st/=0) teems_verbosity=1
     end if
   end function teems_verbosity
+  ! MA48 pivot threshold override from the C side (-ma48u -> TEEMS_MA48U,
+  ! set only when the option is given). Applied right after every
+  ! MA48ID/MA48I initialisation and to HSL_MP48's control block; when
+  ! absent each library keeps its own default (MA48 0.1, MP48 0.01), so
+  ! default runs are bit-identical to builds without this hook.
+  logical function teems_ma48u(u)
+    real (kind=DPC), intent(out) :: u
+    character(len=32) :: s
+    integer :: st
+    teems_ma48u=.false.
+    u=0.1_DPC
+    call get_environment_variable("TEEMS_MA48U",s,status=st)
+    if (st==0) then
+      read(s,*,iostat=st) u
+      if (st==0) teems_ma48u=.true.
+    end if
+  end function teems_ma48u
+  subroutine teems_apply_ma48u(cntl)
+    real (kind=DPC), intent(inout) :: cntl(*)
+    real (kind=DPC) :: u
+    if (teems_ma48u(u)) cntl(2)=u
+  end subroutine teems_apply_ma48u
 end module constants
 
 SUBROUTINE SPEC48_SINGLE(indata,irn1,jcn1,b1,values1,x,neleperrow,ai1,fcomm)
@@ -80,6 +102,7 @@ SUBROUTINE SPEC48_SINGLE(indata,irn1,jcn1,b1,values1,x,neleperrow,ai1,fcomm)
   ! Initialize package
   data%JOB = 1
   CALL MP48AD(data)
+  call teems_apply_ma48u(data%CNTL)
   ! Reset control parameters (if required)
   ! Read all values on host
   data%ICNTL(7) = 3
@@ -206,6 +229,7 @@ SUBROUTINE SPEC48_NOMC66(indata,jcn1,b1,values1,x,neleperrow,fcomm,rowptrin,colp
   ! Initialize package
   data%JOB = 1
   CALL MP48AD(data)
+  call teems_apply_ma48u(data%CNTL)
   ! Reset control parameters (if required)
   ! Read all values on host
   data%ICNTL(7) = 3
@@ -368,6 +392,7 @@ SUBROUTINE SPEC48_NOMC66_P(indata,jcn1,b1,values1,x,neleperrow,fcomm,rowptrin,co
   pdata%COMM = fcomm1
   pdata%JOB = 1
   CALL MP48AD(pdata)
+  call teems_apply_ma48u(pdata%CNTL)
   pdata%ICNTL(7) = 3
   ! the instance persists across steps: own the solution vector so
   ! repeated JOB=5 calls never re-allocate package-owned storage
@@ -511,6 +536,7 @@ SUBROUTINE SPEC51M_RANK(INSIZE,CNTL6,IRN,JCN,VA,IRNA,JCNA,KEEP,W,IW)
     ELSE
       CALL MA48I(CNTL,ICNTL)
     ENDIF
+  call teems_apply_ma48u(CNTL)
     ! errors only below debug verbosity (silences duplicate-entry notes)
     if (teems_verbosity()<2) ICNTL(3)=1
     ! -3 workspace shortfalls are handled by caller-side growth, so
@@ -703,6 +729,7 @@ SUBROUTINE SPEC48M_MSOL(INSIZE,IRN,JCN,VA,B,X,IRNC,JCNC,VAC,IRNB,JCNB,VALUESB,VE
   ELSE
     CALL MA48I(CNTL,ICNTL)
   ENDIF
+call teems_apply_ma48u(CNTL)
   ! errors only below debug verbosity (silences duplicate-entry notes)
   if (teems_verbosity()<2) ICNTL(3)=1
   ! -3 workspace shortfalls are handled by caller-side growth, so
@@ -912,6 +939,7 @@ SUBROUTINE SPEC48M_MSOL_P(INSIZE,IRN,JCN,VA,B,X,IRNC,JCNC,VAC,IRNB,JCNB,VALUESB,
   ELSE
     CALL MA48I(CNTL,ICNTL)
   ENDIF
+call teems_apply_ma48u(CNTL)
   ! errors only below debug verbosity (silences duplicate-entry notes)
   if (teems_verbosity()<2) ICNTL(3)=1
   ! -3 workspace shortfalls are handled by caller-side growth, so
@@ -1128,6 +1156,7 @@ SUBROUTINE SPEC48M_ESOL(INSIZE,IRN,VA,KEEP,B,SOL)
   else
     CALL MA48I(CNTL,ICNTL)
   ENDIF
+call teems_apply_ma48u(CNTL)
   ! errors only below debug verbosity (silences duplicate-entry notes)
   if (teems_verbosity()<2) ICNTL(3)=1
   JOB=1
@@ -1174,6 +1203,7 @@ SUBROUTINE SPEC48M_RPESOL(INSIZE,IRN,VA,KEEP,B,SOL,CNTL,RINFO,ERROR1,ICNTL,INFO,
   else
     CALL MA48I(CNTL,ICNTL)
   ENDIF
+call teems_apply_ma48u(CNTL)
   ! errors only below debug verbosity (silences duplicate-entry notes)
   if (teems_verbosity()<2) ICNTL(3)=1
   JOB=1
@@ -1274,6 +1304,7 @@ SUBROUTINE SPEC48_SSOL2LA(INSIZE,IRN,JCN,VA,B,X)
   else
     CALL MA48I(CNTL,ICNTL)
   endif
+call teems_apply_ma48u(CNTL)
   ! errors only below debug verbosity (silences duplicate-entry notes)
   if (teems_verbosity()<2) ICNTL(3)=1
   ! -3 workspace shortfalls are handled by caller-side growth, so
@@ -1499,6 +1530,7 @@ SUBROUTINE SPEC48_SSOL2LA_P(INSIZE,IRN,JCN,VA,B,X)
     else
       CALL MA48I(pCNTL,pICNTL)
     endif
+  call teems_apply_ma48u(pCNTL)
     ! errors only below debug verbosity (silences duplicate-entry notes)
     if (teems_verbosity()<2) pICNTL(3)=1
     ! -3 workspace shortfalls are handled by caller-side growth, so
@@ -1676,6 +1708,7 @@ SUBROUTINE SPEC48M_SSOL2LA(INSIZE,IRN,JCN,VA,B,X)
   else
     CALL MA48I(CNTL,ICNTL)
   endif
+call teems_apply_ma48u(CNTL)
   ! errors only below debug verbosity (silences duplicate-entry notes)
   if (teems_verbosity()<2) ICNTL(3)=1
   ! -3 workspace shortfalls are handled by caller-side growth, so
@@ -1964,6 +1997,7 @@ SUBROUTINE PREP48_ALU1(INSIZE,IRN,JCN,VA,W,IW,KEEP)
   else
     CALL MA48I(CNTL,ICNTL)
   endif
+call teems_apply_ma48u(CNTL)
   ! errors only below debug verbosity (silences duplicate-entry notes)
   if (teems_verbosity()<2) ICNTL(3)=1
   ! -3 workspace shortfalls are handled by caller-side growth, so
@@ -2083,6 +2117,7 @@ SUBROUTINE PREP48M_MSOL(INSIZE,IRN,JCN,VA,IRNC,JCNC,VAC,IRNB,JCNB,VALUESB,VECBIV
   else
     CALL MA48I(CNTL,ICNTL)
   endif
+call teems_apply_ma48u(CNTL)
   ! errors only below debug verbosity (silences duplicate-entry notes)
   if (teems_verbosity()<2) ICNTL(3)=1
   ! -3 workspace shortfalls are handled by caller-side growth, so
@@ -2267,6 +2302,7 @@ SUBROUTINE PREP48M_MSOL_P(INSIZE,IRN,JCN,VA,IRNC,JCNC,VAC,IRNB,JCNB,VALUESB,VECB
   else
     CALL MA48I(CNTL,ICNTL)
   endif
+call teems_apply_ma48u(CNTL)
   ! errors only below debug verbosity (silences duplicate-entry notes)
   if (teems_verbosity()<2) ICNTL(3)=1
   ! -3 workspace shortfalls are handled by caller-side growth, so

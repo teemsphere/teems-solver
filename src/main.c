@@ -61,6 +61,9 @@ static int coefficients_dump(const char *stem, array_def *coefs, offset_t ncof, 
   return 0;
 }
 
+/* -ma48u pivot threshold as given (<=0 = library defaults) */
+static double teems_ma48u_opt=-1.0;
+
 /* Per-run ordering statistics (<solfiles>.stats.json): netcut, border
    sizes and per-block variable/equation counts. Written before the
    solve so failed runs still record their ordering; consumed by
@@ -169,6 +172,8 @@ static void ordering_stats_write(cmf_file_entry *iodata, int niodata, int noutda
     fprintf(fp,"    \"max_threads\": %d,\n",(int)max_threads);
     fprintf(fp,"    \"store_precision\": \"%s\",\n",TEEMS_STORE_PRECISION);
     fprintf(fp,"    \"fastrefac\": %s,\n",frchk?"true":"false");
+    if(teems_ma48u_opt>0)fprintf(fp,"    \"ma48u\": %g,\n",teems_ma48u_opt);
+    else fprintf(fp,"    \"ma48u\": null,\n");
     fprintf(fp,"    \"condest\": %s,\n",teems_condest?"true":"false");
     fprintf(fp,"    \"gpzerodivide\": %s,\n",teems_gpzerodivide?"true":"false");
     fprintf(fp,"    \"assertions\": \"%s\",\n",mode_names[teems_assertions_mode>=0&&teems_assertions_mode<=2?teems_assertions_mode:2]);
@@ -910,6 +915,28 @@ int main(int argc,char **args) {
     char verbstr[8];
     sprintf(verbstr,"%d",verbosity);
     setenv("TEEMS_VERBOSITY",verbstr,1);/* for the Fortran kernels (hsl_kernels.f90) */
+  }
+  {
+    /* -ma48u <x>: MA48/MP48 pivot threshold (CNTL(2), 0 < x <= 1).
+       Absent = each library's own default (MA48 0.1, HSL_MP48 0.01),
+       bit-identical to pre-option builds; given = applied at every
+       MA48ID/MP48AD initialisation via TEEMS_MA48U (hsl_kernels.f90).
+       Recorded in stats.json options as ma48u (null when default). */
+    PetscReal u=0;
+    PetscBool uflg=PETSC_FALSE;
+    PetscOptionsGetReal(NULL,NULL,"-ma48u",&u,&uflg);
+    if(uflg) {
+      if(!(u>0&&u<=1)) {
+        if(rank==0)printf("Error: -ma48u must be in (0,1] (MA48 pivot threshold CNTL(2); MA48 default 0.1, HSL_MP48 default 0.01), got %g\n",(double)u);
+        PetscFinalize();
+        return 1;
+      }
+      char ustr[32];
+      snprintf(ustr,sizeof(ustr),"%.17g",(double)u);
+      setenv("TEEMS_MA48U",ustr,1);
+      teems_ma48u_opt=(double)u;
+    }
+    else unsetenv("TEEMS_MA48U");
   }
   inmemory=-1;
   PetscOptionsGetInt(NULL,NULL,"-inmemory",&inmemory,NULL);/* keep value arrays resident instead of spilling to scratch */
