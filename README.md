@@ -43,12 +43,15 @@ The solver is distributed as a Docker image to ensure reproducibility and ease o
 
 The following HSL libraries must be obtained directly from [HSL](https://www.hsl.rl.ac.uk/). These are available at no cost for academic use.
 
-| Library | Version |
-|---------|---------|
-| MA48 | 2.2.0 |
-| MA51 | 1.0.0 |
-| HSL_MC66 | 2.2.1 |
-| HSL_MP48 | 2.1.1 |
+| Library | Version | Role |
+|---------|---------|------|
+| MA48 | 2.2.0 | sparse LU |
+| MA51 | 1.0.0 | block rank detection |
+| MA60 | 1.2.0 | solve-quality diagnostics (`-condest`) |
+| MC71 | 1.0.0 | condition estimation (with MA60) |
+| HSL_MC66 | 2.2.1 | bordered ordering |
+| HSL_MC79 | 1.1.1 | structural probe (`-solmed probe`) |
+| HSL_MP48 | 2.1.1 | parallel bordered solve (SBBD) |
 
 **Note**: Backward compatibility with other HSL library versions is not guaranteed.
 
@@ -126,7 +129,10 @@ The `hsl/` directory should contain:
 hsl/
 ├── ma48-2.2.0.tar.gz
 ├── ma51-1.0.0.tar.gz
+├── ma60-1.2.0.tar.gz
+├── mc71-1.0.0.tar.gz
 ├── hsl_mc66-2.2.1.tar.gz
+├── hsl_mc79-1.1.1.tar.gz
 └── hsl_mp48-2.1.1.tar.gz
 ```
 
@@ -151,6 +157,10 @@ docker build --pull \
 ```
 
 **Build time**: ~5 minutes
+
+To build against a specific published base (for example a pre-release tag), add `--build-arg BASE_IMAGE=matthewcantele/teems_base:<tag>`; the local image tag (`-t teems:<tag>`) is what `ems_option_set(docker_tag = "<tag>")` selects in the R package.
+
+**ISA level.** The published `amd64` base is compiled at `x86-64-v2` (runs on every Intel/AMD CPU since ~2009) and the `arm64` base at `armv8-a` (all Apple M-series and Graviton); the expedited build compiles the HSL libraries and the solver at the same level, read from the base's `/opt/teems-solver/archflags`. Higher levels (`x86-64-v3` etc.) showed no measurable win — the dense kernels dispatch per CPU at run time through OpenBLAS — so only the portable levels are published. The full build accepts `--build-arg MARCH=<level>` if you want to compile everything for your own machine.
 
 ##### Full Build
 

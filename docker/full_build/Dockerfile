@@ -2,7 +2,7 @@ FROM debian:bookworm-slim AS builder
 
 ARG TARGETARCH
 # psABI/ISA level for amd64/arm64/arm (e.g. x86-64-v3); empty = portable
-# default per arch. See docs/image-publishing.md.
+# default per arch. See docs/solver-reference.md §12 and the README.
 ARG MARCH=""
 ARG PATH_HSL_MA48
 ARG PATH_HSL_MA51

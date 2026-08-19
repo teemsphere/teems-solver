@@ -1,17 +1,25 @@
 # TEEMS Solver — Technical Reference
 
-The TEEMS solver (`hsl` binary) is a parallel Computable General
-Equilibrium (CGE) solver in the GEMPACK tradition: it reads a TAB-language
-model description, base data, a closure, and shocks; linearizes the model;
-solves the resulting first-order system with sparse direct methods; and
-writes updated data and percentage-change solutions. It implements the
-bordered block-diagonal ordering methods of Ha & Kompas (2016, SBBD) and
-Kompas & Ha (2019, NDBBD) on top of PETSc, MPI, OpenMP, and the HSL
-sparse linear algebra libraries (MA48, MA51, MC66, HSL_MP48).
+The TEEMS solver (`teems-solver`; `teems-solver-f64` is the same
+program with double-precision coefficient storage, §10) is a parallel
+Computable General Equilibrium (CGE) solver in the GEMPACK tradition: it
+reads a TAB-language model description, base data, a closure, and
+shocks; linearizes the model; solves the resulting first-order system
+with sparse direct methods; and writes updated data and
+percentage-change solutions. It implements the bordered block-diagonal
+ordering methods of Ha & Kompas (2016, SBBD) and Kompas & Ha (2019,
+NDBBD) on top of PETSc, MPI, OpenMP, and the HSL sparse linear algebra
+libraries (MA48, MA51, MC66, HSL_MP48; MC79 for the structural probe,
+MA60/MC71 for the solve-quality diagnostics).
 
 Authored by Pham Van Ha and Tom Kompas; restructured and hardened in the
 2026 refactor (see `src/NAMING.md` for the symbol lineage and
-`BUILDING.md` for the build).
+`src/BUILDING.md` for the build). This document is the technical
+reference for the solver; user-facing modelling rules (which TAB forms
+the R front end accepts, rewrites or rejects) are in the teems manual
+(`model_load`), and the solver's own build recipe is in the repository
+`README.md`. Planning and design documents live in the separate
+development repository, not here.
 
 References used throughout:
 - **[GM]** GEMPACK Manual, Horridge et al. 2024
@@ -67,7 +75,7 @@ Solver outputs, consumed by `ems_compose()`:
 | `.sel` | `nsetspace × set_element` — set elements with superset positions |
 | `.mds` | 4 × long: `nsetspace, nvar, nvarele, nset` |
 | `.cof` | coefficient dump header + declarations (`-cofdump`, default on): 4 × long `{version=1, ncof, ncofele, reserved}`, then `ncof × array_def` (same struct as `.var`), then `ncof × uint8 kind` (bit 0 = PostSim coefficient, bit 1 = `(parameter)`). Written after PostSim, so PostSim coefficients carry their computed values |
-| `.cbin` | `ncofele × double` — updated (post-simulation) coefficient values, the coefficient slice of the value vector in `array_def.offset` order; the coefficient twin of `.bin`. Together with `.cof` this replaces the per-coefficient CSVs as teems-R's coefficient transport (ROADMAP 6.13) |
+| `.cbin` | `ncofele × double` — updated (post-simulation) coefficient values, the coefficient slice of the value vector in `array_def.offset` order; the coefficient twin of `.bin`. Together with `.cof` this replaces the per-coefficient CSVs as teems-R's coefficient transport (2026-08) |
 | `.stats.json` | per-run ordering statistics (v2): system size, method, `netcut`, border sizes, per-block variable/equation counts (null/empty when no bordered ordering was built), plus `chain_set`/`partition_set` with `chain_source`/`partition_source` (`explicit`/`structural`/`none`) and, when the partition probe ran, the full `partition_auto` candidate table (§6). Written before the solve, so failed runs still record their ordering; feeds `matrix_method` auto-calibration |
 
 The structs are written raw; teems-R's `parse_solution.cpp` mirrors their
@@ -78,16 +86,42 @@ teems-R and must not be re-ordered or resized casually.
 
 The solver reads a GEMPACK-style TAB subset (statement syntax per [GM]):
 
-- `set` / `subset` — including unions (`+`), differences (`-`), and
-  intertemporal set declarations (`(intertemporal)`), which mark the time
-  dimension used by the bordered orderings.
+- `set` / `subset` — explicit lists, `read elements` from a data
+  file, the full set-expression grammar of [GM] 10.1.1 (`+`, `-`, `\`,
+  `UNION`, `INTERSECT`, quoted single elements, parentheses; `+`
+  disjointness and `-` presence enforced), set equality, conditional
+  set builders `Set X = (all,i,SRC: <cond>)` ([GM] 10.1.2 — evaluated
+  from the input files ahead of set resolution by
+  `tab_setbuilder_transform`; the condition coefficient must be
+  file-Read), and intertemporal set declarations (`(intertemporal)`),
+  which mark the time dimension used by the bordered orderings.
+  Set products (`x`) are not supported.
+- `mapping` ([GM] 11.9) — declared mappings between sets, values from
+  `Read (by_elements)`, used in index expressions and in conditional
+  sums (`sum{j,S: MAP(j) = i, ...}`); mapped equations solve under
+  every matrix method.
 - `coefficient` / `variable` — levels or percentage-change quantities
-  (`(change)` for change variables; `(default=levels)` handled by
-  `variables_read_defaults()`); optional bounds (`GE/GT/LE/LT`,
-  `enum bound_type`).
-- `read` — from the CMF-bound data files.
-- `formula` — `(initial)` / `(always)` semantics as in [GM];
-  `zerodivide` defaults honored by `tab_next_statement_resolved()`.
+  (`(change)`, `(levels)` variables — levels equations and
+  `Formula & Equation` pairs are linearized by `levels.c` at
+  preprocess; `(default=…)` handled by `variables_read_defaults()`),
+  `(parameter)`/`(non_parameter)`, `(integer)`; optional bounds
+  (`GE/GT/LE/LT`, `enum bound_type`, two slots) with initial/updated
+  range tests (`-range_test_*`).
+- `read` — from the CMF-bound data files, including `(IfHeaderExists)`
+  (absent header skipped) and `(by_elements)` mapping reads.
+- `formula` — `(initial)` / `(always)` semantics as in [GM]; conditional
+  quantifiers `(all,i,S: COEF(i) op c)` and general conditional sums;
+  `zerodivide` defaults honored by `tab_next_statement_resolved()`
+  (both GEMPACK zerodivide classes with `-gpzerodivide`); the [GM] 11.5
+  intrinsics (ABS/MAX/MIN/SQRT/EXP/LOGE/LOG10/ID01/ID0V/ROUND/TRUNC0/
+  TRUNCB, …; `$POS` is not supported). `IF[...]` conditional
+  expressions are rewritten by the R front end into these forms.
+- `assertion` (`-assertions` off/warn/fatal), `zerodivide` statements,
+  `Default` statements ([GM] 10.19), `PostSim (Begin/End)` sections
+  ([GM] ch. 12; `-postsim`, split by the preprocess and executed after
+  the simulation), `write` (opt-in coefficient CSVs).
+- `complementarity` ([GM] ch. 51) — approximate and accurate runs
+  (`-comp_*` controls), under every matrix method.
 - `equation` — linearized equations; the left/right sides are compiled
   per equation block by `jacobian_fill()`.
 - `update` — product-form and explicit updates (`updates_apply()`,
@@ -131,7 +165,13 @@ Generated temporaries use the reserved prefixes `gen_sum`, `gen_par`,
 1. **Options and MPI topology.** PETSc init; per-node communicators
    (`node_comm`, `node_tail_comm`) derived from processor names.
 2. **CMF read** (`cmf_read`), TAB preprocess (`tab_preprocess` writes the
-   per-rank `_temp_tab_file<rank>.tab` working copy).
+   per-rank `_temp_tab_file<rank>.tab` working copy — statement
+   normalisation, several statements per physical line split, block
+   comments), then the preprocess passes over the working copy: the
+   PostSim split, levels linearization (`levels.c`), mapping and
+   set-builder transforms (`tab_setbuilder_transform` reads the
+   condition coefficient straight from the data files, in their
+   slice-per-blank-line text layout).
 3. **Sets** (`sets_read`, `sets_read_intertemporal`, `subsets_read`,
    `subset_map_build`) — element lists plus superset position maps.
 4. **Declarations** (`coefficients_read`, `variables_read`) — offsets and
@@ -172,22 +212,25 @@ Generated temporaries use the reserved prefixes `gen_sum`, `gen_par`,
 Layout after the 2026 restructuring (`src/NAMING.md` maps every old name
 to its new one, with the literature source of each term):
 
-| file | lines | role |
+| file | lines (2026-08) | role |
 |---|---|---|
-| `main.c` | ~1,440 | orchestration: options, MPI topology, phases, solve dispatch, solution output |
-| `teems_solver.h` | ~330 | umbrella header: constants, globals, typedefs, enums, structs, prototypes grouped per module |
-| `globals.c` | 13 | single definitions of the program-wide globals |
+| `main.c` | ~2,640 | orchestration: options, MPI topology, phases, solve dispatch, solution output, `stats.json` |
+| `teems_solver.h` | ~690 | umbrella header: constants, globals, typedefs, enums, structs, prototypes grouped per module |
+| `globals.c` | ~130 | single definitions of the program-wide globals |
 | `str_util.c` | 109 | case-insensitive string search helpers |
-| `cmf_io.c` | ~1,060 | CMF reading, TAB preprocessing, data-file headers, output CSVs |
-| `tab_parse.c` | ~4,100 | TAB language: sets, declarations, data reads, closure, shocks, backsolve statements + equation-scan filter |
-| `formula.c` | ~3,280 | FORMULA compile/eval, UPDATE application, subinterval re-shocking |
-| `jacobian.c` | ~2,900 | equation ordering, derivative-matrix preallocation and fill, backsolve recovery programs |
-| `block_order.c` | 541 | (N)DBBD row/column ordering into bordered block form |
-| `block_solve.c` | ~3,240 | (N)DBBD parallel factorization, interface problem, back-solve |
-| `solve_drivers.c` | ~2,040 | Johansen and modified-midpoint drivers; spill/residency logic |
-| `hsl_kernels.f90` | ~1,450 | Fortran wrappers around HSL MP48/MA48/MA51/MC66 plus sparse kernels |
+| `cmf_io.c` | ~2,180 | CMF reading, TAB preprocessing (incl. the PostSim split and set-builder transform), data-file headers, output CSVs, coefficient dump |
+| `tab_parse.c` | ~5,760 | TAB language: sets and set expressions, mappings, declarations and qualifiers, data reads, closure, shocks, backsolve statements + equation-scan filter, name validation |
+| `formula.c` | ~3,240 | FORMULA compile/eval, conditional quantifiers/sums, intrinsics, UPDATE application, subinterval re-shocking |
+| `levels.c` | ~2,010 | levels variables / `Formula & Equation` linearization at preprocess |
+| `jacobian.c` | ~3,060 | equation ordering, derivative-matrix preallocation and fill, backsolve recovery programs, complementarity state |
+| `block_order.c` | 600 | (N)DBBD row/column ordering into bordered block form |
+| `block_solve.c` | ~3,900 | (N)DBBD parallel factorization, interface problem, back-solve, persistent factors |
+| `solve_drivers.c` | ~2,350 | Johansen, Gragg and Euler drivers; spill/residency logic; condest |
+| `solve_rk.c` | ~960 | Runge–Kutta drivers (RK2/RK4, embedded BoSha32/DoPri54, adaptive control) |
+| `probe.c` | ~820 | `-solmed probe`: MC79 structural diagnosis and `probe.json` |
+| `hsl_kernels.f90` | ~2,530 | Fortran wrappers around HSL MP48/MA48/MA51/MC66/MC79/MA60 plus sparse kernels |
 | `hsl_kernels.h` | — | C extern declarations for the Fortran kernels |
-| `makefile`, `mp48_mod.sh`, `patches/` | — | build; HSL source patching (see below) |
+| `makefile`, `mp48_mod.sh`, `patches/` | — | build (`teems-solver` and `teems-solver-f64` targets); HSL source patching (see below) |
 
 ### main.c
 
@@ -364,6 +407,8 @@ from tarball build-args.
 | `Johansen` | one-step solution of the linearized system [D20; Johansen 1960] |
 | `Gragg` | Gragg's method (smoothed modified midpoint) with Richardson extrapolation over `-step1/-step2/-step3` step counts (default 2-4-8), per subinterval [GM "Gragg"; Pearson 1991 eq. 6.1/Alg. 7.1.2]; `Mmid` accepted as a deprecated alias (warns) |
 | `Euler` | forward Euler multistep with Richardson extrapolation over the same three step counts [GM "Euler"] — shares the Gragg driver with the leapfrog and terminal smoothing disabled; the truncation error series is `h` (not `h²`), so the extrapolation weights use the step ratios unsquared and each extra solution gains one order (not two). Any strictly increasing step counts are allowed (no parity rule) |
+| `RK2`, `RK4` | fixed-step explicit Runge–Kutta over `-step1` steps per subinterval (no extrapolation triple) |
+| `BoSha32`, `DoPri54` | embedded Runge–Kutta pairs (Bogacki–Shampine 3(2), Dormand–Prince 5(4)); with `-adaptive yes` the embedded error estimate drives step control against `-epstol` (`accuracy-only` skips the check-failure retries; `-retryadj`/`-maxretries` set the retry policy) — the accuracy summary reports the per-step error metric |
 | `probe` | preparation only — runs the full pre-solve pipeline (data, formulas, structural detection of both the chain dimension and the block partition irrespective of `-matsol`, ordering, `stats.json`) and skips the solve; a sub-second structure probe of a model (§6); `NoSol` accepted as a deprecated alias (warns). On a single rank the probe then assembles the condensed Jacobian and runs the HSL_MC79 maximum-matching / Dulmage-Mendelsohn structural diagnosis on (a) the full stored pattern — structural closure validity — and (b) the numerically realized pattern (entries nonzero at base data) — the zero-flow singularity class. Defects are reported as *named* variable and equation elements (under-determined variables = unmatched columns, over-constrained equations = unmatched rows, plus the coarse-DM entangled blocks), to the log and to `<solfiles>.probe.json` (version 2). The report also carries the statement-level equation-system structure — per statement its quantifier sets, row count and referenced variables with element-level incidence weights — and aggregates every defect/entangled set by variable and by equation statement, so the diagnosis stays readable at any scale. `-probefine 1` adds the fine decomposition's strongly-connected-component report: core-size histogram plus the composition (by equation and variable) of the largest simultaneous cores — the model's irreducible simultaneous structure vs its recursive remainder. Catches structural and zero-data singularity classes, not numerical near-singularity |
 
 Gragg mechanics: for each step count `s`, the shock is applied in `s`
@@ -440,7 +485,7 @@ flags below resolve the dimensions explicitly. The full candidate table
 and recorded in `stats.json` under `partition_auto`, with
 `chain_source`/`partition_source` saying how each dimension was
 resolved — the structural evidence teems-R's `matrix_method = "auto"`
-consults (ROADMAP 6.10). A `-solmed probe` run yields it without
+consults for its `matrix_method = "auto"` decision. A `-solmed probe` run yields it without
 solving, and independently of the `-matsol` it is launched with: the
 probe always runs both detections, measures the nested (NDBBD)
 partition geometry when a chain exists and the flat (DBBD) one
@@ -451,7 +496,7 @@ real solve the detections are gated on the requested method (SBBD:
 chain; DBBD/NDBBD: chain and partition). The scan sees
 *declared* structure only; value-aware element-level classification
 (e.g. recognising a banded adjacency coefficient as nearly
-partitionable) is roadmap 6.5/E3.
+partitionable) is a planned refinement.
 
 The transitional `-enable_time`/`-regset` overrides were removed once
 structural detection reproduced their results bit-identically on the
@@ -487,10 +532,12 @@ the host and refactorize with `FACT_JOB=2` (numerical pivoting
 retained; an MP48 error on the fast path rebuilds the instance). In
 both cases the extraction keeps explicitly stored zeros — an entry that
 is zero at the analyse state may become nonzero at a later step and
-must stay in the pattern. On the LU path `laA` is self-sizing: an MA48
+must stay in the pattern. Every MA48 factorization site is self-sizing: an MA48
 `-3` (workspace too small) return grows the arrays to the size MA48
-suggests (doubling floor, six-attempt cap) instead of aborting, and the
-grown size persists for the rest of the solve. Measured (Gragg 2-4-8,
+suggests (doubling floor, six-attempt cap) instead of aborting, the
+grown size persists for the rest of the solve, and the sizes actually
+used are recorded in `stats.json` (`la_used`) so a caller can warm-start
+the next run. Measured (Gragg 2-4-8,
 17 factorization cycles): 1.35M static LU −72% wall / +21% RSS; 4.36M
 intertemporal SBBD-2 −36% wall / +28% RSS; 202k SBBD-2 −25%. DBBD keeps
 per-diagonal-block persistent factors: each block's COO is a raw copy
@@ -617,8 +664,8 @@ each; raw walls in `.audit/ab_phase5_results.txt`):
   wall): `jacobian_fill` = 0.71s (61%, equation parse + mandatory
   per-step refill); `formulas_execute` = 0.04s (3.4%). Formula op-list
   caching was dropped on these numbers; the equation path belongs to
-  condensation (ROADMAP 6.2).
-- **Compiled-equation cache** (2026-07-16, ROADMAP 6.2 phase 0,
+  condensation.
+- **Compiled-equation cache** (2026-07-16, condensation phase 0,
   `.audit/ab_eqcache.sh`, interleaved pairs, first run discarded):
   `jacobian_fill` split into a build phase (parse + `formula_compile`
   programs, run once per solve per rank) and an execute phase (SUM +
@@ -653,8 +700,11 @@ method (basis of the golden-run verification, below).
 ## 10. Numerical characteristics
 
 - Solve precision `solve_real` = double; storage `store_real` = float
-  (halves memory traffic for coefficient values; solution vectors and
-  factorizations are double).
+  in `teems-solver` (halves memory traffic for coefficient values;
+  solution vectors and factorizations are double). `teems-solver-f64`
+  is the same source built with double coefficient storage for
+  accuracy-critical runs (teems-R `precision` argument); both binaries
+  ship in every image.
 - Compiled `-Ofast` (includes `-ffast-math`: FP reassociation, no
   NaN/Inf guarantees). This is the tested production configuration;
   `make OPT=-O3` builds an IEEE-conformant binary for cross-checks.
@@ -716,14 +766,25 @@ needs corpus calibration.
 | `-nsbbdblocks n` | 2 | SBBD block-count hint |
 | `-probefine {0,1}` | 0 | with `-solmed probe`: add the MC79 fine-DM strongly-connected-component report (§5) |
 | `-condest {0,1}` | 0 | sequential LU only: per-solve quality diagnostics (MA60/MC71) — componentwise backward error ω₁/ω₂ with iterative refinement, forward-error bound, and the Arioli–Demmel–Duff scaled condition numbers κω₁/κω₂ — logged per linear solve and recorded as run maxima in `stats.json` (`condest` object). Diagnostic-only: solutions are bit-identical with the flag on or off (refinement runs on a copy). Null-shock (zero-rhs) solves are skipped with a note; κω₂ > 1e15 adds a numerically-near-singular warning — the class the structural probe cannot see. Ignored (with a warning) for the bordered methods, whose composed systems have no transpose-solve path |
+| `-adaptive {no,yes,accuracy-only}` | no | embedded RK pairs only: error-controlled stepping against `-epstol` (default 0.1); `-retryadj` (0.5) / `-maxretries` (3) tune the check-failure retries |
+| `-assertions {0,1,2}` | 1 | TAB `Assertion` statements: off / warn / fatal |
+| `-range_test_initial`, `-range_test_updated {0,1,2}` | 2 / 1 | coefficient bound checks on initial and updated values: off / warn / fatal |
+| `-gpzerodivide {0,1}` | 0 | GEMPACK's two-class zerodivide semantics (nonzero-by-zero vs zero-by-zero defaults) |
+| `-postsim {0,1}` | 1 | execute the TAB's PostSim section after the simulation |
+| `-comp_steps n`, `-comp_do_approx/-comp_do_acc {0,1}`, `-comp_redo {0,1}`, `-comp_redo_min_frac x`, `-comp_sberr_warn {0,1}` | see log | complementarity ([GM] ch. 51) approximate/accurate run controls |
 | `-nowrites n` | 0 | suppress output writes |
 | `-cofdump {0,1}` | 1 | write the `.cof`/`.cbin` coefficient dump (recorded in `stats.json` `options`) |
 | `-verbosity {0,1,2}` | 1 | 0 = errors/warnings + accuracy summary only; 1 = phase progress and timings; 2 = per-rank/per-block debug detail (also exported as `TEEMS_VERBOSITY` for the Fortran kernels; MA48 duplicate-entry notes appear only at 2) |
 | `-nox` | — | PETSc: no X output |
 
-teems-R populates these from `ems_solve()` arguments
+teems-R populates these from `ems_solve()`/`ems_RK()` arguments
 (`solution_method`, `matrix_method`, `n_tasks`, `steps`,
-`n_subintervals`, `laA/laD/laDi`, `append_args` for anything else).
+`n_subintervals`, and the validated expert dots — `laA/laD/laDi`,
+`fastrefac`, `condest`, `assertions`, `range_test_*`, RK controls,
+complementarity controls). Options travel on the invocation, never in
+the CMF (which is a file manifest only), and are echoed in
+`stats.json`'s `options` object. Stale flags from older commands
+(`-regset`, `-enable_time`, `-presol`, `-nesteddbbd`) are ignored.
 
 ## 12. Verification and development infrastructure
 
@@ -749,25 +810,50 @@ teems-R populates these from `ems_solve()` arguments
 - **Benchmark rigs**: `.audit/bench_run.sh` (wall/RSS via `time -v`),
   `.audit/strace_run.sh` (per-file write-byte accounting), deployments
   under `.audit/bench-*` produced by teems-R scripts.
-- Build: see `BUILDING.md` (HSL staging, `src/patches/` applied by
-  `mp48_mod.sh`, serial make requirement, `OPT` knob).
+- **Feature kits** (`.audit/*-test-kit/run_*_tests.sh`): per-feature
+  acceptance rigs on copies of the golden runs — set builders, set
+  expressions, conditional sums, mapping, complementarity, levels,
+  PostSim, qualifiers/defaults/bounds/names, intrinsics, zerodivide,
+  condest, closure, methods (analytic and polynomial-exactness anchors
+  for the stepping methods), probe. Each pins values with in-TAB
+  `Assertion`s or against an independent computation of the same
+  quantity.
+- **Memory safety**: ASan/TSan builds of the golden suite
+  (`.audit/verify-asan.sh`, `verify-tsan.sh`) and AFL++ fuzzing of the
+  TAB/CMF/closure/shock readers (batches landed 2026-07); the
+  `-fastrefac` and grow-and-retry paths were added under the same
+  gates.
+- Build: see `src/BUILDING.md` (HSL staging, `src/patches/` applied by
+  `mp48_mod.sh`, serial make requirement, `OPT` knob) and the README's
+  expedited image recipe. `.audit/` is developer tooling on the
+  maintainer's machine, not part of the distributed tree.
 
 ## 13. Known limitations and planned work
 
 - **Error handling** is largely `printf` + `exit`/`return`; parse errors
-  on one rank can abort non-collectively. (Messages themselves were
-  overhauled in 5.11: `Error:`/`Warning:` prefixes, file/flag/remedy
-  named; NDBBD misconfiguration now exits with a diagnostic instead of
-  a bare MPI abort.)
+  on one rank can abort non-collectively. Messages carry
+  `Error:`/`Warning:` prefixes with file/flag/remedy named, and teems-R
+  maps them to typed conditions; the exit status is checked as well as
+  the log.
 - Fixed-size line buffers (`TABREADLINE` = 20000) bound statement length;
-  overflow warnings exist but are not hard guards everywhere.
-- The binary is named `hsl` for historical reasons; renaming to
-  `teems-solver` requires coordinated changes in teems-R and the images.
-- Planned (measured motivation on file): formula op-list caching across
-  steps (removes per-step TAB re-parsing); NDBBD-vs-SBBD crossover
-  mapping at scale. Done since this list was written (see ROADMAP
-  5.9–5.11): factor handoff through memory (`-inmemory` holds block
-  factors resident); `formula_op` compaction (1416→968→848B, per-dim
-  operand fields interleaved as `dim_addr` records); verbosity-gated
-  logging with a full message overhaul (`-verbosity`, 541 printf sites
-  triaged: debris deleted, debug gated, errors made informative).
+  overflow is diagnosed, not silently truncated.
+- **Language forms rejected by design** (named errors): `$POS`, set
+  products (`x`), formula-assigned mappings (a mapping needs a
+  `Read (by_elements)`), formula-computed operands in conditional set
+  builders, LOOP/DISPLAY/TRANSFER/BREAK/CYCLE, `(no_split)`,
+  `linear_name=`, positional `Default` semantics through the R
+  pipeline. Compound `AND/OR/NOT` conditions and `IF` nested inside
+  expressions are not evaluated by the solver; the R front end
+  rewrites the supported `IF` forms into conditional quantifiers,
+  helper coefficients and domain splits before deployment.
+- **Version handshake**: solver and teems-R are versioned together
+  (v2.0.0 series; the `hsl` compatibility symlink is dropped at 2.0.0).
+  A `-version` flag / banner / `stats.json` field surfacing one version
+  constant, with a teems-R pre-flight, is planned for the 2.0.0
+  release; until then the image label is the only version hint.
+- **Calibration**: the `matrix_method`/`n_tasks` auto rules, the
+  `-fastrefac` and MA48 pivot-threshold default flips, the NDBBD
+  `-inmemory` default, RK-vs-Gragg rankings, and the structural-probe
+  thresholds were fit at dev-box scale (≤ 4 ranks, ≤ 8M equations);
+  a many-core calibration program on instance-scale rigs is the next
+  step and will re-anchor those defaults.

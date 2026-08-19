@@ -1,5 +1,5 @@
 # Select the base variant matching the target ISA level (see
-# docs/image-publishing.md); the solver and HSL libraries below are
+# README, ISA levels); the solver and HSL libraries below are
 # compiled at the level recorded in the base image's archflags file.
 ARG BASE_IMAGE=matthewcantele/teems_base:latest
 FROM ${BASE_IMAGE} AS builder
