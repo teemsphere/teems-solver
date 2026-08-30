@@ -1,6 +1,67 @@
 #include <teems_solver.h>
 #include <hsl_kernels.h>
 
+/* --- MA48 workspace growth ---------------------------------------
+   Every -3 (workspace too small) return in the solver funnels through
+   ma48_grow_la.  The growth itself is MA48's suggested size with a
+   doubling floor (which also repairs a suggestion that came back
+   wrapped), but the essential part is the MA48_LA_MAX clamp: the HSL
+   build is 32-bit, so once a request passes INT_MAX there is no larger
+   workspace to ask for and every further doubling is a lie the caller
+   cannot detect.  At the ceiling we stop and say so. */
+offset_t ma48_grow_la(offset_t cur,offset_t suggested,offset_t nnz,const char *knob,long *used) {
+  offset_t newla=suggested;
+  if(newla<2*cur)newla=2*cur;
+  if(newla>MA48_LA_MAX)newla=MA48_LA_MAX;
+  if(newla<=cur) {
+    printf("Error: factorizing %s needs a larger MA48 workspace than the %ld-element limit of the 32-bit HSL build (-%s is already at its %ld%% ceiling); this system is too large for one sequential factorization -- solve it with a bordered matrix_method (\"SBBD\" or \"DBBD\"), condense the model, or reduce its dimensions\n",
+           probe_onfail_scope_label(),(long)MA48_LA_MAX,knob,
+           (long)((100.0*MA48_LA_MAX)/nnz));
+    fflush(stdout);
+    MPI_Abort(PETSC_COMM_WORLD,1);
+  }
+  logmsg(1,"Note: MA48 workspace grown from %ld to %ld reals (equivalent -%s %ld)\n",
+         (long)cur,(long)newla,knob,(long)ceil((100.0*newla)/nnz));
+  {
+    long eqpct=(long)ceil((100.0*newla)/nnz);
+    #pragma omp critical(laused)
+    if(eqpct>*used)*used=eqpct;
+  }
+  return newla;
+}
+
+/* Initial LA from a -la* percent, clamped to the 32-bit ceiling and
+   formed in double: the product passes INT_MAX long before the
+   percent looks unreasonable, and a wrapped initial LA is exactly as
+   silent as a wrapped grown one. */
+offset_t ma48_la_from_pct(dim_t pct,offset_t nnz) {
+  double la=ceil((pct/100.0)*(double)nnz);
+  if(la>(double)MA48_LA_MAX)return MA48_LA_MAX;
+  if(la<0)return 0;
+  return (offset_t)la;
+}
+
+/* A clamped LA still reaches tens of GB; these report the shortfall
+   instead of segfaulting on an unchecked NULL. */
+static void ma48_alloc_fail(offset_t n,size_t sz) {
+  printf("Error: cannot allocate the %.1f GB MA48 workspace this factorization needs (%ld elements); free memory on this machine, use a bordered matrix_method (\"SBBD\" or \"DBBD\") to split the factorization, or condense the model\n",
+         (n*(double)sz)/1073741824.0,(long)n);
+  fflush(stdout);
+  MPI_Abort(PETSC_COMM_WORLD,1);
+}
+
+void *ma48_alloc(offset_t n,size_t sz) {
+  void *p=calloc(n,sz);
+  if(p==NULL&&n>0)ma48_alloc_fail(n,sz);
+  return p;
+}
+
+void *ma48_realloc(void *p,offset_t n,size_t sz) {
+  void *q=realloc(p,n*sz);
+  if(q==NULL&&n>0)ma48_alloc_fail(n,sz);
+  return q;
+}
+
 /* Persistent-factor sequential LU (-fastrefac): the Jacobian's stored
    pattern is fixed across steps, so the MA48 pivot sequence is computed
    once and later steps only refactorize (MA48B/BD JOB=2) with fresh
@@ -21,13 +82,13 @@ static void lu_fastrefac_extract(Mat A,PetscInt VecSize,dim_t laA) {
   free(fr_jcn);
   free(fr_values);
   fr_nz=aa->nz;
-  floorla=ceil((laA/100.0)*fr_nz);
+  floorla=ma48_la_from_pct(laA,fr_nz);
   /* a starved -laA (<100) must still stage all NE entries */
   if(floorla<fr_nz)floorla=fr_nz;
   if(fr_lasize<floorla)fr_lasize=floorla;
-  fr_irn=(int *) calloc (fr_lasize,sizeof(int));
-  fr_jcn=(int *) calloc (fr_lasize,sizeof(int));
-  fr_values=(solve_real *) calloc (fr_lasize,sizeof(solve_real));
+  fr_irn=(int *) ma48_alloc (fr_lasize,sizeof(int));
+  fr_jcn=(int *) ma48_alloc (fr_lasize,sizeof(int));
+  fr_values=(solve_real *) ma48_alloc (fr_lasize,sizeof(solve_real));
   for(i=0; i<VecSize; i++)for(j=aa->i[i]; j<aa->i[i+1]; j++) {
       fr_irn[j]=i+1;
       fr_jcn[j]=aa->j[j]+1;
@@ -66,21 +127,13 @@ void lu_fastrefac_solve(Mat A,PetscInt VecSize,dim_t laA,solve_real *rhs,solve_r
     if(insize[4]==-3) {
       /* MA48 workspace too small: grow to at least its suggested size
          (doubling floor guarantees progress) and redo the analyse */
-      offset_t newla=insize[5];
-      if(newla<2*fr_lasize)newla=2*fr_lasize;
-      logmsg(1,"Note: MA48 workspace grown from %ld to %ld reals (equivalent -laA %ld)\n",
-             (long)fr_lasize,(long)newla,(long)ceil((100.0*newla)/fr_nz));
-           {
-             long eqpct=(long)ceil((100.0*newla)/fr_nz);
-             #pragma omp critical(laused)
-             if(eqpct>teems_laA_used)teems_laA_used=eqpct;
-           }
+      offset_t newla=ma48_grow_la(fr_lasize,insize[5],fr_nz,"laA",&teems_laA_used);
       fr_lasize=newla;
     }
     /* -3 or fast-factorize declined: fresh analyse on current values */
     lu_fastrefac_extract(A,VecSize,laA);
   }
-  printf("MA48 workspace growth did not converge after %d attempts\n",tries);
+  printf("Error: the MA48 workspace for %s did not converge after %d growth attempts; raise the initial workspace (laA/laD/laDi) or use a bordered matrix_method (\"SBBD\" or \"DBBD\")\n",probe_onfail_scope_label(),tries);
   MPI_Abort(PETSC_COMM_WORLD,1);
 }
 
@@ -102,6 +155,9 @@ void lu_fastrefac_free(void) {
    MA48 clobbers the staged arrays in place -- and on a -3 workspace
    return grows LA to max(MA48's suggested size, 2x) and re-stages.
    rank_hsl only. */
+static offset_t grow_hw=0;     /* largest LA a previous step needed */
+static offset_t grow_hw_nz=-1; /* the NE it applies to (a different matrix restarts the mark) */
+
 void lu_grow_solve(Mat A,PetscInt VecSize,dim_t laA,solve_real *rhs,solve_real *x) {
   Mat_SeqAIJ *aa=(Mat_SeqAIJ*)A->data;
   PetscInt i,j;
@@ -109,14 +165,19 @@ void lu_grow_solve(Mat A,PetscInt VecSize,dim_t laA,solve_real *rhs,solve_real *
   int tries;
   int insize[6];
   for(i=0; i<aa->nz; i++) if(aa->a[i]!=0)count++;
-  lasize=ceil((laA/100.0)*count);
+  lasize=ma48_la_from_pct(laA,count);
   /* a starved -laA (<100) must still stage all NE entries; MA48 then
      returns -3 with its suggested size and the growth loop takes over */
   if(lasize<count)lasize=count;
+  /* what a previous step had to grow to: the fill pattern is stable
+     across steps, so starting from the high-water mark spares every
+     later step the failed factorization that discovered it (oversizing
+     is untouched pages, undersizing costs a whole factorization) */
+  if(lasize<grow_hw&&count==grow_hw_nz)lasize=grow_hw;
   for(tries=0; tries<6; tries++) {
-    int *irn=(int *) calloc (lasize,sizeof(int));
-    int *jcn=(int *) calloc (lasize,sizeof(int));
-    solve_real *values=(solve_real *) calloc (lasize,sizeof(solve_real));
+    int *irn=(int *) ma48_alloc (lasize,sizeof(int));
+    int *jcn=(int *) ma48_alloc (lasize,sizeof(int));
+    solve_real *values=(solve_real *) ma48_alloc (lasize,sizeof(solve_real));
     k=0;
     for(i=0; i<VecSize; i++)for(j=aa->i[i]; j<aa->i[i+1]; j++) if(aa->a[j]!=0) {
           irn[k]=i+1;
@@ -136,21 +197,18 @@ void lu_grow_solve(Mat A,PetscInt VecSize,dim_t laA,solve_real *rhs,solve_real *
     free(irn);
     free(jcn);
     free(values);
-    if(insize[4]!=-3)return;
-    {
-      offset_t newla=insize[5];
-      if(newla<2*lasize)newla=2*lasize;
-      logmsg(1,"Note: MA48 workspace grown from %ld to %ld reals (equivalent -laA %ld)\n",
-             (long)lasize,(long)newla,(long)ceil((100.0*newla)/count));
-           {
-             long eqpct=(long)ceil((100.0*newla)/count);
-             #pragma omp critical(laused)
-             if(eqpct>teems_laA_used)teems_laA_used=eqpct;
-           }
-      lasize=newla;
+    if(insize[4]!=-3) {
+      /* record what this step actually needed so the next one starts
+         there instead of rediscovering it with a failed factorization */
+      if(count!=grow_hw_nz||lasize>grow_hw) {
+        grow_hw=lasize;
+        grow_hw_nz=count;
+      }
+      return;
     }
+    lasize=ma48_grow_la(lasize,insize[5],count,"laA",&teems_laA_used);
   }
-  printf("MA48 workspace growth did not converge after %d attempts\n",tries);
+  printf("Error: the MA48 workspace for %s did not converge after %d growth attempts; raise the initial workspace (laA/laD/laDi) or use a bordered matrix_method (\"SBBD\" or \"DBBD\")\n",probe_onfail_scope_label(),tries);
   MPI_Abort(PETSC_COMM_WORLD,1);
 }
 

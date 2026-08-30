@@ -293,6 +293,25 @@ typedef struct {
 extern zdiv_state teems_zdiv_scan;
 extern int teems_gpzerodivide;
 extern long teems_laA_used,teems_laDi_used,teems_laD_used; /* max grown -la* equivalent percent (la auto-sizing) */
+/* MA48 workspace ceiling.  The HSL kernels are built with 32-bit
+   integers -- INSIZE and MA48's own LA are integer(4) -- so a workspace
+   request cannot exceed INT_MAX elements.  Past that the request wraps:
+   MA48 is handed a negative or far-too-small LA while the caller has
+   allocated the full 64-bit size, which is how an undersized run used
+   to fail non-monotonically (a bigger retry could fail where a smaller
+   one had succeeded) and then die in the allocator with no diagnosis. */
+#define MA48_LA_MAX 2147483647L
+/* Grow an MA48 workspace after a -3 return: applies MA48's suggestion
+   with a doubling floor, clamps to MA48_LA_MAX, emits the growth note,
+   records the -la* equivalent in *used, and aborts with a named
+   diagnosis once the ceiling leaves nothing larger to ask for. */
+offset_t ma48_grow_la(offset_t cur,offset_t suggested,offset_t nnz,const char *knob,long *used);
+offset_t ma48_la_from_pct(dim_t pct,offset_t nnz); /* initial LA from a -la* percent, clamped to MA48_LA_MAX */
+/* checked allocation for MA48 workspaces: a clamped LA still reaches
+   tens of GB, and an unchecked NULL here is a segfault rather than a
+   report */
+void *ma48_alloc(offset_t n,size_t sz);
+void *ma48_realloc(void *p,offset_t n,size_t sz);
 /* -condest solve-quality diagnostics (MA60/MC71, sequential LU path);
    scope gate set by the LU wrappers, accumulators reduced into
    stats.json post-solve.  teems_condest_active_/report_ are the
@@ -635,6 +654,7 @@ void probe_onfail_context(set_def *sets,set_element *set_elems,array_def *vars,o
 void probe_onfail_scope_set(Mat A,PetscInt m,PetscInt n,const char *label,int block_id,int *row_order,int *col_order,offset_t row_base,offset_t col_base,offset_t row_add,offset_t col_add);
 void probe_onfail_scope_set_coo(const int *irn,const int *jcn,const solve_real *va,const int *rowlen,long nz,PetscInt m,PetscInt n,const char *label,int *row_map,int *col_map);
 void probe_onfail_scope_clear(void);
+const char *probe_onfail_scope_label(void); /* label of the system registered for on-failure diagnosis, for errors raised outside probe.c */
 void teems_onfail_diag_(int *info1);
 void teems_onfail_abort_(void);
 int equation_order_read(char *fname, char *commsyntax,set_def *sets,dim_t nset,set_element *set_elems,array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar,elem_value *elem_vals,offset_t ncofvar,offset_t ncofele,closure_entry *closure_vals,bool *var_inter,bool *ele_inter,array_def *eq_defs,bool *eq_intertemp,dim_t *eq_orderintra,dim_t *eq_orderreg,offset_t allregset,offset_t alltimeset,dim_t *orderintra,dim_t *orderreg);

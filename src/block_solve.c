@@ -639,7 +639,7 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
       nz=aa->nz;
       nrow=submatA[j1]->rmap->n;
       ncol=submatA[j1]->cmap->n;
-      lasize=ceil((laA/100.0)*nz);
+      lasize=ma48_la_from_pct(laA,nz);
       /* the IRN tail carries the CSR row pointers (nz+nrow+1 ints) and
          a starved -laA (<100) must still stage all entries; MA48 then
          returns -3 and the growth loop below takes over */
@@ -726,19 +726,11 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
           if(insize[j1*insizes+17]==-3) {
             /* MA48 workspace too small: grow the persisted arrays to
                at least its suggested size before the redo */
-            offset_t newla=insize[j1*insizes+18];
-            if(newla<2*dfr_la[j1])newla=2*dfr_la[j1];
-            logmsg(1,"Note: MA48 workspace grown from %ld to %ld reals (equivalent -laA %ld)\n",
-                   (long)dfr_la[j1],(long)newla,(long)ceil((100.0*newla)/dfr_nz[j1]));
-                 {
-                   long eqpct=(long)ceil((100.0*newla)/dfr_nz[j1]);
-                   #pragma omp critical(laused)
-                   if(eqpct>teems_laA_used)teems_laA_used=eqpct;
-                 }
+            offset_t newla=ma48_grow_la(dfr_la[j1],insize[j1*insizes+18],dfr_nz[j1],"laA",&teems_laA_used);
             dfr_la[j1]=newla;
-            dfr_irn[j1]=realloc(dfr_irn[j1],newla*sizeof(int));
-            dfr_jcn[j1]=realloc(dfr_jcn[j1],newla*sizeof(int));
-            dfr_va[j1]=realloc(dfr_va[j1],newla*sizeof(solve_real));
+            dfr_irn[j1]=ma48_realloc(dfr_irn[j1],newla,sizeof(int));
+            dfr_jcn[j1]=ma48_realloc(dfr_jcn[j1],newla,sizeof(int));
+            dfr_va[j1]=ma48_realloc(dfr_va[j1],newla,sizeof(solve_real));
             insize[j1*insizes+16]=(int)newla;
           }
           /* fast refactorize declined or workspace grown: re-stage the
@@ -751,7 +743,7 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
           spec48m_msol_p_(insize+j1*insizes,dfr_irn[j1],dfr_jcn[j1],dfr_va[j1],yi1[j1],xi1point,aic,ajc,valsc,ai,aj,vals,vecbivi,bivinzrow,bivinzcol,dfr_keep[j1],&redo_io);
         }
         if(redo_io<0) {
-          printf("MA48 block factorize did not converge after retries\n");
+          printf("Error: MA48 could not factorize %s after repeated retries (the fast refactorization was declined each time); re-run with fastrefac = FALSE, or use a different matrix_method\n",probe_onfail_scope_label());
           MPI_Abort(PETSC_COMM_WORLD,1);
         }
       }
@@ -764,20 +756,12 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
         {
           /* MA48 workspace too small: grow, re-stage from the
              still-live submatrix (MA48 clobbered the staged copy) */
-          offset_t newla=insize[j1*insizes+18];
-          if(newla<2*lasize)newla=2*lasize;
-          logmsg(1,"Note: MA48 workspace grown from %ld to %ld reals (equivalent -laA %ld)\n",
-                 (long)lasize,(long)newla,(long)ceil((100.0*newla)/insize[j1*insizes+2]));
-               {
-                 long eqpct=(long)ceil((100.0*newla)/insize[j1*insizes+2]);
-                 #pragma omp critical(laused)
-                 if(eqpct>teems_laA_used)teems_laA_used=eqpct;
-               }
+          offset_t newla=ma48_grow_la(lasize,insize[j1*insizes+18],insize[j1*insizes+2],"laA",&teems_laA_used);
           lasize=newla;
         }
-        irn=realloc(irn,lasize*sizeof(int));
-        jcn=realloc(jcn,lasize*sizeof(int));
-        values=realloc(values,lasize*sizeof(solve_real));
+        irn=ma48_realloc(irn,lasize,sizeof(int));
+        jcn=ma48_realloc(jcn,lasize,sizeof(int));
+        values=ma48_realloc(values,lasize,sizeof(solve_real));
         {
           Mat_SeqAIJ *aa2=(Mat_SeqAIJ*)submatA[j1]->data;
           memcpy (irn+insize[j1*insizes+2],aa2->i,(nrow+1)*sizeof(PetscInt));
@@ -787,7 +771,7 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
         insize[j1*insizes+16]=(int)lasize;
       }
       if(insize[j1*insizes+17]==-3) {
-        printf("MA48 workspace growth did not converge after %d attempts\n",tries);
+        printf("Error: the MA48 workspace for %s did not converge after %d growth attempts; raise the initial workspace (laA/laD/laDi) or use a bordered matrix_method (\"SBBD\" or \"DBBD\")\n",probe_onfail_scope_label(),tries);
         MPI_Abort(PETSC_COMM_WORLD,1);
       }
       MatDestroy(&submatA[j1]);
@@ -1068,7 +1052,7 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
 
 
     logmsg(2,"nz1 %ld\n",nz1);
-    ldsize=ceil((laD/100.0)*nz1);
+    ldsize=ma48_la_from_pct(laD,nz1);
     /* a starved -laD (<100) must still stage all NE entries; MA48 then
        returns -3 and the growth loop below takes over */
     if(ldsize<nz1)ldsize=nz1;
@@ -1110,20 +1094,12 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
         spec48_ssol2la_(insizeD,irn1,jcn,vecbivi,vecbiui,xd);
         if(insizeD[4]!=-3)break;
         {
-          offset_t newla=insizeD[5];
-          if(newla<2*ldsize)newla=2*ldsize;
-          logmsg(1,"Note: MA48 workspace grown from %ld to %ld reals (equivalent -laD %ld)\n",
-                 (long)ldsize,(long)newla,(long)ceil((100.0*newla)/lnz));
-               {
-                 long eqpct=(long)ceil((100.0*newla)/lnz);
-                 #pragma omp critical(laused)
-                 if(eqpct>teems_laD_used)teems_laD_used=eqpct;
-               }
+          offset_t newla=ma48_grow_la(ldsize,insizeD[5],lnz,"laD",&teems_laD_used);
           ldsize=newla;
         }
-        vecbivi=realloc(vecbivi,ldsize*sizeof(solve_real));
-        irn1=realloc(irn1,ldsize*sizeof(int));
-        jcn=realloc(jcn,ldsize*sizeof(int));
+        vecbivi=ma48_realloc(vecbivi,ldsize,sizeof(solve_real));
+        irn1=ma48_realloc(irn1,ldsize,sizeof(int));
+        jcn=ma48_realloc(jcn,ldsize,sizeof(int));
         memcpy(irn1,sirn,lnz*sizeof(int));
         memcpy(jcn,sjcn,lnz*sizeof(int));
         memcpy(vecbivi,sva,lnz*sizeof(solve_real));
@@ -1131,7 +1107,7 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
         insizeD[5]=ldsize;
       }
       if(insizeD[4]==-3) {
-        printf("MA48 workspace growth did not converge after %d attempts\n",tries);
+        printf("Error: the MA48 workspace for %s did not converge after %d growth attempts; raise the initial workspace (laA/laD/laDi) or use a bordered matrix_method (\"SBBD\" or \"DBBD\")\n",probe_onfail_scope_label(),tries);
         MPI_Abort(PETSC_COMM_WORLD,1);
       }
     }
@@ -1609,7 +1585,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
       ncol=submatAij[j4]->cmap->n;
       if(ncolamax<ncol)ncolamax=ncol;
       nz=aa->nz;
-      lasize=ceil((laA/100.0)*nz);
+      lasize=ma48_la_from_pct(laA,nz);
       /* starved -laA: staging still needs nz entries + the CSR row
          pointers in the IRN tail */
       if(lasize<nz+nrow+1)lasize=nz+nrow+1;
@@ -1707,7 +1683,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
       nz=aa->nz;
       nrow=submatAij[j4]->rmap->n;
       ncol=submatAij[j4]->cmap->n;
-      lasize=ceil((laA/100.0)*nz);
+      lasize=ma48_la_from_pct(laA,nz);
       if(lasize<nz+nrow+1)lasize=nz+nrow+1;
       insize[j4*insizes+13]=bivirowsize;
       insize[j4*insizes+14]=bivicolsize;
@@ -1778,19 +1754,11 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
           if(insize[j4*insizes+17]==-3) {
             /* MA48 workspace too small: grow the persisted arrays to
                at least its suggested size before the redo */
-            offset_t newla=insize[j4*insizes+18];
-            if(newla<2*ndbbd_fac_la[j4])newla=2*ndbbd_fac_la[j4];
-            logmsg(1,"Note: MA48 workspace grown from %ld to %ld reals (equivalent -laA %ld)\n",
-                   (long)ndbbd_fac_la[j4],(long)newla,(long)ceil((100.0*newla)/ndbbd_fac_nz[j4]));
-                 {
-                   long eqpct=(long)ceil((100.0*newla)/ndbbd_fac_nz[j4]);
-                   #pragma omp critical(laused)
-                   if(eqpct>teems_laA_used)teems_laA_used=eqpct;
-                 }
+            offset_t newla=ma48_grow_la(ndbbd_fac_la[j4],insize[j4*insizes+18],ndbbd_fac_nz[j4],"laA",&teems_laA_used);
             ndbbd_fac_la[j4]=newla;
-            ndbbd_fac_irn[j4]=realloc(ndbbd_fac_irn[j4],newla*sizeof(int));
-            ndbbd_fac_jcn[j4]=realloc(ndbbd_fac_jcn[j4],newla*sizeof(int));
-            ndbbd_fac_va[j4]=realloc(ndbbd_fac_va[j4],newla*sizeof(solve_real));
+            ndbbd_fac_irn[j4]=ma48_realloc(ndbbd_fac_irn[j4],newla,sizeof(int));
+            ndbbd_fac_jcn[j4]=ma48_realloc(ndbbd_fac_jcn[j4],newla,sizeof(int));
+            ndbbd_fac_va[j4]=ma48_realloc(ndbbd_fac_va[j4],newla,sizeof(solve_real));
             insize[j4*insizes+16]=(int)newla;
           }
           /* fast refactorize declined or workspace grown: re-stage
@@ -1803,7 +1771,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
           prep48m_msol_p_(insize+j4*insizes,ndbbd_fac_irn[j4],ndbbd_fac_jcn[j4],ndbbd_fac_va[j4],aic,ajc,valsc,ai,aj,vals,vecbivi,bivinzrow,bivinzcol,jcnb1,sol48,b48,w51,iw51,ndbbd_fac_keep[j4],&redo_io);
         }
         if(redo_io<0) {
-          printf("MA48 block factorize did not converge after retries\n");
+          printf("Error: MA48 could not factorize %s after repeated retries (the fast refactorization was declined each time); re-run with fastrefac = FALSE, or use a different matrix_method\n",probe_onfail_scope_label());
           MPI_Abort(PETSC_COMM_WORLD,1);
         }
       }
@@ -1815,22 +1783,14 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
         {
           /* MA48 workspace too small: grow, re-stage from the
              still-live submatrix (MA48 clobbered the staged copy) */
-          offset_t newla=insize[j4*insizes+18];
-          if(newla<2*lasize)newla=2*lasize;
-          logmsg(1,"Note: MA48 workspace grown from %ld to %ld reals (equivalent -laA %ld)\n",
-                 (long)lasize,(long)newla,(long)ceil((100.0*newla)/insize[j4*insizes+2]));
-               {
-                 long eqpct=(long)ceil((100.0*newla)/insize[j4*insizes+2]);
-                 #pragma omp critical(laused)
-                 if(eqpct>teems_laA_used)teems_laA_used=eqpct;
-               }
+          offset_t newla=ma48_grow_la(lasize,insize[j4*insizes+18],insize[j4*insizes+2],"laA",&teems_laA_used);
           lasize=newla;
         }
         if(lasize>alloc_la) {
           alloc_la=lasize;
-          irn=realloc(irn,alloc_la*sizeof(int));
-          jcn=realloc(jcn,alloc_la*sizeof(int));
-          values=realloc(values,alloc_la*sizeof(solve_real));
+          irn=ma48_realloc(irn,alloc_la,sizeof(int));
+          jcn=ma48_realloc(jcn,alloc_la,sizeof(int));
+          values=ma48_realloc(values,alloc_la,sizeof(solve_real));
         }
         {
           Mat_SeqAIJ *aa2=(Mat_SeqAIJ*)submatAij[j4]->data;
@@ -1841,7 +1801,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
         insize[j4*insizes+16]=(int)lasize;
       }
       if(insize[j4*insizes+17]==-3) {
-        printf("MA48 workspace growth did not converge after %d attempts\n",tries);
+        printf("Error: the MA48 workspace for %s did not converge after %d growth attempts; raise the initial workspace (laA/laD/laDi) or use a bordered matrix_method (\"SBBD\" or \"DBBD\")\n",probe_onfail_scope_label(),tries);
         MPI_Abort(PETSC_COMM_WORLD,1);
       }
       ndbbd_fac_emit(rank,j4,irn,keep,values,insize[j4*insizes+16],insize[j4*insizes+12]);
@@ -2019,7 +1979,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
     bivinzcol1=NULL;
     free(vecbivi);//1
     vecbivi=NULL;
-  ldsize=ceil((laDi/100.0)*nz1max);
+  ldsize=ma48_la_from_pct(laDi,nz1max);
   /* a starved -laDi (<100) must still hold all staged entries */
   if(ldsize<nz1max)ldsize=nz1max;
   ldsize+=10;
@@ -2111,7 +2071,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
       insized[1]=ncol;
       insized[2]=nz;
       insized[4]=laDi;
-    ldsize=ceil((laDi/100.0)*nz);
+    ldsize=ma48_la_from_pct(laDi,nz);
     if(ldsize<nz)ldsize=nz;
       insized[5]=ldsize;
       if(cntl6==0&&SORD==0)cntl6in=0.3;
@@ -2126,23 +2086,15 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
           /* MA48 workspace too small for the rank probe: grow and
              re-read the staged COO (MA48 clobbered it in place; the
              _bivi/_rbvi/_cbvi scratch files are still on disk) */
-          offset_t newla=insized[7];
-          if(newla<2*ldsize)newla=2*ldsize;
-          logmsg(1,"Note: MA48 workspace grown from %ld to %ld reals (equivalent -laDi %ld)\n",
-                 (long)ldsize,(long)newla,(long)ceil((100.0*newla)/nz));
-               {
-                 long eqpct=(long)ceil((100.0*newla)/nz);
-                 #pragma omp critical(laused)
-                 if(eqpct>teems_laDi_used)teems_laDi_used=eqpct;
-               }
+          offset_t newla=ma48_grow_la(ldsize,insized[7],nz,"laDi",&teems_laDi_used);
           ldsize=newla;
           insized[5]=ldsize;
         }
         if(ldsize>probe_cap) {
           probe_cap=ldsize;
-          irn1=realloc(irn1,probe_cap*sizeof(int));
-          jcn1=realloc(jcn1,probe_cap*sizeof(int));
-          vecbivi=realloc(vecbivi,probe_cap*sizeof(solve_real));
+          irn1=ma48_realloc(irn1,probe_cap,sizeof(int));
+          jcn1=ma48_realloc(jcn1,probe_cap,sizeof(int));
+          vecbivi=ma48_realloc(vecbivi,probe_cap,sizeof(solve_real));
         }
         #pragma omp critical
         {
@@ -2179,7 +2131,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
         }
       }
       if(insized[6]==-3) {
-        printf("MA48 workspace growth did not converge after %d attempts\n",tries);
+        printf("Error: the MA48 workspace for %s did not converge after %d growth attempts; raise the initial workspace (laA/laD/laDi) or use a bordered matrix_method (\"SBBD\" or \"DBBD\")\n",probe_onfail_scope_label(),tries);
         MPI_Abort(PETSC_COMM_WORLD,1);
       }
       }
@@ -2742,7 +2694,7 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
     if(insizeda1<insizeda[1])insizeda1=insizeda[1];
     if(insizeda2<insizeda[2])insizeda2=insizeda[2];
   }
-  ldsize=ceil((laDi/100.0)*insizeda2);
+  ldsize=ma48_la_from_pct(laDi,insizeda2);
   /* a starved -laDi (<100) must still hold all staged entries */
   if(ldsize<insizeda2)ldsize=insizeda2;
   ldsize+=10;
@@ -2859,7 +2811,7 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
     nz1=insizeda[2];
     //end read from pre
     nz=nz1;
-    ldsize=ceil((laDi/100.0)*nz1);
+    ldsize=ma48_la_from_pct(laDi,nz1);
     /* starved -laDi: LA must still cover the staged entries */
     if(ldsize<nz1)ldsize=nz1;
     #pragma omp critical
@@ -2890,22 +2842,14 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
         prep48_alu1_(insize+j4*insizes,irn1,jcn1,vecbivi0,fw,fiw,fkeep);
         if(insize[j4*insizes+17]!=-3)break;
         {
-          offset_t newla=insize[j4*insizes+18];
-          if(newla<2*ldsize)newla=2*ldsize;
-          logmsg(1,"Note: MA48 workspace grown from %ld to %ld reals (equivalent -laDi %ld)\n",
-                 (long)ldsize,(long)newla,(long)ceil((100.0*newla)/nz1));
-               {
-                 long eqpct=(long)ceil((100.0*newla)/nz1);
-                 #pragma omp critical(laused)
-                 if(eqpct>teems_laDi_used)teems_laDi_used=eqpct;
-               }
+          offset_t newla=ma48_grow_la(ldsize,insize[j4*insizes+18],nz1,"laDi",&teems_laDi_used);
           ldsize=newla;
         }
         if(ldsize>insizeda2) {
           insizeda2=ldsize;
-          irn1=realloc(irn1,insizeda2*sizeof(int));
-          jcn1=realloc(jcn1,insizeda2*sizeof(int));
-          vecbivi0=realloc(vecbivi0,insizeda2*sizeof(solve_real));
+          irn1=ma48_realloc(irn1,insizeda2,sizeof(int));
+          jcn1=ma48_realloc(jcn1,insizeda2,sizeof(int));
+          vecbivi0=ma48_realloc(vecbivi0,insizeda2,sizeof(solve_real));
         }
         memcpy(irn1,sirn,nz1*sizeof(int));
         memcpy(jcn1,sjcn,nz1*sizeof(int));
@@ -2913,7 +2857,7 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
         insize[j4*insizes+16]=(int)ldsize;
       }
       if(insize[j4*insizes+17]==-3) {
-        printf("MA48 workspace growth did not converge after %d attempts\n",tries);
+        printf("Error: the MA48 workspace for %s did not converge after %d growth attempts; raise the initial workspace (laA/laD/laDi) or use a bordered matrix_method (\"SBBD\" or \"DBBD\")\n",probe_onfail_scope_label(),tries);
         MPI_Abort(PETSC_COMM_WORLD,1);
       }
       free(sirn);
@@ -3383,7 +3327,7 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
     }
     my_spar_compl_(biviindx1,&nz0,biviindx0,&lnz,&nz1);
     logmsg(2,"nz0 %ld nz %ld nz1 %ld\n",nz0,lnz,nz1);
-    ldsize=ceil((laD/100.0)*nz1);
+    ldsize=ma48_la_from_pct(laD,nz1);
     /* a starved -laD (<100) must still stage all NE entries; MA48 then
        returns -3 and the growth loop below takes over */
     if(ldsize<nz1)ldsize=nz1;
@@ -3423,20 +3367,12 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
         spec48m_ssol2la_(insizeD,irn1,jcn,vecbivi,vecbiui,xd);
         if(insizeD[4]!=-3)break;
         {
-          offset_t newla=insizeD[5];
-          if(newla<2*ldsize)newla=2*ldsize;
-          logmsg(1,"Note: MA48 workspace grown from %ld to %ld reals (equivalent -laD %ld)\n",
-                 (long)ldsize,(long)newla,(long)ceil((100.0*newla)/lnz));
-               {
-                 long eqpct=(long)ceil((100.0*newla)/lnz);
-                 #pragma omp critical(laused)
-                 if(eqpct>teems_laD_used)teems_laD_used=eqpct;
-               }
+          offset_t newla=ma48_grow_la(ldsize,insizeD[5],lnz,"laD",&teems_laD_used);
           ldsize=newla;
         }
-        vecbivi=realloc(vecbivi,ldsize*sizeof(solve_real));
-        irn1=realloc(irn1,ldsize*sizeof(int));
-        jcn=realloc(jcn,ldsize*sizeof(int));
+        vecbivi=ma48_realloc(vecbivi,ldsize,sizeof(solve_real));
+        irn1=ma48_realloc(irn1,ldsize,sizeof(int));
+        jcn=ma48_realloc(jcn,ldsize,sizeof(int));
         memcpy(irn1,sirn,lnz*sizeof(int));
         memcpy(jcn,sjcn,lnz*sizeof(int));
         memcpy(vecbivi,sva,lnz*sizeof(solve_real));
@@ -3444,7 +3380,7 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
         insizeD[5]=ldsize;
       }
       if(insizeD[4]==-3) {
-        printf("MA48 workspace growth did not converge after %d attempts\n",tries);
+        printf("Error: the MA48 workspace for %s did not converge after %d growth attempts; raise the initial workspace (laA/laD/laDi) or use a bordered matrix_method (\"SBBD\" or \"DBBD\")\n",probe_onfail_scope_label(),tries);
         MPI_Abort(PETSC_COMM_WORLD,1);
       }
     }

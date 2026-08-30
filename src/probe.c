@@ -417,6 +417,14 @@ void probe_onfail_scope_set_coo(const int *irn,const int *jcn,const solve_real *
   onfail_scope.coo_nz=nz;
 }
 
+/* the label of the system currently registered for on-failure
+   diagnosis; a generic phrase when no scope is set, so callers outside
+   probe.c can name the failing system without carrying it themselves */
+const char *probe_onfail_scope_label(void) {
+  if(onfail_scope.set&&onfail_scope.label)return onfail_scope.label;
+  return "the linear system";
+}
+
 void probe_onfail_scope_clear(void) {
   onfail_scope.set=0;
   onfail_scope.A=NULL;

@@ -72,7 +72,7 @@ int dbbd_order(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscIn
     nz1=nz;
     if(nz1<nrow)nz1=nrow;
     if(nz1<ncol)nz1=ncol;
-    lasize=ceil((laA/100.0)*nz1);
+    lasize=ma48_la_from_pct(laA,nz1);
     /* a starved -laA (<100) must still stage all NE entries; MA48
        then returns -3 and the growth loop below takes over */
     if(lasize<nz1)lasize=nz1;
@@ -111,23 +111,15 @@ int dbbd_order(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscIn
     {
       /* MA48 workspace too small for the rank probe: grow and
          re-stage (MA48 clobbers the staged triplet in place) */
-      offset_t newla=insize[7];
-      if(newla<2*lasize)newla=2*lasize;
-      logmsg(1,"Note: MA48 workspace grown from %ld to %ld reals (equivalent -laA %ld)\n",
-             (long)lasize,(long)newla,(long)ceil((100.0*newla)/nz1));
-           {
-             long eqpct=(long)ceil((100.0*newla)/nz1);
-             #pragma omp critical(laused)
-             if(eqpct>teems_laA_used)teems_laA_used=eqpct;
-           }
+      offset_t newla=ma48_grow_la(lasize,insize[7],nz1,"laA",&teems_laA_used);
       lasize=newla;
     }
-    irn=realloc(irn,lasize*sizeof(int));
-    jcn=realloc(jcn,lasize*sizeof(int));
-    values=realloc(values,lasize*sizeof(solve_real));
+    irn=ma48_realloc(irn,lasize,sizeof(int));
+    jcn=ma48_realloc(jcn,lasize,sizeof(int));
+    values=ma48_realloc(values,lasize,sizeof(solve_real));
     }
     if(insize[6]==-3) {
-      printf("MA48 workspace growth did not converge after %d attempts\n",tries);
+      printf("Error: the MA48 workspace for %s did not converge after %d growth attempts; raise the initial workspace (laA/laD/laDi) or use a bordered matrix_method (\"SBBD\" or \"DBBD\")\n",probe_onfail_scope_label(),tries);
       MPI_Abort(PETSC_COMM_WORLD,1);
     }
     for(i=0; i<nrow; i++) {
@@ -266,7 +258,7 @@ int ndbbd_order_presolve(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt ran
       nz1=nz;
       if(nz1<nrow)nz1=nrow;
       if(nz1<ncol)nz1=ncol;
-      lasize=ceil((laA/100.0)*nz1);
+      lasize=ma48_la_from_pct(laA,nz1);
       /* starved -laA: staging still needs all NE entries per block */
       if(lasize<nz1)lasize=nz1;
       if(lasizemax<lasize)lasizemax=lasize;
@@ -306,7 +298,7 @@ int ndbbd_order_presolve(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt ran
       nz1=nz;
       if(nz1<nrow)nz1=nrow;
       if(nz1<ncol)nz1=ncol;
-      lasize=ceil((laA/100.0)*nz1);
+      lasize=ma48_la_from_pct(laA,nz1);
       if(lasize<nz1)lasize=nz1;
       int tries;
       for(tries=0; tries<6; tries++) {
@@ -333,26 +325,18 @@ int ndbbd_order_presolve(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt ran
       {
         /* MA48 workspace too small for the rank probe: grow and
            re-stage (MA48 clobbers the staged triplet in place) */
-        offset_t newla=insize[7];
-        if(newla<2*lasize)newla=2*lasize;
-        logmsg(1,"Note: MA48 workspace grown from %ld to %ld reals (equivalent -laA %ld)\n",
-               (long)lasize,(long)newla,(long)ceil((100.0*newla)/nz1));
-             {
-               long eqpct=(long)ceil((100.0*newla)/nz1);
-               #pragma omp critical(laused)
-               if(eqpct>teems_laA_used)teems_laA_used=eqpct;
-             }
+        offset_t newla=ma48_grow_la(lasize,insize[7],nz1,"laA",&teems_laA_used);
         lasize=newla;
       }
       if(lasize>alloc_la) {
         alloc_la=lasize;
-        irn=realloc(irn,alloc_la*sizeof(int));
-        jcn=realloc(jcn,alloc_la*sizeof(int));
-        values=realloc(values,alloc_la*sizeof(solve_real));
+        irn=ma48_realloc(irn,alloc_la,sizeof(int));
+        jcn=ma48_realloc(jcn,alloc_la,sizeof(int));
+        values=ma48_realloc(values,alloc_la,sizeof(solve_real));
       }
       }
       if(insize[6]==-3) {
-        printf("MA48 workspace growth did not converge after %d attempts\n",tries);
+        printf("Error: the MA48 workspace for %s did not converge after %d growth attempts; raise the initial workspace (laA/laD/laDi) or use a bordered matrix_method (\"SBBD\" or \"DBBD\")\n",probe_onfail_scope_label(),tries);
         MPI_Abort(PETSC_COMM_WORLD,1);
       }
       bfirst=counteq[j3+begblock[rank]];
