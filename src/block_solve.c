@@ -1316,6 +1316,13 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
   if(nmatint*mpisize<ntime)nmatinplust=nmatint+1;
   else nmatinplust=nmatint;
   for(i=0; i<mpisize; i++)if(rank+1<=ntime-mpisize*nmatint)nmatint++;
+  /* ranks beyond the chain-block count would own zero blocks; the
+     block-distribution and interface-reduction paths below assume at
+     least one block per rank and SEGV otherwise */
+  if(mpisize>ntime) {
+    if(rank==0)printf("Error: NDBBD (-matsol 3) supports at most one MPI rank per chain block (%d ranks > %d chain blocks); re-run with at most %d ranks, or use SBBD/DBBD\n",(int)mpisize,(int)ntime,(int)ntime);
+    MPI_Abort(PETSC_COMM_WORLD,1);
+  }
   nmatin=(nreg+1)*nmatint;
   nmatinplus=(nreg+1)*nmatinplust;
   if(inmemory||nfr_flag())ndbbd_fac_init(nmatin);
@@ -2284,6 +2291,13 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
   if(nmatint*mpisize<ntime)nmatinplust=nmatint+1;
   else nmatinplust=nmatint;
   for(i=0; i<mpisize; i++)if(rank+1<=ntime-mpisize*nmatint)nmatint++;
+  /* ranks beyond the chain-block count would own zero blocks; the
+     block-distribution and interface-reduction paths below assume at
+     least one block per rank and SEGV otherwise */
+  if(mpisize>ntime) {
+    if(rank==0)printf("Error: NDBBD (-matsol 3) supports at most one MPI rank per chain block (%d ranks > %d chain blocks); re-run with at most %d ranks, or use SBBD/DBBD\n",(int)mpisize,(int)ntime,(int)ntime);
+    MPI_Abort(PETSC_COMM_WORLD,1);
+  }
   nmatin=(nreg+1)*nmatint;
   nmatinplus=(nreg+1)*nmatinplust;
   if(inmemory||nfr_flag())ndbbd_fac_init(nmatin);
