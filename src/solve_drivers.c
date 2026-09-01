@@ -71,6 +71,11 @@ void *ma48_realloc(void *p,offset_t n,size_t sz) {
 static int *fr_irn=NULL,*fr_jcn=NULL;
 static solve_real *fr_values=NULL;
 static PetscInt fr_nz=-1;
+static PetscInt *fr_pat=NULL;  /* the assembled column pattern the pivot sequence belongs to
+                                  (the staged JCN is clobbered by MA48, so it cannot be
+                                  compared): the assembly skips zero-valued entries, so the
+                                  pattern is value-dependent and an equal NE does not prove
+                                  it unchanged */
 static offset_t fr_lasize=0;   /* current LA; grows on MA48 -3 returns and stays grown */
 static int fr_ready=0;
 
@@ -81,7 +86,10 @@ static void lu_fastrefac_extract(Mat A,PetscInt VecSize,dim_t laA) {
   free(fr_irn);
   free(fr_jcn);
   free(fr_values);
+  free(fr_pat);
   fr_nz=aa->nz;
+  fr_pat=(PetscInt *) ma48_alloc (fr_nz>0?fr_nz:1,sizeof(PetscInt));
+  memcpy(fr_pat,aa->j,fr_nz*sizeof(PetscInt));
   floorla=ma48_la_from_pct(laA,fr_nz);
   /* a starved -laA (<100) must still stage all NE entries */
   if(floorla<fr_nz)floorla=fr_nz;
@@ -102,7 +110,8 @@ void lu_fastrefac_solve(Mat A,PetscInt VecSize,dim_t laA,solve_real *rhs,solve_r
   Mat_SeqAIJ *aa=(Mat_SeqAIJ*)A->data;
   PetscInt i;
   int tries;
-  if(!fr_ready||aa->nz!=fr_nz) {
+  if(!fr_ready||aa->nz!=fr_nz||memcmp(fr_pat,aa->j,fr_nz*sizeof(PetscInt))!=0) {
+    if(fr_ready)printf("Note: the Jacobian pattern changed since the last analyse (an entry crossed zero); re-analysing the LU pivot sequence\n");
     lu_fastrefac_extract(A,VecSize,laA);
   }
   else {
@@ -141,6 +150,8 @@ void lu_fastrefac_free(void) {
   free(fr_irn);
   free(fr_jcn);
   free(fr_values);
+  free(fr_pat);
+  fr_pat=NULL;
   fr_irn=NULL;
   fr_jcn=NULL;
   fr_values=NULL;
@@ -156,7 +167,11 @@ void lu_fastrefac_free(void) {
    return grows LA to max(MA48's suggested size, 2x) and re-stages.
    rank_hsl only. */
 static offset_t grow_hw=0;     /* largest LA a previous step needed */
-static offset_t grow_hw_nz=-1; /* the NE it applies to (a different matrix restarts the mark) */
+static PetscInt grow_hw_n=-1;  /* the system size it applies to (a different system restarts
+                                  the mark).  NOT the realized NE: the assembly skips
+                                  zero-valued entries, so NE drifts by a few entries between
+                                  steps as values cross zero, and keying on it restarted the
+                                  mark at every Gragg step (I-long: 300->600 re-grown 17x) */
 
 void lu_grow_solve(Mat A,PetscInt VecSize,dim_t laA,solve_real *rhs,solve_real *x) {
   Mat_SeqAIJ *aa=(Mat_SeqAIJ*)A->data;
@@ -173,7 +188,7 @@ void lu_grow_solve(Mat A,PetscInt VecSize,dim_t laA,solve_real *rhs,solve_real *
      across steps, so starting from the high-water mark spares every
      later step the failed factorization that discovered it (oversizing
      is untouched pages, undersizing costs a whole factorization) */
-  if(lasize<grow_hw&&count==grow_hw_nz)lasize=grow_hw;
+  if(lasize<grow_hw&&VecSize==grow_hw_n)lasize=grow_hw;
   for(tries=0; tries<6; tries++) {
     int *irn=(int *) ma48_alloc (lasize,sizeof(int));
     int *jcn=(int *) ma48_alloc (lasize,sizeof(int));
@@ -200,9 +215,9 @@ void lu_grow_solve(Mat A,PetscInt VecSize,dim_t laA,solve_real *rhs,solve_real *
     if(insize[4]!=-3) {
       /* record what this step actually needed so the next one starts
          there instead of rediscovering it with a failed factorization */
-      if(count!=grow_hw_nz||lasize>grow_hw) {
+      if(VecSize!=grow_hw_n||lasize>grow_hw) {
         grow_hw=lasize;
-        grow_hw_nz=count;
+        grow_hw_n=VecSize;
       }
       return;
     }
@@ -231,11 +246,17 @@ void sbbd_fastrefac_solve(Mat *A,Vec *vecb,PetscInt VecSize,PetscInt rank,PetscI
   PetscScalar *bv;
   if(rank==rank_hsl) {
     Mat_SeqAIJ *aa=(Mat_SeqAIJ*)(*A)->data;
-    if(sb_ready&&aa->nz==sb_nz) {
+    int same=(sb_ready&&aa->nz==sb_nz);
+    /* an equal NE does not prove the pattern unchanged: the assembly
+       skips zero-valued entries, so an entry crossing zero moves the
+       pattern at constant count */
+    if(same)for(i=0; i<sb_nz; i++)if(sb_jcn[i]!=aa->j[i]+1) {same=0; break;}
+    if(same) {
       for(i=0; i<sb_nz; i++)sb_values[i]=aa->a[i];
       redo=1;
     }
     else {
+      if(sb_ready)printf("Note: the Jacobian pattern changed since the last analyse (an entry crossed zero); rebuilding the MP48 instance\n");
       free(sb_jcn);
       free(sb_neleperrow);
       free(sb_values);

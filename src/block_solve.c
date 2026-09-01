@@ -48,6 +48,20 @@ static void scratch_write(const void *p,size_t esz,size_t n,FILE *fp,const char 
   }
 }
 
+
+/* Border column presence must be STRUCTURAL: the Fortran border
+   accumulation walks every stored entry of the coupling blocks and
+   indexes VECBIVI through this map, so a stored-but-zero column
+   (explicit zeros are kept under -fastrefac) mapped by a value test
+   (column norm > 0) lands at offset 0 -> a write before the buffer. */
+static void border_cols_present(Mat C,int *cnt) {
+  Mat_SeqAIJ *ac=(Mat_SeqAIJ*)C->data;
+  PetscInt k;
+  int *seen=(int*)calloc(C->cmap->n>0?C->cmap->n:1,sizeof(int));
+  for(k=0; k<ac->nz; k++)seen[ac->j[k]]=1;
+  for(k=0; k<C->cmap->n; k++)if(seen[k])cnt[k]++;
+  free(seen);
+}
 static int nfr_flag(void) {
   if(ndbbd_fastrefac<0) {
     ndbbd_fastrefac=0;
@@ -81,6 +95,13 @@ static Mat *xfr_submatA=NULL,*xfr_submatC=NULL,*xfr_submatB=NULL,*xfr_submatBB=N
 static int *xfr_order=NULL;
 static PetscInt xfr_ordlen=0,xfr_nmatin=0;
 static int xfr_proc1=0,xfr_ready=0;
+static PetscInt *xfr_lens=NULL,xfr_nrows=0; /* the signed rows' lengths (drift report) */
+static long xfr_nnz=0;
+static unsigned long long xfr_sig=0; /* FNV-1a over the local rows' lengths and column
+                                        indices of the Jacobian the extraction was built
+                                        from: the assembly skips zero-valued entries, so
+                                        the pattern is value-dependent, and PETSc's
+                                        MAT_REUSE_MATRIX refill does not check it */
 
 void dbbd_fastextract_free(void) {
   PetscInt i;
@@ -291,16 +312,59 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
      any row/col-ordering change forces a fresh MAT_INITIAL build */
   int xfr_reuse=0;
   if(dbbd_fastrefac) {
-    if(xfr_ready&&xfr_ordlen==2*(PetscInt)VecSize
+    /* ... and only while the Jacobian's stored pattern is: sign the
+       local rows and take the reuse decision collectively (the
+       extraction call is collective and every rank must pass the
+       same MatReuse) */
+    unsigned long long sig=1469598103934665603ULL;
+    PetscInt r,nc,kk,rowsdiff=0;
+    long nnzloc=0;
+    const PetscInt *cols;
+    int changed,anychanged=0;
+    if(xfr_nrows!=Iend-Istart) {
+      free(xfr_lens);
+      xfr_lens=(PetscInt*)calloc(Iend-Istart>0?Iend-Istart:1,sizeof(PetscInt));
+      xfr_nrows=Iend-Istart;
+      for(r=0; r<xfr_nrows; r++)xfr_lens[r]=-1;
+    }
+    for(r=Istart; r<Iend; r++) {
+      MatGetRow(A,r,&nc,&cols,NULL);
+      if(xfr_lens[r-Istart]!=nc)rowsdiff++;
+      xfr_lens[r-Istart]=nc;
+      nnzloc+=nc;
+      sig^=(unsigned long long)nc;
+      sig*=1099511628211ULL;
+      for(kk=0; kk<nc; kk++) {
+        sig^=(unsigned long long)cols[kk];
+        sig*=1099511628211ULL;
+      }
+      MatRestoreRow(A,r,&nc,&cols,NULL);
+    }
+    changed=(!xfr_ready||sig!=xfr_sig);
+    MPI_Allreduce(&changed,&anychanged,1,MPI_INT,MPI_MAX,PETSC_COMM_WORLD);
+    if(xfr_ready&&!anychanged&&xfr_ordlen==2*(PetscInt)VecSize
        &&!memcmp(xfr_order,row_order,VecSize*sizeof(int))
        &&!memcmp(xfr_order+VecSize,col_order,VecSize*sizeof(int)))xfr_reuse=1;
     else {
+      if(xfr_ready&&anychanged) {
+        /* drift report: rows whose length moved and the local nnz delta
+           (an equal-length swap is counted by neither) */
+        long tot[3]={rowsdiff,xfr_nnz,nnzloc},sum[3];
+        MPI_Reduce(tot,sum,3,MPI_LONG,MPI_SUM,0,PETSC_COMM_WORLD);
+        if(rank==0)printf("Note: the Jacobian pattern changed since the last analyse (entries crossed zero: %ld rows changed length, nnz %ld -> %ld); re-extracting and re-analysing every DBBD block\n",sum[0],sum[1],sum[2]);
+      }
       dbbd_fastextract_free();
       xfr_order=realloc(xfr_order,2*VecSize*sizeof(int));
       memcpy(xfr_order,row_order,VecSize*sizeof(int));
       memcpy(xfr_order+VecSize,col_order,VecSize*sizeof(int));
       xfr_ordlen=2*(PetscInt)VecSize;
+      /* a fresh extraction can change a block's pattern at constant
+         NE, and the persisted JCN is MA48-clobbered so it cannot be
+         compared: every block re-analyses */
+      for(i=0; i<nmatin; i++)dfr_nz[i]=-1;
     }
+    xfr_sig=sig;
+    xfr_nnz=nnzloc;
   }
   ierr = PetscMalloc(nmatin*sizeof(IS **),&rowindices);
   CHKERRQ(ierr);
@@ -577,8 +641,7 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
   PetscReal *ccolnorms=(PetscReal *) calloc (BBrow,sizeof(PetscReal));
   for(j1=0; j1<nmatinplus; j1++) {
     if(j1<nmatin) {
-      MatGetColumnNorms(submatC[j1],NORM_1,ccolnorms);
-      for(i=0; i<BBrow; i++)if(ccolnorms[i]>0)bivinzcol[i]++;
+      border_cols_present(submatC[j1],bivinzcol);
       Mat_SeqAIJ         *ab=(Mat_SeqAIJ*)submatB[j1]->data;//*aa=subA->data;
       ai= ab->i;
       nz=ab->nz;
@@ -1586,8 +1649,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
     memset(bivinzrow,0,bbrowij*sizeof(long int));
     memset(bivinzcol,0,bbrowij*sizeof(PetscInt));
     for(j1=0; j1<nreg; j1++) {
-      MatGetColumnNorms(submatCij[j1+j3*(nreg+1)][0],NORM_1,ccolnorms);
-      for(i=0; i<bbrowij; i++)if(ccolnorms[i]>0)bivinzcol[i]++;
+      border_cols_present(submatCij[j1+j3*(nreg+1)][0],bivinzcol);
       ab=(Mat_SeqAIJ*)submatBij[j1+j3*(nreg+1)][0]->data;//*aa=subA->data;
       ai= ab->i;
       nz=ab->nz;
@@ -1669,8 +1731,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
     memset(bivinzrow,0,bbrowij*sizeof(long int));
     memset(bivinzcol,0,bbrowij*sizeof(PetscInt));
     for(j1=0; j1<nreg; j1++) {
-      MatGetColumnNorms(submatCij[j1+j3*(nreg+1)][0],NORM_1,ccolnorms);
-      for(i=0; i<bbrowij; i++)if(ccolnorms[i]>0)bivinzcol[i]++;
+      border_cols_present(submatCij[j1+j3*(nreg+1)][0],bivinzcol);
       ab=(Mat_SeqAIJ*)submatBij[j1+j3*(nreg+1)][0]->data;//*aa=subA->data;
       ai= ab->i;
       nz=ab->nz;
@@ -2951,8 +3012,7 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
   bivinzcol=realloc(bivinzcol,BBrow*sizeof(PetscInt));
   memset(bivinzcol,0,BBrow*sizeof(PetscInt));
   for(j1=0; j1<nmatint; j1++) {
-    MatGetColumnNorms(submatC[j1],NORM_1,ccolnorms);
-    for(i=0; i<BBrow; i++)if(ccolnorms[i]>0)bivinzcol[i]++;
+    border_cols_present(submatC[j1],bivinzcol);
     Mat_SeqAIJ         *a1b=(Mat_SeqAIJ*)submatB1[j1][0]->data;//*aa=subA->data;
     ai= a1b->i;
     nz=a1b->nz;

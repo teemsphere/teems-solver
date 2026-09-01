@@ -1,6 +1,10 @@
 #include <teems_solver.h>
 #include <hsl_kernels.h>
 
+/* -fastrefac: keep zero-valued entries so the stored pattern is structural
+   (set per assembly from the effective option; see the insertion site) */
+static int jac_keep_zero=0;
+
 /* ===== compiled equation programs (roadmap 6.2, small-model lever) =====
  *
  * jacobian_fill used to re-derive every equation's parse artifacts --
@@ -342,7 +346,12 @@ static void stmt_prog_execute(stmt_prog *st, offset_t matrow, offset_t *eq_addr,
           }
           vval=formula_eval(elem_vals,sets,set_elems,st->sum_vals,ops1,lv->nops,arSet1,lv->fdimlin,st->zerodivide);
           Iindx=closure_vals[vars[lv->LinVarIndx].offset+li3].exo_index;
-          if (!closure_vals[vars[lv->LinVarIndx].offset+li3].is_exogenous&&vval!=0) {
+          /* zero-valued entries are skipped, so the stored pattern is the
+             REALIZED one and drifts as values cross zero between steps
+             (10-100 entries per Gragg step on a shocked GTAPv7 R32).
+             Under -fastrefac the persisted pivot sequences need the
+             STRUCTURAL pattern, so the entry is stored with its zero */
+          if (!closure_vals[vars[lv->LinVarIndx].offset+li3].is_exogenous&&(vval!=0||jac_keep_zero)) {
             value[i3]=vval;
             jcn[i3]=Iindx;
             i3++;
@@ -943,6 +952,11 @@ int jacobian_fill(char *fname, char *commsyntax,set_def *sets,offset_t nset, set
   PetscMPIInt  mpisize1;
   stmt_prog *stp=NULL;
   offset_t eqindx=0;
+  {
+    dim_t fr=0;
+    PetscOptionsGetInt(NULL,NULL,"-fastrefac",&fr,NULL); /* post force-clear = effective */
+    jac_keep_zero=(fr!=0);
+  }
   ierr = MatGetOwnershipRange(A,&Istart1,&Iend1);
   MPI_Comm_size(PETSC_COMM_WORLD,&mpisize1);
   CHKERRQ(ierr);
