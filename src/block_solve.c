@@ -35,6 +35,7 @@ static FILE *scratch_open(const char *fn,const char *mode) {
   FILE *fp=fopen(fn,mode);
   if(fp==NULL) {
     printf("Error: cannot open scratch file %s (%s); the scratch filesystem may be full or unwritable - free space there or point -tempdir at a larger filesystem\n",fn,strerror(errno));
+    fflush(stdout);
     MPI_Abort(PETSC_COMM_WORLD,1);
   }
   return fp;
@@ -42,6 +43,7 @@ static FILE *scratch_open(const char *fn,const char *mode) {
 static void scratch_write(const void *p,size_t esz,size_t n,FILE *fp,const char *fn) {
   if(fwrite(p,esz,n,fp)!=n) {
     printf("Error: short write on scratch file %s (%s); the scratch filesystem is likely full - free space there or point -tempdir at a larger filesystem\n",fn,strerror(errno));
+    fflush(stdout);
     MPI_Abort(PETSC_COMM_WORLD,1);
   }
 }
@@ -1321,6 +1323,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
      least one block per rank and SEGV otherwise */
   if(mpisize>ntime) {
     if(rank==0)printf("Error: NDBBD (-matsol 3) supports at most one MPI rank per chain block (%d ranks > %d chain blocks); re-run with at most %d ranks, or use SBBD/DBBD\n",(int)mpisize,(int)ntime,(int)ntime);
+    fflush(stdout);
     MPI_Abort(PETSC_COMM_WORLD,1);
   }
   nmatin=(nreg+1)*nmatint;
@@ -1927,7 +1930,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
       printf("Error: cannot open scratch file %s\n",filename);
     }
     fwrt=fwrite(vecbivi, sizeof(solve_real),nz1, presolfile);
-    if(fwrt== 0) {printf("Error: short write on scratch file %s (%s); the scratch filesystem is likely full - free space there or point -tempdir at a larger filesystem\n",filename,strerror(errno));MPI_Abort(PETSC_COMM_WORLD,1);}
+    if(fwrt== 0) {printf("Error: short write on scratch file %s (%s); the scratch filesystem is likely full - free space there or point -tempdir at a larger filesystem\n",filename,strerror(errno));fflush(stdout);MPI_Abort(PETSC_COMM_WORLD,1);}
     fclose(presolfile);
     strcpy(filename,scratch_dir);strcat(filename,"_rbvi");
     strcat(filename,rankname);
@@ -1937,7 +1940,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
       printf("Error: cannot open scratch file %s\n",filename);
     }
     fwrt=fwrite(irn1, sizeof(int), nz1, presolfile);
-    if(fwrt== 0) {printf("Error: short write on scratch file %s (%s); the scratch filesystem is likely full - free space there or point -tempdir at a larger filesystem\n",filename,strerror(errno));MPI_Abort(PETSC_COMM_WORLD,1);}
+    if(fwrt== 0) {printf("Error: short write on scratch file %s (%s); the scratch filesystem is likely full - free space there or point -tempdir at a larger filesystem\n",filename,strerror(errno));fflush(stdout);MPI_Abort(PETSC_COMM_WORLD,1);}
     fclose(presolfile);
     strcpy(filename,scratch_dir);strcat(filename,"_cbvi");
     strcat(filename,rankname);
@@ -1947,7 +1950,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
       printf("Error: cannot open scratch file %s\n",filename);
     }
     fwrt=fwrite(jcn1, sizeof(int), nz1, presolfile);
-    if(fwrt== 0) {printf("Error: short write on scratch file %s (%s); the scratch filesystem is likely full - free space there or point -tempdir at a larger filesystem\n",filename,strerror(errno));MPI_Abort(PETSC_COMM_WORLD,1);}
+    if(fwrt== 0) {printf("Error: short write on scratch file %s (%s); the scratch filesystem is likely full - free space there or point -tempdir at a larger filesystem\n",filename,strerror(errno));fflush(stdout);MPI_Abort(PETSC_COMM_WORLD,1);}
     fclose(presolfile);
     free(irn1);//1
     irn1=NULL;
@@ -1988,7 +1991,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
       }
       logmsg(2,"rank %d nrow %d ncol %d block rank %d nz %d cntl6 %lf\n",rank,nrow,ncol,insized[3],nz,cntl6);
       fwrt=fwrite(insized, sizeof(int), 5+nreg*insizes, presolfile);
-      if(fwrt== 0) {printf("Error: short write on scratch file %s (%s); the scratch filesystem is likely full - free space there or point -tempdir at a larger filesystem\n",filename,strerror(errno));MPI_Abort(PETSC_COMM_WORLD,1);}
+      if(fwrt== 0) {printf("Error: short write on scratch file %s (%s); the scratch filesystem is likely full - free space there or point -tempdir at a larger filesystem\n",filename,strerror(errno));fflush(stdout);MPI_Abort(PETSC_COMM_WORLD,1);}
       fclose(presolfile);
     insize[j4*insizes+15]=0;
   }
@@ -2199,7 +2202,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
       }
       logmsg(2,"rank %d nrow %d ncol %d block rank %d nz %d cntl6 %lf\n",rank,nrow,ncol,insized[3],nz,cntl6in);
       fwrt=fwrite(insized, sizeof(int), 5+nreg*insizes, presolfile);
-      if(fwrt== 0) {printf("Error: short write on scratch file %s (%s); the scratch filesystem is likely full - free space there or point -tempdir at a larger filesystem\n",filename,strerror(errno));MPI_Abort(PETSC_COMM_WORLD,1);}
+      if(fwrt== 0) {printf("Error: short write on scratch file %s (%s); the scratch filesystem is likely full - free space there or point -tempdir at a larger filesystem\n",filename,strerror(errno));fflush(stdout);MPI_Abort(PETSC_COMM_WORLD,1);}
       fclose(presolfile);
       strcpy(filename,scratch_dir);strcat(filename,"_row");
       strcat(filename,rankname);
@@ -2209,7 +2212,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
         printf("Error: cannot open scratch file %s\n",filename);
       }
       fwrt=fwrite(irn, sizeof(int), nrow, presolfile);
-      if(fwrt== 0) {printf("Error: short write on scratch file %s (%s); the scratch filesystem is likely full - free space there or point -tempdir at a larger filesystem\n",filename,strerror(errno));MPI_Abort(PETSC_COMM_WORLD,1);}
+      if(fwrt== 0) {printf("Error: short write on scratch file %s (%s); the scratch filesystem is likely full - free space there or point -tempdir at a larger filesystem\n",filename,strerror(errno));fflush(stdout);MPI_Abort(PETSC_COMM_WORLD,1);}
       fclose(presolfile);
       strcpy(filename,scratch_dir);strcat(filename,"_col");
       strcat(filename,rankname);
@@ -2219,7 +2222,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
         printf("Error: cannot open scratch file %s\n",filename);
       }
       fwrt=fwrite(jcn, sizeof(int), ncol, presolfile);
-      if(fwrt== 0) {printf("Error: short write on scratch file %s (%s); the scratch filesystem is likely full - free space there or point -tempdir at a larger filesystem\n",filename,strerror(errno));MPI_Abort(PETSC_COMM_WORLD,1);}
+      if(fwrt== 0) {printf("Error: short write on scratch file %s (%s); the scratch filesystem is likely full - free space there or point -tempdir at a larger filesystem\n",filename,strerror(errno));fflush(stdout);MPI_Abort(PETSC_COMM_WORLD,1);}
       fclose(presolfile);
       free(insized);//1
     insize[j4*insizes+15]=0;
@@ -2296,6 +2299,7 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
      least one block per rank and SEGV otherwise */
   if(mpisize>ntime) {
     if(rank==0)printf("Error: NDBBD (-matsol 3) supports at most one MPI rank per chain block (%d ranks > %d chain blocks); re-run with at most %d ranks, or use SBBD/DBBD\n",(int)mpisize,(int)ntime,(int)ntime);
+    fflush(stdout);
     MPI_Abort(PETSC_COMM_WORLD,1);
   }
   nmatin=(nreg+1)*nmatint;
@@ -2817,7 +2821,7 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
       printf("Error: cannot open scratch file %s\n",filename);
     }
     frd=fread(jcn1a, sizeof(int), insizeda[1], presolfile);
-    if(frd== 0) {printf("Error: short read on scratch file %s; the file is truncated (a scratch write likely failed earlier)\n",filename);MPI_Abort(PETSC_COMM_WORLD,1);}
+    if(frd== 0) {printf("Error: short read on scratch file %s; the file is truncated (a scratch write likely failed earlier)\n",filename);fflush(stdout);MPI_Abort(PETSC_COMM_WORLD,1);}
     fclose(presolfile);
     remove(filename);
     strcpy(filename,scratch_dir);strcat(filename,"_bivi");
@@ -2839,7 +2843,7 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
       printf("Error: cannot open scratch file %s\n",filename);
     }
     frd=fread(irn1, sizeof(int), insizeda[2], presolfile);
-    if(frd== 0) {printf("Error: short read on scratch file %s; the file is truncated (a scratch write likely failed earlier)\n",filename);MPI_Abort(PETSC_COMM_WORLD,1);}
+    if(frd== 0) {printf("Error: short read on scratch file %s; the file is truncated (a scratch write likely failed earlier)\n",filename);fflush(stdout);MPI_Abort(PETSC_COMM_WORLD,1);}
     fclose(presolfile);
     remove(filename);
     strcpy(filename,scratch_dir);strcat(filename,"_cbvi");
@@ -2850,7 +2854,7 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
       printf("Error: cannot open scratch file %s\n",filename);
     }
     frd=fread(jcn1, sizeof(int), insizeda[2], presolfile);
-    if(frd== 0) {printf("Error: short read on scratch file %s; the file is truncated (a scratch write likely failed earlier)\n",filename);MPI_Abort(PETSC_COMM_WORLD,1);}
+    if(frd== 0) {printf("Error: short read on scratch file %s; the file is truncated (a scratch write likely failed earlier)\n",filename);fflush(stdout);MPI_Abort(PETSC_COMM_WORLD,1);}
     fclose(presolfile);
     remove(filename);
     }
