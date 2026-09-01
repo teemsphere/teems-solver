@@ -1324,6 +1324,10 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
   if(mpisize>ntime) {
     if(rank==0)printf("Error: NDBBD (-matsol 3) supports at most one MPI rank per chain block (%d ranks > %d chain blocks); re-run with at most %d ranks, or use SBBD/DBBD\n",(int)mpisize,(int)ntime,(int)ntime);
     fflush(stdout);
+    /* the condition is uniform across ranks, so the barrier cannot
+       deadlock; without it another rank's abort kills rank 0 before
+       its message is written */
+    MPI_Barrier(PETSC_COMM_WORLD);
     MPI_Abort(PETSC_COMM_WORLD,1);
   }
   nmatin=(nreg+1)*nmatint;
@@ -2300,6 +2304,10 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
   if(mpisize>ntime) {
     if(rank==0)printf("Error: NDBBD (-matsol 3) supports at most one MPI rank per chain block (%d ranks > %d chain blocks); re-run with at most %d ranks, or use SBBD/DBBD\n",(int)mpisize,(int)ntime,(int)ntime);
     fflush(stdout);
+    /* the condition is uniform across ranks, so the barrier cannot
+       deadlock; without it another rank's abort kills rank 0 before
+       its message is written */
+    MPI_Barrier(PETSC_COMM_WORLD);
     MPI_Abort(PETSC_COMM_WORLD,1);
   }
   nmatin=(nreg+1)*nmatint;
