@@ -62,6 +62,44 @@ void *ma48_realloc(void *p,offset_t n,size_t sz) {
   return q;
 }
 
+/* --- Jacobian preallocation ceiling --------------------------------
+   Mat*AIJSetPreallocation totals the per-row counts in a PetscInt.  For
+   every HSL matrix_method A and B are MATSEQAIJ on PETSC_COMM_SELF and
+   hold the whole system on rank_hsl, so on a 32-bit PetscInt build the
+   total passes the ceiling near 2^31 nonzeros (~450M equations at 4.9
+   per row); PETSc then returns an error and, unchecked, the matrix was
+   dereferenced at the first insert (SEGV at address 0).  The total is
+   formed here in 64-bit first so the message can name the count and
+   the way out, and the PETSc return is checked so any other
+   preallocation failure is reported instead of segfaulting. */
+void jac_mat_prealloc(Mat M,const char *what,PetscBool mpi,int count,PetscInt nrows_local,PetscInt dnz,PetscInt *dnnz,PetscInt onz,PetscInt *onnz) {
+  PetscErrorCode ierr;
+  int rank;
+  MPI_Comm_rank(PETSC_COMM_WORLD,&rank);
+  if(count&&dnnz!=NULL) {
+    offset_t nnz=0;
+    PetscInt i;
+    for(i=0;i<nrows_local;i++)nnz+=(offset_t)dnnz[i]+((mpi&&onnz!=NULL)?(offset_t)onnz[i]:0);
+    if(nnz>(offset_t)PETSC_INT_MAX) {
+      if(mpi)
+        printf("Error: assembling the %s for %s needs %ld nonzeros on rank %d, above the %ld-nonzero ceiling of the %d-bit PetscInt build; spread the system over more MPI ranks, condense the model, or reduce its dimensions\n",
+               what,probe_onfail_scope_label(),(long)nnz,rank,(long)PETSC_INT_MAX,(int)(8*sizeof(PetscInt)));
+      else
+        printf("Error: assembling the %s for %s needs %ld nonzeros, above the %ld-nonzero ceiling of the %d-bit PetscInt build; every HSL matrix_method (\"LU\", \"SBBD\") keeps the whole system on one rank, so more ranks do not help -- condense the model, reduce its dimensions, or use the distributed matrix_method \"DBBD\"\n",
+               what,probe_onfail_scope_label(),(long)nnz,(long)PETSC_INT_MAX,(int)(8*sizeof(PetscInt)));
+      fflush(stdout);
+      MPI_Abort(PETSC_COMM_WORLD,1);
+    }
+  }
+  if(mpi)ierr=MatMPIAIJSetPreallocation(M,dnz,dnnz,onz,onnz);
+  else ierr=MatSeqAIJSetPreallocation(M,dnz,dnnz);
+  if(ierr) {
+    printf("Error: PETSc could not preallocate the %s for %s (PETSc error %d)\n",what,probe_onfail_scope_label(),(int)ierr);
+    fflush(stdout);
+    MPI_Abort(PETSC_COMM_WORLD,1);
+  }
+}
+
 /* Persistent-factor sequential LU (-fastrefac): the Jacobian's stored
    pattern is fixed across steps, so the MA48 pivot sequence is computed
    once and later steps only refactorize (MA48B/BD JOB=2) with fresh
@@ -398,12 +436,7 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
     else {
       MatSetType(A,MATSEQAIJ);
     }
-    if(nohsl) {
-      MatMPIAIJSetPreallocation(A,dnz,dnnz,onz,onnz);
-    }
-    else {
-      MatSeqAIJSetPreallocation(A,dnz,dnnz);
-    }
+    jac_mat_prealloc(A,"Jacobian",nohsl,rank==rank_hsl,Iend-Istart,dnz,dnnz,onz,onnz);
 
     ierr = MatSetOption(A,MAT_SYMMETRIC,PETSC_FALSE);
     CHKERRQ(ierr);
@@ -422,12 +455,7 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
     else {
       MatSetType(B,MATSEQAIJ);
     }
-    if(nohsl) {
-      MatMPIAIJSetPreallocation(B,dnzB,dnnzB,onzB,onnzB);
-    }
-    else {
-      MatSeqAIJSetPreallocation(B,dnzB,dnnzB);
-    }
+    jac_mat_prealloc(B,"exogenous block",nohsl,rank==rank_hsl,Iend-Istart,dnzB,dnnzB,onzB,onnzB);
 
     gettimeofday(&endtime, NULL);
     if(rank==0)logmsg(1,"Matrix preparation time %.2f s\n",(endtime.tv_sec - begintime.tv_sec)+((double)(endtime.tv_usec - begintime.tv_usec))/ 1000000);
@@ -992,12 +1020,7 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
           else {
             MatSetType(A,MATSEQAIJ);
           }
-          if(nohsl) {
-            MatMPIAIJSetPreallocation(A,dnz,dnnz,onz,onnz);
-          }
-          else {
-            MatSeqAIJSetPreallocation(A,dnz,dnnz);
-          }
+          jac_mat_prealloc(A,"Jacobian",nohsl,rank==rank_hsl,Iend-Istart,dnz,dnnz,onz,onnz);
 
           if(nohsl) {
             MatCreate(PETSC_COMM_WORLD,&B);
@@ -1012,12 +1035,7 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
           else {
             MatSetType(B,MATSEQAIJ);
           }
-          if(nohsl) {
-            MatMPIAIJSetPreallocation(B,dnzB,dnnzB,onzB,onnzB);
-          }
-          else {
-            MatSeqAIJSetPreallocation(B,dnzB,dnnzB);
-          }
+          jac_mat_prealloc(B,"exogenous block",nohsl,rank==rank_hsl,Iend-Istart,dnzB,dnnzB,onzB,onnzB);
           if(rank==rank_hsl) {
             jacobian_fill(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,closure_vals,ndblock,alltimeset,allregset,eq_addr,counteq,nintraeq,A,B);
           }
@@ -1598,12 +1616,7 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
         else {
           MatSetType(A,MATSEQAIJ);
         }
-        if(nohsl) {
-          MatMPIAIJSetPreallocation(A,dnz,dnnz,onz,onnz);
-        }
-        else {
-          MatSeqAIJSetPreallocation(A,dnz,dnnz);
-        }
+        jac_mat_prealloc(A,"Jacobian",nohsl,rank==rank_hsl,Iend-Istart,dnz,dnnz,onz,onnz);
 
         if(nohsl) {
           MatCreate(PETSC_COMM_WORLD,&B);
@@ -1618,12 +1631,7 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
         else {
           MatSetType(B,MATSEQAIJ);
         }
-        if(nohsl) {
-          MatMPIAIJSetPreallocation(B,dnzB,dnnzB,onzB,onnzB);
-        }
-        else {
-          MatSeqAIJSetPreallocation(B,dnzB,dnnzB);
-        }
+        jac_mat_prealloc(B,"exogenous block",nohsl,rank==rank_hsl,Iend-Istart,dnzB,dnnzB,onzB,onnzB);
 
         if(rank==rank_hsl) {
           jacobian_fill(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,closure_vals,ndblock,alltimeset,allregset,eq_addr,counteq,nintraeq,A,B);

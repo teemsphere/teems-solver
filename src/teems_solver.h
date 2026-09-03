@@ -312,6 +312,12 @@ offset_t ma48_la_from_pct(dim_t pct,offset_t nnz); /* initial LA from a -la* per
    report */
 void *ma48_alloc(offset_t n,size_t sz);
 void *ma48_realloc(void *p,offset_t n,size_t sz);
+/* Jacobian/exogenous-block preallocation with the PetscInt ceiling
+   named: PETSc sums the row counts into a PetscInt, and the one-rank
+   whole-system copy every HSL matrix_method keeps passes that near
+   2^31 nonzeros (unchecked, the still-unallocated Mat segfaulted at
+   the first insert).  count=1 on the rank that owns the row counts. */
+void jac_mat_prealloc(Mat M,const char *what,PetscBool mpi,int count,PetscInt nrows_local,PetscInt dnz,PetscInt *dnnz,PetscInt onz,PetscInt *onnz);
 /* -condest solve-quality diagnostics (MA60/MC71, sequential LU path);
    scope gate set by the LU wrappers, accumulators reduced into
    stats.json post-solve.  teems_condest_active_/report_ are the

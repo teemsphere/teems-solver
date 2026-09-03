@@ -121,14 +121,9 @@ static void rk_stage_solve(PetscBool nohsl,PetscInt VecSize,PetscInt BSize,
   }
   if(nesteddbbd==1)MatSetSizes(A,localsize,localsize,VecSize,VecSize);
   else MatSetSizes(A,PETSC_DECIDE,PETSC_DECIDE,VecSize,VecSize);
-  if(nohsl) {
-    MatSetType(A,MATMPIAIJ);
-    MatMPIAIJSetPreallocation(A,dnz,dnnz,onz,onnz);
-  }
-  else {
-    MatSetType(A,MATSEQAIJ);
-    MatSeqAIJSetPreallocation(A,dnz,dnnz);
-  }
+  if(nohsl)MatSetType(A,MATMPIAIJ);
+  else MatSetType(A,MATSEQAIJ);
+  jac_mat_prealloc(A,"Jacobian",nohsl,rank==rank_hsl,Iend-Istart,dnz,dnnz,onz,onnz);
 
   if(nohsl) {
     MatCreate(PETSC_COMM_WORLD,&B);
@@ -137,14 +132,9 @@ static void rk_stage_solve(PetscBool nohsl,PetscInt VecSize,PetscInt BSize,
     MatCreate(PETSC_COMM_SELF,&B);
   }
   shock_mat_set_sizes(B,nesteddbbd,localsize,VecSize,BSize);
-  if(nohsl) {
-    MatSetType(B,MATMPIAIJ);
-    MatMPIAIJSetPreallocation(B,dnzB,dnnzB,onzB,onnzB);
-  }
-  else {
-    MatSetType(B,MATSEQAIJ);
-    MatSeqAIJSetPreallocation(B,dnzB,dnnzB);
-  }
+  if(nohsl)MatSetType(B,MATMPIAIJ);
+  else MatSetType(B,MATSEQAIJ);
+  jac_mat_prealloc(B,"exogenous block",nohsl,rank==rank_hsl,Iend-Istart,dnzB,dnnzB,onzB,onnzB);
 
   if(rank==rank_hsl) {
     jacobian_fill(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,closure_vals,ndblock,alltimeset,allregset,eq_addr,counteq,nintraeq,A,B);

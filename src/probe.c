@@ -570,12 +570,12 @@ int probe_structural(PetscInt VecSize,offset_t nvarele,offset_t ncofele,PetscInt
   MatCreate(PETSC_COMM_SELF,&A);
   MatSetSizes(A,PETSC_DECIDE,PETSC_DECIDE,VecSize,VecSize);
   MatSetType(A,MATSEQAIJ);
-  MatSeqAIJSetPreallocation(A,dnz,dnnz);
+  jac_mat_prealloc(A,"Jacobian",PETSC_FALSE,1,VecSize,dnz,dnnz,0,NULL);
   MatSetOption(A,MAT_SYMMETRIC,PETSC_FALSE);
   MatCreate(PETSC_COMM_SELF,&B);
   MatSetSizes(B,PETSC_DECIDE,PETSC_DECIDE,VecSize,BSize);
   MatSetType(B,MATSEQAIJ);
-  MatSeqAIJSetPreallocation(B,dnzB,dnnzB);
+  jac_mat_prealloc(B,"exogenous block",PETSC_FALSE,1,VecSize,dnzB,dnnzB,0,NULL);
   jacobian_fill(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,closure_vals,ndblock,alltimeset,allregset,eq_addr,counteq,nintraeq,A,B);
   MatAssemblyBegin(A,MAT_FINAL_ASSEMBLY);
   MatAssemblyEnd(A,MAT_FINAL_ASSEMBLY);
