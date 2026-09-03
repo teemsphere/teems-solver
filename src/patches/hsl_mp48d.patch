@@ -1,5 +1,5 @@
---- hsl_mp48d.f90
-+++ hsl_mp48d.f90
+--- mp48_pristine.f90	2026-09-03 18:12:36.584194257 +1200
++++ mp48_new.f90	2026-09-03 18:14:48.246471667 +1200
 @@ -1,3 +1,5 @@
 +!-Add MYIW1 and MYLMX;
 +!-Change CGLOB=Max col number in a block (including border) x NBLOCK
@@ -198,7 +198,33 @@
        DEALLOCATE (IRN,STAT=ST)
        DEALLOCATE (JCN,STAT=ST)
        DEALLOCATE (JFIRST,STAT=ST)
-@@ -2723,7 +2763,7 @@
+@@ -2669,16 +2709,21 @@
+       REAL(DP) T1,T2
+       INTEGER BLANK,DEST,DGN,ERCODE,ERR, &
+               FLAG, &
+-              I,I1,I2,I1F,I2F,I3,I4,II1,II2,INFO4,INFO10,II, &
++              I,I3,INFO4,INFO10,II, &
+               IPROC,ISTRT,ISTOP,ICOUNT_RANK,INTERF,IFLAG46, &
+               J,J1,J2,J1V,J2V,JBLOCK,JOB50,JOB48,JJ,JPOS, &
+               K,KL,KSTART,KSTOP, &
+-              L,L1,L2,LA,LFACT,LCNT,LDGN,LMX, &
+-              LIRNF,LICOPY,LFCOPY,LKEEP48,LF,LENGTH, &
+-              M,MXINT,MF,MNF, &
++              L1,L2,LA,LFACT,LCNT,LDGN,LMX, &
++              LIRNF,LICOPY,LKEEP48,LF,LENGTH, &
++              M,MXINT,MF, &
+               NBLOCK,NC,NE,NEQ,NF,NPROC,NU,N10,N100,N1000, &
+               NZBLK,NCMX,NZMX,NINTER,RINTER,NVAR,NNA,NP, &
+               RANK,STRM,SRC,VALCRD,WRN,STD,TOTNE_SCHUR
++! TEEMS: per-rank running totals and offsets into FACT/IRNF/FACT_COPY
++! accumulate over every block this rank owns and pass 2**31 on large
++! systems; 32-bit they wrapped silently (a negative ALLOCATE extent
++! yields an empty array that the factor copy then overruns).
++      INTEGER(8) I1,I2,I1F,I2F,II1,II2,I4,L,LFCOPY,MNF,LFACT8,LIRNF8
+ 
+       INTEGER IOS
+ !  Holds IOSTAT parameter for files.
+@@ -2723,7 +2768,7 @@
        INTEGER, DIMENSION (:,:), ALLOCATABLE :: IQM
  
  !     .. External Subroutines ..
@@ -207,7 +233,121 @@
  
  !     .. MPI routines
        EXTERNAL MPI_BARRIER,MPI_BCAST,MPI_COMM_RANK, &
-@@ -4092,7 +4132,7 @@
+@@ -3026,7 +3071,7 @@
+ ! Check how large array VALUES must be.
+             L = 1
+             DO JBLOCK = 1,NBLOCK
+-               L = MAX(L,data%ENTRIES(JBLOCK))
++               L = MAX(L,INT(data%ENTRIES(JBLOCK),8))
+             END DO
+             DEALLOCATE (VALUES,STAT=ST)
+             ALLOCATE (VALUES(1:L),STAT=ST)
+@@ -3185,7 +3230,7 @@
+             MF = data%INFO_MA60(7,JBLOCK)
+             NF = data%private%NF(JBLOCK)
+             LICOPY = LICOPY + MF
+-            LFCOPY = LFCOPY + MF*NF
++            LFCOPY = LFCOPY + INT(MF,8)*INT(NF,8)
+          END DO
+          ALLOCATE (FACT_COPY(1:LFCOPY),NE_SCHUR(1:NBLOCK),STAT=ST)
+ !      END IF
+@@ -3226,16 +3271,16 @@
+   250 CONTINUE
+       IF (JOB50 == 1 .AND. ICONTROL(11) == 0) THEN
+ ! First run. Not using files to hold factor data
+-         LFACT = 0
+-         LIRNF = 0
++         LFACT8 = 0
++         LIRNF8 = 0
+          DO LCNT = 1,ICOUNT_RANK
+             JBLOCK = IBLOCK(LCNT)
+-            LFACT = LFACT + data%private%LFACT(LCNT)
+-            LIRNF = LIRNF + data%private%LIRNF(LCNT)
++            LFACT8 = LFACT8 + INT(data%private%LFACT(LCNT),8)
++            LIRNF8 = LIRNF8 + INT(data%private%LIRNF(LCNT),8)
+          END DO
+          DEALLOCATE (data%FACT,STAT=ST)
+          DEALLOCATE (data%IRNF,STAT=ST)
+-         ALLOCATE (data%FACT(1:LFACT),data%IRNF(1:LIRNF),STAT=ST)
++         ALLOCATE (data%FACT(1:LFACT8),data%IRNF(1:LIRNF8),STAT=ST)
+          IF (ST /= 0) GO TO 300
+       END IF
+ 
+@@ -3257,7 +3302,7 @@
+ ! Find length required for VALUES.
+          L = 1
+          DO LCNT = 1,ICOUNT_RANK
+-            L = MAX(L,NVARSB(LCNT))
++            L = MAX(L,INT(NVARSB(LCNT),8))
+          END DO
+          DEALLOCATE (data%VALUES,STAT=ST)
+          ALLOCATE (data%VALUES(1:L),STAT=ST)
+@@ -3272,12 +3317,12 @@
+             IF (JOB50 == 1) THEN
+                LFACT = data%private%LFACT(LCNT)
+                LIRNF = data%private%LIRNF(LCNT)
+-               L = MAX(L,LFACT)
++               L = MAX(L,INT(LFACT,8))
+                L1 = MAX(L1,LIRNF)
+             ELSE
+               INFO4 = data%INFO_MA60(4,JBLOCK)
+               INFO10 = data%INFO_MA60(10,JBLOCK)
+-              L = MAX(L,INFO4)
++              L = MAX(L,INT(INFO4,8))
+               L1 = MAX(L1,INFO10)
+             END IF
+          END DO
+@@ -3560,11 +3605,11 @@
+          NF = data%private%NF(JBLOCK)
+          II1 = data%private%IPTRL(NC,LCNT)
+          L = I4
+-         MNF = (MF - LF)*(NF - LF)
++         MNF = INT(MF - LF,8)*INT(NF - LF,8)
+ 
+ ! If L+MNF > SIZE(FACT_COPY) then we do not have enough room
+ ! to save the Schur complement.
+-         IF (L + MNF > SIZE(FACT_COPY)) THEN
++         IF (L + MNF > SIZE(FACT_COPY,KIND=8)) THEN
+ ! Increase space for FACT_COPY
+              DO STRM = 8,99
+                IF (STRM == DGN .OR. STRM == ERR .OR. STRM == WRN) &
+@@ -3713,7 +3758,7 @@
+                MF = data%INFO_MA60(7,JBLOCK)
+                LF = data%INFO_MA60(11,JBLOCK)
+                NF = data%private%NF(JBLOCK)
+-               MNF = (MF - LF)*(NF - LF)
++               MNF = INT(MF - LF,8)*INT(NF - LF,8)
+                CALL MPI_RECV(NE_SCHUR(JBLOCK),1,MPI_INTEGER, &
+                              SRC,7,data%private%COMM,STAT,ERCODE)
+                TOTNE_SCHUR = TOTNE_SCHUR + NE_SCHUR(JBLOCK)
+@@ -3768,7 +3813,7 @@
+             MF = data%INFO_MA60(7,JBLOCK)
+             LF = data%INFO_MA60(11,JBLOCK)
+             NF = data%private%NF(JBLOCK)
+-            MNF = (MF - LF)*(NF - LF)
++            MNF = INT(MF - LF,8)*INT(NF - LF,8)
+             CALL MPI_SEND(NE_SCHUR(JBLOCK),1,MPI_INTEGER, &
+                           0,7,data%private%COMM,ERCODE)
+             I4 = I4 + MNF
+@@ -3821,7 +3866,7 @@
+             MF = data%INFO_MA60(7,JBLOCK)
+             LF = data%INFO_MA60(11,JBLOCK)
+             NF = data%private%NF(JBLOCK)
+-            MNF = (MF - LF)*(NF - LF)
++            MNF = INT(MF - LF,8)*INT(NF - LF,8)
+             I4 = I4 + MNF
+          END DO
+       ELSE
+@@ -3831,7 +3876,7 @@
+             MF = data%INFO_MA60(7,JBLOCK)
+             LF = data%INFO_MA60(11,JBLOCK)
+             NF = data%private%NF(JBLOCK)
+-            MNF = (MF - LF)*(NF - LF)
++            MNF = INT(MF - LF,8)*INT(NF - LF,8)
+             IF (NE_SCHUR(JBLOCK) /= 0) &
+             CALL MPI_SEND(FACT_COPY(I4),NE_SCHUR(JBLOCK), &
+                           MPI_DOUBLE_PRECISION,0,1,data%private%COMM,ERCODE)
+@@ -4092,7 +4137,7 @@
  ! pattern (data%private%FJOB = 1)
         IF (data%private%FJOB == 1) THEN
  ! First call.
@@ -216,7 +356,7 @@
  
  ! Switch off printing from MA48
           data%private%ICNTL_48(1) = -1
-@@ -4109,8 +4149,8 @@
+@@ -4109,8 +4154,8 @@
           data%private%ICNTL_48(7) = 0
  
  ! Switch control from sparse to full matrix processing (default 0.5)
@@ -227,7 +367,7 @@
           data%private%CNTL_48(1) = CONTROL(1)
  ! Set threshold pivoting parameter
           data%private%CNTL_48(2) = CONTROL(2)
-@@ -4227,7 +4267,7 @@
+@@ -4227,7 +4272,7 @@
  ! (data%private%FJOB = 1)
           IF (data%private%FJOB == 1) THEN
             JOB48 = 1
@@ -236,7 +376,7 @@
                  data%private%IRN(1:LA),data%private%JCN(1:LA), &
                  data%private%KEEP48(1:LKEEP48), &
                  data%private%CNTL_48,data%private%ICNTL_48, &
-@@ -4315,7 +4355,7 @@
+@@ -4315,7 +4360,7 @@
           ALLOCATE (IW(1:2*RINTER+2*NINTER),STAT=ST )
           IF (ST /= 0) GO TO 420
  
@@ -245,7 +385,25 @@
                  data%private%IRN(1:LA),data%private%JCN(1:NE), &
                  data%private%KEEP48(1:LKEEP48),data%private%CNTL_48, &
                  data%private%ICNTL_48,W,IW, &
-@@ -4595,7 +4635,7 @@
+@@ -4557,7 +4602,7 @@
+ 
+       REAL(DP) T1,T2,T3,T4
+       INTEGER DGN,ERCODE,ERR,FLAG, &
+-              I,I1,I1F,I2,I2F,IPROC,ISTRT,ISTOP,ICOUNT_RANK, &
++              I,IPROC,ISTRT,ISTOP,ICOUNT_RANK, &
+               J,JBLOCK,JOB48, &
+               K, &
+               L,L1,LA,LDGN,LFACT,LIRNF,LCNT,LORDER, &
+@@ -4565,6 +4610,8 @@
+               M,MMX,MF, &
+               NBLOCK,NEQ,NPROC,NP,NC,NINTER,RINTER,NF, &
+               RANK,STRM,SRC,WRN
++! TEEMS: offsets into FACT/IRNF accumulate over this rank's blocks
++      INTEGER(8) I1,I1F,I2,I2F
+ 
+       INTEGER IOS
+ !  Holds IOSTAT parameter for files.
+@@ -4595,7 +4642,7 @@
        INTEGER, DIMENSION (:), ALLOCATABLE :: NVARSB
  
  !     .. External Subroutines ..
@@ -254,7 +412,7 @@
  
  !     .. MPI routines
        EXTERNAL MPI_BARRIER,MPI_BCAST,MPI_COMM_RANK, &
-@@ -4990,7 +5030,7 @@
+@@ -4990,7 +5037,7 @@
           JOB48 = 1
           LKEEP48 =  data%private%LKEEP48
  
@@ -263,7 +421,7 @@
                data%private%IRN(1:LA), &
                       data%private%KEEP48(1:LKEEP48),data%private%CNTL_48, &
                       data%private%ICNTL_48,B1,X1,ERR48,W,IW, &
-@@ -5245,7 +5285,7 @@
+@@ -5245,7 +5292,7 @@
  
        SUBROUTINE MP48ED(M,N,KEEP,LKEEP,INFO)
  ! This subroutine computes statistics for MA48
