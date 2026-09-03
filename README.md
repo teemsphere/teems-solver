@@ -41,19 +41,27 @@ The solver is distributed as a Docker image to ensure reproducibility and ease o
 
 ### Required HSL Libraries
 
-The following HSL libraries must be obtained directly from [HSL](https://www.hsl.rl.ac.uk/). These are available at no cost for academic use.
+The HSL packages the solver uses are obtained as a single **libHSL** source
+snapshot from the [STFC licensing portal](https://licences.stfc.ac.uk)
+(available at no cost for academic use). Download the **source code tarball**
+(`libHSL.v<version>.tar.gz`) — the prebuilt binary tarballs are not usable
+by this build.
 
-| Library | Version | Role |
-|---------|---------|------|
-| MA48 | 2.2.0 | sparse LU |
-| MA51 | 1.0.0 | block rank detection |
-| MA60 | 1.2.0 | solve-quality diagnostics (`-condest`) |
-| MC71 | 1.0.0 | condition estimation (with MA60) |
-| HSL_MC66 | 2.2.1 | bordered ordering |
-| HSL_MC79 | 1.1.1 | structural probe (`-solmed probe`) |
-| HSL_MP48 | 2.1.1 | parallel bordered solve (SBBD) |
+The build stages the following packages out of the snapshot:
 
-**Note**: Backward compatibility with other HSL library versions is not guaranteed.
+| Package | Role |
+|---------|------|
+| MA48 | sparse LU |
+| MA51 | block rank detection |
+| MA60 | solve-quality diagnostics (`-condest`) |
+| MC71 | condition estimation (with MA60) |
+| HSL_MC66 | bordered ordering |
+| HSL_MC79 | structural probe (`-solmed probe`) |
+| HSL_MP48 | parallel bordered solve (SBBD) |
+
+**Note**: the staged decks are checksum-pinned to the verified snapshot
+(libHSL 2026.8.4); the build fails loudly if a newer snapshot changes any
+package the solver uses, so that the change can be reviewed first.
 
 ### Linux-Specific Requirements
 
@@ -66,20 +74,14 @@ Linux users **must** configure Docker to run without `sudo`:
 # Clone repository
 git clone --depth 1 https://github.com/matthewcantele/teems-solver.git
 cd teems-solver
-# Copy HSL tarballs into the empty hsl/ directory
+# Copy the libHSL source tarball into the empty hsl/ directory
 ```
 
 ```bash
 # Expedited build (~5 minutes)
 docker build --pull \
   -t teems:latest \
-  --build-arg PATH_HSL_MA48="hsl/ma48-2.2.0.tar.gz" \
-  --build-arg PATH_HSL_MA51="hsl/ma51-1.0.0.tar.gz" \
-  --build-arg PATH_HSL_MA60="hsl/ma60-1.2.0.tar.gz" \
-  --build-arg PATH_HSL_MC66="hsl/hsl_mc66-2.2.1.tar.gz" \
-  --build-arg PATH_HSL_MC71="hsl/mc71-1.0.0.tar.gz" \
-  --build-arg PATH_HSL_MC79="hsl/hsl_mc79-1.1.1.tar.gz" \
-  --build-arg PATH_HSL_MP48="hsl/hsl_mp48-2.1.1.tar.gz" \
+  --build-arg PATH_LIBHSL="hsl/libHSL.v2026.8.4.tar.gz" \
   -f ./docker/expedited_build/Dockerfile \
   .
 ```
@@ -100,9 +102,9 @@ docker run hello-world
 
 ### HSL Libraries
 
-1. Visit [HSL](https://www.hsl.rl.ac.uk/) and request the required libraries
-2. Download the specific versions listed in [Prerequisites](#required-hsl-libraries)
-3. Keep the downloaded `.tar.gz` files in their original format
+1. Visit the [STFC licensing portal](https://licences.stfc.ac.uk) and request **libHSL**
+2. Download the **source code tarball** (`libHSL.v<version>.tar.gz`)
+3. Keep the downloaded `.tar.gz` file in its original format
 
 ### Build Options
 
@@ -122,19 +124,16 @@ cd teems-solver
 
 #### Step 2: Prepare HSL Libraries
 
-Copy your HSL library tarballs into the `hsl/` directory.
+Copy the libHSL source tarball into the `hsl/` directory.
 
 The `hsl/` directory should contain:
 ```
 hsl/
-├── ma48-2.2.0.tar.gz
-├── ma51-1.0.0.tar.gz
-├── ma60-1.2.0.tar.gz
-├── mc71-1.0.0.tar.gz
-├── hsl_mc66-2.2.1.tar.gz
-├── hsl_mc79-1.1.1.tar.gz
-└── hsl_mp48-2.1.1.tar.gz
+└── libHSL.v2026.8.4.tar.gz
 ```
+
+(Individual per-package HSL tarballs are no longer a supported input;
+the build stops with a pointer to these instructions if given one.)
 
 #### Step 3: Build Docker Image
 
@@ -145,13 +144,7 @@ Pulls the pre-built base image (`matthewcantele/teems_base:latest`) from Dockerh
 ```bash
 docker build --pull \
   -t teems:latest \
-  --build-arg PATH_HSL_MA48="hsl/ma48-2.2.0.tar.gz" \
-  --build-arg PATH_HSL_MA51="hsl/ma51-1.0.0.tar.gz" \
-  --build-arg PATH_HSL_MA60="hsl/ma60-1.2.0.tar.gz" \
-  --build-arg PATH_HSL_MC66="hsl/hsl_mc66-2.2.1.tar.gz" \
-  --build-arg PATH_HSL_MC71="hsl/mc71-1.0.0.tar.gz" \
-  --build-arg PATH_HSL_MC79="hsl/hsl_mc79-1.1.1.tar.gz" \
-  --build-arg PATH_HSL_MP48="hsl/hsl_mp48-2.1.1.tar.gz" \
+  --build-arg PATH_LIBHSL="hsl/libHSL.v2026.8.4.tar.gz" \
   -f ./docker/expedited_build/Dockerfile \
   .
 ```
@@ -168,13 +161,7 @@ Compiles all dependencies (MPICH, PETSc, HSL, solver) from source on a `debian:b
 
 ```bash
 docker build -t teems:latest \
-  --build-arg PATH_HSL_MA48="hsl/ma48-2.2.0.tar.gz" \
-  --build-arg PATH_HSL_MA51="hsl/ma51-1.0.0.tar.gz" \
-  --build-arg PATH_HSL_MA60="hsl/ma60-1.2.0.tar.gz" \
-  --build-arg PATH_HSL_MC66="hsl/hsl_mc66-2.2.1.tar.gz" \
-  --build-arg PATH_HSL_MC71="hsl/mc71-1.0.0.tar.gz" \
-  --build-arg PATH_HSL_MC79="hsl/hsl_mc79-1.1.1.tar.gz" \
-  --build-arg PATH_HSL_MP48="hsl/hsl_mp48-2.1.1.tar.gz" \
+  --build-arg PATH_LIBHSL="hsl/libHSL.v2026.8.4.tar.gz" \
   -f ./docker/full_build/Dockerfile \
   .
 ```

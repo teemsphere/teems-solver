@@ -2,25 +2,33 @@
 
 The solver is built inside a container based on `matthewcantele/teems_base`
 (Debian + MPICH + PETSc under `/opt/teems-solver/lib`). The proprietary HSL
-packages (MA48, MA51, MC66, MC79, MP48) are supplied as tarballs at image
-build time; see `docker/expedited_build/Dockerfile` for the canonical flow:
+packages (MA48, MA51, MA60, MC71, MC66, MC79, MP48) are supplied as a single
+**libHSL** source snapshot (`libHSL.v<version>.tar.gz` from
+https://licences.stfc.ac.uk) at image build time; see
+`docker/expedited_build/Dockerfile` for the canonical flow:
 
-1. Build the HSL libraries that need a library build — MA48, MA51, MP48
-   (`autoreconf && configure && make`). MP48 must be built with `make`
-   **serially** — its Fortran module dependencies break under `make -j`.
-   MC66 and MC79 are compiled straight into the solver from staged
-   sources and need no library build.
-2. Stage `hsl_mp48d.f90`, `ddeps.f`, and `hsl_mp01.mod` from the MP48 build
-   into `src/`, plus `hsl_mc66d.f90` and `ddeps90.f90` from MC66, plus
-   `hsl_mc79i.f90`, `hsl_mc79i_ciface.f90` (F95 core + its C interface)
-   and `include/hsl_mc79i.h` from MC79 (integer-only, dependency-free —
-   the MC69 companion sources in its tarball are not used).
-3. Run `./mp48_mod.sh`, which applies `patches/*.patch` to the staged
+1. `docker/stage_hsl.sh` stages the per-package sources out of the libHSL
+   snapshot: the main decks are copied and the historical `ddeps` bundles
+   are reproduced by concatenating the individual dependency decks (the
+   recipes are byte-exact against the original per-package tarballs).
+   Every deck used is checksum-pinned to the verified snapshot (2026.8.4);
+   a snapshot that changes any used deck fails the build until it has been
+   re-verified and its checksums recorded in `stage_hsl.sh`.
+2. Build the two dynamically linked libraries — `libma48.so`, `libma51.so`
+   (a direct `gfortran -shared` of deck + deps; same flags, soname, and
+   `.libs/` layout the old autotools build produced) — and compile
+   `common90.f90` (HSL_MP01) with `mpif90` for its module file.
+3. Stage `hsl_mp48d.f90`, `ddeps.f`, and `hsl_mp01.mod` into `src/`, plus
+   `hsl_mc66d.f90` and `ddeps90.f90` from MC66, plus `hsl_mc79i.f90`,
+   `hsl_mc79i_ciface.f90` (F95 core + its C interface) and
+   `include/hsl_mc79i.h` from MC79 (integer-only, dependency-free), plus
+   `ma60d.f`, `mc71d.f`, and `fd15d.f` for `-condest`.
+4. Run `./mp48_mod.sh`, which applies `patches/*.patch` to the staged
    sources (64-bit work arrays; MA48/MA50/MC13/MC21/MC29/MC59/MC71 entry
    points renamed to `Z*` so the patched static copies cannot clash with
    the dynamically linked libma48/libma51). `patch --forward` fails loudly
    if the upstream HSL sources ever drift.
-4. `make` in `src/` produces the `teems-solver` binary.
+5. `make` in `src/` produces the `teems-solver` binary.
 
 ## Makefile knobs
 

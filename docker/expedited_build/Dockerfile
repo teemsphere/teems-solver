@@ -4,55 +4,35 @@
 ARG BASE_IMAGE=matthewcantele/teems_base:latest
 FROM ${BASE_IMAGE} AS builder
 
-ARG PATH_HSL_MA48
-ARG PATH_HSL_MA51
-ARG PATH_HSL_MA60
-ARG PATH_HSL_MC66
-ARG PATH_HSL_MC71
-ARG PATH_HSL_MC79
-ARG PATH_HSL_MP48
+ARG PATH_LIBHSL
 ARG BUILD_DIR=/opt/teems-solver
 
-COPY ${PATH_HSL_MA48} ${BUILD_DIR}/hsl/ma48.tar.gz
-COPY ${PATH_HSL_MA51} ${BUILD_DIR}/hsl/ma51.tar.gz
-COPY ${PATH_HSL_MA60} ${BUILD_DIR}/hsl/ma60.tar.gz
-COPY ${PATH_HSL_MC66} ${BUILD_DIR}/hsl/mc66.tar.gz
-COPY ${PATH_HSL_MC71} ${BUILD_DIR}/hsl/mc71.tar.gz
-COPY ${PATH_HSL_MC79} ${BUILD_DIR}/hsl/mc79.tar.gz
-COPY ${PATH_HSL_MP48} ${BUILD_DIR}/hsl/mp48.tar.gz
+COPY ${PATH_LIBHSL} ${BUILD_DIR}/hsl/libHSL.tar.gz
+COPY docker/stage_hsl.sh ${BUILD_DIR}/hsl/stage_hsl.sh
 # Overwrite the src snapshot baked into teems_base with the current tree;
 # without this the image silently ships stale solver code.
 COPY ./src ${BUILD_DIR}/src
 
 RUN ARCH_FLAGS="$(cat ${BUILD_DIR}/archflags 2>/dev/null || true)" \
-    && mkdir -p ${BUILD_DIR}/LICENSES/hsl \
-    && mkdir -p ${BUILD_DIR}/lib/ma48 \
-    && tar xfz ${BUILD_DIR}/hsl/ma48.tar.gz --strip-components=1 -C ${BUILD_DIR}/lib/ma48 \
-    && cp ${BUILD_DIR}/lib/ma48/LICENCE ${BUILD_DIR}/LICENSES/hsl \
-    && mkdir -p ${BUILD_DIR}/lib/ma51 \
-    && tar xfz ${BUILD_DIR}/hsl/ma51.tar.gz --strip-components=1 -C ${BUILD_DIR}/lib/ma51 \
-    && mkdir -p ${BUILD_DIR}/lib/ma60 \
-    && tar xfz ${BUILD_DIR}/hsl/ma60.tar.gz --strip-components=1 -C ${BUILD_DIR}/lib/ma60 \
-    && mkdir -p ${BUILD_DIR}/lib/mc71 \
-    && tar xfz ${BUILD_DIR}/hsl/mc71.tar.gz --strip-components=1 -C ${BUILD_DIR}/lib/mc71 \
-    && mkdir -p ${BUILD_DIR}/lib/mc66 \
-    && tar xfz ${BUILD_DIR}/hsl/mc66.tar.gz --strip-components=1 -C ${BUILD_DIR}/lib/mc66 \
-    && mkdir -p ${BUILD_DIR}/lib/mc79 \
-    && tar xfz ${BUILD_DIR}/hsl/mc79.tar.gz --strip-components=1 -C ${BUILD_DIR}/lib/mc79 \
-    && mkdir -p ${BUILD_DIR}/lib/mp48 \
-    && tar xfz ${BUILD_DIR}/hsl/mp48.tar.gz --strip-components=1 -C ${BUILD_DIR}/lib/mp48 \
-    && cd ${BUILD_DIR}/lib/ma48 \
-    && autoreconf -fi \
-    && ./configure CFLAGS="-O2 $ARCH_FLAGS" FFLAGS="-O2 $ARCH_FLAGS" FCFLAGS="-O2 $ARCH_FLAGS" \
-    && make \
-    && cd ${BUILD_DIR}/lib/ma51 \
-    && autoreconf -fi \
-    && ./configure CFLAGS="-O2 $ARCH_FLAGS" FFLAGS="-O2 $ARCH_FLAGS" FCFLAGS="-O2 $ARCH_FLAGS" \
-    && make \
-    && cd ${BUILD_DIR}/lib/mp48 \
-    && autoreconf -fi \
-    && ./configure FFLAGS="-fallow-argument-mismatch -O2 $ARCH_FLAGS" FCFLAGS="-fallow-argument-mismatch -O2 $ARCH_FLAGS" \
-    && make \
+    # HSL — staged from a single libHSL source snapshot; stage_hsl.sh
+    # reconstructs the historical per-package layout from checksum-pinned
+    # decks (see docker/stage_hsl.sh) and installs LICENSES/hsl
+    && bash ${BUILD_DIR}/hsl/stage_hsl.sh ${BUILD_DIR}/hsl/libHSL.tar.gz ${BUILD_DIR} \
+    # MA48/MA51 shared libraries (previously autotools/libtool; same
+    # sources, same flags, same soname and .libs layout — double-precision
+    # decks only: the solver references no single-precision entries)
+    && mkdir -p ${BUILD_DIR}/lib/ma48/src/.libs ${BUILD_DIR}/lib/ma51/src/.libs \
+    && cd ${BUILD_DIR}/lib/ma48/src \
+    && gfortran -O2 $ARCH_FLAGS -fPIC -shared -Wl,-soname,libma48.so.0 \
+           -o .libs/libma48.so.0.0.0 ma48d.f ddeps.f \
+    && ln -sf libma48.so.0.0.0 .libs/libma48.so \
+    && cd ${BUILD_DIR}/lib/ma51/src \
+    && gfortran -O2 $ARCH_FLAGS -fPIC -shared -Wl,-soname,libma51.so.0 \
+           -o .libs/libma51.so.0.0.0 ma51d.f ddeps.f \
+    && ln -sf libma51.so.0.0.0 .libs/libma51.so \
+    # hsl_mp01 module (previously a product of the MP48 autotools build)
+    && cd ${BUILD_DIR}/lib/mp48/src \
+    && ${BUILD_DIR}/lib/mpi/bin/mpif90 -fallow-argument-mismatch -O2 $ARCH_FLAGS -c common90.f90 \
     && cp ${BUILD_DIR}/lib/mp48/src/hsl_mp48d.f90 ${BUILD_DIR}/src \
     && cp ${BUILD_DIR}/lib/mp48/src/ddeps.f ${BUILD_DIR}/src \
     && cp ${BUILD_DIR}/lib/mp48/src/hsl_mp01.mod ${BUILD_DIR}/src \
@@ -64,13 +44,11 @@ RUN ARCH_FLAGS="$(cat ${BUILD_DIR}/archflags 2>/dev/null || true)" \
     && cp ${BUILD_DIR}/lib/mc79/src/hsl_mc79i.f90 ${BUILD_DIR}/src \
     && cp ${BUILD_DIR}/lib/mc79/src/hsl_mc79i_ciface.f90 ${BUILD_DIR}/src \
     && cp ${BUILD_DIR}/lib/mc79/include/hsl_mc79i.h ${BUILD_DIR}/src \
-    # -condest diagnostics (MA60/MC71): sources compile into the solver;
-    # FD15AD is extracted alone -- ma60's ddeps.f bundles duplicate
-    # MA48/MC59/MC71 and must never be compiled whole
+    # -condest diagnostics (MA60/MC71/FD15): sources compile into the
+    # solver; FD15 comes as its own deck from libHSL
     && cp ${BUILD_DIR}/lib/ma60/src/ma60d.f ${BUILD_DIR}/src \
     && cp ${BUILD_DIR}/lib/mc71/src/mc71d.f ${BUILD_DIR}/src \
-    && awk '/DOUBLE PRECISION FUNCTION FD15AD/{f=1} f&&/^      SUBROUTINE/{exit} f' \
-       ${BUILD_DIR}/lib/ma60/src/ddeps.f > ${BUILD_DIR}/src/fd15d.f \
+    && cp ${BUILD_DIR}/lib/fd15/fd15d.f ${BUILD_DIR}/src \
     # final build — solver objects at the same ISA level as the base libs
     && cd ${BUILD_DIR}/src \
     && make OPT="-Ofast $ARCH_FLAGS" teems-solver teems-solver-f64 \
