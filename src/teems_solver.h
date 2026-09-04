@@ -69,7 +69,7 @@ typedef float store_real;
 enum matrix_method { MM_LU=0, MM_SBBD=1, MM_DBBD=2, MM_NDBBD=3 };
 /* -solmed solution method (GEMPACK manual; Pearson 1991; Schiffmann
    2022 / GEMPACK 26.5 for the Runge-Kutta flavors) */
-enum solution_method { SM_GRAGG=1, SM_EULER=2, SM_RK2=3, SM_RK4=4, SM_BOSHA32=5, SM_DOPRI54=6, SM_JOHANSEN=10, SM_PROBE=100 };
+enum solution_method { SM_GRAGG=1, SM_EULER=2, SM_RK2=3, SM_RK4=4, SM_BOSHA32=5, SM_DOPRI54=6, SM_HEUN=7, SM_JOHANSEN=10, SM_PROBE=100 };
 /* array_def.gltype: bound imposed on levels values */
 enum bound_type { BT_NONE=0, BT_GE=1, BT_GT=2, BT_LE=3, BT_LT=4 };
 /* formula_op.Oper: compiled formula operation */
@@ -266,6 +266,40 @@ extern int teems_assertions_mode;
    update executors and later formulas passes */
 extern int teems_range_test_initial;
 extern int teems_range_test_updated;
+/* Runge-Kutta run controls (main parses -rkchart/-rknorm/-rkctrl/
+   -rk_h0/-rkguard; solve_rk.c reads them) */
+enum rk_chart_kind { RK_CHART_LOG=0, RK_CHART_PERCENT=1 };
+enum rk_norm_kind { RK_NORM_MAX=0, RK_NORM_RMS=1 };
+enum rk_ctrl_kind { RK_CTRL_STD=0, RK_CTRL_PI=1 };
+enum rk_scope_kind { RK_SCOPE_PCT=0, RK_SCOPE_ALL=1 };
+typedef struct {
+  int chart;        /* rk_chart_kind */
+  int norm;         /* rk_norm_kind: error-metric norm for the accept test */
+  int ctrl;         /* rk_ctrl_kind: step-size controller */
+  int scope;        /* rk_scope_kind: which elements steer the accept test */
+  double h0;        /* initial step length (0 = 1/step1 capped by the initial gradient) */
+  double guard;     /* log chart: |log(level/level0)| beyond which a stage is rejected */
+} rk_options;
+/* Runge-Kutta run record (solve_rk.c fills, main patches into stats.json) */
+typedef struct {
+  long stage_solves, stage_solves_reused, steps;
+  long rejects_accuracy, rejects_crossed, rejects_range, rejects_assert, rejects_guard, rejects_singular;
+  double h_min, h_max, worst_step_metric, worst_est_metric;
+  int chart;
+} teems_rk_stats_t;
+extern teems_rk_stats_t teems_rk_stats;
+/* set while a Runge-Kutta stage state is being realized under -adaptive
+   yes: formula.c counts range-test and assertion violations into the
+   two counters (and prints them as warnings) instead of aborting, so
+   the driver can retry the step (manual 26.5.1 triggers 2 and 3) */
+extern int teems_rk_stage_checks;
+extern long teems_check_viol_range;
+extern long teems_check_viol_assert;
+/* nonzero while an LU stage solve may fail softly (a singular stage
+   state under adaptive Runge-Kutta): the kernel returns and sets
+   teems_stage_solve_failed instead of aborting */
+extern int teems_rk_softfail;
+extern int teems_stage_solve_failed;
 /* (parameter)-qualified coefficients, parallel to coefs[] (F2) */
 extern bool *teems_coef_is_param;
 /* second range bound (one lower + one upper per declaration, manual
@@ -703,7 +737,7 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A,PetscInt dnz,PetscInt* 
    2=accuracy-only; epstol/retryadj/maxretries tune the embedded
    controller. accmetric2 receives the per-element cumulative error
    metrics (embedded flavors only; main writes them to the .acc file). */
-bool solve_rk(PetscBool nohsl,PetscInt VecSize,PetscInt dnz,PetscInt* dnnz,PetscInt onz,PetscInt* onnz,PetscInt dnzB,PetscInt* dnnzB,PetscInt onzB,PetscInt* onnzB,Vec *vece1,PetscInt rank,PetscInt rank_hsl,PetscInt mpisize,char* tabfile, char *commsyntax,set_def *sets,dim_t nset, set_element *set_elems, array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar, elem_value **elem_vals2,offset_t ncofele,offset_t nvarele,closure_entry **closure_vals2,offset_t alltimeset,offset_t allregset,offset_t nintraeq,dim_t matsol,PetscInt Istart,PetscInt Iend,offset_t nreg, offset_t ntime, offset_t *eq_addr, offset_t ndblock, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laDi,dim_t laD,PetscReal cntl3,PetscReal cntl6,dim_t nesteddbbd,int localsize,PetscInt *ndbbddrank1,fortran_int* indata,dim_t mc66,fortran_int *ptx,struct timeval begintime,MPI_Fint fcomm,int solmethod,int adaptive,double epstol,double retryadj,int maxretries,solve_real **xcf2,solve_real **accmetric2);
+bool solve_rk(PetscBool nohsl,PetscInt VecSize,PetscInt dnz,PetscInt* dnnz,PetscInt onz,PetscInt* onnz,PetscInt dnzB,PetscInt* dnnzB,PetscInt onzB,PetscInt* onnzB,Vec *vece1,PetscInt rank,PetscInt rank_hsl,PetscInt mpisize,char* tabfile, char *commsyntax,set_def *sets,dim_t nset, set_element *set_elems, array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar, elem_value **elem_vals2,offset_t ncofele,offset_t nvarele,closure_entry **closure_vals2,offset_t alltimeset,offset_t allregset,offset_t nintraeq,dim_t matsol,PetscInt Istart,PetscInt Iend,offset_t nreg, offset_t ntime, offset_t *eq_addr, offset_t ndblock, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laDi,dim_t laD,PetscReal cntl3,PetscReal cntl6,dim_t nesteddbbd,int localsize,PetscInt *ndbbddrank1,fortran_int* indata,dim_t mc66,fortran_int *ptx,struct timeval begintime,MPI_Fint fcomm,int solmethod,int adaptive,double epstol,double retryadj,int maxretries,rk_options *rko,solve_real **xcf2,solve_real **accmetric2);
 /* solve_rk.c -- C2 complementarity approximate run (design doc
    section 8; manual 51.1.2/51.7.3): single-solution forward Euler
    with per-step state evaluation, the del_comp@ Newton correction

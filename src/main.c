@@ -85,6 +85,8 @@ typedef struct {
   long subints;
   int adaptive;                 /* 0 fixed, 1 retry-on-check, 2 accuracy-only */
   double epstol;
+  int rk_chart, rk_norm, rk_ctrl, rk_scope;
+  double rk_h0;
   int maxretries;
   double retryadj;
   long laA, laDi, laD;
@@ -157,7 +159,7 @@ static void ordering_stats_write(cmf_file_entry *iodata, int niodata, int noutda
   {
     static const char *mode_names[] = {"off","warn","fatal"};
     dim_t frchk=0;
-    int isrk=(strcmp(solmed,"RK2")==0||strcmp(solmed,"RK4")==0||strcmp(solmed,"BoSha32")==0||strcmp(solmed,"DoPri54")==0);
+    int isrk=(strcmp(solmed,"RK2")==0||strcmp(solmed,"Heun")==0||strcmp(solmed,"RK4")==0||strcmp(solmed,"BoSha32")==0||strcmp(solmed,"DoPri54")==0);
     PetscOptionsGetInt(NULL,NULL,"-fastrefac",&frchk,NULL); /* post force-clear = effective */
     fprintf(fp,"  \"options\": {\n");
     if(strcmp(solmed,"Gragg")==0||strcmp(solmed,"Euler")==0)
@@ -166,8 +168,8 @@ static void ordering_stats_write(cmf_file_entry *iodata, int niodata, int noutda
       fprintf(fp,"    \"steps\": null,\n");
     else fprintf(fp,"    \"steps\": [%d],\n",steps1);
     fprintf(fp,"    \"subintervals\": %ld,\n",ropt->subints);
-    if(isrk)fprintf(fp,"    \"adaptive\": %d,\n    \"eps_tolerance\": %g,\n    \"max_retries\": %d,\n    \"retry_adjust\": %g,\n",ropt->adaptive,ropt->epstol,ropt->maxretries,ropt->retryadj);
-    else fprintf(fp,"    \"adaptive\": null,\n    \"eps_tolerance\": null,\n    \"max_retries\": null,\n    \"retry_adjust\": null,\n");
+    if(isrk)fprintf(fp,"    \"adaptive\": %d,\n    \"eps_tolerance\": %g,\n    \"max_retries\": %d,\n    \"retry_adjust\": %g,\n    \"rk_chart\": \"%s\",\n    \"rk_norm\": \"%s\",\n    \"rk_controller\": \"%s\",\n    \"rk_scope\": \"%s\",\n    \"rk_h0\": %g,\n",ropt->adaptive,ropt->epstol,ropt->maxretries,ropt->retryadj,ropt->rk_chart==RK_CHART_LOG?"log":"percent",ropt->rk_norm==RK_NORM_RMS?"rms":"max",ropt->rk_ctrl==RK_CTRL_PI?"pi":"std",ropt->rk_scope==RK_SCOPE_ALL?"all":"pct",ropt->rk_h0);
+    else fprintf(fp,"    \"adaptive\": null,\n    \"eps_tolerance\": null,\n    \"max_retries\": null,\n    \"retry_adjust\": null,\n    \"rk_chart\": null,\n    \"rk_norm\": null,\n    \"rk_controller\": null,\n    \"rk_scope\": null,\n    \"rk_h0\": null,\n");
     fprintf(fp,"    \"laA\": %ld,\n    \"laDi\": %ld,\n    \"laD\": %ld,\n",ropt->laA,ropt->laDi,ropt->laD);
     fprintf(fp,"    \"max_threads\": %d,\n",(int)max_threads);
     fprintf(fp,"    \"store_precision\": \"%s\",\n",TEEMS_STORE_PRECISION);
@@ -240,6 +242,50 @@ static void stats_la_used_patch(cmf_file_entry *iodata, int niodata, int noutdat
     return;
   }
   fprintf(fp,"%s,\n  \"la_used\": {\"laA\": %ld, \"laDi\": %ld, \"laD\": %ld}\n}\n",buf,laA_used,laDi_used,laD_used);
+  fclose(fp);
+  free(buf);
+}
+
+/* Runge-Kutta run record: stage-solve economy and the retry census,
+   patched into stats.json like la_used */
+static void stats_rk_patch(cmf_file_entry *iodata, int niodata, int noutdata, int nsoldata) {
+  char statspath[TABREADLINE+16];
+  int i;
+  for (i=niodata+noutdata; i<niodata+noutdata+nsoldata; i++) {
+    if (strcmp("solfiles",iodata[i].logname)==0)break;
+  }
+  if(i<niodata+noutdata+nsoldata)strcpy(statspath,iodata[i].filname);
+  else strcpy(statspath,"solution");
+  strcat(statspath,".stats.json");
+  FILE *fp=fopen(statspath,"r");
+  if (fp==NULL)return;
+  fseek(fp,0,SEEK_END);
+  long len=ftell(fp);
+  fseek(fp,0,SEEK_SET);
+  char *buf=(char *) malloc (len+1);
+  size_t rd=fread(buf,1,len,fp);
+  fclose(fp);
+  if((long)rd!=len) {
+    free(buf);
+    return;
+  }
+  buf[len]='\0';
+  char *end=strrchr(buf,'}');
+  if(end==NULL) {
+    free(buf);
+    return;
+  }
+  *end='\0';
+  fp=fopen(statspath,"w");
+  if (fp==NULL) {
+    free(buf);
+    return;
+  }
+  fprintf(fp,"%s,\n  \"runge_kutta\": {\"steps\": %ld, \"stage_solves\": %ld, \"stage_solves_reused\": %ld, \"rejects_accuracy\": %ld, \"rejects_crossed\": %ld, \"rejects_range\": %ld, \"rejects_assertion\": %ld, \"rejects_guard\": %ld, \"rejects_singular\": %ld, \"h_min\": %g, \"h_max\": %g, \"worst_step_metric\": %g, \"worst_estimated_metric\": %g}\n}\n",
+          buf,teems_rk_stats.steps,teems_rk_stats.stage_solves,teems_rk_stats.stage_solves_reused,
+          teems_rk_stats.rejects_accuracy,teems_rk_stats.rejects_crossed,teems_rk_stats.rejects_range,
+          teems_rk_stats.rejects_assert,teems_rk_stats.rejects_guard,teems_rk_stats.rejects_singular,
+          teems_rk_stats.h_min,teems_rk_stats.h_max,teems_rk_stats.worst_step_metric,teems_rk_stats.worst_est_metric);
   fclose(fp);
   free(buf);
 }
@@ -1012,13 +1058,14 @@ int main(int argc,char **args) {
   if(strcmp(solmed,"Gragg")==0)solmethod=SM_GRAGG;
   if(strcmp(solmed,"Euler")==0)solmethod=SM_EULER;
   if(strcmp(solmed,"RK2")==0)solmethod=SM_RK2;
+  if(strcmp(solmed,"Heun")==0)solmethod=SM_HEUN;
   if(strcmp(solmed,"RK4")==0)solmethod=SM_RK4;
   if(strcmp(solmed,"BoSha32")==0)solmethod=SM_BOSHA32;
   if(strcmp(solmed,"DoPri54")==0)solmethod=SM_DOPRI54;
   if(strcmp(solmed,"Johansen")==0)solmethod=SM_JOHANSEN;
   if(strcmp(solmed,"probe")==0)solmethod=SM_PROBE;
   if(solmethod==0) {
-    if(rank==0)printf("Error: unknown -solmed %s (valid: Gragg, Euler, RK2, RK4, BoSha32, DoPri54, Johansen, probe)\n",solmed);
+    if(rank==0)printf("Error: unknown -solmed %s (valid: Gragg, Euler, RK2, Heun, RK4, BoSha32, DoPri54, Johansen, probe)\n",solmed);
     PetscFinalize();
     return 1;
   }
@@ -1051,7 +1098,7 @@ int main(int argc,char **args) {
       teems_condest=0;
     }
   }
-  bool isrk=(solmethod==SM_RK2||solmethod==SM_RK4||solmethod==SM_BOSHA32||solmethod==SM_DOPRI54);
+  bool isrk=(solmethod==SM_RK2||solmethod==SM_HEUN||solmethod==SM_RK4||solmethod==SM_BOSHA32||solmethod==SM_DOPRI54);
   bool isrk_embedded=(solmethod==SM_BOSHA32||solmethod==SM_DOPRI54);
   /* Runge-Kutta controls (GEMPACK 26.5.1/26.5.2): -adaptive
      no|yes|accuracy-only (embedded flavors only; accuracy-only skips
@@ -1059,6 +1106,7 @@ int main(int argc,char **args) {
      bound, -retryadj/-maxretries the check-failure retry policy */
   int adaptive=0,maxretries=3;
   PetscReal epstol=0.1,retryadj=0.5;
+  rk_options rko={RK_CHART_LOG,RK_NORM_MAX,RK_CTRL_STD,RK_SCOPE_PCT,0.0,log(1e30)};
   {
     char adaptbuf[NAMESIZE];
     PetscOptionsGetString(NULL,NULL,"-adaptive",adaptbuf,NAMESIZE,&flg);
@@ -1080,6 +1128,75 @@ int main(int argc,char **args) {
     PetscOptionsGetReal(NULL,NULL,"-epstol",&epstol,NULL);
     PetscOptionsGetReal(NULL,NULL,"-retryadj",&retryadj,NULL);
     PetscOptionsGetInt(NULL,NULL,"-maxretries",&maxretries,NULL);
+    /* -rkchart log|percent: the state chart the stages combine in (log
+       levels: positivity unconditional, Munthe-Kaas 1999; percent: the
+       GEMPACK-orientation arithmetic); -rknorm max|rms: the per-step
+       error-metric norm the accept test uses; -rkctrl std|pi: the
+       step-size controller; -rk_h0: initial step length (default 1/step1
+       capped by the initial gradient); -rkguard: log-chart level ratio
+       beyond which a stage is rejected */
+    {
+      char optbuf[NAMESIZE];
+      PetscReal rtmp=0;
+      PetscOptionsGetString(NULL,NULL,"-rkchart",optbuf,NAMESIZE,&flg);
+      if(flg) {
+        if(strcmp(optbuf,"log")==0)rko.chart=RK_CHART_LOG;
+        else if(strcmp(optbuf,"percent")==0)rko.chart=RK_CHART_PERCENT;
+        else {
+          if(rank==0)printf("Error: unknown -rkchart %s (valid: log, percent)\n",optbuf);
+          PetscFinalize();
+          return 1;
+        }
+      }
+      PetscOptionsGetString(NULL,NULL,"-rknorm",optbuf,NAMESIZE,&flg);
+      if(flg) {
+        if(strcmp(optbuf,"max")==0)rko.norm=RK_NORM_MAX;
+        else if(strcmp(optbuf,"rms")==0)rko.norm=RK_NORM_RMS;
+        else {
+          if(rank==0)printf("Error: unknown -rknorm %s (valid: max, rms)\n",optbuf);
+          PetscFinalize();
+          return 1;
+        }
+      }
+      PetscOptionsGetString(NULL,NULL,"-rkctrl",optbuf,NAMESIZE,&flg);
+      if(flg) {
+        if(strcmp(optbuf,"std")==0)rko.ctrl=RK_CTRL_STD;
+        else if(strcmp(optbuf,"pi")==0)rko.ctrl=RK_CTRL_PI;
+        else {
+          if(rank==0)printf("Error: unknown -rkctrl %s (valid: std, pi)\n",optbuf);
+          PetscFinalize();
+          return 1;
+        }
+      }
+      PetscOptionsGetString(NULL,NULL,"-rkscope",optbuf,NAMESIZE,&flg);
+      if(flg) {
+        if(strcmp(optbuf,"pct")==0)rko.scope=RK_SCOPE_PCT;
+        else if(strcmp(optbuf,"all")==0)rko.scope=RK_SCOPE_ALL;
+        else {
+          if(rank==0)printf("Error: unknown -rkscope %s (valid: pct, all)\n",optbuf);
+          PetscFinalize();
+          return 1;
+        }
+      }
+      PetscOptionsGetReal(NULL,NULL,"-rk_h0",&rtmp,&flg);
+      if(flg) {
+        if(rtmp<=0||rtmp>1) {
+          if(rank==0)printf("Error: -rk_h0 must lie in (0, 1] (got %g)\n",(double)rtmp);
+          PetscFinalize();
+          return 1;
+        }
+        rko.h0=(double)rtmp;
+      }
+      PetscOptionsGetReal(NULL,NULL,"-rkguard",&rtmp,&flg);
+      if(flg) {
+        if(rtmp<=1) {
+          if(rank==0)printf("Error: -rkguard must exceed 1 (a level ratio; got %g)\n",(double)rtmp);
+          PetscFinalize();
+          return 1;
+        }
+        rko.guard=log((double)rtmp);
+      }
+    }
     if(isrk) {
       if(steps1<1) {
         if(rank==0)printf("Error: -step1 must be at least 1 for Runge-Kutta methods (got %d)\n",steps1);
@@ -2197,6 +2314,11 @@ comp_accurate_reentry:
     ropt.cofdump=cofdump;
     ropt.subints=(long)subints;
     ropt.adaptive=(int)adaptive;
+    ropt.rk_chart=rko.chart;
+    ropt.rk_norm=rko.norm;
+    ropt.rk_ctrl=rko.ctrl;
+    ropt.rk_scope=rko.scope;
+    ropt.rk_h0=rko.h0;
     ropt.epstol=(double)epstol;
     ropt.maxretries=maxretries;
     ropt.retryadj=(double)retryadj;
@@ -2462,7 +2584,7 @@ comp_accurate_reentry:
 
   if(!comp_dispatch&&(solmethod==SM_GRAGG||solmethod==SM_EULER))solve_gragg(nohsl,VecSize,&A,dnz,dnnz,onz,onnz,&B,dnzB,dnnzB,onzB,onnzB,&vecb,&vece,rank,rank_hsl,mpisize,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,&elem_vals,ncofele+nvarele,ncofele,nvarele,&closure_vals,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,eq_addr,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,subints,fcomm,solmethod,&xcf);
 
-  if(!comp_dispatch&&isrk)solve_rk(nohsl,VecSize,dnz,dnnz,onz,onnz,dnzB,dnnzB,onzB,onnzB,&vece,rank,rank_hsl,mpisize,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,&elem_vals,ncofele,nvarele,&closure_vals,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,eq_addr,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,fcomm,solmethod,adaptive,(double)epstol,(double)retryadj,maxretries,&xcf,&accmetric);
+  if(!comp_dispatch&&isrk)solve_rk(nohsl,VecSize,dnz,dnnz,onz,onnz,dnzB,dnnzB,onzB,onnzB,&vece,rank,rank_hsl,mpisize,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,&elem_vals,ncofele,nvarele,&closure_vals,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,eq_addr,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,fcomm,solmethod,adaptive,(double)epstol,(double)retryadj,maxretries,&rko,&xcf,&accmetric);
 
   /* C3: after the accurate run, every component must sit in its
      approximate-run state with the variable inside its bounds
@@ -2527,10 +2649,12 @@ comp_accurate_reentry:
     if(xcf!=NULL)fwrite(xcf, sizeof(solve_real),nvarele, solution); /* probe runs have no solution; sol.bin stays empty */
     fclose(solution);
     if(accmetric!=NULL) {
-      /* embedded-RK cumulative error metrics, one double per variable
-         element in .bin order (GEMPACK's <sol>.acc equivalent) */
+      /* embedded-RK estimated error metrics, one double per variable
+         element in .bin order (the accumulated per-step embedded
+         estimate -- an indicator, not a bound; GEMPACK writes the same
+         quantity as <sol>.acc) */
       strcpy(solchar,tempchar);
-      strcat(solchar,".acc");
+      strcat(solchar,".est");
       logmsg(2,"solchar %s\n",solchar);
       if ( (solution = fopen(solchar, "wb")) == NULL ) {
         printf("Error: cannot open %s for writing\n",solchar);
@@ -2599,6 +2723,7 @@ comp_accurate_reentry:
     if(rank==0)stats_condest_patch(iodata,niodata,noutdata,nsoldata,
                                    cddmax[0],cddmax[1],cddmax[2],cdlsum[0],cdlsum[1]);
   }
+  if(isrk&&!comp_dispatch&&rank==0)stats_rk_patch(iodata,niodata,noutdata,nsoldata);
   /* PostSim foundation F3 (early Tier 0): after the solve, coefficient
      slots hold post-simulation (updated) values and xcf holds the
      composed solution; expose the solution to the formula engine and

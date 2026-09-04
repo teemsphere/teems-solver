@@ -441,6 +441,13 @@ void teems_onfail_abort_(void) {
   MPI_Abort(PETSC_COMM_WORLD,1);
 }
 
+/* Fortran entry: nonzero while a Runge-Kutta stage solve under adaptive
+   control may fail softly (the kernel returns its INFO(1) instead of
+   aborting; the driver retries the step) */
+int teems_softfail_(void) {
+  return teems_rk_softfail;
+}
+
 /* Fortran entry: CALL TEEMS_ONFAIL_DIAG(INFO(1)) before the failure
    aborts.  info1 is MA48's error code: only singularity-class failures
    get the (potentially expensive) matching — a workspace failure

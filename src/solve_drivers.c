@@ -250,6 +250,12 @@ void lu_grow_solve(Mat A,PetscInt VecSize,dim_t laA,solve_real *rhs,solve_real *
     free(irn);
     free(jcn);
     free(values);
+    if(insize[4]<0&&insize[4]!=-3) {
+      /* soft failure (singular stage state under adaptive Runge-Kutta):
+         hand the step back to the driver for a retry */
+      teems_stage_solve_failed=1;
+      return;
+    }
     if(insize[4]!=-3) {
       /* record what this step actually needed so the next one starts
          there instead of rediscovering it with a failed factorization */

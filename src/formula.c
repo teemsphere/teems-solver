@@ -2072,13 +2072,17 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
         }
 
         int glmode=IsIni?teems_range_test_initial:teems_range_test_updated;
+        if(teems_rk_stage_checks&&glmode==2)glmode=1;   /* RK stage state: warn and let the driver retry */
         if(glmode>0){
           int glviol=0;
           if(coefs[index].gltype>0)glviol|=coef_range_check(coefs,index,offset,varsize,elem_vals,glmode,coefs[index].gltype,coefs[index].glval);
           if(teems_coef_gltype2!=NULL&&teems_coef_gltype2[index]>0)glviol|=coef_range_check(coefs,index,offset,varsize,elem_vals,glmode,teems_coef_gltype2[index],teems_coef_glval2[index]);
           /* fatal only when requested (-range_test_* 2; manual
              25.4.4); the GEMPACK default is warn */
-          if(glviol&&glmode==2)MPI_Abort(PETSC_COMM_WORLD,1);
+          if(glviol) {
+            if(teems_rk_stage_checks)teems_check_viol_range++;
+            else if(glmode==2)MPI_Abort(PETSC_COMM_WORLD,1);
+          }
         }
         
         
@@ -2378,13 +2382,17 @@ offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_el
     free(ops);
 
         int glmode=teems_range_test_updated;
+        if(teems_rk_stage_checks&&glmode==2)glmode=1;   /* RK stage state: warn and let the driver retry */
         if(glmode>0){
           int glviol=0;
           if(coefs[index].gltype>0)glviol|=coef_range_check(coefs,index,offset,varsize,elem_vals,glmode,coefs[index].gltype,coefs[index].glval);
           if(teems_coef_gltype2!=NULL&&teems_coef_gltype2[index]>0)glviol|=coef_range_check(coefs,index,offset,varsize,elem_vals,glmode,teems_coef_gltype2[index],teems_coef_glval2[index]);
           /* fatal only when requested (-range_test_* 2; manual
              25.4.4); the GEMPACK default is warn */
-          if(glviol&&glmode==2)MPI_Abort(PETSC_COMM_WORLD,1);
+          if(glviol) {
+            if(teems_rk_stage_checks)teems_check_viol_range++;
+            else if(glmode==2)MPI_Abort(PETSC_COMM_WORLD,1);
+          }
         }
     
   }
@@ -2664,13 +2672,17 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
     free(ops);
 
         int glmode=teems_range_test_updated;
+        if(teems_rk_stage_checks&&glmode==2)glmode=1;   /* RK stage state: warn and let the driver retry */
         if(glmode>0){
           int glviol=0;
           if(coefs[index].gltype>0)glviol|=coef_range_check(coefs,index,offset,varsize,elem_vals,glmode,coefs[index].gltype,coefs[index].glval);
           if(teems_coef_gltype2!=NULL&&teems_coef_gltype2[index]>0)glviol|=coef_range_check(coefs,index,offset,varsize,elem_vals,glmode,teems_coef_gltype2[index],teems_coef_glval2[index]);
           /* fatal only when requested (-range_test_* 2; manual
              25.4.4); the GEMPACK default is warn */
-          if(glviol&&glmode==2)MPI_Abort(PETSC_COMM_WORLD,1);
+          if(glviol) {
+            if(teems_rk_stage_checks)teems_check_viol_range++;
+            else if(glmode==2)MPI_Abort(PETSC_COMM_WORLD,1);
+          }
         }
     
   }
@@ -3197,7 +3209,11 @@ offset_t assertions_execute(char *fname,set_def *sets,dim_t nset,set_element *se
       if(fails>shown)printf("%%%% (%d further failing elements not listed)\n",fails-shown);
       printf("Assertion '%s' does not hold.\n",(msg[0]!='\0')?msg:linecopy);
       total_fail+=fails;
-      if(mode==2) {
+      if(teems_rk_stage_checks) {
+        teems_check_viol_assert++;
+        printf("Warning: assertion failed at a Runge-Kutta stage state; the step will be retried\n");
+      }
+      else if(mode==2) {
         printf("Error: assertion failed (-assertions 1 downgrades this abort to a warning, -assertions 0 skips the checks)\n");
         MPI_Abort(PETSC_COMM_WORLD,1);
       }

@@ -1238,6 +1238,10 @@ SUBROUTINE SPEC48_SSOL2LA(INSIZE,IRN,JCN,VA,B,X)
   LOGICAL TRANS,checksol
   real(kind=DPC), pointer :: CNTL(:),RINFO(:),W(:),ERROR1(:),LOGDET!A(:),,R(:),C(:)!,RHS(:),SOL(:)
   integer, pointer :: ICNTL(:),INFO(:),IW(:),KEEP(:)!,JCN1(:),IRN1(:)
+  ! Runge-Kutta stage solves under adaptive control ask for a soft
+  ! failure (INSIZE(5) = INFO(1), no abort) so the driver can retry
+  ! the step at a smaller size instead of dying on a singular stage
+  INTEGER, EXTERNAL :: TEEMS_SOFTFAIL
   ! -condest (MA60/MC71 solve-quality diagnostics; active only when the
   ! LU wrappers gate it on -- this kernel also serves the DBBD interface)
   LOGICAL CONDEST_ON
@@ -1333,6 +1337,13 @@ call teems_apply_ma48u(CNTL)
   ! the analyse itself fails on structural singularity (INFO(1)=-5);
   ! previously unchecked, which corrupted the follow-on factorize
   IF (INFO(1).LT.0) THEN
+    IF (TEEMS_SOFTFAIL().NE.0) THEN
+      WRITE (6,'(A,I3,A)') 'Note: MA48A/AD failed with INFO(1) =',INFO(1),' at a Runge-Kutta stage state; the step will be retried'
+      INSIZE(5)=INFO(1)
+      deallocate(CNTL,RINFO,ERROR1,ICNTL,INFO,IW,KEEP)
+      IF (CONDEST_ON) deallocate(CIRN,CJCN,CVA,CB)
+      RETURN
+    END IF
     WRITE (6,'(A,I3)') 'Error STOP from MA48A/AD with INFO(1) =',INFO(1)
     CALL TEEMS_ONFAIL_DIAG(INFO(1))
     CALL TEEMS_ONFAIL_ABORT()

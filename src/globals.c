@@ -67,6 +67,12 @@ offset_t teems_comp_active = 0;
    accuracy), 2 = fatal */
 int teems_range_test_initial = 1;
 int teems_range_test_updated = 1;
+teems_rk_stats_t teems_rk_stats;
+int teems_rk_stage_checks = 0;
+long teems_check_viol_range = 0;
+long teems_check_viol_assert = 0;
+int teems_rk_softfail = 0;
+int teems_stage_solve_failed = 0;
 
 /* dual-class zerodivide (plan A1): scanner-tracked state + the
    GEMPACK-semantics switch (-gpzerodivide, default legacy) */
