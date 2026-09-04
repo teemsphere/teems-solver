@@ -87,6 +87,10 @@ long teems_laA_used = 0;
 long teems_laDi_used = 0;
 long teems_laD_used = 0;
 
+/* closure side arrays (6.16(b)); see closure_entry in teems_solver.h */
+unsigned char *teems_cl_flags = NULL;
+store_real *teems_cl_shock = NULL;
+
 /* phase resident-memory record (6.16(a)); see teems_solver.h */
 teems_rss_entry teems_rss[TEEMS_RSS_MAX];
 int teems_nrss = 0;

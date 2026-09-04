@@ -117,7 +117,7 @@ static void rk_stage_solve(PetscBool nohsl,PetscInt VecSize,PetscInt BSize,
   closure_entry *closure_vals,
   offset_t alltimeset,offset_t allregset,offset_t nintraeq,
   dim_t matsol,PetscInt Istart,PetscInt Iend,
-  offset_t nreg,offset_t ntime,offset_t *eq_addr,offset_t ndblock,
+  offset_t nreg,offset_t ntime,PetscInt *eq_addr,offset_t ndblock,
   offset_t *countvarintra1,offset_t *counteq,offset_t *counteqnoadd,
   offset_t *countvarintra1s,offset_t *counteqs,offset_t *counteqnoadds,
   dim_t laA,dim_t laDi,dim_t laD,PetscReal cntl3,PetscReal cntl6,
@@ -426,7 +426,7 @@ static const char *rk_fail_name(int code) {
   return "a check failed";
 }
 
-bool solve_rk(PetscBool nohsl,PetscInt VecSize,PetscInt dnz,PetscInt* dnnz,PetscInt onz,PetscInt* onnz,PetscInt dnzB,PetscInt* dnnzB,PetscInt onzB,PetscInt* onnzB,Vec *vece1,PetscInt rank,PetscInt rank_hsl,PetscInt mpisize,char* tabfile, char *commsyntax,set_def *sets,dim_t nset, set_element *set_elems, array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar, elem_value **elem_vals2,offset_t ncofele,offset_t nvarele,closure_entry **closure_vals2,offset_t alltimeset,offset_t allregset,offset_t nintraeq,dim_t matsol,PetscInt Istart,PetscInt Iend,offset_t nreg, offset_t ntime, offset_t *eq_addr, offset_t ndblock, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laDi,dim_t laD,PetscReal cntl3,PetscReal cntl6,dim_t nesteddbbd,int localsize,PetscInt *ndbbddrank1,fortran_int* indata,dim_t mc66,fortran_int *ptx,struct timeval begintime,MPI_Fint fcomm,int solmethod,int adaptive,double epstol,double retryadj,int maxretries,rk_options *rko,solve_real **xcf2,solve_real **accmetric2) {
+bool solve_rk(PetscBool nohsl,PetscInt VecSize,PetscInt dnz,PetscInt* dnnz,PetscInt onz,PetscInt* onnz,PetscInt dnzB,PetscInt* dnnzB,PetscInt onzB,PetscInt* onnzB,Vec *vece1,PetscInt rank,PetscInt rank_hsl,PetscInt mpisize,char* tabfile, char *commsyntax,set_def *sets,dim_t nset, set_element *set_elems, array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar, elem_value **elem_vals2,offset_t ncofele,offset_t nvarele,closure_entry **closure_vals2,offset_t alltimeset,offset_t allregset,offset_t nintraeq,dim_t matsol,PetscInt Istart,PetscInt Iend,offset_t nreg, offset_t ntime, PetscInt *eq_addr, offset_t ndblock, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laDi,dim_t laD,PetscReal cntl3,PetscReal cntl6,dim_t nesteddbbd,int localsize,PetscInt *ndbbddrank1,fortran_int* indata,dim_t mc66,fortran_int *ptx,struct timeval begintime,MPI_Fint fcomm,int solmethod,int adaptive,double epstol,double retryadj,int maxretries,rk_options *rko,solve_real **xcf2,solve_real **accmetric2) {
   PetscErrorCode ierr;
   offset_t i,j;
   fortran_int tindx1;
@@ -529,7 +529,7 @@ bool solve_rk(PetscBool nohsl,PetscInt VecSize,PetscInt dnz,PetscInt* dnnz,Petsc
          X = S*t exactly in the percent chart (constant gradient h*S),
          whereas integrating log(1+S*t/100) would give the shock itself
          a truncation error. */
-      if(chart_log&&!vars[i].change_real&&!closure_vals[tindx1].is_exogenous) {
+      if(chart_log&&!vars[i].change_real&&!CL_EXO(tindx1)) {
         mult[tindx1]=1;
         nmult++;
       }
@@ -616,8 +616,8 @@ bool solve_rk(PetscBool nohsl,PetscInt VecSize,PetscInt dnz,PetscInt* dnnz,Petsc
       for(i=0; i<nvar; i++) {
         if(vars[i].change_real) {
           for(tindx1=vars[i].offset; tindx1<vars[i].nelem+vars[i].offset; tindx1++) {
-            if(closure_vals[tindx1].is_exogenous) {
-              solve_real ez=h*closure_vals[tindx1].shock_value;
+            if(CL_EXO(tindx1)) {
+              solve_real ez=h*CL_SHOCK(tindx1);
               VecSetValue(vece,closure_vals[tindx1].exo_index,ez,INSERT_VALUES);
               if(exo_z!=NULL)exo_z[tindx1]=ez;
             }
@@ -625,9 +625,9 @@ bool solve_rk(PetscBool nohsl,PetscInt VecSize,PetscInt dnz,PetscInt* dnnz,Petsc
         }
         else {
           for(tindx1=vars[i].offset; tindx1<vars[i].nelem+vars[i].offset; tindx1++) {
-            if(closure_vals[tindx1].is_exogenous) {
-              solve_real ez=mult[tindx1]?h*closure_vals[tindx1].shock_value/exp(stagez[tindx1])
-                            :h*closure_vals[tindx1].shock_value/(1+stagez[tindx1]/100);
+            if(CL_EXO(tindx1)) {
+              solve_real ez=mult[tindx1]?h*CL_SHOCK(tindx1)/exp(stagez[tindx1])
+                            :h*CL_SHOCK(tindx1)/(1+stagez[tindx1]/100);
               VecSetValue(vece,closure_vals[tindx1].exo_index,ez,INSERT_VALUES);
               if(exo_z!=NULL)exo_z[tindx1]=ez;
             }
@@ -663,16 +663,16 @@ bool solve_rk(PetscBool nohsl,PetscInt VecSize,PetscInt dnz,PetscInt* dnnz,Petsc
       for(i=0; i<nvar; i++) {
         if(vars[i].change_real) {
           for(tindx1=vars[i].offset; tindx1<vars[i].nelem+vars[i].offset; tindx1++) {
-            if(closure_vals[tindx1].is_exogenous)kk[m][tindx1]=h*closure_vals[tindx1].shock_value;
-            else if(closure_vals[tindx1].is_backsolved)kk[m][tindx1]=bsvals[closure_vals[tindx1].exo_index];
+            if(CL_EXO(tindx1))kk[m][tindx1]=h*CL_SHOCK(tindx1);
+            else if(CL_BS(tindx1))kk[m][tindx1]=bsvals[closure_vals[tindx1].exo_index];
             else kk[m][tindx1]=x1[closure_vals[tindx1].exo_index];
           }
         }
         else {
           for(tindx1=vars[i].offset; tindx1<vars[i].nelem+vars[i].offset; tindx1++) {
             solve_real v;
-            if(closure_vals[tindx1].is_exogenous)v=mult[tindx1]?h*closure_vals[tindx1].shock_value/exp(stagez[tindx1]):h*closure_vals[tindx1].shock_value;
-            else if(closure_vals[tindx1].is_backsolved)v=mult[tindx1]?bsvals[closure_vals[tindx1].exo_index]:bsvals[closure_vals[tindx1].exo_index]*(1+stagez[tindx1]/100);
+            if(CL_EXO(tindx1))v=mult[tindx1]?h*CL_SHOCK(tindx1)/exp(stagez[tindx1]):h*CL_SHOCK(tindx1);
+            else if(CL_BS(tindx1))v=mult[tindx1]?bsvals[closure_vals[tindx1].exo_index]:bsvals[closure_vals[tindx1].exo_index]*(1+stagez[tindx1]/100);
             else v=mult[tindx1]?x1[closure_vals[tindx1].exo_index]:x1[closure_vals[tindx1].exo_index]*(1+stagez[tindx1]/100);
             kk[m][tindx1]=mult[tindx1]?v/100:v;
           }
@@ -1000,7 +1000,7 @@ bool solve_rk(PetscBool nohsl,PetscInt VecSize,PetscInt dnz,PetscInt* dnnz,Petsc
    is accepted regardless. The accepted-step count can therefore
    exceed the request (51.6). The accurate run (51.7.1) is C3; this
    run's solution is the simulation result. */
-bool solve_comp_approx(PetscBool nohsl,PetscInt VecSize,PetscInt dnz,PetscInt* dnnz,PetscInt onz,PetscInt* onnz,PetscInt dnzB,PetscInt* dnnzB,PetscInt onzB,PetscInt* onnzB,Vec *vece1,PetscInt rank,PetscInt rank_hsl,PetscInt mpisize,char* tabfile, char *commsyntax,set_def *sets,dim_t nset, set_element *set_elems, array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar, elem_value **elem_vals2,offset_t ncofele,offset_t nvarele,closure_entry **closure_vals2,offset_t alltimeset,offset_t allregset,offset_t nintraeq,dim_t matsol,PetscInt Istart,PetscInt Iend,offset_t nreg, offset_t ntime, offset_t *eq_addr, offset_t ndblock, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laDi,dim_t laD,PetscReal cntl3,PetscReal cntl6,dim_t nesteddbbd,int localsize,PetscInt *ndbbddrank1,fortran_int* indata,dim_t mc66,fortran_int *ptx,struct timeval begintime,MPI_Fint fcomm,int napprox,int redo_steps,double redo_min_frac,solve_real **xcf2) {
+bool solve_comp_approx(PetscBool nohsl,PetscInt VecSize,PetscInt dnz,PetscInt* dnnz,PetscInt onz,PetscInt* onnz,PetscInt dnzB,PetscInt* dnnzB,PetscInt onzB,PetscInt* onnzB,Vec *vece1,PetscInt rank,PetscInt rank_hsl,PetscInt mpisize,char* tabfile, char *commsyntax,set_def *sets,dim_t nset, set_element *set_elems, array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar, elem_value **elem_vals2,offset_t ncofele,offset_t nvarele,closure_entry **closure_vals2,offset_t alltimeset,offset_t allregset,offset_t nintraeq,dim_t matsol,PetscInt Istart,PetscInt Iend,offset_t nreg, offset_t ntime, PetscInt *eq_addr, offset_t ndblock, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laDi,dim_t laD,PetscReal cntl3,PetscReal cntl6,dim_t nesteddbbd,int localsize,PetscInt *ndbbddrank1,fortran_int* indata,dim_t mc66,fortran_int *ptx,struct timeval begintime,MPI_Fint fcomm,int napprox,int redo_steps,double redo_min_frac,solve_real **xcf2) {
   PetscErrorCode ierr;
   offset_t i;
   fortran_int tindx1;
@@ -1097,8 +1097,8 @@ bool solve_comp_approx(PetscBool nohsl,PetscInt VecSize,PetscInt dnz,PetscInt* d
     for(i=0; i<nvar; i++) {
       if(vars[i].change_real) {
         for(tindx1=vars[i].offset; tindx1<vars[i].nelem+vars[i].offset; tindx1++) {
-          if(closure_vals[tindx1].is_exogenous) {
-            solve_real ez=(tindx1==deloff)?1.0:h*closure_vals[tindx1].shock_value;
+          if(CL_EXO(tindx1)) {
+            solve_real ez=(tindx1==deloff)?1.0:h*CL_SHOCK(tindx1);
             VecSetValue(vece,closure_vals[tindx1].exo_index,ez,INSERT_VALUES);
             if(exo_z!=NULL)exo_z[tindx1]=ez;
           }
@@ -1106,8 +1106,8 @@ bool solve_comp_approx(PetscBool nohsl,PetscInt VecSize,PetscInt dnz,PetscInt* d
       }
       else {
         for(tindx1=vars[i].offset; tindx1<vars[i].nelem+vars[i].offset; tindx1++) {
-          if(closure_vals[tindx1].is_exogenous) {
-            solve_real ez=h*closure_vals[tindx1].shock_value/(1+stagex[tindx1]/100);
+          if(CL_EXO(tindx1)) {
+            solve_real ez=h*CL_SHOCK(tindx1)/(1+stagex[tindx1]/100);
             VecSetValue(vece,closure_vals[tindx1].exo_index,ez,INSERT_VALUES);
             if(exo_z!=NULL)exo_z[tindx1]=ez;
           }
@@ -1126,15 +1126,15 @@ bool solve_comp_approx(PetscBool nohsl,PetscInt VecSize,PetscInt dnz,PetscInt* d
     for(i=0; i<nvar; i++) {
       if(vars[i].change_real) {
         for(tindx1=vars[i].offset; tindx1<vars[i].nelem+vars[i].offset; tindx1++) {
-          if(closure_vals[tindx1].is_exogenous)dx[tindx1]=(tindx1==deloff)?1.0:h*closure_vals[tindx1].shock_value;
-          else if(closure_vals[tindx1].is_backsolved)dx[tindx1]=bsvals[closure_vals[tindx1].exo_index];
+          if(CL_EXO(tindx1))dx[tindx1]=(tindx1==deloff)?1.0:h*CL_SHOCK(tindx1);
+          else if(CL_BS(tindx1))dx[tindx1]=bsvals[closure_vals[tindx1].exo_index];
           else dx[tindx1]=x1[closure_vals[tindx1].exo_index];
         }
       }
       else {
         for(tindx1=vars[i].offset; tindx1<vars[i].nelem+vars[i].offset; tindx1++) {
-          if(closure_vals[tindx1].is_exogenous)dx[tindx1]=h*closure_vals[tindx1].shock_value;
-          else if(closure_vals[tindx1].is_backsolved)dx[tindx1]=bsvals[closure_vals[tindx1].exo_index]*(1+stagex[tindx1]/100);
+          if(CL_EXO(tindx1))dx[tindx1]=h*CL_SHOCK(tindx1);
+          else if(CL_BS(tindx1))dx[tindx1]=bsvals[closure_vals[tindx1].exo_index]*(1+stagex[tindx1]/100);
           else dx[tindx1]=x1[closure_vals[tindx1].exo_index]*(1+stagex[tindx1]/100);
         }
       }

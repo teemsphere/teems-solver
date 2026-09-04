@@ -462,7 +462,7 @@ static void block_var_count(array_def *vars, offset_t nvar, set_def *sets, set_e
   if(nesteddbbd==1) {
     for (i=0; i<nvar; i++) {
       for (j=0; j<vars[i].nelem; j++) {
-        if(!closure_vals[j3+j].is_exogenous&&!closure_vals[j3+j].is_backsolved) {
+        if(!CL_EXO(j3+j)&&!CL_BS(j3+j)) {
           if(!var_inter[i]&&!ele_inter[j3+j]) {
             j0=j;
             j2=-1;
@@ -489,7 +489,7 @@ static void block_var_count(array_def *vars, offset_t nvar, set_def *sets, set_e
   else if(alltimeset>=0) {
     for (i=0; i<nvar; i++) {
       for (j=0; j<vars[i].nelem; j++) {
-        if(!closure_vals[j3+j].is_exogenous&&!closure_vals[j3+j].is_backsolved) {
+        if(!CL_EXO(j3+j)&&!CL_BS(j3+j)) {
           if(!var_inter[i]&&!ele_inter[j3+j]) {
             j0=j;
             j2=-1;
@@ -519,7 +519,7 @@ static void block_var_count(array_def *vars, offset_t nvar, set_def *sets, set_e
   else if(allregset>=0) {
     for (i=0; i<nvar; i++) {
       for (j=0; j<vars[i].nelem; j++) {
-        if(!closure_vals[j3+j].is_exogenous&&!closure_vals[j3+j].is_backsolved) {
+        if(!CL_EXO(j3+j)&&!CL_BS(j3+j)) {
           if(!var_inter[i]&&!ele_inter[j3+j]) {
             j0=j;
             j4=-1;
@@ -1704,6 +1704,8 @@ int main(int argc,char **args) {
   free(coef_store);
   free(var_store);
   closure_entry *closure_vals= (closure_entry *) calloc (nvarele,sizeof(closure_entry));
+  teems_cl_flags= (unsigned char *) calloc (nvarele,sizeof(unsigned char));
+  teems_cl_shock= (store_real *) calloc (nvarele,sizeof(store_real));
   /* element-level border marks (6.5 E3), populated by the ordering scan
      alongside var_inter on the same ranks */
   bool *ele_inter= (bool *) calloc (nvarele,sizeof(bool));
@@ -1803,6 +1805,13 @@ int main(int argc,char **args) {
     }
     else {
       MPI_Bcast(closure_vals,nvarele*sizeof(closure_entry), MPI_BYTE,0, PETSC_COMM_WORLD);
+    }
+    /* the closure side arrays travel with closure_vals (same chunking) */
+    j1=1500000000/sizeof(store_real);
+    for(j=0; j*j1<nvarele; j++) {
+      i=(nvarele-j*j1<j1)?nvarele-j*j1:j1;
+      MPI_Bcast(teems_cl_flags+j*j1,i*sizeof(unsigned char), MPI_BYTE,0, PETSC_COMM_WORLD);
+      MPI_Bcast(teems_cl_shock+j*j1,i*sizeof(store_real), MPI_BYTE,0, PETSC_COMM_WORLD);
     }
     MPI_Bcast(&nexo1,sizeof(offset_t), MPI_BYTE,0, PETSC_COMM_WORLD);
     MPI_Bcast(&nbacksolve,sizeof(int), MPI_BYTE,0, PETSC_COMM_WORLD);
@@ -1995,7 +2004,7 @@ comp_accurate_reentry:
     for (i=0; i<nvar; i++) {
       for (j=0; j<vars[i].nelem; j++) {
         j5=j3+j;
-        if(!closure_vals[j5].is_exogenous&&!closure_vals[j5].is_backsolved) {
+        if(!CL_EXO(j5)&&!CL_BS(j5)) {
           if(!var_inter[i]&&!ele_inter[j5]) {
             j0=j;
             j2=-1;
@@ -2033,7 +2042,7 @@ comp_accurate_reentry:
     }
     j1=0;
     for (i=0; i<nvarele; i++) {
-      if (closure_vals[i].is_exogenous) {
+      if (CL_EXO(i)) {
         closure_vals[i].exo_index+=j1;
         j1++;
       }
@@ -2065,7 +2074,7 @@ comp_accurate_reentry:
       for (i=0; i<nvar; i++) {
         for (j=0; j<vars[i].nelem; j++) {
           j5=j3+j;
-          if(!closure_vals[j5].is_exogenous&&!closure_vals[j5].is_backsolved) {
+          if(!CL_EXO(j5)&&!CL_BS(j5)) {
             if(!var_inter[i]&&!ele_inter[j5]) {
               j0=j;
               for(j1=0; j1<orderintra[i]+1; j1++) {
@@ -2100,7 +2109,7 @@ comp_accurate_reentry:
       }
       j1=0;
       for (i=0; i<nvarele; i++) {
-        if (closure_vals[i].is_exogenous) {
+        if (CL_EXO(i)) {
           closure_vals[i].exo_index+=j1;
           j1++;
         }
@@ -2131,7 +2140,7 @@ comp_accurate_reentry:
         for (i=0; i<nvar; i++) {
           for (j=0; j<vars[i].nelem; j++) {
             j5=j3+j;
-            if(!closure_vals[j5].is_exogenous&&!closure_vals[j5].is_backsolved) {
+            if(!CL_EXO(j5)&&!CL_BS(j5)) {
               if(!var_inter[i]&&!ele_inter[j5]) {
                 j0=j;
                 for(j1=0; j1<orderreg[i]+1; j1++) {
@@ -2155,7 +2164,7 @@ comp_accurate_reentry:
         }
         j1=0;
         for (i=0; i<nvarele; i++) {
-          if (closure_vals[i].is_exogenous) {
+          if (CL_EXO(i)) {
             closure_vals[i].exo_index+=j1;
             j1++;
           }
@@ -2169,11 +2178,11 @@ comp_accurate_reentry:
           for (j=0; j<vars[i].nelem; j++) {
             j3=j0+j;
 
-            if (!closure_vals[j3].is_exogenous&&!closure_vals[j3].is_backsolved) {
+            if (!CL_EXO(j3)&&!CL_BS(j3)) {
               closure_vals[j3].exo_index+=j2;
               j2++;
             }
-            if (closure_vals[j3].is_exogenous) {
+            if (CL_EXO(j3)) {
               closure_vals[j3].exo_index+=j1;
               j1++;
             }
@@ -2189,7 +2198,7 @@ comp_accurate_reentry:
   free(var_inter);
   free(ele_inter);
   strcpy(commsyntax,"equation");
-  offset_t *eq_addr= (offset_t *) calloc (VecSize,sizeof(offset_t));//recycle ha_cgeset
+  PetscInt *eq_addr= (PetscInt *) calloc (VecSize,sizeof(PetscInt)); /* row index per equation position: PetscInt by meaning, half the offset_t footprint (6.16(b)) */
   offset_t *eq_time_offsets= (offset_t *) calloc (neq,sizeof(offset_t));
   offset_t *eq_reg_offsets= (offset_t *) calloc (neq,sizeof(offset_t));
   offset_t *counteq= (offset_t *) calloc (ndblock+1,sizeof(offset_t));
@@ -2541,7 +2550,7 @@ comp_accurate_reentry:
        Gragg step state. Fall back to scratch files unless it
        fits comfortably in available memory. */
     long need=(long)(ncofele+nvarele)*sizeof(elem_value)
-             +(long)nvarele*(sizeof(closure_entry)+6*sizeof(solve_real)+sizeof(int));
+             +(long)nvarele*(sizeof(closure_entry)+sizeof(unsigned char)+sizeof(store_real)+6*sizeof(solve_real)+sizeof(int));
     long avail=-1;
     FILE *mi=fopen("/proc/meminfo","r");
     if(mi) {
@@ -2599,7 +2608,7 @@ comp_accurate_reentry:
       /* tear down pass-1 state and re-enter the closure-dependent
          pipeline: exo_index numbering restarts from zero (backsolved
          ordinals are assigned by backsolve_read and keep theirs) */
-      for(i=0; i<nvarele; i++)if(!closure_vals[i].is_backsolved)closure_vals[i].exo_index=0;
+      for(i=0; i<nvarele; i++)if(!CL_BS(i))closure_vals[i].exo_index=0;
       jacobian_cache_free();
       backsolve_cache_free();
       free(xcf);

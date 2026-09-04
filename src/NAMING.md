@@ -44,7 +44,7 @@ Binary `hsl` → `teems-solver` is deferred: path is hardcoded in teems-R
 | ha_cgevar | elem_value (.varval → .value, .var0 → .initial, .csolpupd → .substep_base) | per-element value record |
 | ha_cgesumele | sum_value | partial-sum element |
 | ha_cgecofele | elem_store | float-valued element (read staging) |
-| ha_cgeexovar | closure_entry (.ShockId → .is_exogenous, .ShockVal → .shock_value, .ExoIndx → .exo_index) | closure + shock per element [GM "closure", "shock"] |
+| ha_cgeexovar | closure_entry (.ExoIndx → .exo_index; .ShockId → CL_EXO()/CL_BS() flag bits in teems_cl_flags, .ShockVal → CL_SHOCK() in teems_cl_shock, side arrays since 6.16(b)) | closure + shock per element [GM "closure", "shock"] |
 | ha_cgesetindx | quantifier (.arIndx → .index_name) | (all,r,REG) quantifier [GM] |
 | hcge_linvars | eq_var_ref | linear-variable reference in an equation, with lead/lag |
 | hcge_calvars | formula_op | one op of the compiled formula program |

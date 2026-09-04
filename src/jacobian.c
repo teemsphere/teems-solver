@@ -275,7 +275,7 @@ void jacobian_cache_free(void) {
    evaluated inline before the split), then run each occurrence's element
    loop filling A (endogenous columns) and B (exogenous columns).  Loop
    layout, OpenMP scheduling and MatSetValues pattern are unchanged. */
-static void stmt_prog_execute(stmt_prog *st, offset_t matrow, offset_t *eq_addr, offset_t nloops, set_def *sets, set_element *set_elems, elem_value *elem_vals, closure_entry *closure_vals, array_def *vars, PetscInt Istart1, PetscInt Iend1, Mat A, Mat B) {
+static void stmt_prog_execute(stmt_prog *st, offset_t matrow, PetscInt *eq_addr, offset_t nloops, set_def *sets, set_element *set_elems, elem_value *elem_vals, closure_entry *closure_vals, array_def *vars, PetscInt Istart1, PetscInt Iend1, Mat A, Mat B) {
   int s,i;
   dim_t dcount;
   offset_t lj,l1,l2,li3,i3,i5,sj;
@@ -351,12 +351,12 @@ static void stmt_prog_execute(stmt_prog *st, offset_t matrow, offset_t *eq_addr,
              (10-100 entries per Gragg step on a shocked GTAPv7 R32).
              Under -fastrefac the persisted pivot sequences need the
              STRUCTURAL pattern, so the entry is stored with its zero */
-          if (!closure_vals[vars[lv->LinVarIndx].offset+li3].is_exogenous&&(vval!=0||jac_keep_zero)) {
+          if (!CL_EXO(vars[lv->LinVarIndx].offset+li3)&&(vval!=0||jac_keep_zero)) {
             value[i3]=vval;
             jcn[i3]=Iindx;
             i3++;
           }
-          if (closure_vals[vars[lv->LinVarIndx].offset+li3].is_exogenous&&vval!=0) {
+          if (CL_EXO(vars[lv->LinVarIndx].offset+li3)&&vval!=0) {
             valueb[sj]=-vval;
             jcnb[sj]=Iindx;
             sj++;
@@ -531,7 +531,7 @@ static void linvar_map_dim_check(eq_var_ref *ref, dim_t d, offset_t frame_setid,
 static void stmt_prog_build_one(char *line, stmt_prog *stp, char *commsyntax,
                                 set_def *sets, offset_t nset, set_element *set_elems, array_def *coefs, offset_t ncof,
                                 array_def *vars, offset_t nvar, offset_t ncofele,
-                                offset_t *eq_addr, offset_t matrow,
+                                PetscInt *eq_addr, offset_t matrow,
                                 PetscInt Istart1, PetscInt Iend1, PetscMPIInt mpisize1,
                                 bool force_all) {
   char tline[TABREADLINE],line1[TABREADLINE],leftline[TABREADLINE],linecopy[TABREADLINE];
@@ -943,7 +943,7 @@ static void stmt_prog_build_one(char *line, stmt_prog *stp, char *commsyntax,
       free(arSet);
 }
 
-int jacobian_fill(char *fname, char *commsyntax,set_def *sets,offset_t nset, set_element *set_elems, array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar, elem_value *elem_vals,offset_t ncofvar,offset_t ncofele,closure_entry *closure_vals,offset_t ndblock,offset_t alltimeset,offset_t allregset,offset_t *eq_addr,offset_t *counteq,offset_t nintraeq,Mat A,Mat B) {
+int jacobian_fill(char *fname, char *commsyntax,set_def *sets,offset_t nset, set_element *set_elems, array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar, elem_value *elem_vals,offset_t ncofvar,offset_t ncofele,closure_entry *closure_vals,offset_t ndblock,offset_t alltimeset,offset_t allregset,PetscInt *eq_addr,offset_t *counteq,offset_t nintraeq,Mat A,Mat B) {
   FILE * filehandle;
   char line[TABREADLINE];
   PetscInt Istart1,Iend1,matrow;
@@ -1135,7 +1135,7 @@ static void bs_prog_execute(bs_prog *bp, set_def *sets, set_element *set_elems,
             if (pivelem[i5]==-1) pivelem[i5]=li3;
             else if (pivelem[i5]!=li3) pivbad=1;
           }
-          else if (closure_vals[gidx].is_exogenous) {
+          else if (CL_EXO(gidx)) {
             acc[i5]+=vval*exo_z[gidx];
           }
           else {
@@ -2192,7 +2192,7 @@ int equation_order_read(char *fname, char *commsyntax,set_def *sets,dim_t nset,s
                 if(strcmp(LinVars[i4].dimnames[i3],arSet[i].index_name)==0&&sets[eq_defs[eqindx].setid[i]].regional&&orderreg[LinVars[i4].LinVarIndx]==i3) { //ha_set[ha_var[LinVars[i4].LinVarIndx].setid[i3]].regional) {
                   dimmat[i]+=vars[LinVars[i4].LinVarIndx].nelem;
                   l01=0;
-                  for(j01=0; j01<vars[LinVars[i4].LinVarIndx].nelem; j01++)if(closure_vals[vars[LinVars[i4].LinVarIndx].offset+j01].is_exogenous)l01++;
+                  for(j01=0; j01<vars[LinVars[i4].LinVarIndx].nelem; j01++)if(CL_EXO(vars[LinVars[i4].LinVarIndx].offset+j01))l01++;
                   dimmat[i]-=l01;
                   linvarrcount[i4]=true;
                   if(lvar4<i4)linvarrcount[lvar4]=true;
@@ -2226,7 +2226,7 @@ int equation_order_read(char *fname, char *commsyntax,set_def *sets,dim_t nset,s
             if((orderreg[LinVars[i4].LinVarIndx]<0||strcmp(LinVars[i4].dimnames[orderreg[LinVars[i4].LinVarIndx]],arSet[eq_orderreg[eqindx]].index_name)!=0)&&!var_inter[LinVars[i4].LinVarIndx]) {
               nelem+=vars[LinVars[i4].LinVarIndx].nelem;
               l01=0;
-              for(j01=0; j01<vars[LinVars[i4].LinVarIndx].nelem; j01++)if(closure_vals[vars[LinVars[i4].LinVarIndx].offset+j01].is_exogenous)l01++;
+              for(j01=0; j01<vars[LinVars[i4].LinVarIndx].nelem; j01++)if(CL_EXO(vars[LinVars[i4].LinVarIndx].offset+j01))l01++;
               nelem+=vars[LinVars[i4].LinVarIndx].nelem-l01;
               linvarrcount[i4]=true;
               if(lvar4<i4)linvarrcount[lvar4]=true;
@@ -2522,7 +2522,7 @@ int equation_order_read_nested(char *fname, char *commsyntax,set_def *sets,dim_t
                 linvarrcount[i4]=true;
                 if(lvar4<i4)linvarrcount[lvar4]=true;
                 l01=0;
-                for(j01=0; j01<vars[LinVars[i4].LinVarIndx].nelem; j01++)if(closure_vals[vars[LinVars[i4].LinVarIndx].offset+j01].is_exogenous)l01++;
+                for(j01=0; j01<vars[LinVars[i4].LinVarIndx].nelem; j01++)if(CL_EXO(vars[LinVars[i4].LinVarIndx].offset+j01))l01++;
                 dimmat[i]-=l01;
               }
             }
@@ -2549,7 +2549,7 @@ int equation_order_read_nested(char *fname, char *commsyntax,set_def *sets,dim_t
           }
           if(orderreg[LinVars[i4].LinVarIndx]!=-1&&strcmp(LinVars[i4].dimnames[orderreg[LinVars[i4].LinVarIndx]],arSet[eq_orderreg[eqindx]].index_name)!=0) {
             l01=0;
-            for(j01=0; j01<vars[LinVars[i4].LinVarIndx].nelem; j01++)if(closure_vals[vars[LinVars[i4].LinVarIndx].offset+j01].is_exogenous)l01++;
+            for(j01=0; j01<vars[LinVars[i4].LinVarIndx].nelem; j01++)if(CL_EXO(vars[LinVars[i4].LinVarIndx].offset+j01))l01++;
             nelem+=vars[LinVars[i4].LinVarIndx].nelem-l01;
             linvarrcount[i4]=true;
             if(lvar4<i4)linvarrcount[lvar4]=true;
@@ -2589,7 +2589,7 @@ int equation_order_read_nested(char *fname, char *commsyntax,set_def *sets,dim_t
   return 1;
 }
 
-int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,set_element *set_elems,array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar,elem_value *elem_vals,offset_t ncofvar,offset_t ncofele, offset_t nexo,closure_entry *closure_vals,offset_t ndblock,offset_t alltimeset,offset_t allregset,bool *eq_intertemp,offset_t *eq_addr,dim_t *eq_time,dim_t *eq_reg,offset_t *counteq,offset_t nintraeq,bool *sbbd_overrid,PetscInt VecSize,PetscInt Istart,PetscInt Iend,PetscInt Cstart,PetscInt Cend,PetscInt *dnz,PetscInt *dnnz,PetscInt *onz,PetscInt *onnz,PetscInt *dnzB,PetscInt *dnnzB,PetscInt *onzB,PetscInt *onnzB,int nesteddbbd,eq_probe_meta *eqmeta,offset_t *neqmeta) {
+int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,set_element *set_elems,array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar,elem_value *elem_vals,offset_t ncofvar,offset_t ncofele, offset_t nexo,closure_entry *closure_vals,offset_t ndblock,offset_t alltimeset,offset_t allregset,bool *eq_intertemp,PetscInt *eq_addr,dim_t *eq_time,dim_t *eq_reg,offset_t *counteq,offset_t nintraeq,bool *sbbd_overrid,PetscInt VecSize,PetscInt Istart,PetscInt Iend,PetscInt Cstart,PetscInt Cend,PetscInt *dnz,PetscInt *dnnz,PetscInt *onz,PetscInt *onnz,PetscInt *dnzB,PetscInt *dnnzB,PetscInt *onzB,PetscInt *onnzB,int nesteddbbd,eq_probe_meta *eqmeta,offset_t *neqmeta) {
   FILE * filehandle;
   char tline[TABREADLINE],line[TABREADLINE],line1[TABREADLINE],linecopy[TABREADLINE];//,set1[NAMESIZE],set2[NAMESIZE];
   char vname[TABREADLINE],lintmp[TABREADLINE];//,*p1=NULL;
@@ -2979,7 +2979,7 @@ int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,
           }
           Iindx=closure_vals[vars[LinVars[i].LinVarIndx].offset+li3].exo_index;
           if(Istart<=Jindx&&Jindx<Iend) {
-            if (!closure_vals[vars[LinVars[i].LinVarIndx].offset+li3].is_exogenous) {
+            if (!CL_EXO(vars[LinVars[i].LinVarIndx].offset+li3)) {
               if (Istart<=Iindx&&Iindx<Iend) {
                 dnnz[Jindx-Istart]=dnnz[Jindx-Istart]+1;
               }
@@ -2987,7 +2987,7 @@ int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,
                 onnz[Jindx-Istart]=onnz[Jindx-Istart]+1;
               }
             }
-            if (closure_vals[vars[LinVars[i].LinVarIndx].offset+li3].is_exogenous) {
+            if (CL_EXO(vars[LinVars[i].LinVarIndx].offset+li3)) {
               /* B's diagonal block is delimited by ITS column range, which
                  parts company with the row range once nexo > VecSize */
               if (Cstart<=Iindx&&Iindx<Cend) {

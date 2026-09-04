@@ -389,7 +389,7 @@ void shock_mat_set_sizes(Mat B,int nesteddbbd,PetscInt localsize,PetscInt VecSiz
   else MatSetSizes(B,PETSC_DECIDE,PETSC_DECIDE,VecSize,BSize);
 }
 
-bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt* dnnz,PetscInt onz,PetscInt* onnz,Mat B,PetscInt dnzB,PetscInt* dnnzB,PetscInt onzB,PetscInt* onnzB,Vec vecb,Vec vece,PetscInt rank,PetscInt rank_hsl,PetscInt mpisize,char* tabfile, char *commsyntax,set_def *sets,dim_t nset, set_element *set_elems, array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar, elem_value **elem_vals2,offset_t ncofvar,offset_t ncofele,offset_t nvarele,closure_entry **closure_vals2,offset_t alltimeset,offset_t allregset,offset_t nintraeq,dim_t matsol,PetscInt Istart,PetscInt Iend,  offset_t nreg, offset_t ntime, offset_t *eq_addr, offset_t ndblock, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laDi,dim_t laD,PetscReal cntl3,PetscReal cntl6,dim_t nesteddbbd,int localsize,PetscInt *ndbbddrank1,fortran_int* indata,dim_t mc66,fortran_int *ptx,struct timeval begintime,solve_real **xcf2){ //Johansen
+bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt* dnnz,PetscInt onz,PetscInt* onnz,Mat B,PetscInt dnzB,PetscInt* dnnzB,PetscInt onzB,PetscInt* onnzB,Vec vecb,Vec vece,PetscInt rank,PetscInt rank_hsl,PetscInt mpisize,char* tabfile, char *commsyntax,set_def *sets,dim_t nset, set_element *set_elems, array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar, elem_value **elem_vals2,offset_t ncofvar,offset_t ncofele,offset_t nvarele,closure_entry **closure_vals2,offset_t alltimeset,offset_t allregset,offset_t nintraeq,dim_t matsol,PetscInt Istart,PetscInt Iend,  offset_t nreg, offset_t ntime, PetscInt *eq_addr, offset_t ndblock, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laDi,dim_t laD,PetscReal cntl3,PetscReal cntl6,dim_t nesteddbbd,int localsize,PetscInt *ndbbddrank1,fortran_int* indata,dim_t mc66,fortran_int *ptx,struct timeval begintime,solve_real **xcf2){ //Johansen
   char tempfilenam[256],tempchar[256];
   PetscScalar value,*vals=NULL;
   PetscErrorCode ierr;
@@ -476,11 +476,11 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
     teems_rss_probe("matrix calculation");
 
     for (count=0; count<nvarele; count++) {
-      if (closure_vals[count].is_exogenous) {
-        value = closure_vals[count].shock_value;
+      if (CL_EXO(count)) {
+        value = CL_SHOCK(count);
         dnz=closure_vals[count].exo_index;
         VecSetValues(vece,1,&dnz,&value,INSERT_VALUES);
-        if(exo_z!=NULL)exo_z[count]=closure_vals[count].shock_value;
+        if(exo_z!=NULL)exo_z[count]=CL_SHOCK(count);
       }
     }
     MPI_Barrier(PETSC_COMM_WORLD);
@@ -752,13 +752,13 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
       for(i=0; i<nvar; i++) {
         if(vars[i].change_real) {
           for(j=vars[i].offset; j<vars[i].nelem+vars[i].offset; j++) {
-            if(closure_vals[j].is_exogenous) {
+            if(CL_EXO(j)) {
               elem_vals1[j].initial=elem_vals1[j].value;
-              elem_vals1[j].value+=closure_vals[j].shock_value;
-              xcf[j]=closure_vals[j].shock_value;//varchange[j]
-              elem_vals1[j].substep_base=closure_vals[j].shock_value;
+              elem_vals1[j].value+=CL_SHOCK(j);
+              xcf[j]=CL_SHOCK(j);//varchange[j]
+              elem_vals1[j].substep_base=CL_SHOCK(j);
             }
-            else if(closure_vals[j].is_backsolved) {
+            else if(CL_BS(j)) {
               elem_vals1[j].initial=elem_vals1[j].value;
               elem_vals1[j].value+=bsvals[closure_vals[j].exo_index];
               xcf[j]=bsvals[closure_vals[j].exo_index];
@@ -774,13 +774,13 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
         }
         else {
           for(j=vars[i].offset; j<vars[i].nelem+vars[i].offset; j++) {
-            if(closure_vals[j].is_exogenous) {
+            if(CL_EXO(j)) {
               elem_vals1[j].initial=elem_vals1[j].value;
-              elem_vals1[j].value+=closure_vals[j].shock_value*elem_vals1[j].initial/100;
-              xcf[j]=closure_vals[j].shock_value;//varchange[j]
-              elem_vals1[j].substep_base=closure_vals[j].shock_value;
+              elem_vals1[j].value+=CL_SHOCK(j)*elem_vals1[j].initial/100;
+              xcf[j]=CL_SHOCK(j);//varchange[j]
+              elem_vals1[j].substep_base=CL_SHOCK(j);
             }
-            else if(closure_vals[j].is_backsolved) {
+            else if(CL_BS(j)) {
               elem_vals1[j].initial=elem_vals1[j].value;
               xcf[j]=bsvals[closure_vals[j].exo_index];
               elem_vals1[j].value+=bsvals[closure_vals[j].exo_index]/100*elem_vals1[j].value;
@@ -809,7 +809,7 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
     return 1;
   }
 
-bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt* dnnz,PetscInt onz,PetscInt* onnz,Mat* B1,PetscInt dnzB,PetscInt* dnnzB,PetscInt onzB,PetscInt* onnzB,Vec* vecb1,Vec *vece1,PetscInt rank,PetscInt rank_hsl,PetscInt mpisize,char* tabfile, char *commsyntax,set_def *sets,dim_t nset, set_element *set_elems, array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar, elem_value **elem_vals2,offset_t ncofvar,offset_t ncofele,offset_t nvarele,closure_entry **closure_vals2,offset_t alltimeset,offset_t allregset,offset_t nintraeq,dim_t matsol,PetscInt Istart,PetscInt Iend,  offset_t nreg, offset_t ntime, offset_t *eq_addr, offset_t ndblock, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laDi,dim_t laD,PetscReal cntl3,PetscReal cntl6,dim_t nesteddbbd,int localsize,PetscInt *ndbbddrank1,fortran_int* indata,dim_t mc66,fortran_int *ptx,struct timeval begintime,dim_t subints,MPI_Fint fcomm,int solmethod,solve_real **xcf2){ /* multistep driver: Gragg (smoothed modified midpoint, Pearson 1991 eq. 6.1 / Alg. 7.1.2) or forward Euler, per solmethod */
+bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt* dnnz,PetscInt onz,PetscInt* onnz,Mat* B1,PetscInt dnzB,PetscInt* dnnzB,PetscInt onzB,PetscInt* onnzB,Vec* vecb1,Vec *vece1,PetscInt rank,PetscInt rank_hsl,PetscInt mpisize,char* tabfile, char *commsyntax,set_def *sets,dim_t nset, set_element *set_elems, array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar, elem_value **elem_vals2,offset_t ncofvar,offset_t ncofele,offset_t nvarele,closure_entry **closure_vals2,offset_t alltimeset,offset_t allregset,offset_t nintraeq,dim_t matsol,PetscInt Istart,PetscInt Iend,  offset_t nreg, offset_t ntime, PetscInt *eq_addr, offset_t ndblock, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laDi,dim_t laD,PetscReal cntl3,PetscReal cntl6,dim_t nesteddbbd,int localsize,PetscInt *ndbbddrank1,fortran_int* indata,dim_t mc66,fortran_int *ptx,struct timeval begintime,dim_t subints,MPI_Fint fcomm,int solmethod,solve_real **xcf2){ /* multistep driver: Gragg (smoothed modified midpoint, Pearson 1991 eq. 6.1 / Alg. 7.1.2) or forward Euler, per solmethod */
   char tempfilenam[256],tempchar[256],solchar[255];
   PetscScalar value,*vals;
   PetscErrorCode ierr;
@@ -928,14 +928,14 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
             for(i=0; i<nvar; i++) {
               if(vars[i].change_real) {
                 for(tindx1=vars[i].offset; tindx1<vars[i].nelem+vars[i].offset; tindx1++) {
-                  if(closure_vals[tindx1].is_exogenous) {
+                  if(CL_EXO(tindx1)) {
                     if(sol==0) {
                       elem_vals1[tindx1].initial=elem_vals1[tindx1].value;
                     }
                     else {
                       elem_vals1[tindx1].value=elem_vals1[tindx1].initial;
                     }
-                    elem_vals1[tindx1].substep_base=closure_vals[tindx1].shock_value/nsteps;
+                    elem_vals1[tindx1].substep_base=CL_SHOCK(tindx1)/nsteps;
                     VecSetValue(vece,closure_vals[tindx1].exo_index,elem_vals1[tindx1].substep_base,INSERT_VALUES);
                     if(exo_z!=NULL)exo_z[tindx1]=elem_vals1[tindx1].substep_base;
                   }
@@ -951,14 +951,14 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
               }
               else {
                 for(tindx1=vars[i].offset; tindx1<vars[i].nelem+vars[i].offset; tindx1++) {
-                  if(closure_vals[tindx1].is_exogenous) {
+                  if(CL_EXO(tindx1)) {
                     if(sol==0) {
                       elem_vals1[tindx1].initial=elem_vals1[tindx1].value;
                     }
                     else {
                       elem_vals1[tindx1].value=elem_vals1[tindx1].initial;
                     }
-                    temp2=closure_vals[tindx1].shock_value;//subints;
+                    temp2=CL_SHOCK(tindx1);//subints;
                     elem_vals1[tindx1].substep_base=(100+(subindx+1)*temp2)/(100+subindx*temp2)-1;//ha_cgeshock[ha_var[i].begadd+j].ShockVal/nsteps;//(exp(log(1+ha_cgeshock[ha_var[i].begadd+j].ShockVal/100)/nsteps)-1)*100;
                     elem_vals1[tindx1].substep_base*=vpercents;//nsteps*100;
                     VecSetValue(vece,closure_vals[tindx1].exo_index,elem_vals1[tindx1].substep_base,INSERT_VALUES);
@@ -1392,13 +1392,13 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
             for(i=0; i<nvar; i++) {
               if(vars[i].change_real) {
                 for(tindx1=vars[i].offset; tindx1<vars[i].nelem+vars[i].offset; tindx1++) {
-                  if(closure_vals[tindx1].is_exogenous) {
+                  if(CL_EXO(tindx1)) {
                     elem_vals1[tindx1].value+=elem_vals1[tindx1].substep_base;
                     varchange[tindx1]=elem_vals1[tindx1].substep_base;
                     VecSetValue(vece,closure_vals[tindx1].exo_index,elem_vals1[tindx1].substep_base,INSERT_VALUES);
                     if(exo_z!=NULL)exo_z[tindx1]=elem_vals1[tindx1].substep_base;
                   }
-                  else if(closure_vals[tindx1].is_backsolved) {
+                  else if(CL_BS(tindx1)) {
                     varchange[tindx1]=bsvals[closure_vals[tindx1].exo_index];
                     elem_vals1[tindx1].value+=bsvals[closure_vals[tindx1].exo_index];
                     elem_vals1[tindx1].substep_base=bsvals[closure_vals[tindx1].exo_index];
@@ -1414,13 +1414,13 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
               }
               else {
                 for(tindx1=vars[i].offset; tindx1<vars[i].nelem+vars[i].offset; tindx1++) {
-                  if(closure_vals[tindx1].is_exogenous) {
+                  if(CL_EXO(tindx1)) {
                     varchange[tindx1]=elem_vals1[tindx1].substep_base;
                     elem_vals1[tindx1].value*=(1+elem_vals1[tindx1].substep_base/100);
                     VecSetValue(vece,closure_vals[tindx1].exo_index,elem_vals1[tindx1].substep_base/(1+elem_vals1[tindx1].substep_base/100),INSERT_VALUES);
                     if(exo_z!=NULL)exo_z[tindx1]=elem_vals1[tindx1].substep_base/(1+elem_vals1[tindx1].substep_base/100);
                   }
-                  else if(closure_vals[tindx1].is_backsolved) {
+                  else if(CL_BS(tindx1)) {
                     varchange[tindx1]=bsvals[closure_vals[tindx1].exo_index];
                     elem_vals1[tindx1].substep_base=bsvals[closure_vals[tindx1].exo_index];
                     elem_vals1[tindx1].value*=(1+elem_vals1[tindx1].substep_base/100);
@@ -1442,13 +1442,13 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
             for(i=0; i<nvar; i++) {
               if(vars[i].change_real) {
                 for(tindx1=vars[i].offset; tindx1<vars[i].nelem+vars[i].offset; tindx1++) {
-                  if(closure_vals[tindx1].is_exogenous) {
+                  if(CL_EXO(tindx1)) {
                     elem_vals1[tindx1].value+=elem_vals1[tindx1].substep_base;
                     varchange[tindx1]+=elem_vals1[tindx1].substep_base;
                     VecSetValue(vece,closure_vals[tindx1].exo_index,elem_vals1[tindx1].substep_base,INSERT_VALUES);
                     if(exo_z!=NULL)exo_z[tindx1]=elem_vals1[tindx1].substep_base;
                   }
-                  else if(closure_vals[tindx1].is_backsolved) {
+                  else if(CL_BS(tindx1)) {
                     varchange[tindx1]+=bsvals[closure_vals[tindx1].exo_index];
                     elem_vals1[tindx1].substep_base=bsvals[closure_vals[tindx1].exo_index];
                     elem_vals1[tindx1].value+=bsvals[closure_vals[tindx1].exo_index];
@@ -1462,8 +1462,8 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
               }
               else {
                 for(tindx1=vars[i].offset; tindx1<vars[i].nelem+vars[i].offset; tindx1++) {
-                  if(closure_vals[tindx1].is_exogenous) {
-                    temp2=closure_vals[tindx1].shock_value;//subints;
+                  if(CL_EXO(tindx1)) {
+                    temp2=CL_SHOCK(tindx1);//subints;
                     temp1=(100+(subindx+1)*temp2)/(100+subindx*temp2)-1;
                     temp1*=vpercents;
                     elem_vals1[tindx1].substep_base=temp1/(1+varchange[tindx1]/100);
@@ -1472,7 +1472,7 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
                     VecSetValue(vece,closure_vals[tindx1].exo_index,temp1/(1+varchange[tindx1]/100),INSERT_VALUES);
                     if(exo_z!=NULL)exo_z[tindx1]=temp1/(1+varchange[tindx1]/100);
                   }
-                  else if(closure_vals[tindx1].is_backsolved) {
+                  else if(CL_BS(tindx1)) {
                     /* compound the per-step percent change onto the
                        cumulative one before rebasing on the initial */
                     varchange[tindx1]+=bsvals[closure_vals[tindx1].exo_index]*(100+varchange[tindx1])/100;
@@ -1492,13 +1492,13 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
             for(i=0; i<nvar; i++) {
               if(vars[i].change_real) {
                 for(tindx1=vars[i].offset; tindx1<vars[i].nelem+vars[i].offset; tindx1++) {
-                  if(closure_vals[tindx1].is_exogenous) {
+                  if(CL_EXO(tindx1)) {
                     elem_vals1[tindx1].value+=elem_vals1[tindx1].substep_base;
                     varchange[tindx1]+=elem_vals1[tindx1].substep_base;
                     VecSetValue(vece,closure_vals[tindx1].exo_index,elem_vals1[tindx1].substep_base,INSERT_VALUES);
                     if(exo_z!=NULL)exo_z[tindx1]=elem_vals1[tindx1].substep_base;
                   }
-                  else if(closure_vals[tindx1].is_backsolved) {
+                  else if(CL_BS(tindx1)) {
                     temp1=elem_vals1[tindx1].value;
                     varchange[tindx1]=clag1[tindx1]+2*bsvals[closure_vals[tindx1].exo_index];
                     elem_vals1[tindx1].substep_base=bsvals[closure_vals[tindx1].exo_index];
@@ -1516,8 +1516,8 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
               }
               else {
                 for(tindx1=vars[i].offset; tindx1<vars[i].nelem+vars[i].offset; tindx1++) {
-                  if(closure_vals[tindx1].is_exogenous) {
-                    temp2=closure_vals[tindx1].shock_value;//subints;
+                  if(CL_EXO(tindx1)) {
+                    temp2=CL_SHOCK(tindx1);//subints;
                     temp1=(100+(subindx+1)*temp2)/(100+subindx*temp2)-1;
                     temp1*=vpercents;
                     elem_vals1[tindx1].substep_base=temp1/(1+varchange[tindx1]/100);
@@ -1526,7 +1526,7 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
                     VecSetValue(vece,closure_vals[tindx1].exo_index,temp1/(1+varchange[tindx1]/100),INSERT_VALUES);
                     if(exo_z!=NULL)exo_z[tindx1]=temp1/(1+varchange[tindx1]/100);
                   }
-                  else if(closure_vals[tindx1].is_backsolved) {
+                  else if(CL_BS(tindx1)) {
                     temp1=varchange[tindx1];
                     varchange[tindx1]=clag1[tindx1]+2*bsvals[closure_vals[tindx1].exo_index]*(100+temp1)/100;
                     elem_vals1[tindx1].substep_base=bsvals[closure_vals[tindx1].exo_index];
@@ -1974,10 +1974,10 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
         for(i=0; i<nvar; i++) {
           if(vars[i].change_real) {
             for(tindx1=vars[i].offset; tindx1<vars[i].nelem+vars[i].offset; tindx1++) {
-              if(closure_vals[tindx1].is_exogenous) {
+              if(CL_EXO(tindx1)) {
                 elem_vals1[tindx1].value=0;
               }
-              else if(closure_vals[tindx1].is_backsolved) {
+              else if(CL_BS(tindx1)) {
                 varchange[tindx1]=0.5*(varchange[tindx1]+clag1[tindx1]+bsvals[closure_vals[tindx1].exo_index]);
                 elem_vals1[tindx1].value=0;
                 clag1[tindx1]=0;
@@ -1991,10 +1991,10 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
           }
           else {
             for(tindx1=vars[i].offset; tindx1<vars[i].nelem+vars[i].offset; tindx1++) {
-              if(closure_vals[tindx1].is_exogenous) {
+              if(CL_EXO(tindx1)) {
                 elem_vals1[tindx1].value=0;
               }
-              else if(closure_vals[tindx1].is_backsolved) {
+              else if(CL_BS(tindx1)) {
                 varchange[tindx1]=0.5*(varchange[tindx1]+clag1[tindx1]+bsvals[closure_vals[tindx1].exo_index]*(1+varchange[tindx1]/100));
                 elem_vals1[tindx1].value=0;
                 clag1[tindx1]=0;

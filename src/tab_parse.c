@@ -2585,10 +2585,10 @@ offset_t closure_read(char *fname, char *commsyntax,closure_entry *closure_vals,
         for (j=0; j<nvar; j++) if (strcmp(vname,vars[j].cofname)==0) {
             dims=vars[j].nelem;
             if (dims==0) {
-              closure_vals[vars[j].offset].is_exogenous=true;
+              CL_SET_EXO(vars[j].offset,true);
               n=n+1;
             } else for (l=0; l<dims; l++) {
-                closure_vals[vars[j].offset+l].is_exogenous=true;
+                CL_SET_EXO(vars[j].offset+l,true);
                 n=n+1;
               }
             check=false;
@@ -2627,7 +2627,7 @@ offset_t closure_read(char *fname, char *commsyntax,closure_entry *closure_vals,
                 *p1='\0';
                 for (l1=0; l1<sets[vars[j].setid[0]].size; l1++)
                   if (strcmp(p,set_elems[sets[vars[j].setid[0]].offset+l1].setele)==0) {
-                    closure_vals[vars[j].offset+l1].is_exogenous=true;
+                    CL_SET_EXO(vars[j].offset+l1,true);
                     n=n+1;
                     check=false;
                     break;
@@ -2748,7 +2748,7 @@ offset_t closure_read(char *fname, char *commsyntax,closure_entry *closure_vals,
                   }
                   exodims=exodims+l2*vars[j].strides[dcount];
                 }
-                closure_vals[vars[j].offset+exodims].is_exogenous=true;
+                CL_SET_EXO(vars[j].offset+exodims,true);
                 n=n+1;
               }
             free(arSet);
@@ -2837,9 +2837,9 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
           }
           k1=str_rfind_ci(readitem,"uniform");
           if(k1!=-1){
-            closure_vals[vars[j].offset].shock_value=atof(readitem+k1+1)/subints;
+            CL_SHOCK(vars[j].offset)=atof(readitem+k1+1)/subints;
           }else{
-            closure_vals[vars[j].offset].shock_value=atof(readitem)/subints;
+            CL_SHOCK(vars[j].offset)=atof(readitem)/subints;
           }
           l=l+1;
           break;
@@ -2972,7 +2972,7 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
               for (dcount=0; dcount<vars[j].size; dcount++) {
                 l2=l2+arSet[dcount]*vars[j].strides[dcount];
               }
-              closure_vals[vars[j].offset+l2].shock_value=val/subints;
+              CL_SHOCK(vars[j].offset+l2)=val/subints;
               l=l+1;
             }
           } else {
@@ -3013,7 +3013,7 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
               for (dcount=0; dcount<vars[j].size; dcount++) {
                 l2=l2+arSet[dcount]*vars[j].strides[dcount];
               }
-              closure_vals[vars[j].offset+l2].shock_value=val/subints;
+              CL_SHOCK(vars[j].offset+l2)=val/subints;
               l=l+1;
             }
           }
@@ -5440,12 +5440,12 @@ offset_t backsolve_read(char *fname, array_def *vars, offset_t nvar, closure_ent
       }
     }
     for (l=vars[j].offset; l<vars[j].offset+vars[j].nelem; l++) {
-      if (closure_vals[l].is_exogenous) {
+      if (CL_EXO(l)) {
         printf("Error: backsolved variable %s is exogenous in the closure; a backsolved variable must be endogenous (GEMPACK manual 14.1.3)\n",vars[j].cofname);
         fclose(filehandle);
         return -1;
       }
-      closure_vals[l].is_backsolved=true;
+      CL_SET_BS(l,true);
       closure_vals[l].exo_index=(exo_idx_t)(nbselems+(l-vars[j].offset));
     }
     backsolves=realloc(backsolves,(nbacksolve+1)*sizeof(backsolve_def));

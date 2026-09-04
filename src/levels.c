@@ -1351,15 +1351,15 @@ int comp_closure_check(closure_entry *closure_vals, array_def *vars, offset_t nv
     offset_t nele = vars[i].nelem; /* scalars carry nelem 1 (size 0) */
     if (strchr(vars[i].cofname, '@') == NULL) continue;
     for (j = 0; j < nele; j++) {
-      if (closure_vals[vars[i].offset + j].is_backsolved) {
+      if (CL_BS(vars[i].offset + j)) {
         printf("Error: derived complementarity variable %s cannot be backsolved\n", vars[i].cofname);
         return -1;
       }
     }
     if (strcmp(vars[i].cofname, "del_comp@") == 0) {
       for (j = 0; j < nele; j++) {
-        if (!closure_vals[vars[i].offset + j].is_exogenous) {
-          closure_vals[vars[i].offset + j].is_exogenous = true;
+        if (!CL_EXO(vars[i].offset + j)) {
+          CL_SET_EXO(vars[i].offset + j,true);
           (*nexo)++;
         }
       }
@@ -1396,15 +1396,15 @@ int comp_closure_check(closure_entry *closure_vals, array_def *vars, offset_t nv
         xoff += pmap[d][l2 / vars[di].strides[d]] * vars[xi].strides[d];
         l2 = l2 % vars[di].strides[d];
       }
-      if (closure_vals[vars[xi].offset + xoff].is_backsolved) {
+      if (CL_BS(vars[xi].offset + xoff)) {
         printf("Error: the Complementarity variable %s must not be backsolved (manual 11.14.1)\n", cp->varname);
         for (d = 0; d < vars[di].size; d++) free(pmap[d]);
         return -1;
       }
-      if (closure_vals[vars[xi].offset + xoff].is_exogenous) continue; /* inert: dummy absorbs the row */
+      if (CL_EXO(vars[xi].offset + xoff)) continue; /* inert: dummy absorbs the row */
       teems_comp_active++;
-      if (!closure_vals[vars[di].offset + j].is_exogenous) {
-        closure_vals[vars[di].offset + j].is_exogenous = true;
+      if (!CL_EXO(vars[di].offset + j)) {
+        CL_SET_EXO(vars[di].offset + j,true);
         (*nexo)++;
       }
     }
@@ -1781,13 +1781,13 @@ int comp_accurate_closure(closure_entry *closure_vals, array_def *vars, offset_t
         l2 = l2 % coefs[rt->wxi].strides[d];
         xoff += rt->xmap[d][idx] * vars[xvi].strides[d];
       }
-      if (closure_vals[vars[xvi].offset + xoff].is_exogenous) continue; /* inert component */
+      if (CL_EXO(vars[xvi].offset + xoff)) continue; /* inert component */
       cp_eval_tuple(rt, cp, coefs, elem_vals, j, &X, &E, &L, &U);
       /* the dummy returns endogenous; the E_$comp row goes inert
          (weights are back at their zero initials after the pre-sim
          restore) */
-      closure_vals[vars[dvi].offset + j].is_exogenous = false;
-      closure_vals[vars[dvi].offset + j].shock_value = 0;
+      CL_SET_EXO(vars[dvi].offset + j,false);
+      CL_SHOCK(vars[dvi].offset + j) = 0;
       if (s == 2) {
         tgt = vars[evi].offset + j;
         shock = -E;                      /* change variable: to zero */
@@ -1805,8 +1805,8 @@ int comp_accurate_closure(closure_entry *closure_vals, array_def *vars, offset_t
           shock = 100 * (target / X - 1);
         } else shock = target - X;
       }
-      closure_vals[tgt].is_exogenous = true;
-      closure_vals[tgt].shock_value = (store_real)shock;
+      CL_SET_EXO(tgt,true);
+      CL_SHOCK(tgt) = (store_real)shock;
       {
         char tn[NAMESIZE * MAXVARDIM];
         cp_tuple_name(rt, sets, set_elems, coefs, j, tn, sizeof(tn));

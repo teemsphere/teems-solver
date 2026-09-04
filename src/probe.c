@@ -353,7 +353,7 @@ typedef struct {
 } probe_onfail_scope_t;
 static __thread probe_onfail_scope_t onfail_scope;
 
-void probe_onfail_context(set_def *sets,set_element *set_elems,array_def *vars,offset_t nvar,closure_entry *closure_vals,offset_t nvarele,offset_t *eq_addr,eq_probe_meta *eqmeta,offset_t neqmeta,PetscInt VecSize) {
+void probe_onfail_context(set_def *sets,set_element *set_elems,array_def *vars,offset_t nvar,closure_entry *closure_vals,offset_t nvarele,PetscInt *eq_addr,eq_probe_meta *eqmeta,offset_t neqmeta,PetscInt VecSize) {
   PetscInt i;
   offset_t j5;
   onfail_ctx.sets=sets;
@@ -373,7 +373,7 @@ void probe_onfail_context(set_def *sets,set_element *set_elems,array_def *vars,o
     onfail_ctx.col2ele[i]=-1;
     onfail_ctx.row2leq[i]=-1;
   }
-  for(j5=0; j5<nvarele; j5++)if(!closure_vals[j5].is_exogenous&&!closure_vals[j5].is_backsolved) {
+  for(j5=0; j5<nvarele; j5++)if(!CL_EXO(j5)&&!CL_BS(j5)) {
       if(closure_vals[j5].exo_index>=0&&closure_vals[j5].exo_index<VecSize)onfail_ctx.col2ele[closure_vals[j5].exo_index]=(int)j5;
     }
   for(j5=0; j5<VecSize; j5++)if(eq_addr[j5]>=0&&eq_addr[j5]<VecSize)onfail_ctx.row2leq[eq_addr[j5]]=(int)j5;
@@ -551,7 +551,7 @@ void teems_onfail_diag_(int *info1) {
   }
 }
 
-int probe_structural(PetscInt VecSize,offset_t nvarele,offset_t ncofele,PetscInt dnz,PetscInt *dnnz,PetscInt dnzB,PetscInt *dnnzB,char *tabfile,char *commsyntax,set_def *sets,dim_t nset,set_element *set_elems,array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar,elem_value *elem_vals,closure_entry *closure_vals,offset_t ndblock,offset_t alltimeset,offset_t allregset,offset_t *eq_addr,offset_t *counteq,offset_t nintraeq,eq_probe_meta *eqmeta,offset_t neqmeta,cmf_file_entry *iodata,int niodata,int noutdata,int nsoldata,int probefine,PetscInt mpisize,PetscInt rank) {
+int probe_structural(PetscInt VecSize,offset_t nvarele,offset_t ncofele,PetscInt dnz,PetscInt *dnnz,PetscInt dnzB,PetscInt *dnnzB,char *tabfile,char *commsyntax,set_def *sets,dim_t nset,set_element *set_elems,array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar,elem_value *elem_vals,closure_entry *closure_vals,offset_t ndblock,offset_t alltimeset,offset_t allregset,PetscInt *eq_addr,offset_t *counteq,offset_t nintraeq,eq_probe_meta *eqmeta,offset_t neqmeta,cmf_file_entry *iodata,int niodata,int noutdata,int nsoldata,int probefine,PetscInt mpisize,PetscInt rank) {
   Mat A,B;
   struct timeval t0,t1;
   offset_t j5,k,d;
@@ -598,7 +598,7 @@ int probe_structural(PetscInt VecSize,offset_t nvarele,offset_t ncofele,PetscInt
     col2ele[i]=-1;
     row2leq[i]=-1;
   }
-  for(j5=0; j5<nvarele; j5++)if(!closure_vals[j5].is_exogenous&&!closure_vals[j5].is_backsolved) {
+  for(j5=0; j5<nvarele; j5++)if(!CL_EXO(j5)&&!CL_BS(j5)) {
       if(closure_vals[j5].exo_index>=0&&closure_vals[j5].exo_index<VecSize)col2ele[closure_vals[j5].exo_index]=j5;
     }
   for(j5=0; j5<VecSize; j5++)if(eq_addr[j5]>=0&&eq_addr[j5]<VecSize)row2leq[eq_addr[j5]]=j5;
