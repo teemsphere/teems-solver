@@ -315,6 +315,10 @@ module mp48_persist
   implicit none
   TYPE (MP48_DATA), save :: pdata
   logical, save :: pinit=.false.
+  ! the pattern as staged (1-based global columns): MP48's analyse
+  ! overwrites pdata%EQVAR with local indices, so the per-step
+  ! pattern test compares against this copy (4 bytes per entry)
+  integer (4), allocatable, save :: pcols(:)
 end module mp48_persist
 
 SUBROUTINE SPEC48_NOMC66_P(indata,jcn1,b1,values1,x,neleperrow,fcomm,rowptrin,colptrin,redo)
@@ -495,7 +499,317 @@ SUBROUTINE SPEC48_NOMC66_PFREE()
   IF (ALLOCATED(pdata%VALUES)) DEALLOCATE(pdata%VALUES)
   IF (ALLOCATED(pdata%B)) DEALLOCATE(pdata%B)
   IF (ALLOCATED(pdata%X)) DEALLOCATE(pdata%X)
+  IF (ALLOCATED(pcols)) DEALLOCATE(pcols)
 END SUBROUTINE SPEC48_NOMC66_PFREE
+
+module mp48_oneshot
+  ! One-shot SBBD instance staged straight from PETSc's SeqAIJ CSR
+  ! (6.15(c)): SPEC48_NOMC66_STAGE fills MP48's host arrays, the caller
+  ! then frees the PETSc matrix, and SPEC48_NOMC66_RUN factorizes and
+  ! solves -- so the solving rank holds one copy of the system during
+  ! the factorization instead of the matrix, a COO staging and the
+  ! host arrays at once.
+  USE HSL_MP48_DOUBLE
+  implicit none
+  TYPE (MP48_DATA), save :: odata
+end module mp48_oneshot
+
+SUBROUTINE SPEC48_NOMC66_STAGE(indata,ai,aj,a,b1,fcomm,rowptrin,colptrin)
+  ! Host staging from the 0-based CSR (ai row pointers, aj columns, a
+  ! values, b1 right-hand side); stored zeros are dropped exactly as the
+  ! former C staging did, so MP48 sees the identical EQVAR/VALUES
+  ! sequence.  indata(1) returns the entry count on the host.
+  ! Collective (JOB=1); the arrays are read on rank 0 only.
+  use mp48_oneshot
+  use constants
+  IMPLICIT NONE
+  integer (8) :: i,j,h,nz,m,nblocks,maxsbcols,ncols
+  INTEGER ST
+  integer (4) fcomm(*)
+  integer (4) ai(*),aj(*)
+  integer (8) indata(*),rowptrin(*),colptrin(*)
+  real (kind=DPC) a(*),b1(*)
+  integer (4) persistent
+  odata%COMM = fcomm(1)
+  odata%JOB = 1
+  CALL MP48AD(odata)
+  call teems_apply_ma48u(odata%CNTL)
+  odata%ICNTL(7) = 3
+  IF (odata%RANK.EQ.0) THEN
+    m = indata(2)
+    nblocks = indata(4)
+    nz = 0
+    do i = 1, ai(m+1)
+      if (a(i).ne.0) nz = nz+1
+    end do
+    indata(1) = nz
+    odata%NEQ=m
+    odata%NBLOCK=nblocks
+    odata%NE=nz
+    ALLOCATE(odata%NEQSB(1:odata%NBLOCK),STAT=ST )
+    ALLOCATE(odata%EQPTR(1:odata%NEQ+1),STAT=ST )
+    ALLOCATE(odata%EQVAR(1:odata%NE),STAT=ST )
+    ALLOCATE(odata%VALUES(1:odata%NE),STAT=ST )
+    ALLOCATE(odata%B(1:odata%NEQ),STAT=ST )
+    maxsbcols=0
+    do i = 1, nblocks
+      odata%NEQSB(i)=rowptrin(i+1)-rowptrin(i)
+      if (teems_verbosity()>=2) write(*,"('nomc block ',i4,' of dimension  ',i10,' X ',i10)") &
+      i,odata%NEQSB(i),colptrin(i+1)-colptrin(i)
+      ncols=colptrin(i+1)-colptrin(i)
+      if(maxsbcols.LT.ncols)maxsbcols=ncols
+    end do
+    maxsbcols=maxsbcols+m-colptrin(nblocks+1)
+    if (teems_verbosity()>=2) print *, "row ", m,"nz ",nz,"maxcolsb ",maxsbcols
+    odata%MAXSBCOLS=maxsbcols
+    h=1
+    do j = 1, m
+      odata%EQPTR(j)=h
+      do i = ai(j)+1, ai(j+1)
+        if (a(i).ne.0) then
+          odata%EQVAR(h)=aj(i)+1
+          odata%VALUES(h)=a(i)
+          h=h+1
+        end if
+      end do
+    end do
+    odata%EQPTR(m+1)=h
+    do i = 1, m
+      odata%B(i)=b1(i)
+    end do
+    persistent=0
+    CALL TEEMS_ONFAIL_SCOPE_CSR(odata%EQPTR,odata%EQVAR,odata%VALUES,nz,m,persistent)
+  END IF
+END SUBROUTINE SPEC48_NOMC66_STAGE
+
+SUBROUTINE SPEC48_NOMC66_RUN(indata,x,fcomm)
+  ! Analyse+factorize+solve (JOB=25) of the instance staged by
+  ! SPEC48_NOMC66_STAGE, solution copied to x on the host, then teardown.
+  ! Collective.
+  use mp48_oneshot
+  use constants
+  IMPLICIT NONE
+  integer myid, numprocs
+  integer (8) :: o,m
+  INTEGER ERCODE
+  INTEGER (4) ZDIAG
+  integer (4) fcomm(*),fcomm1
+  integer (8) indata(*)
+  real (kind=DPC) x(*)
+  fcomm1=fcomm(1)
+  m = indata(2)
+  CALL MPI_BARRIER(odata%COMM,ERCODE)
+  call MPI_COMM_RANK( fcomm1 , myid, ERCODE )
+  call MPI_COMM_SIZE( fcomm1, numprocs, ERCODE )
+  if (teems_verbosity()>=2) print *, "Process ", myid, " of ", numprocs, " is alive1"
+  odata%JOB = 25
+  CALL MP48AD(odata)
+  IF (odata%RANK.EQ.0) THEN
+    IF (odata%ERROR.LT.0 .OR. odata%ERROR.EQ.2) THEN
+      WRITE (6,'(A,I4)') 'Error STOP from MP48 with data%ERROR = ',odata%ERROR
+      IF (odata%ERROR.EQ.-21) WRITE (6,*) ' (the SBBD interface matrix is structurally rank deficient)'
+      IF (odata%ERROR.EQ.2) WRITE (6,*) ' (MP48 reports the matrix is singular)'
+      IF (odata%ERROR.EQ.-21 .OR. odata%ERROR.EQ.2) THEN
+        ZDIAG=0
+        CALL TEEMS_ONFAIL_DIAG(ZDIAG)
+      END IF
+      CALL TEEMS_ONFAIL_ABORT()
+    ELSE
+      do o=1,m
+        x(o)=odata%X(o)
+      end do
+    END IF
+  END IF
+  odata%JOB = 6
+  CALL MP48AD(odata)
+  ! user-supplied components survive JOB=6
+  IF (ALLOCATED(odata%NEQSB)) DEALLOCATE(odata%NEQSB)
+  IF (ALLOCATED(odata%EQPTR)) DEALLOCATE(odata%EQPTR)
+  IF (ALLOCATED(odata%EQVAR)) DEALLOCATE(odata%EQVAR)
+  IF (ALLOCATED(odata%VALUES)) DEALLOCATE(odata%VALUES)
+  IF (ALLOCATED(odata%B)) DEALLOCATE(odata%B)
+END SUBROUTINE SPEC48_NOMC66_RUN
+
+SUBROUTINE SPEC48_NOMC66_P_CSR(indata,ai,aj,a,b1,x,fcomm,rowptrin,colptrin,redo)
+  ! Persistent-instance variant staged from the 0-based CSR (6.15(c)):
+  ! no C-side copy of the pattern/values is kept.  redo(1) on entry:
+  ! 1 = values-only step (the caller established with SPEC48_NOMC66_P_SAME
+  ! that the pattern is unchanged, and broadcast that), 0 = (re)build.
+  ! On exit: 0 = solved, <0 = MP48 error (fast leg: retry with 0).  All
+  ! stored entries are staged, zeros included (-fastrefac keeps the
+  ! structural pattern).  Collective, same redo on every rank.
+  use mp48_persist
+  use constants
+  IMPLICIT NONE
+  integer (8) :: i,j,o,nz,m,nblocks,maxsbcols,ncols
+  INTEGER ERCODE,ST
+  INTEGER (4) ZDIAG
+  integer (4) fcomm(*),fcomm1
+  integer (4) redo(*)
+  integer (4) ai(*),aj(*)
+  integer (8) indata(*),rowptrin(*),colptrin(*)
+  real (kind=DPC) a(*),b1(*),x(*)
+  integer (4) persistent
+  fcomm1=fcomm(1)
+  IF (redo(1).EQ.1 .AND. pinit) THEN
+    ! values-only step: refactorize on the kept structure
+    IF (pdata%RANK.EQ.0) THEN
+      m = indata(2)
+      nz = ai(m+1)
+      do i = 1, nz
+        pdata%VALUES(i)=a(i)
+      end do
+      do i = 1, m
+        pdata%B(i)=b1(i)
+      end do
+      persistent=1
+      CALL TEEMS_ONFAIL_SCOPE_CSR(pdata%EQPTR,pcols,pdata%VALUES,nz,m,persistent)
+    END IF
+    pdata%FACT_JOB=2
+    pdata%JOB = 4
+    CALL MP48AD(pdata)
+    IF (pdata%ERROR.LT.0) THEN
+      if (teems_verbosity()>=1 .AND. pdata%RANK.EQ.0) WRITE (6,'(A,I4)') &
+        'Note: fast SBBD refactorize declined, MP48 code ',pdata%ERROR
+      redo(1)=pdata%ERROR
+      RETURN
+    END IF
+    IF (pdata%ERROR.EQ.2) THEN
+      IF (pdata%RANK.EQ.0) WRITE (6,*) ' MP48 reports the matrix is singular'
+      redo(1)=-21
+      RETURN
+    END IF
+    pdata%JOB = 5
+    CALL MP48AD(pdata)
+    IF (pdata%ERROR.LT.0) THEN
+      redo(1)=pdata%ERROR
+      RETURN
+    END IF
+    IF (pdata%RANK.EQ.0) THEN
+      do o=1,indata(2)
+        x(o)=pdata%X(o)
+      end do
+    END IF
+    redo(1)=0
+    RETURN
+  END IF
+  ! full (re)build
+  IF (pinit) THEN
+    pdata%JOB = 6
+    CALL MP48AD(pdata)
+    pinit=.false.
+  END IF
+  pdata%COMM = fcomm1
+  pdata%JOB = 1
+  CALL MP48AD(pdata)
+  call teems_apply_ma48u(pdata%CNTL)
+  pdata%ICNTL(7) = 3
+  pdata%ICNTL(13) = 1
+  IF (pdata%RANK.EQ.0) THEN
+    m = indata(2)
+    nz = ai(m+1)
+    nblocks = indata(4)
+    indata(1) = nz
+    pdata%NEQ=m
+    pdata%NBLOCK=nblocks
+    pdata%NE=nz
+    IF (ALLOCATED(pdata%NEQSB)) DEALLOCATE(pdata%NEQSB)
+    IF (ALLOCATED(pdata%EQPTR)) DEALLOCATE(pdata%EQPTR)
+    IF (ALLOCATED(pdata%EQVAR)) DEALLOCATE(pdata%EQVAR)
+    IF (ALLOCATED(pdata%VALUES)) DEALLOCATE(pdata%VALUES)
+    IF (ALLOCATED(pdata%B)) DEALLOCATE(pdata%B)
+    IF (ALLOCATED(pdata%X)) DEALLOCATE(pdata%X)
+    ALLOCATE(pdata%NEQSB(1:pdata%NBLOCK),STAT=ST )
+    ALLOCATE(pdata%EQPTR(1:pdata%NEQ+1),STAT=ST )
+    ALLOCATE(pdata%EQVAR(1:pdata%NE),STAT=ST )
+    ALLOCATE(pdata%VALUES(1:pdata%NE),STAT=ST )
+    ALLOCATE(pdata%B(1:pdata%NEQ),STAT=ST )
+    ALLOCATE(pdata%X(1:pdata%NEQ),STAT=ST )
+    maxsbcols=0
+    do i = 1, nblocks
+      pdata%NEQSB(i)=rowptrin(i+1)-rowptrin(i)
+      if (teems_verbosity()>=2) write(*,"('nomc block ',i4,' of dimension  ',i10,' X ',i10)") &
+      i,pdata%NEQSB(i),colptrin(i+1)-colptrin(i)
+      ncols=colptrin(i+1)-colptrin(i)
+      if(maxsbcols.LT.ncols)maxsbcols=ncols
+    end do
+    maxsbcols=maxsbcols+m-colptrin(nblocks+1)
+    if (teems_verbosity()>=2) print *, "row ", m,"nz ",nz,"maxcolsb ",maxsbcols
+    pdata%MAXSBCOLS=maxsbcols
+    do j = 1, m+1
+      pdata%EQPTR(j)=ai(j)+1
+    end do
+    IF (ALLOCATED(pcols)) DEALLOCATE(pcols)
+    ALLOCATE(pcols(1:nz),STAT=ST )
+    do i = 1, nz
+      pdata%EQVAR(i)=aj(i)+1
+      pcols(i)=aj(i)+1
+      pdata%VALUES(i)=a(i)
+    end do
+    do i = 1, m
+      pdata%B(i)=b1(i)
+    end do
+    persistent=1
+    CALL TEEMS_ONFAIL_SCOPE_CSR(pdata%EQPTR,pcols,pdata%VALUES,nz,m,persistent)
+  END IF
+  CALL MPI_BARRIER(pdata%COMM,ERCODE)
+  pdata%JOB = 23
+  CALL MP48AD(pdata)
+  IF (pdata%ERROR.LT.0) THEN
+    WRITE (6,*) ' Unexpected MP48 analyse code on rank ',pdata%RANK
+    redo(1)=pdata%ERROR
+    RETURN
+  END IF
+  pdata%FACT_JOB=1
+  pdata%JOB = 4
+  CALL MP48AD(pdata)
+  IF (pdata%ERROR.LT.0) THEN
+    WRITE (6,*) ' Unexpected MP48 factorize code on rank ',pdata%RANK
+    redo(1)=pdata%ERROR
+    RETURN
+  END IF
+  IF (pdata%ERROR.EQ.2) THEN
+    IF (pdata%RANK.EQ.0) WRITE (6,*) ' MP48 reports the matrix is singular'
+    redo(1)=-21
+    RETURN
+  END IF
+  pinit=.true.
+  pdata%JOB = 5
+  CALL MP48AD(pdata)
+  IF (pdata%ERROR.LT.0) THEN
+    redo(1)=pdata%ERROR
+    RETURN
+  END IF
+  IF (pdata%RANK.EQ.0) THEN
+    do o=1,indata(2)
+      x(o)=pdata%X(o)
+    end do
+  END IF
+  redo(1)=0
+END SUBROUTINE SPEC48_NOMC66_P_CSR
+
+SUBROUTINE SPEC48_NOMC66_P_SAME(indata,ai,aj,same)
+  ! Host-side pattern test for the persistent instance: same(1)=1 when
+  ! an instance exists and the incoming 0-based CSR columns equal its
+  ! EQVAR entry for entry (an equal count alone does not prove it: an
+  ! entry crossing zero moves the pattern at constant count).  Rank 0
+  ! only; the caller broadcasts the verdict.
+  use mp48_persist
+  IMPLICIT NONE
+  integer (8) :: i,nz,m
+  integer (4) ai(*),aj(*),same(*)
+  integer (8) indata(*)
+  same(1)=0
+  IF (.NOT. pinit) RETURN
+  m = indata(2)
+  nz = ai(m+1)
+  IF (.NOT. ALLOCATED(pcols)) RETURN
+  IF (nz.NE.SIZE(pcols,KIND=8)) RETURN
+  do i = 1, nz
+    if (aj(i)+1.NE.pcols(i)) RETURN
+  end do
+  same(1)=1
+END SUBROUTINE SPEC48_NOMC66_P_SAME
 
 SUBROUTINE SPEC51M_RANK(INSIZE,CNTL6,IRN,JCN,VA,IRNA,JCNA,KEEP,W,IW)
   use constants

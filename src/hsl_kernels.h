@@ -16,6 +16,11 @@ extern void spec48_single_(fortran_int *indata,int *irn, int *jcn,solve_real *b1
 extern void spec48_nomc66_(fortran_int *indata, int *jcn,solve_real *b1, solve_real *values,solve_real *x1, int *neleperrow, MPI_Fint *fcomm,fortran_int *rowptrin, fortran_int *colptrin);
 extern void spec48_nomc66_p_(fortran_int *indata, int *jcn,solve_real *b1, solve_real *values,solve_real *x1, int *neleperrow, MPI_Fint *fcomm,fortran_int *rowptrin, fortran_int *colptrin,int *redo);/* persistent MP48 instance (-fastrefac); redo inout: 0 build, 1 FACT_JOB=2 refactorize; out 0 ok, <0 declined (retry with 0). Collective on all ranks with the same redo */
 extern void spec48_nomc66_pfree_(void);/* JOB=6 teardown; collective, no-op if never built */
+/* 6.15(c): staging straight from PETSc's 0-based SeqAIJ CSR (ai/aj/a) -- no C-side COO copy.  STAGE fills the host arrays (zeros dropped, indata[0] returns NE on the host, probe scope registered), the caller frees the Mat, RUN factorizes+solves+tears down.  Both collective. */
+extern void spec48_nomc66_stage_(fortran_int *indata,PetscInt *ai,PetscInt *aj,PetscScalar *a,solve_real *b1,MPI_Fint *fcomm,fortran_int *rowptrin,fortran_int *colptrin);
+extern void spec48_nomc66_run_(fortran_int *indata,solve_real *x1,MPI_Fint *fcomm);
+extern void spec48_nomc66_p_csr_(fortran_int *indata,PetscInt *ai,PetscInt *aj,PetscScalar *a,solve_real *b1,solve_real *x1,MPI_Fint *fcomm,fortran_int *rowptrin,fortran_int *colptrin,int *redo);/* persistent instance from the CSR; redo in: 1 values-only step (caller verified the pattern with p_same and broadcast it), 0 (re)build; out 0 ok, <0 declined (retry with 0). Collective, same redo everywhere */
+extern void spec48_nomc66_p_same_(fortran_int *indata,PetscInt *ai,PetscInt *aj,int *same);/* host-only pattern test against the persistent instance: same=1 when unchanged */
 extern void my_spar_add3l_(solve_real *vecbivi, long int *biviindx,long int *nz1,solve_real *vecbivi0,long int *biviindx0,long int *nz0,long int *nz2);
 extern void my_spar_add4l_(solve_real *vecbivi, long int *biviindx,int *irn, int *jcn,long int *nz1,solve_real *vecbivi0,long int *biviindx0,long int *nz0,long int *nz2,int *ncol);
 extern void my_spar_compl_(long int *biviindx,long int *nz1,long int *biviindx0,long int *nz0,long int *nz2);

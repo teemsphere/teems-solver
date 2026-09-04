@@ -680,6 +680,10 @@ void lu_grow_solve(Mat A,PetscInt VecSize,dim_t laA,solve_real *rhs,solve_real *
    refactorize with FACT_JOB=2.  Collective — all ranks call both. */
 void sbbd_fastrefac_solve(Mat *A,Vec *vecb,PetscInt VecSize,PetscInt rank,PetscInt rank_hsl,fortran_int *indata,MPI_Fint fcomm,offset_t *counteq,offset_t *countvarintra1,solve_real *x);
 void sbbd_fastrefac_free(void);
+/* SBBD one-shot solve staged straight from PETSc's CSR into MP48's host
+   arrays (6.15(c)); destroys *A and *vecb before the factorization.
+   Collective. */
+void sbbd_csr_solve(Mat *A,Vec *vecb,PetscInt VecSize,PetscInt rank,PetscInt rank_hsl,fortran_int *indata,MPI_Fint fcomm,offset_t *counteq,offset_t *countvarintra1,solve_real *x);
 /* -fastrefac DBBD per-block persistent factors (block_solve.c): the flag is
    read inside dbbd_solve, so all drivers inherit it */
 void dbbd_fastrefac_free(void);
@@ -721,6 +725,7 @@ int probe_structural(PetscInt VecSize,offset_t nvarele,offset_t ncofele,PetscInt
 void probe_onfail_context(set_def *sets,set_element *set_elems,array_def *vars,offset_t nvar,closure_entry *closure_vals,offset_t nvarele,PetscInt *eq_addr,eq_probe_meta *eqmeta,offset_t neqmeta,PetscInt VecSize);
 void probe_onfail_scope_set(Mat A,PetscInt m,PetscInt n,const char *label,int block_id,int *row_order,int *col_order,offset_t row_base,offset_t col_base,offset_t row_add,offset_t col_add);
 void probe_onfail_scope_set_coo(const int *irn,const int *jcn,const solve_real *va,const int *rowlen,long nz,PetscInt m,PetscInt n,const char *label,int *row_map,int *col_map);
+void probe_onfail_scope_set_csr(const int *rowptr,const int *jcn,const solve_real *va,long nz,PetscInt m,PetscInt n,const char *label); /* 1-based CSR staging (MP48 host arrays) */
 void probe_onfail_scope_clear(void);
 const char *probe_onfail_scope_label(void); /* label of the system registered for on-failure diagnosis, for errors raised outside probe.c */
 void teems_onfail_diag_(int *info1);

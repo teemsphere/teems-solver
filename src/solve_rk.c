@@ -226,6 +226,10 @@ static void rk_stage_solve(PetscBool nohsl,PetscInt VecSize,PetscInt BSize,
       sbbd_fastrefac_solve(&A,&vecb,VecSize,rank,rank_hsl,indata,fcomm,counteq,countvarintra1,x1);
     }
     else if(matsol==MM_SBBD) {
+      if(mc66==0) {
+        sbbd_csr_solve(&A,&vecb,VecSize,rank,rank_hsl,indata,fcomm,counteq,countvarintra1,x1);
+      }
+      else {
       if(rank==rank_hsl) {
         Mat_SeqAIJ *aa=(Mat_SeqAIJ*)A->data;
         ai= aa->i;
@@ -298,6 +302,7 @@ static void rk_stage_solve(PetscBool nohsl,PetscInt VecSize,PetscInt BSize,
       free(ai1);
       free(b1);
       b1=NULL;
+      }
     }
     else if(fastrefac) {
       /* -fastrefac: persistent pivot sequence, MA48B/BD JOB=2 per stage */

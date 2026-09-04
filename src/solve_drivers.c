@@ -276,67 +276,62 @@ void lu_grow_solve(Mat A,PetscInt VecSize,dim_t laA,solve_real *rhs,solve_real *
    VALUES/B and refactorize with FACT_JOB=2.  Same full-pattern
    extraction rule as the LU path.  Collective: every rank calls
    sbbd_fastrefac_solve with the redo decision broadcast from rank_hsl. */
-static int *sb_jcn=NULL,*sb_neleperrow=NULL;
-static solve_real *sb_values=NULL,*sb_b1=NULL;
-static PetscInt sb_nz=-1;
-static int sb_ready=0;
+static int sb_ready=0; /* a persistent instance exists (for the pattern-change note) */
 
+/* SBBD one-shot solve (6.15(c)): MP48's host arrays are staged straight
+   from PETSc's SeqAIJ CSR on the solving rank (stored zeros dropped, as
+   before), the PETSc matrix and right-hand side are destroyed, and only
+   then does MP48 factorize -- so rank_hsl holds one copy of the system
+   during the factorization instead of the matrix, a 20-byte-per-entry
+   COO staging and the host arrays together.  The on-failure probe scope
+   points at the host arrays (registered from the Fortran staging).
+   Collective: every rank enters both Fortran calls. */
+void sbbd_csr_solve(Mat *A,Vec *vecb,PetscInt VecSize,PetscInt rank,PetscInt rank_hsl,
+                    fortran_int *indata,MPI_Fint fcomm,
+                    offset_t *counteq,offset_t *countvarintra1,solve_real *x) {
+  Mat_SeqAIJ *aa=(Mat_SeqAIJ*)(*A)->data;
+  PetscScalar *bv=NULL;
+  PetscErrorCode ierr;
+  indata[1]=VecSize;
+  if(rank==rank_hsl)VecGetArray(*vecb,&bv);
+  spec48_nomc66_stage_(indata,aa->i,aa->j,aa->a,bv,&fcomm,counteq,countvarintra1);
+  if(rank==rank_hsl)VecRestoreArray(*vecb,&bv);
+  ierr = VecDestroy(vecb);
+  CHKERRABORT(PETSC_COMM_WORLD,ierr);
+  ierr = MatDestroy(A);
+  CHKERRABORT(PETSC_COMM_WORLD,ierr);
+  spec48_nomc66_run_(indata,x,&fcomm);
+  probe_onfail_scope_clear();
+}
+
+/* -fastrefac SBBD (6.15(c) form): the persistent MP48 instance is staged
+   and refilled straight from PETSc's CSR; no C-side copy of the pattern
+   or values is kept.  The pattern test runs on the host against the
+   instance's own EQVAR and its verdict is broadcast, so every rank calls
+   the kernel with the same redo.  A and vecb stay live until after the
+   call because a declined fast step is retried as a full rebuild from
+   the same CSR. */
 void sbbd_fastrefac_solve(Mat *A,Vec *vecb,PetscInt VecSize,PetscInt rank,PetscInt rank_hsl,
                           fortran_int *indata,MPI_Fint fcomm,
                           offset_t *counteq,offset_t *countvarintra1,solve_real *x) {
-  int redo=0;
-  PetscInt i,j;
+  int same=0,redo_io;
   PetscErrorCode ierr;
-  PetscScalar *bv;
-  if(rank==rank_hsl) {
-    Mat_SeqAIJ *aa=(Mat_SeqAIJ*)(*A)->data;
-    int same=(sb_ready&&aa->nz==sb_nz);
-    /* an equal NE does not prove the pattern unchanged: the assembly
-       skips zero-valued entries, so an entry crossing zero moves the
-       pattern at constant count */
-    if(same)for(i=0; i<sb_nz; i++)if(sb_jcn[i]!=aa->j[i]+1) {same=0; break;}
-    if(same) {
-      for(i=0; i<sb_nz; i++)sb_values[i]=aa->a[i];
-      redo=1;
-    }
-    else {
-      if(sb_ready)printf("Note: the Jacobian pattern changed since the last analyse (an entry crossed zero); rebuilding the MP48 instance\n");
-      free(sb_jcn);
-      free(sb_neleperrow);
-      free(sb_values);
-      free(sb_b1);
-      sb_nz=aa->nz;
-      sb_jcn=(int *) calloc (sb_nz,sizeof(int));
-      sb_neleperrow=(int *) calloc (VecSize,sizeof(int));
-      sb_values=(solve_real *) calloc (sb_nz,sizeof(solve_real));
-      sb_b1=(solve_real *) calloc (VecSize,sizeof(solve_real));
-      for(i=0; i<VecSize; i++) {
-        sb_neleperrow[i]=aa->i[i+1]-aa->i[i];
-        for(j=aa->i[i]; j<aa->i[i+1]; j++) {
-          sb_jcn[j]=aa->j[j]+1;
-          sb_values[j]=aa->a[j];
-        }
-      }
-    }
-  }
-  MPI_Bcast(&redo,1,MPI_INT,rank_hsl,PETSC_COMM_WORLD);
-  ierr = MatDestroy(A);
-  CHKERRABORT(PETSC_COMM_WORLD,ierr);
-  if(rank==rank_hsl) {
-    VecGetArray(*vecb,&bv);
-    for(i=0; i<VecSize; i++)sb_b1[i]=bv[i];
-  }
-  ierr = VecDestroy(vecb);
-  CHKERRABORT(PETSC_COMM_WORLD,ierr);
-  indata[0]=sb_nz;
+  PetscScalar *bv=NULL;
+  Mat_SeqAIJ *aa=(Mat_SeqAIJ*)(*A)->data;
   indata[1]=VecSize;
-  int redo_io=redo;
-  if(rank==rank_hsl)probe_onfail_scope_set_coo(NULL,sb_jcn,sb_values,sb_neleperrow,sb_nz,VecSize,VecSize,"SBBD system (MP48, persistent)",NULL,NULL);
-  spec48_nomc66_p_(indata,sb_jcn,sb_b1,sb_values,x,sb_neleperrow,&fcomm,counteq,countvarintra1,&redo_io);
+  if(rank==rank_hsl) {
+    indata[0]=aa->nz;
+    spec48_nomc66_p_same_(indata,aa->i,aa->j,&same);
+    if(!same&&sb_ready)printf("Note: the Jacobian pattern changed since the last analyse (an entry crossed zero); rebuilding the MP48 instance\n");
+  }
+  MPI_Bcast(&same,1,MPI_INT,rank_hsl,PETSC_COMM_WORLD);
+  if(rank==rank_hsl)VecGetArray(*vecb,&bv);
+  redo_io=same?1:0;
+  spec48_nomc66_p_csr_(indata,aa->i,aa->j,aa->a,bv,x,&fcomm,counteq,countvarintra1,&redo_io);
   if(redo_io<0) {
     /* fast refactorize declined: rebuild the instance on current values */
     redo_io=0;
-    spec48_nomc66_p_(indata,sb_jcn,sb_b1,sb_values,x,sb_neleperrow,&fcomm,counteq,countvarintra1,&redo_io);
+    spec48_nomc66_p_csr_(indata,aa->i,aa->j,aa->a,bv,x,&fcomm,counteq,countvarintra1,&redo_io);
     if(redo_io<0) {
       printf("MP48 instance rebuild failed with code %d\n",redo_io);
       /* -21 = structurally rank-deficient interface matrix (singular
@@ -356,19 +351,15 @@ void sbbd_fastrefac_solve(Mat *A,Vec *vecb,PetscInt VecSize,PetscInt rank,PetscI
     }
   }
   probe_onfail_scope_clear();
+  if(rank==rank_hsl)VecRestoreArray(*vecb,&bv);
+  ierr = VecDestroy(vecb);
+  CHKERRABORT(PETSC_COMM_WORLD,ierr);
+  ierr = MatDestroy(A);
+  CHKERRABORT(PETSC_COMM_WORLD,ierr);
   sb_ready=1;
 }
 
 void sbbd_fastrefac_free(void) {
-  free(sb_jcn);
-  free(sb_neleperrow);
-  free(sb_values);
-  free(sb_b1);
-  sb_jcn=NULL;
-  sb_neleperrow=NULL;
-  sb_values=NULL;
-  sb_b1=NULL;
-  sb_nz=-1;
   sb_ready=0;
   spec48_nomc66_pfree_();
 }
@@ -625,6 +616,11 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
       indata[0]=count;//.nz
 
       if(matsol==MM_SBBD) {
+        if(mc66==0) {
+          x0=realloc (x0,VecSize*sizeof(solve_real));
+          sbbd_csr_solve(&A,&vecb,VecSize,rank,rank_hsl,ptx,fcomm,counteq,countvarintra1,x0);
+        }
+        else {
         int *irn=(int *) calloc (count,sizeof(int));
         int *irn1=(int *) calloc (nz01,sizeof(int));
         int *jcn=(int *) calloc (count,sizeof(int));
@@ -689,6 +685,7 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
         free(ai1);
         free(b1);//b1=realloc (b1,sizeof(ha_cgetype));
         b1=NULL;
+        }
       }
       else {
         x0=realloc (x0,VecSize*sizeof(solve_real));
@@ -1165,6 +1162,17 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
               sbbd_fastrefac_solve(&A,&vecb,VecSize,rank,rank_hsl,indata,fcomm,counteq,countvarintra1,x1);
             }
             else if(matsol==MM_SBBD) {
+              if(mc66==0) {
+                x1=realloc (x1,VecSize*sizeof(solve_real));
+                sbbd_csr_solve(&A,&vecb,VecSize,rank,rank_hsl,ptx,fcomm,counteq,countvarintra1,x1);
+                ierr = PetscGetCPUTime(&time1);
+                CHKERRQ(ierr);
+                if(verbosity>=1){ierr = PetscPrintf(PETSC_COMM_WORLD,"LU time %f\n",time1-time0);}
+                CHKERRQ(ierr);
+                ierr = PetscGetCPUTime(&time0);
+                CHKERRQ(ierr);
+              }
+              else {
               if(rank==rank_hsl) {
                 Mat_SeqAIJ *aa=(Mat_SeqAIJ*)A->data;
                 ai= aa->i;
@@ -1254,6 +1262,7 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
               free(ai1);
               free(b1);
               b1=NULL;
+              }
             }
             else if(fastrefac) {
               x1=realloc (x1,VecSize*sizeof(solve_real));
@@ -1765,6 +1774,17 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
             sbbd_fastrefac_solve(&A,&vecb,VecSize,rank,rank_hsl,indata,fcomm,counteq,countvarintra1,x1);
           }
           else if(matsol==MM_SBBD) {
+            if(mc66==0) {
+              x1=realloc (x1,VecSize*sizeof(solve_real));
+              sbbd_csr_solve(&A,&vecb,VecSize,rank,rank_hsl,ptx,fcomm,counteq,countvarintra1,x1);
+              ierr = PetscGetCPUTime(&time1);
+              CHKERRQ(ierr);
+              if(verbosity>=1){ierr = PetscPrintf(PETSC_COMM_WORLD,"LU time %f\n",time1-time0);}
+              CHKERRQ(ierr);
+              ierr = PetscGetCPUTime(&time0);
+              CHKERRQ(ierr);
+            }
+            else {
             if(rank==rank_hsl) {
               Mat_SeqAIJ *aa=(Mat_SeqAIJ*)A->data;
               ai= aa->i;
@@ -1854,6 +1874,7 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
             free(ai1);
             free(b1);
             b1=NULL;
+            }
           }
           else if(fastrefac) {
             x1=realloc (x1,VecSize*sizeof(solve_real));

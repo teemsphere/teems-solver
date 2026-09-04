@@ -67,11 +67,23 @@ static PetscInt probe_csc_build(Mat A,PetscInt n,int realized,int **ptr_out,int 
    position lists), which makes each column's rows come out ascending —
    but border systems are netcut-sized, so a defensive per-column
    insertion sort costs nothing if that invariant ever breaks. */
-static PetscInt probe_csc_build_coo(const int *irn,const int *jcn,const solve_real *va,const int *rowlen,long nz,PetscInt m,PetscInt n,int realized,int **ptr_out,int **row_out) {
+static PetscInt probe_csc_build_coo(const int *irn,const int *jcn,const solve_real *va,const int *rowlen,const int *rowptr,long nz,PetscInt m,PetscInt n,int realized,int **ptr_out,int **row_out) {
   long k;
   PetscInt i,r,nkeep=0;
   int *irn_w=NULL;
-  if(irn==NULL) {
+  if(irn==NULL&&rowptr!=NULL) {
+    /* 1-based CSR row pointer (MP48's EQPTR): synthesize the row indices */
+    if((long)rowptr[m]-1!=nz) {
+      printf("probe: staging row-pointer descriptor inconsistent (%ld != nz %ld), diagnosis skipped\n",(long)rowptr[m]-1,nz);
+      *ptr_out=NULL;
+      *row_out=NULL;
+      return -1;
+    }
+    irn_w= (int *) malloc ((nz>0)?nz*sizeof(int):sizeof(int));
+    for(r=0; r<m; r++)for(k=rowptr[r]-1; k<rowptr[r+1]-1; k++)irn_w[k]=(int)r+1;
+    irn=irn_w;
+  }
+  else if(irn==NULL) {
     /* CSR-style staging (rowlen[r] entries for row r+1, in row order,
        empty rows included — the -fastrefac SBBD form): synthesize the
        row indices */
@@ -338,6 +350,8 @@ typedef struct {
   const int *coo_rowlen;        /* alternative to coo_irn: per-row entry
                                    counts of a row-major staging (SBBD
                                    -fastrefac form), empty rows included */
+  const int *coo_rowptr;        /* alternative to both: 1-based CSR row
+                                   pointer (MP48's EQPTR, 6.15(c)) */
   const solve_real *coo_va;
   long coo_nz;                  /* >0 selects the COO leg when A is NULL */
   PetscInt m,n;
@@ -385,6 +399,7 @@ void probe_onfail_scope_set(Mat A,PetscInt m,PetscInt n,const char *label,int bl
   onfail_scope.coo_irn=NULL;
   onfail_scope.coo_jcn=NULL;
   onfail_scope.coo_rowlen=NULL;
+  onfail_scope.coo_rowptr=NULL;
   onfail_scope.coo_va=NULL;
   onfail_scope.coo_nz=0;
   onfail_scope.m=m;
@@ -413,8 +428,27 @@ void probe_onfail_scope_set_coo(const int *irn,const int *jcn,const solve_real *
   onfail_scope.coo_irn=irn;
   onfail_scope.coo_jcn=jcn;
   onfail_scope.coo_rowlen=rowlen;
+  onfail_scope.coo_rowptr=NULL;
   onfail_scope.coo_va=va;
   onfail_scope.coo_nz=nz;
+}
+
+/* register a system staged as MP48's 1-based CSR host arrays (EQPTR /
+   EQVAR / VALUES, 6.15(c)); identity maps (the full SBBD system) */
+void probe_onfail_scope_set_csr(const int *rowptr,const int *jcn,const solve_real *va,long nz,PetscInt m,PetscInt n,const char *label) {
+  probe_onfail_scope_set(NULL,m,n,label,-1,NULL,NULL,0,0,0,0);
+  onfail_scope.coo_irn=NULL;
+  onfail_scope.coo_rowlen=NULL;
+  onfail_scope.coo_rowptr=rowptr;
+  onfail_scope.coo_jcn=jcn;
+  onfail_scope.coo_va=va;
+  onfail_scope.coo_nz=nz;
+}
+
+/* Fortran entry (hsl_kernels.f90 SBBD staging): register MP48's host
+   arrays for the on-failure diagnosis; host rank only */
+void teems_onfail_scope_csr_(int *rowptr,int *jcn,double *va,long *nz,long *m,int *persistent) {
+  probe_onfail_scope_set_csr(rowptr,jcn,va,*nz,(PetscInt)*m,(PetscInt)*m,(*persistent)?"SBBD system (MP48, persistent)":"SBBD system (MP48)");
 }
 
 /* the label of the system currently registered for on-failure
@@ -431,6 +465,7 @@ void probe_onfail_scope_clear(void) {
   onfail_scope.coo_irn=NULL;
   onfail_scope.coo_jcn=NULL;
   onfail_scope.coo_rowlen=NULL;
+  onfail_scope.coo_rowptr=NULL;
   onfail_scope.coo_va=NULL;
   onfail_scope.coo_nz=0;
 }
@@ -503,7 +538,7 @@ void teems_onfail_diag_(int *info1) {
         for(pass=0; pass<2; pass++) {
           const char *pname=(pass==0)?"stored pattern":"currently nonzero pattern";
           nz=(s->A!=NULL)?probe_csc_build(s->A,s->n,pass,&ptr,&row)
-                         :probe_csc_build_coo(s->coo_irn,s->coo_jcn,s->coo_va,s->coo_rowlen,s->coo_nz,s->m,s->n,pass,&ptr,&row);
+                         :probe_csc_build_coo(s->coo_irn,s->coo_jcn,s->coo_va,s->coo_rowlen,s->coo_rowptr,s->coo_nz,s->m,s->n,pass,&ptr,&row);
           if(nz<0) {
             defect=-1; /* builder bailed: neither verdict applies */
             break;
