@@ -465,6 +465,7 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
 
     gettimeofday(&endtime, NULL);
     if(rank==0)logmsg(1,"Matrix preparation time %.2f s\n",(endtime.tv_sec - begintime.tv_sec)+((double)(endtime.tv_usec - begintime.tv_usec))/ 1000000);
+    teems_rss_probe("matrix preparation");
     
     if(rank==rank_hsl) {
       jacobian_fill(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,closure_vals,ndblock,alltimeset,allregset,eq_addr,counteq,nintraeq,A,B);
@@ -472,6 +473,7 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
 
     gettimeofday(&begintime, NULL);
     if(rank==0)logmsg(1,"Matrix calculation time %.2f s\n",(begintime.tv_sec - endtime.tv_sec)+((double)(begintime.tv_usec - endtime.tv_usec))/ 1000000);
+    teems_rss_probe("matrix calculation");
 
     for (count=0; count<nvarele; count++) {
       if (closure_vals[count].is_exogenous) {
@@ -533,6 +535,7 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
 
     gettimeofday(&endtime, NULL);
     if(rank==0)logmsg(1,"Matrix assembly time %.2f s\n",(endtime.tv_sec - begintime.tv_sec)+((double)(endtime.tv_usec - begintime.tv_usec))/ 1000000);
+    teems_rss_probe("matrix assembly");
     CHKERRQ(ierr);
     PetscViewer viewer;
     /* vecb spans the equation rows (VecSize); vece may be wider (BSize) */
@@ -592,6 +595,7 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
       rep_time = ((double)(gettime_end.tv_nsec-gettime_beg.tv_nsec))/1000000000.0;
       if(rank==0)logmsg(1,"Step time %.2f s\n",(endtime.tv_sec - begintime.tv_sec)+((double)(endtime.tv_usec - begintime.tv_usec))/ 1000000);
       if(rank==0)logmsg(1,"Step wall time %.2f s\n",rep_time);
+      teems_rss_probe("step");
       free(row_order);
       free(col_order);
       free(block_sizes);
@@ -708,6 +712,7 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
       }
       gettimeofday(&endtime, NULL);
       if(rank==0)logmsg(1,"Step time %.2f s\n",(endtime.tv_sec - begintime.tv_sec)+((double)(endtime.tv_usec - begintime.tv_usec))/ 1000000);
+      teems_rss_probe("step");
     }
     if(rank==rank_hsl) {
       if(!inmemory){
@@ -1148,6 +1153,7 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
             ierr = PetscGetCPUTime(&time1);
             if(verbosity>=1){ierr = PetscPrintf(PETSC_COMM_WORLD,"One step solution %f\n",time1-time0);}
             if(rank==0)logmsg(1,"Step time %.2f s\n",difftime(timeend,timestr));
+            teems_rss_probe("step");
             free(row_order);
             free(col_order);
             free(block_sizes);
@@ -1300,6 +1306,7 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
               ierr = PetscGetCPUTime(&time0);
               CHKERRQ(ierr);
             }
+            teems_rss_probe("step");
           }
           if(rank==rank_hsl) {
             if(!inmemory){
@@ -1746,6 +1753,7 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
           ierr = PetscGetCPUTime(&time1);
           if(verbosity>=1){ierr = PetscPrintf(PETSC_COMM_WORLD,"One step solution %f\n",time1-time0);}
           if(rank==0)logmsg(1,"Step time %.2f s\n",difftime(timeend,timestr));
+          teems_rss_probe("step");
           free(row_order);
           free(col_order);
           free(block_sizes);
@@ -1898,6 +1906,7 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
             ierr = VecDestroy(&vecb);
             CHKERRQ(ierr);
           }
+          teems_rss_probe("step");
         }
         if(rank==rank_hsl) {
           if(!inmemory){
@@ -2430,6 +2439,7 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
     free(bsvals);
     gettimeofday(&endtime, NULL);
     if(rank==0)logmsg(1,"%s solve time %.2f s\n",euler?"Euler":"Gragg",(endtime.tv_sec - begintime.tv_sec)+((double)(endtime.tv_usec - begintime.tv_usec))/ 1000000);
+    teems_rss_probe("solve");
               free(counteqs);
               free(counteqnoadds);
               free(countvarintra1s);

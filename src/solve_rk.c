@@ -887,6 +887,7 @@ bool solve_rk(PetscBool nohsl,PetscInt VecSize,PetscInt dnz,PetscInt* dnnz,Petsc
     if(h>teems_rk_stats.h_max)teems_rk_stats.h_max=h;
     if(metric>teems_rk_stats.worst_step_metric)teems_rk_stats.worst_step_metric=metric;
     if(rank==0)logmsg(1,"Step %d accepted: t %.5f, step size %.4g, accuracy metric %.3g (worst element %s[%ld])\n",stepno,t,h,metric,rk_elem_var(vars,nvar,worst_t),(long)worst_t);
+    teems_rss_probe("step");
         fflush(stdout);
     /* first-same-as-last: the last stage was solved at the end state =
        the new base, so its gradient is the next stage 0 */
@@ -981,6 +982,7 @@ bool solve_rk(PetscBool nohsl,PetscInt VecSize,PetscInt dnz,PetscInt* dnnz,Petsc
   free(countvarintra1s);
   gettimeofday(&endtime, NULL);
   if(rank==0)logmsg(1,"%s solve time %.2f s (%d steps, %ld stage solves, %ld reused; rejected %ld accuracy, %ld check)\n",scheme.name,(endtime.tv_sec - begintime.tv_sec)+((double)(endtime.tv_usec - begintime.tv_usec))/ 1000000,stepno,teems_rk_stats.stage_solves,teems_rk_stats.stage_solves_reused,teems_rk_stats.rejects_accuracy,teems_rk_stats.rejects_crossed+teems_rk_stats.rejects_range+teems_rk_stats.rejects_assert+teems_rk_stats.rejects_guard+teems_rk_stats.rejects_singular);
+  teems_rss_probe("solve");
   return 1;
 }
 /* ------------------------------------------------------------------ */
@@ -1235,5 +1237,6 @@ bool solve_comp_approx(PetscBool nohsl,PetscInt VecSize,PetscInt dnz,PetscInt* d
   free(countvarintra1s);
   gettimeofday(&endtime, NULL);
   if(rank==0)logmsg(1,"Complementarity approximate run solve time %.2f s (%d Euler steps, %d requested)\n",(endtime.tv_sec - begintime.tv_sec)+((double)(endtime.tv_usec - begintime.tv_usec))/ 1000000,stepno,napprox);
+  teems_rss_probe("solve");
   return 1;
 }

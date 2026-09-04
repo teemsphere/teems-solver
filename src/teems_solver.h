@@ -356,6 +356,22 @@ void jac_mat_prealloc(Mat M,const char *what,PetscBool mpi,int count,PetscInt nr
    scope gate set by the LU wrappers, accumulators reduced into
    stats.json post-solve.  teems_condest_active_/report_ are the
    Fortran-visible entries used by SPEC48_SSOL2LA(_P). */
+/* Phase resident-memory record (ROADMAP 6.16(a)): after each phase,
+   step and solve line every rank reads its resident set
+   (/proc/self/statm) and high-water mark (getrusage ru_maxrss); the
+   values are reduced to rank 0 as max and sum over ranks, printed as a
+   "memory:" line and kept per phase for stats.json ("rss_gb").
+   Collective on PETSC_COMM_WORLD: call it on every rank.  A phase
+   probed repeatedly (steps) keeps its maximum. */
+#define TEEMS_RSS_MAX 16
+typedef struct {
+  const char *phase;
+  double rss_max,rss_sum,hwm_max,hwm_sum;
+  long count;
+} teems_rss_entry;
+extern teems_rss_entry teems_rss[TEEMS_RSS_MAX];
+extern int teems_nrss;
+void teems_rss_probe(const char *phase);
 extern int teems_condest,teems_condest_scope;
 extern double teems_condest_kw1max,teems_condest_kw2max,teems_condest_omegamax;
 extern long teems_condest_solves,teems_condest_skips;

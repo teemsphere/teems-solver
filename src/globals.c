@@ -1,6 +1,7 @@
 /* Single definitions of the program-wide globals declared extern in
  * teems_solver.h. */
 #include <teems_solver.h>
+#include <sys/resource.h>
 
 int verbosity = 1;
 int inmemory;
@@ -85,6 +86,42 @@ int teems_gpzerodivide = 0;
 long teems_laA_used = 0;
 long teems_laDi_used = 0;
 long teems_laD_used = 0;
+
+/* phase resident-memory record (6.16(a)); see teems_solver.h */
+teems_rss_entry teems_rss[TEEMS_RSS_MAX];
+int teems_nrss = 0;
+void teems_rss_probe(const char *phase) {
+  double loc[2]={0.0,0.0},mx[2]={0.0,0.0},sm[2]={0.0,0.0};
+  long pages=0,resident=0;
+  int rank=0,size=1,i;
+  FILE *fp=fopen("/proc/self/statm","r");
+  if(fp!=NULL) {
+    if(fscanf(fp,"%ld %ld",&pages,&resident)!=2)resident=0;
+    fclose(fp);
+  }
+  loc[0]=(double)resident*(double)sysconf(_SC_PAGESIZE)/1073741824.0;
+  struct rusage ru;
+  if(getrusage(RUSAGE_SELF,&ru)==0)loc[1]=(double)ru.ru_maxrss*1024.0/1073741824.0;
+  MPI_Reduce(loc,mx,2,MPI_DOUBLE,MPI_MAX,0,PETSC_COMM_WORLD);
+  MPI_Reduce(loc,sm,2,MPI_DOUBLE,MPI_SUM,0,PETSC_COMM_WORLD);
+  MPI_Comm_rank(PETSC_COMM_WORLD,&rank);
+  if(rank!=0)return;
+  MPI_Comm_size(PETSC_COMM_WORLD,&size);
+  logmsg(1,"memory: after %s, resident %.2f GB max per rank, %.2f GB over %d rank(s); high-water %.2f GB max, %.2f GB sum\n",phase,mx[0],sm[0],size,mx[1],sm[1]);
+  for(i=0; i<teems_nrss; i++)if(strcmp(teems_rss[i].phase,phase)==0)break;
+  if(i==teems_nrss) {
+    if(teems_nrss==TEEMS_RSS_MAX)return;
+    teems_nrss++;
+    teems_rss[i].phase=phase;
+    teems_rss[i].rss_max=teems_rss[i].rss_sum=teems_rss[i].hwm_max=teems_rss[i].hwm_sum=0.0;
+    teems_rss[i].count=0;
+  }
+  teems_rss[i].count++;
+  if(mx[0]>teems_rss[i].rss_max)teems_rss[i].rss_max=mx[0];
+  if(sm[0]>teems_rss[i].rss_sum)teems_rss[i].rss_sum=sm[0];
+  if(mx[1]>teems_rss[i].hwm_max)teems_rss[i].hwm_max=mx[1];
+  if(sm[1]>teems_rss[i].hwm_sum)teems_rss[i].hwm_sum=sm[1];
+}
 
 /* -condest (MA60/MC71 solve-quality diagnostics, sequential LU path):
    the run flag, a scope gate the LU wrappers set around their kernel

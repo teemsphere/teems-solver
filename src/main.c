@@ -290,6 +290,56 @@ static void stats_rk_patch(cmf_file_entry *iodata, int niodata, int noutdata, in
   free(buf);
 }
 
+/* phase resident-memory record (6.16(a)): per phase the max-over-ranks
+   and sum-over-ranks resident set in GB and the run's high-water mark,
+   patched into stats.json like la_used (same append-at-tail flow) */
+static void stats_rss_patch(cmf_file_entry *iodata, int niodata, int noutdata, int nsoldata) {
+  char statspath[TABREADLINE+16];
+  int i,j;
+  double hwm_max=0.0,hwm_sum=0.0;
+  for (i=niodata+noutdata; i<niodata+noutdata+nsoldata; i++) {
+    if (strcmp("solfiles",iodata[i].logname)==0)break;
+  }
+  if(i<niodata+noutdata+nsoldata)strcpy(statspath,iodata[i].filname);
+  else strcpy(statspath,"solution");
+  strcat(statspath,".stats.json");
+  FILE *fp=fopen(statspath,"r");
+  if (fp==NULL)return;
+  fseek(fp,0,SEEK_END);
+  long len=ftell(fp);
+  fseek(fp,0,SEEK_SET);
+  char *buf=(char *) malloc (len+1);
+  size_t rd=fread(buf,1,len,fp);
+  fclose(fp);
+  if((long)rd!=len) {
+    free(buf);
+    return;
+  }
+  buf[len]='\0';
+  char *end=strrchr(buf,'}');
+  if(end==NULL) {
+    free(buf);
+    return;
+  }
+  *end='\0';
+  fp=fopen(statspath,"w");
+  if (fp==NULL) {
+    free(buf);
+    return;
+  }
+  fprintf(fp,"%s,\n  \"rss_gb\": {\n",buf);
+  for(i=0; i<teems_nrss; i++) {
+    fprintf(fp,"    \"");
+    for(j=0; teems_rss[i].phase[j]!='\0'; j++)fputc(teems_rss[i].phase[j]==' '?'_':teems_rss[i].phase[j],fp);
+    fprintf(fp,"\": {\"max\": %.3f, \"sum\": %.3f, \"probes\": %ld},\n",teems_rss[i].rss_max,teems_rss[i].rss_sum,teems_rss[i].count);
+    if(teems_rss[i].hwm_max>hwm_max)hwm_max=teems_rss[i].hwm_max;
+    if(teems_rss[i].hwm_sum>hwm_sum)hwm_sum=teems_rss[i].hwm_sum;
+  }
+  fprintf(fp,"    \"peak\": {\"max\": %.3f, \"sum\": %.3f}\n  }\n}\n",hwm_max,hwm_sum);
+  fclose(fp);
+  free(buf);
+}
+
 /* -condest record: per-run maxima of the MA60 solve-quality measures,
    patched into stats.json like la_used (same append-at-tail flow) */
 static void stats_condest_patch(cmf_file_entry *iodata, int niodata, int noutdata, int nsoldata,
@@ -1771,6 +1821,7 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
   }
   gettimeofday(&endtime, NULL);
   if(rank==0)logmsg(1,"Variable calculation time %.2f s\n",(endtime.tv_sec - begintime.tv_sec)+((double)(endtime.tv_usec - begintime.tv_usec))/ 1000000);
+  teems_rss_probe("variable calculation");
   if(nohsl) { //Overcome MPI_Bcast limit
     if((nvarele+ncofele)*sizeof(elem_value)>1500000000) {
       j1=1500000000/sizeof(elem_value);
@@ -1790,6 +1841,7 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
   //**************************************************************************************
   gettimeofday(&begintime, NULL);
   if(rank==0)logmsg(1,"Variable broadcast time %.2f s\n",(begintime.tv_sec - endtime.tv_sec)+((double)(begintime.tv_usec - endtime.tv_usec))/ 1000000);
+  teems_rss_probe("variable broadcast");
   //**************************************************************************************
   //****************************** MATRIX FROM FORMULA************************************
   //**************************************************************************************
@@ -2724,6 +2776,10 @@ comp_accurate_reentry:
                                    cddmax[0],cddmax[1],cddmax[2],cdlsum[0],cdlsum[1]);
   }
   if(isrk&&!comp_dispatch&&rank==0)stats_rk_patch(iodata,niodata,noutdata,nsoldata);
+  /* phase resident-memory record: a last probe for the run's high-water
+     mark (collective), then patch the per-phase table */
+  teems_rss_probe("solution write");
+  if(rank==0)stats_rss_patch(iodata,niodata,noutdata,nsoldata);
   /* PostSim foundation F3 (early Tier 0): after the solve, coefficient
      slots hold post-simulation (updated) values and xcf holds the
      composed solution; expose the solution to the formula engine and
