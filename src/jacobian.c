@@ -356,7 +356,13 @@ static void stmt_prog_execute(stmt_prog *st, offset_t matrow, PetscInt *eq_addr,
             jcn[i3]=Iindx;
             i3++;
           }
-          if (CL_EXO(vars[lv->LinVarIndx].offset+li3)&&vval!=0) {
+          /* exogenous block (6.16(c)): only SHOCKED columns are stored.
+             B's single consumer is vecb = B*vece and every vece entry is a
+             multiple of the element's shock, so an unshocked column only
+             ever multiplies an exact zero; dropping it leaves the product
+             bit-identical (up to the sign of an all-zero row sum) and
+             shrinks B from nexo columns to the shocked set */
+          if (CL_EXO(vars[lv->LinVarIndx].offset+li3)&&vval!=0&&CL_SHOCK(vars[lv->LinVarIndx].offset+li3)!=0) {
             valueb[sj]=-vval;
             jcnb[sj]=Iindx;
             sj++;
@@ -2987,8 +2993,9 @@ int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,
                 onnz[Jindx-Istart]=onnz[Jindx-Istart]+1;
               }
             }
-            if (CL_EXO(vars[LinVars[i].LinVarIndx].offset+li3)) {
-              /* B's diagonal block is delimited by ITS column range, which
+            if (CL_EXO(vars[LinVars[i].LinVarIndx].offset+li3)&&CL_SHOCK(vars[LinVars[i].LinVarIndx].offset+li3)!=0) {
+              /* shocked columns only, matching the fill (6.16(c)).
+                 B's diagonal block is delimited by ITS column range, which
                  parts company with the row range once nexo > VecSize */
               if (Cstart<=Iindx&&Iindx<Cend) {
                 dnnzB[Jindx-Istart]=dnnzB[Jindx-Istart]+1;
