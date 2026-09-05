@@ -91,6 +91,8 @@ long teems_laD_used = 0;
 unsigned char *teems_cl_flags = NULL;
 store_real *teems_cl_shock = NULL;
 
+int teems_ndcutcache = 1; /* -ndcutcache: reuse the NDBBD cuts across steps */
+
 /* wall-clock stage record (bordered drivers); see teems_solver.h */
 static const char *teems_stage_name[TEEMS_STAGE_MAX];
 static double teems_stage_wall[TEEMS_STAGE_MAX];

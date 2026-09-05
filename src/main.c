@@ -176,6 +176,7 @@ static void ordering_stats_write(cmf_file_entry *iodata, int niodata, int noutda
     fprintf(fp,"    \"fastrefac\": %s,\n",frchk?"true":"false");
     if(teems_ma48u_opt>0)fprintf(fp,"    \"ma48u\": %g,\n",teems_ma48u_opt);
     else fprintf(fp,"    \"ma48u\": null,\n");
+    fprintf(fp,"    \"ndcutcache\": %d,\n",teems_ndcutcache);
     fprintf(fp,"    \"condest\": %s,\n",teems_condest?"true":"false");
     fprintf(fp,"    \"gpzerodivide\": %s,\n",teems_gpzerodivide?"true":"false");
     fprintf(fp,"    \"assertions\": \"%s\",\n",mode_names[teems_assertions_mode>=0&&teems_assertions_mode<=2?teems_assertions_mode:2]);
@@ -1036,6 +1037,7 @@ int main(int argc,char **args) {
   }
   inmemory=-1;
   PetscOptionsGetInt(NULL,NULL,"-inmemory",&inmemory,NULL);/* keep value arrays resident instead of spilling to scratch */
+  PetscOptionsGetInt(NULL,NULL,"-ndcutcache",&teems_ndcutcache,NULL);/* NDBBD: reuse the rank cuts across steps (1) or re-probe every step (0) */
   if(inmemory<0)inmemory=(matsol==MM_NDBBD)?0:1;/* default: resident except NDBBD, whose factor-file I/O wants the page cache that spilling frees (measured; LU/SBBD gain, DBBD neutral on both domains) */
   {
     /* Scratch directory for solver temp files: -tempdir option, else
@@ -2621,6 +2623,7 @@ comp_accurate_reentry:
       if(nesteddbbd==1) {
         free(ndbbddrank1);
         ndbbddrank1=NULL;
+        ndbbd_cut_cache_free();
       }
       if(rank==rank_hsl) {
         PetscFree(dnnz);
@@ -2687,6 +2690,7 @@ comp_accurate_reentry:
   dbbd_fastrefac_free();
   dbbd_fastextract_free();
   ndbbd_fastrefac_free();
+  ndbbd_cut_cache_free();
   free(backsolves);
 
 

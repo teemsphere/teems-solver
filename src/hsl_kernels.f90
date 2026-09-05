@@ -2368,6 +2368,8 @@ call teems_apply_ma48u(CNTL)
     WRITE (6,FMT='(A,I3/A)') 'STOP from MA48B/BD with INFO(1) =',&
     INFO(1),'Solution not possible'
     write(*,"(A,i5)") 'RANK',INFO(5)
+    WRITE (6,*) ' (NDBBD interface block: on a repeat step the cached row/column', &
+      ' selection may have gone numerically singular -- rerun with -ndcutcache 0)'
     CALL TEEMS_ONFAIL_DIAG(INFO(1))
     CALL TEEMS_ONFAIL_ABORT()
   END IF

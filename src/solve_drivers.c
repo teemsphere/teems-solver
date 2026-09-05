@@ -890,6 +890,9 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
     BSize=(PetscInt)(nvarele-VecSize-nbselems);      /* nexo */
     BSize=(BSize>VecSize)?BSize:VecSize;
     for(subindx=0; subindx<subints; subindx++) {
+      /* a new subinterval re-bases the data: the NDBBD cut is re-probed
+         there (reuse is within a subinterval, across its passes/steps) */
+      ndbbd_cut_cache_free();
       for(sol=0; sol<maxsol; sol++) {
         if(sol==0)nsteps=steps1;
         /* llround: truncation could drop a step when the ratio is not

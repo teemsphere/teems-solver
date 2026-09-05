@@ -382,6 +382,21 @@ void jac_mat_prealloc(Mat M,const char *what,PetscBool mpi,int count,PetscInt nr
    resets.  Marks must sit at points every rank passes in the same
    order (the report is a collective); inside OpenMP regions only
    thread 0 records. */
+/* NDBBD cut cache (-ndcutcache, default 1): the regional cut
+   (ndbbd_order_presolve: rank-deficient block tails migrated to the
+   time-interface blocks, counteq/countvarintra1/block_sizes, the
+   row/col permutations, ndbbdrank) and the per-chain-block interface
+   cut (ndbbd_presolve's rank probe: rank + row/col permutation) are
+   fixed by the model's structure, yet were recomputed by a throwaway
+   MA48 factorization of every block at every step (and every RK
+   stage).  Step 1 computes them as before and stores them; later
+   steps reuse them.  Keyed on VecSize/ndblock; freed on the
+   complementarity re-entry (closure changes the partition). */
+extern int teems_ndcutcache;
+void ndbbd_cut_cache_free(void);
+void ndbbd_cut_iface_init(int nmatint);
+int ndbbd_cut_iface_get(int j3,int *rank_out,int *irn,int *jcn,int nrow,int ncol);
+void ndbbd_cut_iface_put(int j3,int rank_val,const int *irn,const int *jcn,int nrow,int ncol);
 #define TEEMS_STAGE_MAX 24
 void teems_stage_mark(const char *name);
 void teems_stage_report(const char *prefix);

@@ -1615,6 +1615,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
   long int nz0,nz1,nz2,nz3=j,halfj2;
   long int lj2;
   int jthrd,nthrd;
+  ndbbd_cut_iface_init(nmatint);
   teems_stage_mark("presolve:factor+schur");
   #pragma omp parallel private(jthrd,nthrd,j3,j4,bivirowsize,bivicolsize,bbrowij,ai,nz,nrow,i,j,j1,j2,li,lj,ddrowi,vecbivisize,aic,ajc,valsc,nzc,nrowc,ncolc,ncolb,nrowb,aj,vals,lj2,nz0,j1name,filename,presolfile,fwrt,fd1,nz1,cntl6in,ncol,lasize,ldsize) shared(insize,submatAij,submatBij,submatCij)
   {
@@ -2191,7 +2192,14 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
       if(cntl6==0&&SORD==0)cntl6in=0.3;
       else cntl6in=cntl6;
       {
-      int tries;
+      int tries,cut_rank=0;
+      if(ndbbd_cut_iface_get(j3,&cut_rank,irn,jcn,nrow,ncol)) {
+        /* interface cut cached from step 1: skip the rank probe */
+        insized[3]=cut_rank;
+        insized[6]=0;
+        tries=6;
+      }
+      else
       for(tries=0; tries<6; tries++) {
         insized[6]=0;
         spec51m_rank_(insized,&cntl6in,irn1,jcn1,vecbivi,irn,jcn,keep,w51,iw51);
@@ -2248,6 +2256,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
         printf("Error: the MA48 workspace for %s did not converge after %d growth attempts; raise the initial workspace (laA/laD/laDi) or use a bordered matrix_method (\"SBBD\" or \"DBBD\")\n",probe_onfail_scope_label(),tries);
         MPI_Abort(PETSC_COMM_WORLD,1);
       }
+      ndbbd_cut_iface_put(j3,insized[3],irn,jcn,nrow,ncol);
       }
       insized=realloc(insized,(5+nreg*insizes)*sizeof(int));
       for(i=0; i<nreg; i++) {
@@ -2269,6 +2278,12 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
         printf("Error: cannot open scratch file %s\n",filename);
       }
       logmsg(2,"rank %d nrow %d ncol %d block rank %d nz %d cntl6 %lf\n",rank,nrow,ncol,insized[3],nz,cntl6in);
+      if(verbosity>=2) {
+        unsigned long ph=1469598103934665603UL;
+        for(i=0; i<nrow; i++)ph=(ph^(unsigned long)irn[i])*1099511628211UL;
+        for(i=0; i<ncol; i++)ph=(ph^(unsigned long)jcn[i])*1099511628211UL;
+        printf("ifcut rank %d j3 %d irank %d nrow %d ncol %d permsum %lx\n",rank,j3,insized[3],nrow,ncol,ph);
+      }
       fwrt=fwrite(insized, sizeof(int), 5+nreg*insizes, presolfile);
       if(fwrt== 0) {printf("Error: short write on scratch file %s (%s); the scratch filesystem is likely full - free space there or point -tempdir at a larger filesystem\n",filename,strerror(errno));fflush(stdout);MPI_Abort(PETSC_COMM_WORLD,1);}
       fclose(presolfile);

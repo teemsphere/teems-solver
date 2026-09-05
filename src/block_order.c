@@ -156,6 +156,81 @@ int dbbd_order(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscIn
 }
 
 
+
+/* ---- NDBBD cut cache (see teems_solver.h) ---- */
+static int ndcut_valid=0;
+static offset_t ndcut_VecSize=-1,ndcut_ndblock=-1;
+static int ndcut_ntime=-1;
+static int *ndcut_row=NULL,*ndcut_col=NULL,*ndcut_bs=NULL;
+static offset_t *ndcut_ceq=NULL,*ndcut_ceqna=NULL,*ndcut_cvi=NULL;
+static PetscInt *ndcut_rank=NULL;
+static int ndcut_niface=0;
+static int *ndcut_if_rank=NULL,*ndcut_if_nrow=NULL,*ndcut_if_ncol=NULL,*ndcut_if_set=NULL;
+static int **ndcut_if_irn=NULL,**ndcut_if_jcn=NULL;
+
+void ndbbd_cut_cache_free(void) {
+  int i;
+  free(ndcut_row); free(ndcut_col); free(ndcut_bs);
+  free(ndcut_ceq); free(ndcut_ceqna); free(ndcut_cvi); free(ndcut_rank);
+  ndcut_row=ndcut_col=ndcut_bs=NULL;
+  ndcut_ceq=ndcut_ceqna=ndcut_cvi=NULL;
+  ndcut_rank=NULL;
+  for(i=0; i<ndcut_niface; i++) {
+    free(ndcut_if_irn[i]);
+    free(ndcut_if_jcn[i]);
+  }
+  free(ndcut_if_irn); free(ndcut_if_jcn); free(ndcut_if_rank); free(ndcut_if_nrow); free(ndcut_if_ncol); free(ndcut_if_set);
+  ndcut_if_irn=ndcut_if_jcn=NULL;
+  ndcut_if_rank=ndcut_if_nrow=ndcut_if_ncol=ndcut_if_set=NULL;
+  ndcut_niface=0;
+  ndcut_valid=0;
+  ndcut_VecSize=ndcut_ndblock=-1;
+  ndcut_ntime=-1;
+}
+
+/* per-rank interface cut slots, one per local chain block; call before
+   the presolve's interface loop (outside its parallel region) */
+void ndbbd_cut_iface_init(int nmatint) {
+  int i;
+  if(ndcut_niface==nmatint)return;
+  for(i=0; i<ndcut_niface; i++) {
+    free(ndcut_if_irn[i]);
+    free(ndcut_if_jcn[i]);
+  }
+  free(ndcut_if_irn); free(ndcut_if_jcn); free(ndcut_if_rank); free(ndcut_if_nrow); free(ndcut_if_ncol); free(ndcut_if_set);
+  ndcut_niface=nmatint;
+  ndcut_if_irn=(int **) calloc (nmatint,sizeof(int *));
+  ndcut_if_jcn=(int **) calloc (nmatint,sizeof(int *));
+  ndcut_if_rank=(int *) calloc (nmatint,sizeof(int));
+  ndcut_if_nrow=(int *) calloc (nmatint,sizeof(int));
+  ndcut_if_ncol=(int *) calloc (nmatint,sizeof(int));
+  ndcut_if_set=(int *) calloc (nmatint,sizeof(int));
+}
+
+/* 1 = slot j3 holds a cut for a block of this shape (rank + permutations copied out) */
+int ndbbd_cut_iface_get(int j3,int *rank_out,int *irn,int *jcn,int nrow,int ncol) {
+  if(!teems_ndcutcache||teems_ndcutcache==2||j3<0||j3>=ndcut_niface||!ndcut_if_set[j3])return 0; /* 2 = regional cache only (bisect aid) */
+  if(ndcut_if_nrow[j3]!=nrow||ndcut_if_ncol[j3]!=ncol)return 0;
+  *rank_out=ndcut_if_rank[j3];
+  memcpy(irn,ndcut_if_irn[j3],nrow*sizeof(int));
+  memcpy(jcn,ndcut_if_jcn[j3],ncol*sizeof(int));
+  return 1;
+}
+
+void ndbbd_cut_iface_put(int j3,int rank_val,const int *irn,const int *jcn,int nrow,int ncol) {
+  if(!teems_ndcutcache||j3<0||j3>=ndcut_niface)return;
+  free(ndcut_if_irn[j3]);
+  free(ndcut_if_jcn[j3]);
+  ndcut_if_irn[j3]=(int *) malloc ((nrow>0?nrow:1)*sizeof(int));
+  ndcut_if_jcn[j3]=(int *) malloc ((ncol>0?ncol:1)*sizeof(int));
+  memcpy(ndcut_if_irn[j3],irn,nrow*sizeof(int));
+  memcpy(ndcut_if_jcn[j3],jcn,ncol*sizeof(int));
+  ndcut_if_rank[j3]=rank_val;
+  ndcut_if_nrow[j3]=nrow;
+  ndcut_if_ncol[j3]=ncol;
+  ndcut_if_set[j3]=1;
+}
+
 int ndbbd_order_presolve(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscInt Istart, PetscInt Iend,int nreg, int ntime, offset_t nvarele, PetscInt *eq_addr,int *row_order,int *col_order, offset_t ndblock,int *block_sizes, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laDi,solve_real cntl6,PetscInt* ndbbdrank,PetscBool presol) {
   FILE *presolfile;
   char j1name[1024],filename[1024],rankname[1024];
@@ -170,6 +245,17 @@ int ndbbd_order_presolve(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt ran
   PetscErrorCode ierr;
   PetscViewer viewer;
   MatInfo           matinfo;
+  if(teems_ndcutcache&&teems_ndcutcache!=3&&ndcut_valid&&ndcut_VecSize==VecSize&&ndcut_ndblock==ndblock&&ndcut_ntime==ntime) { /* 3 = interface cache only (bisect aid) */
+    /* the cut is structural: reuse step 1's instead of re-probing */
+    memcpy(counteq,ndcut_ceq,(ndblock+1)*sizeof(offset_t));
+    memcpy(counteqnoadd,ndcut_ceqna,ndblock*sizeof(offset_t));
+    memcpy(countvarintra1,ndcut_cvi,(ndblock+1)*sizeof(offset_t));
+    memcpy(row_order,ndcut_row,VecSize*sizeof(int));
+    memcpy(col_order,ndcut_col,VecSize*sizeof(int));
+    memcpy(block_sizes,ndcut_bs,ndblock*sizeof(int));
+    memcpy(ndbbdrank,ndcut_rank,ntime*sizeof(PetscInt));
+    return 1;
+  }
   MatGetInfo(A,MAT_LOCAL,&matinfo);
   logmsg(2,"rank %d matinfo.nz_used %g\n",rank,matinfo.nz_used);
   int *block_sizes1= (int *) calloc (ndblock,sizeof(int));
@@ -347,7 +433,12 @@ int ndbbd_order_presolve(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt ran
       for(i=0; i<ncol; i++) {
         col_order2[i+countvarintra1[j3+begblock[rank]]]=jcn1[i]-1+bfirst;
       }
-      logmsg(2,"rank %d mat rank %d nrow %d ncol %d j3 %d proc %d\n",rank,insize[3],nrow,ncol,j3,rank);
+      if(verbosity>=2) {
+        unsigned long ph=1469598103934665603UL;
+        for(i=0; i<nrow; i++)ph=(ph^(unsigned long)irn1[i])*1099511628211UL;
+        for(i=0; i<ncol; i++)ph=(ph^(unsigned long)jcn1[i])*1099511628211UL;
+        logmsg(2,"rank %d mat rank %d nrow %d ncol %d j3 %d proc %d permsum %lx\n",rank,insize[3],nrow,ncol,j3,rank,ph);
+      }
       block_sizes1[j3+begblock[rank]]=insize[3];
       counteqnoadd1[j3+begblock[rank]]=insize[3];
       countvarintra2[j3+begblock[rank]]=insize[3];
@@ -451,6 +542,30 @@ int ndbbd_order_presolve(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt ran
   free(countvarintra2);
   free(countvarintra4);
   free(countvarintra6);
+  if(teems_ndcutcache) {
+    /* store the cut for the following steps */
+    if(ndcut_VecSize!=VecSize||ndcut_ndblock!=ndblock||ndcut_ntime!=ntime) {
+      free(ndcut_row); free(ndcut_col); free(ndcut_bs); free(ndcut_ceq); free(ndcut_ceqna); free(ndcut_cvi); free(ndcut_rank);
+      ndcut_row=(int *) malloc (VecSize*sizeof(int));
+      ndcut_col=(int *) malloc (VecSize*sizeof(int));
+      ndcut_bs=(int *) malloc (ndblock*sizeof(int));
+      ndcut_ceq=(offset_t *) malloc ((ndblock+1)*sizeof(offset_t));
+      ndcut_ceqna=(offset_t *) malloc (ndblock*sizeof(offset_t));
+      ndcut_cvi=(offset_t *) malloc ((ndblock+1)*sizeof(offset_t));
+      ndcut_rank=(PetscInt *) malloc (ntime*sizeof(PetscInt));
+      ndcut_VecSize=VecSize;
+      ndcut_ndblock=ndblock;
+      ndcut_ntime=ntime;
+    }
+    memcpy(ndcut_ceq,counteq,(ndblock+1)*sizeof(offset_t));
+    memcpy(ndcut_ceqna,counteqnoadd,ndblock*sizeof(offset_t));
+    memcpy(ndcut_cvi,countvarintra1,(ndblock+1)*sizeof(offset_t));
+    memcpy(ndcut_row,row_order,VecSize*sizeof(int));
+    memcpy(ndcut_col,col_order,VecSize*sizeof(int));
+    memcpy(ndcut_bs,block_sizes,ndblock*sizeof(int));
+    memcpy(ndcut_rank,ndbbdrank,ntime*sizeof(PetscInt));
+    ndcut_valid=1;
+  }
   return 1;
 }
 
