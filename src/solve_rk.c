@@ -209,11 +209,16 @@ static void rk_stage_solve(PetscBool nohsl,PetscInt VecSize,PetscInt BSize,
       memcpy(counteq,counteqs,(ndblock+1)*sizeof(offset_t));
       memcpy(counteqnoadd,counteqnoadds,(ndblock)*sizeof(offset_t));
       memcpy(countvarintra1,countvarintra1s,(ndblock+1)*sizeof(offset_t));
+      teems_stage_mark("order-presolve");
       ndbbd_order_presolve(A,VecSize,mpisize,rank,Istart,Iend,nreg,ntime,nvarele,eq_addr,row_order,col_order,ndblock,block_sizes,countvarintra1,counteq,counteqnoadd,laA,laDi,cntl6,ndbbddrank1,presol);
+      teems_stage_mark("presolve");
       ndbbd_presolve(A,vecb,x1,VecSize,mpisize,rank,Istart,Iend,row_order,col_order,ndblock,nreg,ntime,block_sizes,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,presol);
       presol=0;
+      teems_stage_mark("order");
       ndbbd_order(A,VecSize,mpisize,rank,Istart,Iend,nreg,ntime,nvarele,eq_addr,row_order,col_order,ndblock,block_sizes,countvarintra1,counteq,counteqnoadd,laA,laDi,cntl6,ndbbddrank1,presol);
+      teems_stage_mark("solve");
       ndbbd_solve(A,vecb,x1,VecSize,mpisize,rank,Istart,Iend,row_order,col_order,ndblock,nreg,ntime,block_sizes,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,presol);
+      teems_stage_report("ndbbd");
     }
     free(row_order);
     free(col_order);

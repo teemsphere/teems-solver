@@ -375,6 +375,16 @@ void jac_mat_prealloc(Mat M,const char *what,PetscBool mpi,int count,PetscInt nr
    "memory:" line and kept per phase for stats.json ("rss_gb").
    Collective on PETSC_COMM_WORLD: call it on every rank.  A phase
    probed repeatedly (steps) keeps its maximum. */
+/* Wall-clock stage record for the bordered drivers (NDBBD first):
+   teems_stage_mark(name) closes the running stage and opens `name`
+   (NULL closes only); teems_stage_report(prefix) reduces every stage's
+   wall to its max over ranks and prints one line on rank 0, then
+   resets.  Marks must sit at points every rank passes in the same
+   order (the report is a collective); inside OpenMP regions only
+   thread 0 records. */
+#define TEEMS_STAGE_MAX 24
+void teems_stage_mark(const char *name);
+void teems_stage_report(const char *prefix);
 #define TEEMS_RSS_MAX 16
 typedef struct {
   const char *phase;

@@ -1514,6 +1514,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
     free(indices);
   }
   logmsg(2,"Begin preparation rank %d\n",rank);
+  teems_stage_mark("presolve:extract");
   ierr = MatCreateSubMatrices(A,nmatin,rowindices,colindices,MAT_INITIAL_MATRIX,&submatAij);
   int insizes=19;
   int *insize=(int *) calloc (insizes*nmatin,sizeof(int));
@@ -1614,6 +1615,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
   long int nz0,nz1,nz2,nz3=j,halfj2;
   long int lj2;
   int jthrd,nthrd;
+  teems_stage_mark("presolve:factor+schur");
   #pragma omp parallel private(jthrd,nthrd,j3,j4,bivirowsize,bivicolsize,bbrowij,ai,nz,nrow,i,j,j1,j2,li,lj,ddrowi,vecbivisize,aic,ajc,valsc,nzc,nrowc,ncolc,ncolb,nrowb,aj,vals,lj2,nz0,j1name,filename,presolfile,fwrt,fd1,nz1,cntl6in,ncol,lasize,ldsize) shared(insize,submatAij,submatBij,submatCij)
   {
   long int *bivinzrow=NULL,irnmems=0;//(long int *) calloc (1,sizeof(long int));
@@ -2113,6 +2115,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
   if(vecbivi==NULL)printf("Error: memory allocation failed for vecbivi\n");
   long int probe_cap=ldsize; /* current array length; grows on MA48 -3 */
   int *insizeda=(int *) calloc (5+nreg*insizes,sizeof(int));
+  teems_stage_mark("presolve:interface-rank");
   #pragma omp for schedule (static)
   for(j3=0; j3<nmatint; j3++) {
     j4=nreg+j3*(nreg+1);
@@ -2462,6 +2465,7 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
   for (i=0; i<nmatinplus; i++) fn03[i] = (char*)calloc(1024,sizeof(char));
 
   timestr=clock();
+  teems_stage_mark("solve:rhs+extract");
   for(j1=0; j1<nmatinplus; j1++) {
     if(j1<nmatin) {
       if(j1<10)strcpy(j1name,"000");
@@ -2780,6 +2784,7 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
   offset_t xi1indx=0;
   long int nz0=0,nz1,nz3;//,nz2,halfj2;
   int fd1,fd2,fd3,frrsl1,frrsl2,frrsl3;
+  teems_stage_mark("solve:interface-factor");
   omp_set_num_threads(section_threads);
   #pragma omp parallel private(jthrd,nthrd,j4,j1name,filename,frd,fd1,nrow,ncol,i,j,presolfile,nz,nz1,cntl6in,fwrt,ldsize,j3) shared(insize)
   {
@@ -3078,6 +3083,7 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
   }
   int maxrowcij;
   solve_real *xi1 = (solve_real*)calloc(sumrowcolin,sizeof(solve_real));
+  teems_stage_mark("solve:schur");
   #pragma omp parallel private(jthrd,timestr,aic,ajc,valsc,nrowc,ncolc,a1i,a1j,val1s,nz,a2i,a2j,val2s,nrowb,ncolb,i,j,j2,xi1point,xi1indx,maxrowcij,la1,fp1,fp2,fp3,freadresult,frrsl1,frrsl2,frrsl3,longsize,nzc) shared(submatC,submatB1,submatB2,xi1,submatCij,submatBij,insize,yi1,vecbivi,vecbiui)
   {
   int icntl[20],info[20];
@@ -3244,6 +3250,7 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
   logmsg(2,"Completed calculation of partitioned matrices, rank %d\n",rank);
   timestr=clock();
 
+  teems_stage_mark("solve:reduce");
   lj=0; /* reduction adds thread sums to the ORIGINAL lj - must not be stack garbage */
   #pragma omp parallel private(li) reduction(+:lj)
   {
@@ -3420,6 +3427,7 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
   solve_real *xd;//= (ha_cgetype*)calloc(vecbiuisize,sizeof(ha_cgetype));
   solve_real *x0;//,*vecbivi0;//= (ha_cgetype*)calloc(VecSize,sizeof(ha_cgetype));
   long int lnz;
+  teems_stage_mark("solve:border");
   if(rank==mpisize-1) {
     Mat_SeqAIJ         *aa=(Mat_SeqAIJ*)submatD[0]->data;//*aa=subA->data;
     ai= aa->i;
@@ -3543,6 +3551,7 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
   timestr=clock();
   xi1indx=0;
 
+  teems_stage_mark("solve:backsub");
   omp_set_num_threads(section_threads);
   #pragma omp parallel private(jthrd,j1,j2,j,i,timestr,ai,aj,vals,nz,nrow,xi1point,xi1indx,ierr,nindices) shared(submatC,submatCij,submatBij,insize,xi1,colindicesbc1,colindicesbc2,x0)
   {
@@ -3630,6 +3639,7 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
   free(insize);
   ierr = PetscFree(submatC);
   logmsg(2,"Solution calculation rank %d time %f\n",rank,((double)(clock()-timestr))/CLOCKS_PER_SEC);
+  teems_stage_mark("solve:allreduce");
   MPI_Barrier(PETSC_COMM_WORLD);
   free(xd);
   timestr=clock();

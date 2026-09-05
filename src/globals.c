@@ -91,6 +91,47 @@ long teems_laD_used = 0;
 unsigned char *teems_cl_flags = NULL;
 store_real *teems_cl_shock = NULL;
 
+/* wall-clock stage record (bordered drivers); see teems_solver.h */
+static const char *teems_stage_name[TEEMS_STAGE_MAX];
+static double teems_stage_wall[TEEMS_STAGE_MAX];
+static int teems_nstage=0;
+static const char *teems_stage_cur=NULL;
+static double teems_stage_t0=0.0;
+void teems_stage_mark(const char *name) {
+  int i;
+  if(omp_in_parallel()&&omp_get_thread_num()!=0)return;
+  double t=MPI_Wtime();
+  if(teems_stage_cur!=NULL) {
+    for(i=0; i<teems_nstage; i++)if(strcmp(teems_stage_name[i],teems_stage_cur)==0)break;
+    if(i==teems_nstage&&teems_nstage<TEEMS_STAGE_MAX) {
+      teems_stage_name[teems_nstage]=teems_stage_cur;
+      teems_stage_wall[teems_nstage]=0.0;
+      teems_nstage++;
+    }
+    if(i<TEEMS_STAGE_MAX)teems_stage_wall[i]+=t-teems_stage_t0;
+  }
+  teems_stage_cur=name;
+  teems_stage_t0=t;
+}
+void teems_stage_report(const char *prefix) {
+  double mx[TEEMS_STAGE_MAX];
+  int i,rank=0,n=teems_nstage;
+  teems_stage_mark(NULL);
+  MPI_Allreduce(MPI_IN_PLACE,&n,1,MPI_INT,MPI_MIN,PETSC_COMM_WORLD);
+  MPI_Allreduce(teems_stage_wall,mx,n>0?n:1,MPI_DOUBLE,MPI_MAX,PETSC_COMM_WORLD);
+  MPI_Comm_rank(PETSC_COMM_WORLD,&rank);
+  if(rank==0&&n>0) {
+    double tot=0.0;
+    for(i=0; i<n; i++)tot+=mx[i];
+    printf("%s stages (s, max over ranks; total %.2f):",prefix,tot);
+    for(i=0; i<n; i++)printf("%s %s %.2f",i?",":"",teems_stage_name[i],mx[i]);
+    printf("\n");
+    fflush(stdout);
+  }
+  teems_nstage=0;
+  teems_stage_cur=NULL;
+}
+
 /* phase resident-memory record (6.16(a)); see teems_solver.h */
 teems_rss_entry teems_rss[TEEMS_RSS_MAX];
 int teems_nrss = 0;
