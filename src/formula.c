@@ -93,6 +93,25 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
   int leadlag;
   int mp=0;
   bool IsChange=false;
+  /* index-count guard: a reference must carry exactly the declared
+     number of indices (manual 10.3/11.4.10). The binders below strtok
+     the argument list positionally, so a bare reference to an indexed
+     array (esun for esun(t)) handed a NULL index to parse_index_leadlag
+     (SEGV in an equation term) or bound element 0 in a formula, and a
+     surplus index was silently dropped. Counted before strtok cuts the
+     token; the copy keeps the reference text for the message. */
+  char tokcopy[NAMESIZE];
+  int nargs_tok=0;
+  {
+    const char *b=strchr(var2,'{');
+    strncpy(tokcopy,var2,NAMESIZE-1);
+    tokcopy[NAMESIZE-1]='\0';
+    if(b!=NULL) {
+      const char *q;
+      nargs_tok=1;
+      for(q=b+1; *q!='\0'&&*q!='}'; q++) if(*q==',') nargs_tok++;
+    }
+  }
   p= strtok(var2,"{");
   if (p==NULL) {
     p=&var2[0];
@@ -122,6 +141,10 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
   index=ncof-1;
   if(!PairSkipCoefs) do {
     if (strcmp(coefs[index].cofname,p)==0) {
+      if((int)coefs[index].size!=nargs_tok) {
+        printf("Error: coefficient %s is declared with %d %s but is referenced with %d in %s; a reference must carry exactly the declared indices (manual 10.3, 11.4.10)\n",coefs[index].cofname,(int)coefs[index].size,coefs[index].size==1?"index":"indices",nargs_tok,tokcopy);
+        MPI_Abort(PETSC_COMM_WORLD,1);
+      }
       if(!coefs[index].suplval)warn_no_values(coefs[index].cofname,index,0);
       if(varindex==2) {
         ops[nops].Var2BegAdd=coefs[index].offset;
@@ -262,6 +285,10 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
   index=nvar-1;
   do {
     if (strcmp(vars[index].cofname,p)==0) {
+      if((int)vars[index].size!=nargs_tok) {
+        printf("Error: variable %s is declared with %d %s but is referenced with %d in %s; a reference must carry exactly the declared indices (manual 10.3, 11.4.10)\n",vars[index].cofname,(int)vars[index].size,vars[index].size==1?"index":"indices",nargs_tok,tokcopy);
+        MPI_Abort(PETSC_COMM_WORLD,1);
+      }
       if(varindex==2) {
         ops[nops].Var2BegAdd=vars[index].offset+ncofele;
         if(IsChange) ops[nops].Var2Type=OT_CHANGE;

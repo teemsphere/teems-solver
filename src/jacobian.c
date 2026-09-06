@@ -534,6 +534,219 @@ static void linvar_map_dim_check(eq_var_ref *ref, dim_t d, offset_t frame_setid,
    backsolve recovery programs are evaluated outside the matrix ownership
    split -- while the fill path keeps the exact eq_addr/[Istart1,Iend1)
    pruning it always had. */
+/* ---- linearity check of a linear equation (manual 11.4.8) ----------
+   TABLO rejects a linear equation that uses a linear variable other
+   than as coefficient-expression * variable: inside a function
+   argument, as the base or exponent of ^, multiplied by or dividing
+   another variable, or in the conditional part of an IF or SUM. The
+   term splitter in stmt_prog_build_one assumes that shape and silently
+   mis-read anything else (a variable raised to a power lost its
+   exponent; a product of two variables bound one column and left the
+   system structurally singular; an unknown function name bound as a
+   coefficient). The shape is verified here first, on the normalised
+   "RHS-(LHS)" text (blanks stripped, brackets as parentheses, before
+   formula_normalize retypes the groups), by recursive descent
+     expr    := term (('+'|'-') term)*
+     term    := factor (('*'|'/') factor)*
+     factor  := unary ('^' unary)*
+     unary   := ('+'|'-') unary | primary
+     primary := number | '(' expr ')' | name [ '(' args ')' ]
+   returning the degree in linear variables (0 or 1); every violation
+   is a named fatal. Tokens starting p_ are linear variables (cmf_io
+   prefixes every linear-variable reference; names_validate keeps the
+   prefix off coefficients). SUM/IF bodies are the last argument and
+   their head/condition may not hold a variable; intrinsic arguments
+   must be degree 0 (11.5); any other name followed by '(' that is not
+   a coefficient is an unknown function. */
+typedef struct {
+  const char *p;
+  const char *eqname;
+  array_def *coefs;
+  offset_t ncof;
+  int fail;
+} lin_ctx;
+
+static const char *lin_intrinsics[]={"sqrt","exp","loge","log10","abs","max","min","id01","id0v","round","trunc0","truncb","random","normal","cumnormal","lognormal","cumlognormal","gperf","gperfc","maxs","mins","prod",NULL};
+
+static int lin_isnamec(char ch) {
+  return isalnum((unsigned char)ch)||ch=='_'||ch=='@';
+}
+
+static void lin_fatal(lin_ctx *c, const char *what) {
+  if(c->fail) return;
+  printf("Error: equation %s is not linear in its variables: %s. A linear equation may use a linear variable only as coefficient-expression * variable (manual 11.4.8); a nonlinear relation between levels is written as Equation (Levels) over Variable (Levels) declarations (manual 9.2, 18.1)\n",c->eqname,what);
+  c->fail=1;
+}
+
+static void lin_fatal_tok(lin_ctx *c, const char *what, const char *tok, int toklen) {
+  char msg[NAMESIZE+128];
+  if(toklen>NAMESIZE-1) toklen=NAMESIZE-1;
+  snprintf(msg,sizeof(msg),"%s %.*s",what,toklen,tok);
+  lin_fatal(c,msg);
+}
+
+/* p at '(' -> pointer past the matching ')', NULL if unbalanced */
+static const char *lin_skip_group(const char *p) {
+  int depth=0;
+  for(; *p!='\0'; p++) {
+    if(*p=='(') depth++;
+    else if(*p==')') { depth--; if(depth==0) return p+1; }
+  }
+  return NULL;
+}
+
+/* a p_-leading token starts inside [s,e) */
+static int lin_has_var(const char *s, const char *e) {
+  const char *q;
+  for(q=s; q+1<e; q++)
+    if(q[0]=='p'&&q[1]=='_'&&(q==s||!lin_isnamec(q[-1]))) return 1;
+  return 0;
+}
+
+static int lin_coef_known(lin_ctx *c, const char *nm, int nmlen) {
+  offset_t i;
+  for(i=0; i<c->ncof; i++)
+    if(strncmp(c->coefs[i].cofname,nm,nmlen)==0&&c->coefs[i].cofname[nmlen]=='\0') return 1;
+  return 0;
+}
+
+static int lin_expr(lin_ctx *c);
+
+static int lin_primary(lin_ctx *c) {
+  const char *p=c->p;
+  int f;
+  if(c->fail) return 0;
+  if(*p=='(') {
+    int d;
+    c->p=p+1;
+    d=lin_expr(c);
+    if(c->fail) return 0;
+    if(*c->p!=')') { lin_fatal(c,"unbalanced parentheses"); return 0; }
+    c->p++;
+    return d;
+  }
+  if(isdigit((unsigned char)*p)||*p=='.') {
+    while(isdigit((unsigned char)*p)||*p=='.') p++;
+    if((*p=='e'||*p=='E')&&(isdigit((unsigned char)p[1])||((p[1]=='+'||p[1]=='-')&&isdigit((unsigned char)p[2])))) {
+      p+=2;
+      while(isdigit((unsigned char)*p)) p++;
+    }
+    c->p=p;
+    return 0;
+  }
+  if(lin_isnamec(*p)) {
+    const char *nm=p;
+    int nmlen,isvar;
+    while(lin_isnamec(*p)) p++;
+    nmlen=(int)(p-nm);
+    isvar=(nmlen>2&&nm[0]=='p'&&nm[1]=='_');
+    if(*p=='(') {
+      const char *ge=lin_skip_group(p);
+      if(ge==NULL) { lin_fatal(c,"unbalanced parentheses"); return 0; }
+      if(isvar) { c->p=ge; return 1; }
+      if((nmlen==3&&strncmp(nm,"sum",3)==0)||(nmlen==2&&strncmp(nm,"if",2)==0)) {
+        /* body = last top-level argument */
+        const char *a=p+1,*q,*body=NULL;
+        int depth=0,d;
+        for(q=a; q<ge-1; q++) {
+          if(*q=='(') depth++;
+          else if(*q==')') depth--;
+          else if(*q==','&&depth==0) body=q+1;
+        }
+        if(body==NULL) { lin_fatal_tok(c,"malformed",nm,nmlen); return 0; }
+        if(lin_has_var(a,body-1)) { lin_fatal_tok(c,"a linear variable in the conditional part of",nm,nmlen); return 0; }
+        c->p=body;
+        d=lin_expr(c);
+        if(c->fail) return 0;
+        if(c->p!=ge-1) { lin_fatal_tok(c,"malformed body of",nm,nmlen); return 0; }
+        c->p=ge;
+        return d;
+      }
+      for(f=0; lin_intrinsics[f]!=NULL; f++)
+        if((int)strlen(lin_intrinsics[f])==nmlen&&strncmp(nm,lin_intrinsics[f],nmlen)==0) break;
+      if(lin_intrinsics[f]!=NULL) {
+        if(lin_has_var(p+1,ge-1)) { lin_fatal_tok(c,"a linear variable inside the argument of function",nm,nmlen); return 0; }
+        c->p=ge;
+        return 0;
+      }
+      if(lin_coef_known(c,nm,nmlen)) { c->p=ge; return 0; }
+      lin_fatal_tok(c,"unknown function or name",nm,nmlen);
+      return 0;
+    }
+    if(isvar) { c->p=p; return 1; }
+    if(lin_coef_known(c,nm,nmlen)) { c->p=p; return 0; }
+    lin_fatal_tok(c,"unknown name",nm,nmlen);
+    return 0;
+  }
+  lin_fatal_tok(c,"unexpected character",p,1);
+  return 0;
+}
+
+static int lin_unary(lin_ctx *c) {
+  while(*c->p=='+'||*c->p=='-') c->p++;
+  return lin_primary(c);
+}
+
+static int lin_factor(lin_ctx *c) {
+  int d=lin_unary(c);
+  if(c->fail) return 0;
+  while(*c->p=='^') {
+    int e;
+    c->p++;
+    e=lin_unary(c);
+    if(c->fail) return 0;
+    if(d>0) { lin_fatal(c,"a linear variable raised to a power"); return 0; }
+    if(e>0) { lin_fatal(c,"a linear variable used as an exponent"); return 0; }
+  }
+  return d;
+}
+
+static int lin_term(lin_ctx *c) {
+  int d=lin_factor(c);
+  if(c->fail) return 0;
+  while(*c->p=='*'||*c->p=='/') {
+    char op=*c->p;
+    int e;
+    c->p++;
+    e=lin_factor(c);
+    if(c->fail) return 0;
+    if(op=='/'&&e>0) { lin_fatal(c,"division by a linear variable"); return 0; }
+    d+=e;
+    if(d>1) { lin_fatal(c,"a product of two linear variables"); return 0; }
+  }
+  return d;
+}
+
+static int lin_expr(lin_ctx *c) {
+  int d=lin_term(c);
+  if(c->fail) return 0;
+  while(*c->p=='+'||*c->p=='-') {
+    int e;
+    c->p++;
+    e=lin_term(c);
+    if(c->fail) return 0;
+    if(e>d) d=e;
+  }
+  return d;
+}
+
+static void eq_linearity_check(const char *text, const char *eqname, array_def *coefs, offset_t ncof) {
+  lin_ctx c;
+  int d;
+  c.p=text; c.eqname=eqname; c.coefs=coefs; c.ncof=ncof; c.fail=0;
+  d=lin_expr(&c);
+  if(!c.fail&&*c.p!='\0') {
+    int n=(int)strlen(c.p);
+    lin_fatal_tok(&c,"unexpected text at",c.p,n>40?40:n);
+  }
+  if(!c.fail&&d==0) {
+    printf("Error: equation %s contains no linear variable (manual 11.4.8: every term of a linear equation is coefficient-expression * variable)\n",eqname);
+    c.fail=1;
+  }
+  if(c.fail) MPI_Abort(PETSC_COMM_WORLD,1);
+}
+
+
 static void stmt_prog_build_one(char *line, stmt_prog *stp, char *commsyntax,
                                 set_def *sets, offset_t nset, set_element *set_elems, array_def *coefs, offset_t ncof,
                                 array_def *vars, offset_t nvar, offset_t ncofele,
@@ -541,7 +754,7 @@ static void stmt_prog_build_one(char *line, stmt_prog *stp, char *commsyntax,
                                 PetscInt Istart1, PetscInt Iend1, PetscMPIInt mpisize1,
                                 bool force_all) {
   char tline[TABREADLINE],line1[TABREADLINE],leftline[TABREADLINE],linecopy[TABREADLINE];
-  char vname[TABREADLINE],sumsyntax[NAMESIZE],lintmp[TABREADLINE];
+  char vname[TABREADLINE],sumsyntax[NAMESIZE],lintmp[TABREADLINE],eqname[NAMESIZE];
   char *readitem=NULL,*p=NULL,*p1=NULL;
   PetscInt Jindx=0;
   bool isinproc;
@@ -555,6 +768,14 @@ static void stmt_prog_build_one(char *line, stmt_prog *stp, char *commsyntax,
 
       str_replace_first(line, commsyntax, "");
       str_replace_first(line, "(linear)", "");
+      {
+        /* equation name for the linearity-check messages */
+        const char *q=line;
+        int k=0;
+        while(*q==' ') q++;
+        while(lin_isnamec(*q)&&k<NAMESIZE-1) eqname[k++]=*q++;
+        eqname[k]='\0';
+      }
       while (str_replace_all(line,"  ", " "));
       while (str_replace_char(line, '[', '('));
       while (str_replace_char(line, ']', ')'));
@@ -589,6 +810,7 @@ static void stmt_prog_build_one(char *line, stmt_prog *stp, char *commsyntax,
         strcat(readitem,")");
       }
       while (str_replace_all(readitem," ", ""));
+      eq_linearity_check(readitem,eqname,coefs,ncof);
       while (formula_normalize(readitem)==1);
       leadlag_encode(readitem);
       strcpy(tline,readitem);

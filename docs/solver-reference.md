@@ -276,6 +276,17 @@ variable-declaration append (`tab_write_variables`).
 headers. `outputs_write_csv` writes the post-simulation
 set/coefficient CSVs.
 
+Before an equation reaches the readers, every linear-variable
+reference in it is prefixed `p_` (the internal linear-variable
+marker, change and percent-change alike; levels variables are
+excluded, their bare token is the value). The follower set that
+recognises a token includes `)` and `}` since 2026-09-06: a scalar
+variable closing a bracket group (GTAPv7's `[pxwcom(c) - pxwwld]`)
+was never prefixed, so the equation reader bound it as a value and
+dropped its column from `E_c1_cr`, `E_cnttotr` and `E_cntpinv`; the
+linearity check in `jacobian.c` now names such a token as an unknown
+name instead of letting it through.
+
 ### tab_parse.c
 
 The TAB front end, driven per statement type over the preprocessed file:
@@ -296,7 +307,11 @@ statements: parses quantifiers and conditions, resolves the target
 array, compiles the RHS once via `formula_compile` (helpers:
 `formula_compile_pow` / `_muldiv` / `_addsub` / `_if` precedence passes;
 `formula_bind_operand` resolves each operand's array, strides, and
-superset maps; `formula_subst_scalar` inlines scalar coefficients;
+superset maps, and aborts with a named error when a reference carries
+a different number of indices than its declaration (a bare `ESUN` for
+`ESUN(t)` used to hand a NULL index to the positional binder: SEGV in
+an equation term, silent element-0 binding in a formula);
+`formula_subst_scalar` inlines scalar coefficients;
 `leadlag_encode` / `parse_index_leadlag` handle `{t+1}` offsets), then
 evaluates the resulting `formula_op` program per element with
 `formula_eval` under OpenMP (per-thread program copies). `sum_eval`
@@ -330,7 +345,18 @@ statement is compiled once per solve into a cached program
 only re-evaluate it; the cache is per rank, keyed to the matrix
 ownership range, and released by `jacobian_cache_free()`.
 `eq_sum_parse` / `eq_sum_replace` / `eq_linvar_read` handle SUM terms
-and linear-variable references during the build phase.
+and linear-variable references during the build phase. Before the
+term splitter sees an equation, `eq_linearity_check` parses the
+normalised `RHS-(LHS)` text by recursive descent and rejects, as a
+named fatal citing manual 11.4.8, any use of a linear variable other
+than coefficient-expression * variable: a variable inside a function
+argument, as the base or exponent of `^`, multiplied by or dividing
+another variable, in the conditional part of an IF or SUM, an unknown
+function name, or an equation with no linear variable at all. The
+splitter assumes that shape and silently mis-read anything else (a
+power lost its exponent, a product bound one column and left MA48 a
+structurally singular matrix). The nonlinear form belongs in
+`Equation (Levels)` (see `levels.c`).
 
 ### block_order.c
 
