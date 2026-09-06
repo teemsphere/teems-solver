@@ -3801,7 +3801,17 @@ bool ndbbd_block_solve_mem(PetscInt rank, int begmat,int nreg,int * insize,int i
     j2=j1-begmat;//-begmat;
     j=j1*insizes;
     insize1=insize+j;
-    spec48m_rpesol_(insize1,irnereg[j2],valereg[j2],keepreg[j2],b01,sol1,cntl,rinfo,error1,icntl,info,w,iw);//insize+j
+    /* the Schur pass feeds one sparse border column at a time, so a
+       regional slice of the right-hand side is often all zero; its
+       solve is exactly zero (forward and back substitution of zeros),
+       so write the zeros and skip the MA48C call.  The dense
+       right-hand-side pass finds a nonzero within a few entries. */
+    {
+      PetscInt n1=insize[j],k;
+      for(k=0; k<n1; k++)if(b01[k]!=0)break;
+      if(k==n1)memset(sol1,0,n1*sizeof(solve_real));
+      else spec48m_rpesol_(insize1,irnereg[j2],valereg[j2],keepreg[j2],b01,sol1,cntl,rinfo,error1,icntl,info,w,iw);//insize+j
+    }
     b01+=insize[j];
     sol1+=insize[j];
   }
