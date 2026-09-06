@@ -1617,7 +1617,80 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
   int jthrd,nthrd;
   ndbbd_cut_iface_init(nmatint);
   teems_stage_mark("presolve:factor+schur");
-  #pragma omp parallel private(jthrd,nthrd,j3,j4,bivirowsize,bivicolsize,bbrowij,ai,nz,nrow,i,j,j1,j2,li,lj,ddrowi,vecbivisize,aic,ajc,valsc,nzc,nrowc,ncolc,ncolb,nrowb,aj,vals,lj2,nz0,j1name,filename,presolfile,fwrt,fd1,nz1,cntl6in,ncol,lasize,ldsize) shared(insize,submatAij,submatBij,submatCij)
+  /* NDBBD thread budget.  Every presolve thread owns a dense interface
+     product (the border rows x border columns present in its chain
+     block, solve_real) and an MA48 workspace of lasize entries, so
+     resident memory grows with threads x that footprint rather than
+     with ranks: Q34 on one rank with 32 threads reached 130 GB where
+     four ranks x one thread needed 71 GB.  Size the per-thread
+     footprint from the structure before the team starts and cap the
+     team so the ranks on this node fit MemAvailable (0.8 of it, the
+     rest is for the factors and the outer solve).  The cap only lowers
+     -maxthreads, and block-to-thread assignment does not change
+     results. */
+  int ndthr=omp_get_max_threads();
+  {
+    long int vmax=0,lmax=0,rmax=0,cmax=0,bbmax=0,rs,cs,ls;
+    PetscInt pnz,pnrow,anr,anc,*pai;
+    Mat_SeqAIJ *pb,*pa;
+    for(j3=0; j3<nmatint; j3++) {
+      bbrowij=submatBij[j3*(nreg+1)][0]->rmap->n;
+      if(bbrowij>bbmax)bbmax=bbrowij;
+    }
+    long int *prow=(long int *) calloc (bbmax>0?bbmax:1,sizeof(long int));
+    int *pcol=(int *) calloc (bbmax>0?bbmax:1,sizeof(int));
+    for(j3=0; j3<nmatint; j3++) {
+      bbrowij=submatBij[j3*(nreg+1)][0]->rmap->n;
+      memset(prow,0,bbrowij*sizeof(long int));
+      memset(pcol,0,bbrowij*sizeof(int));
+      for(j1=0; j1<nreg; j1++) {
+        j4=j1+j3*(nreg+1);
+        border_cols_present(submatCij[j4][0],pcol);
+        pb=(Mat_SeqAIJ*)submatBij[j4][0]->data;
+        pai=pb->i;
+        pnz=pb->nz;
+        pnrow=submatBij[j4][0]->rmap->n;
+        for(i=0; i<pnrow-1; i++)if(pai[i]!=pai[i+1])prow[i]++;
+        if(pnrow>0&&pai[pnrow-1]<pnz)prow[pnrow-1]++;
+        pa=(Mat_SeqAIJ*)submatAij[j4]->data;
+        anr=submatAij[j4]->rmap->n;
+        anc=submatAij[j4]->cmap->n;
+        ls=ma48_la_from_pct(laA,pa->nz);
+        if(ls<pa->nz+anr+1)ls=pa->nz+anr+1;
+        if(ls>lmax)lmax=ls;
+        if(anr>rmax)rmax=anr;
+        if(anc>cmax)cmax=anc;
+      }
+      rs=0;
+      cs=0;
+      for(i=0; i<bbrowij; i++) {
+        if(prow[i]>0)rs++;
+        if(pcol[i]>0)cs++;
+      }
+      if(rs*cs>vmax)vmax=rs*cs;
+    }
+    free(prow);
+    free(pcol);
+    double dense_b=(double)vmax*sizeof(solve_real);
+    double ws_b=(double)lmax*(2*sizeof(int)+sizeof(solve_real))+(double)(rmax+9*cmax+7)*sizeof(int)+(double)5*(rmax>cmax?rmax:cmax)*sizeof(solve_real)+(double)(6*rmax+3*cmax)*sizeof(int);
+    long int avail=0;
+    char mline[256];
+    FILE *mi=fopen("/proc/meminfo","r");
+    if(mi!=NULL) {
+      while(fgets(mline,sizeof(mline),mi))if(sscanf(mline,"MemAvailable: %ld kB",&avail)==1)break;
+      fclose(mi);
+    }
+    int nnode=1;
+    MPI_Comm_size(node_comm,&nnode);
+    if(avail>0&&dense_b+ws_b>0) {
+      double budget=0.8*(double)avail*1024.0/(double)nnode;
+      int fit=(int)(budget/(dense_b+ws_b));
+      if(fit<1)fit=1;
+      if(fit<ndthr)ndthr=fit;
+    }
+    if(rank==0||ndthr<omp_get_max_threads())logmsg(1,"ndbbd threads: rank %d uses %d of %d (per thread: dense interface product %.2f GB, MA48 workspace %.2f GB; %d rank(s) on this node, MemAvailable %.1f GB)\n",(int)rank,ndthr,omp_get_max_threads(),dense_b/1073741824.0,ws_b/1073741824.0,nnode,(double)avail/1048576.0);
+  }
+  #pragma omp parallel num_threads(ndthr) private(jthrd,nthrd,j3,j4,bivirowsize,bivicolsize,bbrowij,ai,nz,nrow,i,j,j1,j2,li,lj,ddrowi,vecbivisize,aic,ajc,valsc,nzc,nrowc,ncolc,ncolb,nrowb,aj,vals,lj2,nz0,j1name,filename,presolfile,fwrt,fd1,nz1,cntl6in,ncol,lasize,ldsize) shared(insize,submatAij,submatBij,submatCij)
   {
   long int *bivinzrow=NULL,irnmems=0;//(long int *) calloc (1,sizeof(long int));
   PetscInt *bivinzcol=NULL;//(PetscInt *) calloc (1,sizeof(PetscInt));
