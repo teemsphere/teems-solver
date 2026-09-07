@@ -1568,8 +1568,27 @@ int tab_postsim_split(char *newtabfile, char *psfile) {
       continue;
     }
     if(!inps) {
-      /* scope isolation (12.2.1): PostSim names are PostSim-only */
-      for(k=0;k<npsn;k++)if(line_has_ident(line,psnames[k])) {
+      /* scope isolation (12.2.1): PostSim names are PostSim-only.
+         Set element lists and quoted element literals are not names
+         (a PostSim coefficient INVESTMENT vs the element investment of
+         an ordinary set): scan a copy with those masked out */
+      char scan[TABREADLINE];
+      {
+        int si=0,inq=0,inlist=0,isset=(strncmp(line,"set ",4)==0),k3;
+        /* a write's longname is free text (it may nest quotes) */
+        char *lnm=(strncmp(line,"write",5)==0)?strstr(line," longname "):NULL;
+        for(k3=0; line[k3]!='\0'&&si<TABREADLINE-1; k3++) {
+          char ch=line[k3];
+          if(lnm!=NULL&&line+k3>=lnm) break;
+          if(inq) { if(ch=='"') inq=0; continue; }
+          if(ch=='"') { inq=1; continue; }
+          if(isset&&ch=='(') { inlist=1; continue; }
+          if(isset&&inlist) { if(ch==')') inlist=0; continue; }
+          scan[si++]=ch;
+        }
+        scan[si]='\0';
+      }
+      for(k=0;k<npsn;k++)if(line_has_ident(scan,psnames[k])) {
         printf("Error: ordinary statement references PostSim-declared name %s (manual 12.2.1): %s",psnames[k],line);
         fclose(fin);
         fclose(fmain);

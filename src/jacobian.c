@@ -1054,7 +1054,10 @@ static void stmt_prog_build_one(char *line, stmt_prog *stp, char *commsyntax,
                 }
               }
             }
-          nloopsfac=(offset_t)nloopslin/nloops;
+          /* an equation quantified over an empty set (manual 11.7.9: an IF
+           rewrite's complement partition can be empty) has no rows */
+        nloopsfac=(nloops>0)?(offset_t)nloopslin/nloops:0;
+        if(nloops==0) continue; /* no rows: nothing to reference */
           if(!force_all) {
             Jindx=eq_addr[matrow+(offset_t)(nloopslin-1)/nloopsfac];
             if(Jindx<Istart1)continue;
@@ -3068,7 +3071,10 @@ int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,
         else for (dcount=0; dcount<fdim; dcount++) {
             dcountdim2[dcount]=dcountdim1[dcount];
           }
-        nloopsfac=(offset_t)nloopslin/nloops;
+        /* an equation quantified over an empty set (manual 11.7.9: an IF
+           rewrite's complement partition can be empty) has no rows */
+        nloopsfac=(nloops>0)?(offset_t)nloopslin/nloops:0;
+        if(nloops==0) continue; /* no rows: nothing to reference */
         if(eqmeta!=NULL) { /* probe structure capture: one update per reference, merged by variable */
           for(i4=0; i4<eqmeta[eqindx].nvars_ref; i4++)if(eqmeta[eqindx].var_ref[i4]==LinVars[i].LinVarIndx)break;
           if(i4<eqmeta[eqindx].nvars_ref)eqmeta[eqindx].var_w[i4]+=nloopslin;

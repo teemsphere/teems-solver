@@ -4849,7 +4849,7 @@ void set_expr_mark_product(char *buf) {
    undeclared set name is reported and *err set. */
 dim_t set_expr_bound(char **pp, set_def *record, dim_t nset, const char *owner, int *err) {
   char *p=*pp;
-  dim_t acc=0,rhs;
+  dim_t acc=0,rhs,mx=0;
   char op=0;
   int first=1;
   while (*p!='\0'&&*p!=';'&&*p!=')') {
@@ -4886,6 +4886,7 @@ dim_t set_expr_bound(char **pp, set_def *record, dim_t nset, const char *owner, 
       }
       rhs=record[i].size;
     }
+    if (rhs>mx) mx=rhs;
     if (first) acc=rhs;
     else if (op=='+'||op=='^') acc+=rhs;
     else if (op=='*') acc*=rhs;
@@ -4893,7 +4894,10 @@ dim_t set_expr_bound(char **pp, set_def *record, dim_t nset, const char *owner, 
     first=0;
   }
   *pp=p;
-  return acc;
+  /* the bound sizes the element buffers every operand is copied into
+     (set_expr_term), so it must cover the largest operand as well as
+     the result ("ele" & BIG has one element but reads all of BIG) */
+  return acc>mx?acc:mx;
 }
 
 /* Element names of SET3 = SET1 x SET2 (manual 11.7.11): xx_yyy with the
@@ -5071,10 +5075,12 @@ dim_t set_expr_build(set_element *se, set_def *sets, dim_t nset, dim_t i) {
   char expr[TABREADLINE],*p,*cursor;
   char (*out)[NAMESIZE];
   dim_t cap=sets[i].size,m,n,l;
-  int depth=0,inq=0,allplusun=1,allint=1,anyop=0;
+  int depth=0,inq=0,allplusun=1,allint=1,anyop=0,allminus_top=1,seen_top_op=0;
   char lastop=0;
-  char lastterm[NAMESIZE];
+  char lastterm[NAMESIZE],firstterm[NAMESIZE];
+  int fk=0,firstdone=0;
   lastterm[0]='\0';
+  firstterm[0]='\0';
   strcpy(expr,sets[i].readele+1);
   if (cap<1) cap=1;
   out=malloc((size_t)cap*NAMESIZE);
@@ -5103,13 +5109,22 @@ dim_t set_expr_build(set_element *se, set_def *sets, dim_t nset, dim_t i) {
         if (*p=='-'||*p=='*') { allplusun=0; allint=0; }
         else if (*p=='&') allplusun=0;
         else allint=0;
-        if (depth==0) { lastop=*p; lastterm[0]='\0'; k=0; }
+        if (depth==0) { lastop=*p; lastterm[0]='\0'; k=0; firstdone=1; seen_top_op=1; if (*p!='-') allminus_top=0; }
         continue;
       }
       if (depth==0) {
         if (k<NAMESIZE-1) { lastterm[k++]=*p; lastterm[k]='\0'; }
+        if (!firstdone&&fk<NAMESIZE-1) { firstterm[fk++]=*p; firstterm[fk]='\0'; }
       }
     }
+  }
+  /* complement of any shape, A - <expr> [- <expr> ...] (manual 11.7):
+     the result is a subset of the named first term.  The two-set form
+     keeps its legacy path; this covers the parenthesized subtrahends
+     the IF rewrite emits (TECHTYPE - (IFS16 + ... + IFS21)). */
+  if (seen_top_op&&allminus_top&&firstterm[0]!='\0'&&expr[0]!='('&&expr[0]!='"') {
+    for (l=0; l<nset; l++) if (strcmp(firstterm,sets[l].setname)==0) break;
+    if (l<nset&&l!=i) set_register_subset(se,sets,i,l);
   }
   if (anyop&&(allplusun||allint)) {
     /* register against every named RHS set */
