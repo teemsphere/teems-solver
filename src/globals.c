@@ -51,6 +51,12 @@ bool *teems_coef_ifhdr = NULL;
    by_elements values are read and broadcast */
 map_def *teems_maps = NULL;
 dim_t teems_nmap = 0;
+set_def *teems_sets = NULL;
+dim_t teems_nset = 0;
+set_element *teems_set_elems = NULL;
+bool *teems_set_isprod = NULL;
+dim_t *teems_set_prod1 = NULL;
+dim_t *teems_set_prod2 = NULL;
 
 /* complementarities (manual 10.17/11.14; design doc sections 7-8):
    records filled by tab_complementarity_transform on rank 0,

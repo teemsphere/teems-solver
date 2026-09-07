@@ -1835,8 +1835,9 @@ int mappings_read(char *fname, map_def *maps, dim_t nmap, set_def *sets, dim_t n
     strcpy(linecopy,line);
     readitem = strtok(line," ");   /* "mapping" */
     readitem = strtok(NULL," ");
-    if (readitem!=NULL&&strcmp(readitem,"(onto)")==0) {
-      maps[j].onto=true;
+    while (readitem!=NULL&&(strcmp(readitem,"(onto)")==0||strcmp(readitem,"(project)")==0)) {
+      if (strcmp(readitem,"(onto)")==0) maps[j].onto=true;
+      else maps[j].project=true; /* manual 10.13.2 */
       readitem = strtok(NULL," ");
     }
     if (readitem==NULL||strlen(readitem)>=NAMESIZE) {
@@ -1879,6 +1880,28 @@ int mappings_read(char *fname, map_def *maps, dim_t nmap, set_def *sets, dim_t n
     }
     maps[j].toset=i;
     maps[j].values= (dim_t *) calloc (sets[maps[j].fromset].size>0?sets[maps[j].fromset].size:1,sizeof(dim_t));
+    maps[j].assigned= (unsigned char *) calloc (sets[maps[j].fromset].size>0?sets[maps[j].fromset].size:1,sizeof(unsigned char));
+    if (maps[j].project) {
+      /* projection from a set product onto one of its factors (manual
+         10.13.2): element k of A x B is (k mod |A|, k div |A|) */
+      set_def *fs=&sets[maps[j].fromset];
+      dim_t k,n1,p1=teems_set_prod1[maps[j].fromset],p2=teems_set_prod2[maps[j].fromset];
+      if (!teems_set_isprod[maps[j].fromset]) {
+        printf("Error: Mapping (project) %s: set %s is not defined as a set product A x B (manual 10.13.2)\n",maps[j].mapname,fs->setname);
+        fclose(filehandle);
+        MPI_Abort(PETSC_COMM_WORLD,1);
+        return -1;
+      }
+      if ((dim_t)maps[j].toset!=p1&&(dim_t)maps[j].toset!=p2) {
+        printf("Error: Mapping (project) %s: set %s is not a factor of the product %s (manual 10.13.2)\n",maps[j].mapname,sets[maps[j].toset].setname,fs->setname);
+        fclose(filehandle);
+        MPI_Abort(PETSC_COMM_WORLD,1);
+        return -1;
+      }
+      n1=sets[p1].size;
+      for (k=0; k<fs->size; k++) maps[j].values[k]=((dim_t)maps[j].toset==p1)?(k%n1):(k/n1);
+      maps[j].has_values=true;
+    }
     j++;
   }
   fclose(filehandle);
@@ -2045,13 +2068,8 @@ int mapping_use_guards(char *fname, map_def *maps, dim_t nmap) {
       readitem = strtok(NULL," (");
     }
     if (readitem==NULL) continue;
-    strtok(readitem,"(=");
-    for (j=0; j<nmap; j++) if (strcmp(readitem,maps[j].mapname)==0) {
-        printf("Error: formula-assigned mappings are not supported; give mapping %s its values with Read (by_elements) (manual 11.9.1)\n",maps[j].mapname);
-        fclose(filehandle);
-        MPI_Abort(PETSC_COMM_WORLD,1);
-        return -1;
-      }
+    /* a Formula whose LHS is a mapping assigns its values (manual
+       10.13.1/11.9.1b): executed by formulas_execute */
   }
   fclose(filehandle);
   /* updates cannot carry mapping calls yet (corpus: none do); equations
@@ -2476,14 +2494,57 @@ void mapping_reject_in(char *line, const char *what) {
   }
 }
 
+/* Mark the mappings assigned by Formula statements in fname (manual
+   10.13.1): the LHS token, after quantifier groups and qualifiers, is
+   a mapping name.  Their values arrive when the formula executes, so
+   mappings_validate defers their completeness check to first use. */
+void mapping_formula_scan(char *fname, map_def *maps, dim_t nmap) {
+  FILE *filehandle;
+  char line[TABREADLINE]="\0";
+  char *readitem=NULL;
+  dim_t j;
+  filehandle = fopen(fname,"r");
+  if (filehandle==NULL) return;
+  while (tab_next_statement("formula",filehandle,line,TABREADLINE)) {
+    readitem = strtok(line," ");
+    readitem = strtok(NULL," (");
+    while (readitem!=NULL&&(strncmp(readitem,"all,",4)==0||strchr(readitem,')')!=NULL)) {
+      readitem = strtok(NULL," (");
+    }
+    if (readitem==NULL) continue;
+    strtok(readitem,"(=");
+    for (j=0; j<nmap; j++) if (strcmp(readitem,maps[j].mapname)==0) maps[j].formula_assigned=true;
+  }
+  fclose(filehandle);
+}
+
+/* Onto check for one mapping (manual 11.9.3). Returns -1 on failure. */
+int mapping_check_onto(map_def *maps, dim_t j, set_def *sets, set_element *set_elems) {
+  dim_t i;
+  if (!maps[j].onto) return 0;
+  dim_t tosize=sets[maps[j].toset].size;
+  bool *hit= (bool *) calloc (tosize>0?tosize:1,sizeof(bool));
+  for (i=0; i<sets[maps[j].fromset].size; i++) hit[maps[j].values[i]]=true;
+  for (i=0; i<tosize; i++) if (!hit[i]) {
+      printf("Error: mapping %s is not onto: element %s of set %s is not mapped to (manual 11.9.3)\n",maps[j].mapname,set_elems[sets[maps[j].toset].offset+i].setele,sets[maps[j].toset].setname);
+      free(hit);
+      return -1;
+    }
+  free(hit);
+  return 0;
+}
+
 /* Pre-use mapping validation (manual 11.9.2/11.9.3): every mapping
    must have values, and an (onto) mapping must cover its codomain.
    Range validity is guaranteed by construction in
-   mapping_values_read (names resolve to positions or abort). */
+   mapping_values_read (names resolve to positions or abort).
+   Formula-assigned mappings are checked when their formula completes
+   the table (formula.c) and at first use instead. */
 int mappings_validate(map_def *maps, dim_t nmap, set_def *sets, set_element *set_elems) {
   dim_t j,i;
   for (j=0; j<nmap; j++) {
     if (!maps[j].has_values) {
+      if (maps[j].formula_assigned) continue;
       printf("Error: mapping %s is never given values (manual 11.9.1)\n",maps[j].mapname);
       MPI_Abort(PETSC_COMM_WORLD,1);
       return -1;
@@ -4324,6 +4385,9 @@ int sets_read(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,
           strcpy(exprbuf,linecopy);
           while (str_replace_first(exprbuf,"intersect","&"));
           while (str_replace_first(exprbuf,"union","^"));
+          /* set product A x B (manual 10.1.6): the standalone token x
+             becomes the operator '*' while spaces still delimit it */
+          set_expr_mark_product(exprbuf);
           while (str_replace_all(exprbuf," ", ""));
           str_replace_char(exprbuf,'\\','-');
           char *crhs=strchr(exprbuf,'=');
@@ -4335,6 +4399,7 @@ int sets_read(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,
               if (*p=='+'||*p=='-'||*p=='^') nops++;
               if (*p=='&'||*p=='('||*p=='"') special=1;
               if (*p=='&') nops++;
+              if (*p=='*') { nops++; special=1; }
             }
             /* an operand whose size is only an upper bound at this point
                (an expression-route set, exact count fixed at build) forces
@@ -4359,38 +4424,43 @@ int sets_read(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,
             }
             if (nops>=2||special) {
               expr_route=1;
-              /* size upper bound: sum of named-operand sizes plus one
-                 per quoted element; corrected to the exact count when
-                 the elements build (set_expr_build) */
-              char nm[NAMESIZE];
+              /* size upper bound from the operand sizes ('+'/UNION add,
+                 '-'/INTERSECT keep the left operand, 'x' multiplies, a
+                 quoted element counts one); corrected to the exact
+                 count when the elements build (set_expr_build) */
               dim_t sz=0;
-              int ni=0,inq=0;
               record[j].readele[0]='@';
               record[j].readele[1]='\0';
-              for (p=crhs;; p++) {
-                if (inq) {
-                  if (*p=='"'||*p=='\0') inq=0;
-                  if (*p=='\0') break;
-                  continue;
-                }
-                if (*p=='+'||*p=='-'||*p=='^'||*p=='&'||*p=='('||*p==')'||*p=='"'||*p==';'||*p=='\0') {
-                  if (ni>0) {
-                    nm[ni]='\0';
-                    ni=0;
-                    for (i=0; i<nset; i++) if (strcmp(nm,record[i].setname)==0) break;
-                    if (i==nset) {
-                      printf("Error: set %s in the definition of %s is not declared before use\n",nm,record[j].setname);
-                      return -1;
-                    }
-                    else sz+=record[i].size;
-                  }
-                  if (*p=='"') { sz++; inq=1; }
-                  if (*p==';'||*p=='\0') break;
-                } else if (ni<NAMESIZE-1) {
-                  nm[ni++]=*p;
-                }
+              {
+                char *bp=crhs;
+                int berr=0;
+                sz=set_expr_bound(&bp,record,nset,record[j].setname,&berr);
+                if (berr) return -1;
               }
               record[j].size=sz;
+              /* exactly "A x B": remember the factors for Mapping (project) */
+              {
+                char f1[NAMESIZE],f2[NAMESIZE];
+                int k1=0,k2=0;
+                p=crhs;
+                while (*p!='\0'&&*p!=';'&&*p!='*'&&k1<NAMESIZE-1) f1[k1++]=*p++;
+                f1[k1]='\0';
+                if (*p=='*') {
+                  p++;
+                  while (*p!='\0'&&*p!=';'&&k2<NAMESIZE-1) f2[k2++]=*p++;
+                  f2[k2]='\0';
+                  if (k1>0&&k2>0&&strpbrk(f1,"+-^&()\"*")==NULL&&strpbrk(f2,"+-^&()\"*")==NULL) {
+                    dim_t a,b;
+                    for (a=0; a<nset; a++) if (strcmp(f1,record[a].setname)==0) break;
+                    for (b=0; b<nset; b++) if (strcmp(f2,record[b].setname)==0) break;
+                    if (a<nset&&b<nset) {
+                      teems_set_isprod[j]=true;
+                      teems_set_prod1[j]=a;
+                      teems_set_prod2[j]=b;
+                    }
+                  }
+                }
+              }
               {
                 size_t rl=strlen(record[j].readele);
                 for (p=crhs; *p!='\0'&&*p!=';'&&rl<TABREADLINE-1; p++) record[j].readele[rl++]=*p;
@@ -4755,11 +4825,131 @@ static void set_register_subset(set_element *se, set_def *sets, dim_t sub, dim_t
 static dim_t set_expr_eval(char **pp, set_element *se, set_def *sets, dim_t nset,
                            char (*out)[NAMESIZE], dim_t cap, const char *owner);
 
+/* set name of the most recent named term (set_expr_term), "" for a
+   quoted element or a parenthesized subexpression: the product naming
+   rule prefixes truncated element names with the factor set's letter */
+static char set_expr_termname[NAMESIZE]="";
+
+/* Mark the set-product operator: a standalone token x (whitespace or
+   bracket delimited, after the '=') becomes '*' so the space-stripped
+   expression keeps the operator (manual 10.1.6). A set or element
+   named x cannot be distinguished here; GEMPACK reserves the token. */
+void set_expr_mark_product(char *buf) {
+  char *p=strchr(buf,'=');
+  if (p==NULL) return;
+  for (p++; *p!='\0'&&*p!=';'; p++) {
+    if (*p=='"') { p++; while (*p!='\0'&&*p!='"') p++; if (*p=='\0') return; continue; }
+    if (*p=='x'&&(p[-1]==' '||p[-1]==')'||p[-1]=='=')&&(p[1]==' '||p[1]=='('||p[1]==';')) *p='*';
+  }
+}
+
+/* Parse-time size bound of a set expression (sets_read): named
+   operands contribute their (possibly bounded) size, a quoted element
+   one; '+'/'^' add, '-'/'&' keep the left bound, '*' multiplies. An
+   undeclared set name is reported and *err set. */
+dim_t set_expr_bound(char **pp, set_def *record, dim_t nset, const char *owner, int *err) {
+  char *p=*pp;
+  dim_t acc=0,rhs;
+  char op=0;
+  int first=1;
+  while (*p!='\0'&&*p!=';'&&*p!=')') {
+    if (!first) {
+      op=*p;
+      if (op!='+'&&op!='-'&&op!='^'&&op!='&'&&op!='*') {
+        printf("Error: malformed set expression in the definition of %s\n",owner);
+        *err=1;
+        return 0;
+      }
+      p++;
+    }
+    if (*p=='(') {
+      p++;
+      rhs=set_expr_bound(&p,record,nset,owner,err);
+      if (*err) return 0;
+      if (*p==')') p++;
+    } else if (*p=='"') {
+      p++;
+      while (*p!='"'&&*p!='\0') p++;
+      if (*p=='"') p++;
+      rhs=1;
+    } else {
+      char nm[NAMESIZE];
+      int k=0;
+      dim_t i;
+      while (*p!='\0'&&*p!='+'&&*p!='-'&&*p!='^'&&*p!='&'&&*p!='*'&&*p!='('&&*p!=')'&&*p!='"'&&*p!=';'&&k<NAMESIZE-1) nm[k++]=*p++;
+      nm[k]='\0';
+      for (i=0; i<nset; i++) if (strcmp(nm,record[i].setname)==0) break;
+      if (i==nset) {
+        printf("Error: set %s in the definition of %s is not declared before use\n",nm,owner);
+        *err=1;
+        return 0;
+      }
+      rhs=record[i].size;
+    }
+    if (first) acc=rhs;
+    else if (op=='+'||op=='^') acc+=rhs;
+    else if (op=='*') acc*=rhs;
+    /* '-' and '&': the left bound stands */
+    first=0;
+  }
+  *pp=p;
+  return acc;
+}
+
+/* Element names of SET3 = SET1 x SET2 (manual 11.7.11): xx_yyy with the
+   first factor varying fastest; when the longest names would exceed the
+   12-character element limit, the elements of a factor are truncated to
+   "<first letter of the factor set><element number><leading characters
+   that fit>". n1/n2 element lists, names of the factor sets (may be ""
+   for a subexpression: the owner's letter stands in). Returns 0 on a
+   duplicate product name (reported). */
+static int set_product_names(char (*a)[NAMESIZE], dim_t n1, const char *nm1,
+                             char (*b)[NAMESIZE], dim_t n2, const char *nm2,
+                             char (*out)[NAMESIZE], dim_t cap, const char *owner) {
+  dim_t i,j,k,mx1=0,mx2=0;
+  int lim1=0,lim2=0; /* 0 = no truncation of that factor */
+  for (i=0; i<n1; i++) if ((dim_t)strlen(a[i])>mx1) mx1=strlen(a[i]);
+  for (j=0; j<n2; j++) if ((dim_t)strlen(b[j])>mx2) mx2=strlen(b[j]);
+  if (mx1+mx2>11) {
+    if (mx1<=5) lim2=11-mx1;
+    else if (mx2<=5) lim1=11-mx2;
+    else { lim1=6; lim2=5; }
+  }
+  char c1=(nm1[0]!='\0')?nm1[0]:owner[0];
+  char c2=(nm2[0]!='\0')?nm2[0]:owner[0];
+  for (j=0; j<n2; j++) {
+    char e2[NAMESIZE];
+    if (lim2>0) {
+      int w=snprintf(e2,NAMESIZE,"%c%d",c2,(int)j+1);
+      strncat(e2,b[j],(size_t)(lim2-w>0?lim2-w:0));
+    } else strcpy(e2,b[j]);
+    for (i=0; i<n1; i++) {
+      char e1[NAMESIZE];
+      if (lim1>0) {
+        int w=snprintf(e1,NAMESIZE,"%c%d",c1,(int)i+1);
+        strncat(e1,a[i],(size_t)(lim1-w>0?lim1-w:0));
+      } else strcpy(e1,a[i]);
+      k=j*n1+i;
+      if (k>=cap) {
+        printf("Error: set product in the definition of %s produces more elements than its declared size\n",owner);
+        return 0;
+      }
+      snprintf(out[k],NAMESIZE,"%s_%s",e1,e2);
+    }
+  }
+  for (k=1; k<n1*n2; k++) for (i=0; i<k; i++) if (strcmp(out[i],out[k])==0) {
+      printf("Error: set product in the definition of %s produces the duplicate element name %s (manual 11.7.11); rename the factor elements\n",owner,out[k]);
+      return 0;
+    }
+  return 1;
+}
+
 /* one term into out; returns element count */
 static dim_t set_expr_term(char **pp, set_element *se, set_def *sets, dim_t nset,
                            char (*out)[NAMESIZE], dim_t cap, const char *owner) {
   char *p=*pp;
   dim_t n=0,l,k;
+  set_expr_termname[0]='\0';
   if (*p=='(') {
     p++;
     *pp=p;
@@ -4782,7 +4972,7 @@ static dim_t set_expr_term(char **pp, set_element *se, set_def *sets, dim_t nset
   {
     char nm[NAMESIZE];
     k=0;
-    while (*p!='\0'&&*p!='+'&&*p!='-'&&*p!='^'&&*p!='&'&&*p!='('&&*p!=')'&&*p!='"'&&k<NAMESIZE-1) nm[k++]=*p++;
+    while (*p!='\0'&&*p!='+'&&*p!='-'&&*p!='^'&&*p!='&'&&*p!='*'&&*p!='('&&*p!=')'&&*p!='"'&&k<NAMESIZE-1) nm[k++]=*p++;
     nm[k]='\0';
     *pp=p;
     for (l=0; l<nset; l++) if (strcmp(nm,sets[l].setname)==0) break;
@@ -4790,6 +4980,7 @@ static dim_t set_expr_term(char **pp, set_element *se, set_def *sets, dim_t nset
       printf("Error: set %s in the definition of %s is not declared before use\n",nm,owner);
       return 0;
     }
+    strcpy(set_expr_termname,nm);
     for (k=0; (dim_t)k<sets[l].size&&(dim_t)k<cap; k++) strcpy(out[k],se[sets[l].offset+k].setele);
     if ((dim_t)k<sets[l].size) printf("Error: set %s has more elements than the declared size of %s\n",sets[l].setname,owner);
     return k;
@@ -4801,12 +4992,33 @@ static dim_t set_expr_eval(char **pp, set_element *se, set_def *sets, dim_t nset
   dim_t n,m,a,b,w;
   char op;
   char (*tmp)[NAMESIZE];
+  char accname[NAMESIZE],rhsname[NAMESIZE];
   n=set_expr_term(pp,se,sets,nset,out,cap,owner);
-  while (**pp=='+'||**pp=='-'||**pp=='^'||**pp=='&') {
+  strcpy(accname,set_expr_termname);
+  while (**pp=='+'||**pp=='-'||**pp=='^'||**pp=='&'||**pp=='*') {
     op=**pp;
     (*pp)++;
     tmp=malloc((size_t)cap*NAMESIZE);
     m=set_expr_term(pp,se,sets,nset,tmp,cap,owner);
+    strcpy(rhsname,set_expr_termname);
+    if (op=='*') {
+      /* set product (manual 10.1.6/11.7.11): first factor fastest */
+      char (*prod)[NAMESIZE]=malloc((size_t)cap*NAMESIZE);
+      if (!set_product_names(out,n,accname,tmp,m,rhsname,prod,cap,owner)) {
+        free(prod);
+        free(tmp);
+        MPI_Abort(PETSC_COMM_WORLD,1);
+        return 0;
+      } else {
+        n=n*m;
+        for (a=0; a<n; a++) strcpy(out[a],prod[a]);
+      }
+      free(prod);
+      accname[0]='\0'; /* the accumulator is no longer one declared set */
+      free(tmp);
+      continue;
+    }
+    accname[0]='\0';
     if (op=='+') {
       for (b=0; b<m; b++) {
         for (a=0; a<n; a++) if (strcmp(out[a],tmp[b])==0) break;
@@ -4886,9 +5098,9 @@ dim_t set_expr_build(set_element *se, set_def *sets, dim_t nset, dim_t i) {
       if (*p=='"') { inq=1; lastterm[0]='\0'; k=0; continue; }
       if (*p=='(') { depth++; lastterm[0]='\0'; k=0; continue; }
       if (*p==')') { depth--; k=0; continue; }
-      if (*p=='+'||*p=='-'||*p=='^'||*p=='&') {
+      if (*p=='+'||*p=='-'||*p=='^'||*p=='&'||*p=='*') {
         anyop=1;
-        if (*p=='-') { allplusun=0; allint=0; }
+        if (*p=='-'||*p=='*') { allplusun=0; allint=0; }
         else if (*p=='&') allplusun=0;
         else allint=0;
         if (depth==0) { lastop=*p; lastterm[0]='\0'; k=0; }
@@ -4910,7 +5122,7 @@ dim_t set_expr_build(set_element *se, set_def *sets, dim_t nset, dim_t i) {
         if (*p=='\0') break;
         continue;
       }
-      if (*p=='+'||*p=='-'||*p=='^'||*p=='&'||*p=='('||*p==')'||*p=='"'||*p=='\0') {
+      if (*p=='+'||*p=='-'||*p=='^'||*p=='&'||*p=='*'||*p=='('||*p==')'||*p=='"'||*p=='\0') {
         if (k>0) {
           nm[k]='\0';
           k=0;

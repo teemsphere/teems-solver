@@ -94,12 +94,19 @@ The solver reads a GEMPACK-style TAB subset (statement syntax per [GM]):
   from the input files ahead of set resolution by
   `tab_setbuilder_transform`; the condition coefficient must be
   file-Read), and intertemporal set declarations (`(intertemporal)`),
-  which mark the time dimension used by the bordered orderings.
-  Set products (`x`) are not supported.
+  which mark the time dimension used by the bordered orderings, and
+  set products `Set P = A x B` ([GM] 10.1.6; elements `a_b`, first
+  factor fastest, the 11.7.11 compromise names when a pair would exceed
+  12 characters, duplicates fatal).
 - `mapping` ([GM] 11.9) — declared mappings between sets, values from
-  `Read (by_elements)`, used in index expressions and in conditional
-  sums (`sum{j,S: MAP(j) = i, ...}`); mapped equations solve under
-  every matrix method.
+  `Read (by_elements)`, from `Mapping (project)` onto a factor of a
+  set product ([GM] 10.13.2), or from Formulas ([GM] 10.13.1: a
+  codomain position, typically `$POS(...)`, or a quoted codomain
+  element under `(by_elements)`; a formula-assigned mapping must be
+  complete before its first use and is frozen after it, 11.9.9); used
+  in index expressions and in conditional sums
+  (`sum{j,S: MAP(j) = i, ...}`); mapped equations solve under every
+  matrix method.
 - `coefficient` / `variable` — levels or percentage-change quantities
   (`(change)`, `(levels)` variables — levels equations and
   `Formula & Equation` pairs are linearized by `levels.c` at
@@ -114,8 +121,11 @@ The solver reads a GEMPACK-style TAB subset (statement syntax per [GM]):
   `zerodivide` defaults honored by `tab_next_statement_resolved()`
   (both GEMPACK zerodivide classes with `-gpzerodivide`); the [GM] 11.5
   intrinsics (ABS/MAX/MIN/SQRT/EXP/LOGE/LOG10/ID01/ID0V/ROUND/TRUNC0/
-  TRUNCB, …; `$POS` is not supported). `IF[...]` conditional
-  expressions are rewritten by the R front end into these forms.
+  TRUNCB, …) and `$POS` in its five forms ([GM] 11.5.6: index,
+  index in a superset, element literal in a set, mapped index, mapped
+  index in a superset; compiled to a per-tuple position operand).
+  `IF[...]` conditional expressions are rewritten by the R front end
+  into these forms.
 - `assertion` (`-assertions` off/warn/fatal), `zerodivide` statements,
   `Default` statements ([GM] 10.19), `PostSim (Begin/End)` sections
   ([GM] ch. 12; `-postsim`, split by the preprocess and executed after

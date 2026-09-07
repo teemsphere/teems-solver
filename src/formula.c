@@ -78,12 +78,123 @@ static void map_dim_bind(dim_addr *Dm, int mp, dim_t frame_setid, offset_t arg_s
     printf("Error: mapping %s does not map into the argument set at that position of %s (manual 11.9.7)\n",teems_maps[mp-1].mapname,symname);
     MPI_Abort(PETSC_COMM_WORLD,1);
   }
+  if (!teems_maps[mp-1].has_values) {
+    printf("Error: mapping %s is used (in %s) before a Formula has assigned all of its values (manual 10.13.1/11.9.1)\n",teems_maps[mp-1].mapname,symname);
+    MPI_Abort(PETSC_COMM_WORLD,1);
+  }
   Dm->ADims=stride;
   Dm->leadlag=leadlag;
   Dm->SupSet=0;
   Dm->SSIndx=0;
   Dm->MapId=mp;
   teems_maps[mp-1].used=true;
+}
+
+/* $POS(...) (manual 11.5.6) inside a formula text (spaces stripped,
+   lowercased, mapping calls already lowered to map@idx): each call is
+   compiled to an OP_LOAD/OT_POS op emitted ahead of the expression and
+   replaced in the text by that op's temp name, which the operand binder
+   resolves like any other generated temp.  Forms:
+     $pos(i)        position of quantifier index i in the set it ranges over
+     $pos(i,S)      its position in S, a superset of that set
+     $pos(map@i)    position of the mapped element in the codomain (11.9.5)
+     $pos(map@i,S)  ... lifted into a superset S of the codomain
+     $pos("el",S)   a constant: the position of the element in S
+   Returns 0 (with a message) on a malformed or unresolvable call. */
+static int pos_lower(char *f, set_def *sets, quantifier *arSet, dim_t fdim, formula_op *ops, dim_t *nops) {
+  char *q;
+  /* index lists ride inside {} once formula_normalize has run, so the
+     call may read $pos{...} as well as $pos(...) */
+  while ((q=strstr(f,"$pos("))!=NULL||(q=strstr(f,"$pos{"))!=NULL) {
+    char inner[NAMESIZE],arg1[NAMESIZE],arg2[NAMESIZE],repl[NAMESIZE];
+    char *p=q+5,*close;
+    int depth=1,k=0;
+    for (close=p; *close!='\0'; close++) {
+      if (*close=='('||*close=='{') depth++;
+      else if (*close==')'||*close=='}') { depth--; if (depth==0) break; }
+    }
+    if (*close=='\0') { printf("Error: unbalanced $POS( in formula: %s\n",f); return 0; }
+    if (close-p>=NAMESIZE-1) { printf("Error: $POS argument too long in formula: %s\n",f); return 0; }
+    strncpy(inner,p,close-p);
+    inner[close-p]='\0';
+    /* split on the top-level comma */
+    arg2[0]='\0';
+    {
+      char *c=inner;
+      int d=0;
+      for (; *c!='\0'; c++) {
+        if (*c=='"') { c++; while (*c!='"'&&*c!='\0') c++; if (*c=='\0') break; continue; }
+        if (*c=='('||*c=='{') d++;
+        else if (*c==')'||*c=='}') d--;
+        else if (*c==','&&d==0) break;
+      }
+      if (*c==',') { *c='\0'; strcpy(arg2,c+1); }
+      strcpy(arg1,inner);
+    }
+    if (arg1[0]=='\0') { printf("Error: $POS needs an index, element or index expression argument (manual 11.5.6): %s\n",f); return 0; }
+    dim_t setS=-1;
+    if (arg2[0]!='\0') {
+      for (setS=0; setS<teems_nset; setS++) if (strcmp(arg2,teems_sets[setS].setname)==0) break;
+      if (setS==teems_nset) { printf("Error: $POS: %s is not a declared set (manual 11.5.6)\n",arg2); return 0; }
+    }
+    if (arg1[0]=='"') {
+      /* $POS("el",S): a constant */
+      char el[NAMESIZE];
+      dim_t e;
+      if (setS<0) { printf("Error: $POS(\"%s\") needs the set as second argument (manual 11.5.6)\n",arg1); return 0; }
+      k=0;
+      for (p=arg1+1; *p!='"'&&*p!='\0'&&k<NAMESIZE-1; p++) el[k++]=tolower((int)*p);
+      el[k]='\0';
+      for (e=0; e<teems_sets[setS].size; e++) if (strcmp(el,teems_set_elems[teems_sets[setS].offset+e].setele)==0) break;
+      if (e==teems_sets[setS].size) { printf("Error: $POS: %s is not an element of set %s (manual 11.5.6)\n",el,arg2); return 0; }
+      snprintf(repl,NAMESIZE,"%d",(int)e+1);
+    } else {
+      char *at=strchr(arg1,'@'),*idx=arg1;
+      int mp=0;
+      dim_t l,base,sup=0;
+      if (at!=NULL) {
+        dim_t m;
+        *at='\0';
+        idx=at+1;
+        for (m=0; m<teems_nmap; m++) if (strcmp(arg1,teems_maps[m].mapname)==0) { mp=(int)m+1; break; }
+        if (mp==0) { printf("Error: $POS: unknown mapping %s in an index expression\n",arg1); return 0; }
+      }
+      for (l=0; l<fdim; l++) if (strcmp(idx,arSet[l].index_name)==0) break;
+      if (l==fdim) { printf("Error: $POS: %s is not an index of the statement's quantifiers (manual 11.5.6): %s\n",idx,f); return 0; }
+      base=(dim_t)arSet[l].setid;
+      if (mp>0) {
+        if ((dim_t)teems_maps[mp-1].fromset!=base) { printf("Error: $POS: the index of mapping %s does not range over its domain set\n",teems_maps[mp-1].mapname); return 0; }
+        if (!teems_maps[mp-1].has_values) { printf("Error: mapping %s is used (in $POS) before a Formula has assigned all of its values (manual 10.13.1/11.9.1)\n",teems_maps[mp-1].mapname); return 0; }
+        teems_maps[mp-1].used=true;
+        base=(dim_t)teems_maps[mp-1].toset;
+      }
+      if (setS>=0&&setS!=base) {
+        for (sup=1; sup<MAXSUPSET; sup++) if (sets[base].subsetid[sup]==setS) break;
+        if (sup==MAXSUPSET) { printf("Error: $POS(%s,%s): %s does not range over a subset of %s (manual 11.5.6)\n",idx,arg2,idx,arg2); return 0; }
+      }
+      ops[*nops].Oper=OP_LOAD;
+      ops[*nops].Var1Type=OT_POS;
+      ops[*nops].Var1BegAdd=(offset_t)l;
+      ops[*nops].Var1Dims[0].MapId=mp;
+      ops[*nops].Var1Dims[0].SupSet=(setS>=0&&setS!=base)?1:0;
+      ops[*nops].Var1Dims[0].SSIndx=(int)sup;
+      ops[*nops].Var1Dims[0].ADims=(offset_t)base;
+      ops[*nops].Var1Dims[0].leadlag=0;
+      snprintf(ops[*nops].TmpVarName,sizeof(ops[*nops].TmpVarName),"gen_pos%03d",(int)*nops);
+      strcpy(repl,ops[*nops].TmpVarName);
+      *nops=*nops+1;
+    }
+    /* splice: text before $pos( + replacement + text after the ')' */
+    {
+      char tail[TABREADLINE];
+      strcpy(tail,close+1);
+      if ((q-f)+strlen(repl)+strlen(tail)>=TABREADLINE) { printf("Error: formula too long after $POS expansion: %s\n",f); return 0; }
+      *q='\0';
+      strcat(f,repl);
+      strcat(f,tail);
+    }
+  }
+  return 1;
 }
 
 int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t ncof, array_def *vars,offset_t nvar,offset_t ncofele,sum_def *sum_cof,int totalsum,formula_op *ops,int nops,quantifier *arSet,dim_t fdim,int varindex) {
@@ -588,10 +699,12 @@ int parse_index_leadlag(char *p,int *leadlag) {
 int formula_compile(char *fomulain, set_def *sets,array_def *coefs, offset_t ncof, array_def *vars,offset_t nvar,offset_t ncofele,sum_def *sum_cof,dim_t totalsum,formula_op *ops,dim_t *nops,quantifier *arSet,dim_t fdim) {
   int npar=0,npow=0,nmul=0,ndiv=0,nplu=0,nmin=0,j;
   *nops=0;
-  /* $POS needs per-tuple index-position machinery (manual 11.5.6) --
-     defer with a clean error rather than mis-binding the index name */
-  if(strstr(fomulain,"$pos")!=NULL) {
-    printf("Error: the $POS function is not supported yet: %s\n",fomulain);
+  /* $POS (manual 11.5.6): compiled to position ops ahead of the
+     expression, the calls replaced by their temp names */
+  if(strstr(fomulain,"$pos(")!=NULL||strstr(fomulain,"$pos{")!=NULL) {
+    if(!pos_lower(fomulain,sets,arSet,fdim,ops,nops)) return 0;
+  } else if(strstr(fomulain,"$pos")!=NULL) {
+    printf("Error: malformed $POS call in formula: %s\n",fomulain);
     return 0;
   }
   npar=str_count_char(fomulain, ')');
@@ -962,6 +1075,15 @@ solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,
       if (ops[i].Var1Type==OT_CHANGE) {
         l=dims_offset(ops[i].Var1Dims,arSet,fdim,sets,set_elems);
         ops[i].TmpVarVal=record[ops[i].Var1BegAdd+l].substep_base;
+        break;
+      }
+      if (ops[i].Var1Type==OT_POS) {
+        /* $POS: 1-based position of a quantifier index, optionally
+           routed through a mapping and lifted into a superset */
+        offset_t pidx=arSet[ops[i].Var1BegAdd].indx;
+        if (ops[i].Var1Dims[0].MapId>0) pidx=teems_maps[ops[i].Var1Dims[0].MapId-1].values[pidx];
+        if (ops[i].Var1Dims[0].SupSet==1) pidx=set_elems[sets[ops[i].Var1Dims[0].ADims].offset+pidx].superset_pos[ops[i].Var1Dims[0].SSIndx];
+        ops[i].TmpVarVal=(store_real)(pidx+1);
         break;
       }
       break;
@@ -1585,6 +1707,167 @@ static solve_real cond_constant(const char *s) {
   return atof(p);
 }
 
+
+/* Store one mapping value from a Formula (manual 10.13.1/11.9.9):
+   codomain position cod (0-based) for domain position dom.  A value
+   may be re-assigned freely until the mapping has been used; after
+   that a change is an error (11.9.9), a repeat is harmless (multi-step
+   formula passes re-run the statement). */
+static void mapping_store_value(dim_t mm, dim_t dom, dim_t cod, set_def *sets, set_element *set_elems) {
+  map_def *md=&teems_maps[mm];
+  dim_t n=sets[md->fromset].size;
+  if (cod<0||cod>=sets[md->toset].size) {
+    printf("Error: Formula assigns mapping %s a position outside its codomain set %s (%d elements): %d (manual 11.9.2)\n",md->mapname,sets[md->toset].setname,(int)sets[md->toset].size,(int)cod+1);
+    MPI_Abort(PETSC_COMM_WORLD,1);
+  }
+  if (md->assigned[dom]&&md->values[dom]!=cod&&md->used) {
+    printf("Error: Formula changes the value of mapping %s for element %s after the mapping has been used (manual 11.9.9)\n",md->mapname,set_elems[sets[md->fromset].offset+dom].setele);
+    MPI_Abort(PETSC_COMM_WORLD,1);
+  }
+  md->values[dom]=cod;
+  if (!md->assigned[dom]) { md->assigned[dom]=1; md->nassigned++; }
+  if (md->nassigned==n&&!md->has_values) {
+    md->has_values=true;
+    if (mapping_check_onto(teems_maps,mm,sets,set_elems)==-1) MPI_Abort(PETSC_COMM_WORLD,1);
+  }
+}
+
+/* element name -> position in set s, or -1 */
+static dim_t set_element_pos(const char *el, dim_t s, set_def *sets, set_element *set_elems) {
+  dim_t e;
+  for (e=0; e<sets[s].size; e++) if (strcmp(el,set_elems[sets[s].offset+e].setele)==0) return e;
+  return -1;
+}
+
+/* MAP("dom") = "cod" | <position> (manual 10.13.1): lhs is the
+   space-stripped LHS text, rhs the RHS text (';' may trail) */
+static void mapping_assign_literal(dim_t mm, char *lhs, char *rhs, set_def *sets, set_element *set_elems, int byele) {
+  map_def *md=&teems_maps[mm];
+  char el[NAMESIZE];
+  char *p=strchr(lhs,'('),*q;
+  int k=0;
+  dim_t dom,cod;
+  /* mapping_lower_calls has rewritten map("el") to map@"el" */
+  if (p==NULL) p=strchr(lhs,'@');
+  if (p==NULL||p[1]!='"') {
+    printf("Error: unquantified Formula for mapping %s must name a domain element in quotes, e.g. %s(\"food\") (manual 10.13.1)\n",md->mapname,md->mapname);
+    MPI_Abort(PETSC_COMM_WORLD,1);
+  }
+  for (p+=2; *p!='"'&&*p!='\0'&&k<NAMESIZE-1; p++) el[k++]=tolower((int)*p);
+  el[k]='\0';
+  dom=set_element_pos(el,md->fromset,sets,set_elems);
+  if (dom<0) {
+    printf("Error: %s is not an element of set %s, the domain of mapping %s (manual 11.9.2)\n",el,sets[md->fromset].setname,md->mapname);
+    MPI_Abort(PETSC_COMM_WORLD,1);
+  }
+  while (*rhs==' ') rhs++;
+  if ((q=strchr(rhs,';'))!=NULL) *q='\0';
+  if (rhs[0]=='"') {
+    k=0;
+    for (p=rhs+1; *p!='"'&&*p!='\0'&&k<NAMESIZE-1; p++) el[k++]=tolower((int)*p);
+    el[k]='\0';
+    cod=set_element_pos(el,md->toset,sets,set_elems);
+    if (cod<0) {
+      printf("Error: %s is not an element of set %s, the codomain of mapping %s (manual 11.9.2)\n",el,sets[md->toset].setname,md->mapname);
+      MPI_Abort(PETSC_COMM_WORLD,1);
+    }
+  } else {
+    if (byele) {
+      printf("Error: Formula (by_elements) for mapping %s needs a quoted codomain element on the right-hand side (manual 10.13.1)\n",md->mapname);
+      MPI_Abort(PETSC_COMM_WORLD,1);
+    }
+    cod=(dim_t)atoi(rhs)-1;
+  }
+  mapping_store_value(mm,dom,cod,sets,set_elems);
+}
+
+/* (all,i,DOM) MAP(i) = <expr> (manual 10.13.1): the single LHS index
+   ranges over the domain set or a subset of it; the RHS is an integer
+   codomain position (typically a $POS shape) or, under (by_elements),
+   a quoted codomain element.  Sums are already evaluated (sum_vals). */
+static void mapping_assign_formula(dim_t mm, char *vname, char *rhs, int byele, set_def *sets, set_element *set_elems, sum_value *sum_vals, elem_value *elem_vals, quantifier *arSet, dim_t fdim, offset_t *dcountdim1, offset_t nloops, formula_op *ops, array_def *coefs, offset_t ncof, array_def *vars, offset_t nvar, offset_t ncofele, sum_def *sum_cof, dim_t totalsum, solve_real zerodivide) {
+  map_def *md=&teems_maps[mm];
+  char arg[NAMESIZE],el[NAMESIZE];
+  char *p=strchr(vname,'(');
+  int k=0,sup=0,litdom=0;
+  dim_t l=-1,dom=-1,codlit=-1,nops=0;
+  offset_t t,i4,i3;
+  dim_t dcount;
+  /* mapping_lower_calls has rewritten map(i) to map@i */
+  if (p==NULL) p=strchr(vname,'@');
+  if (p==NULL) {
+    printf("Error: Formula for mapping %s has no argument (manual 10.13.1)\n",md->mapname);
+    MPI_Abort(PETSC_COMM_WORLD,1);
+  }
+  for (p++; *p!=')'&&*p!='}'&&*p!='\0'&&k<NAMESIZE-1; p++) arg[k++]=*p;
+  arg[k]='\0';
+  if (strchr(arg,',')!=NULL) {
+    printf("Error: mapping %s takes one argument in a Formula (manual 10.13.1): %s\n",md->mapname,vname);
+    MPI_Abort(PETSC_COMM_WORLD,1);
+  }
+  if (arg[0]=='"') {
+    k=0;
+    for (p=arg+1; *p!='"'&&*p!='\0'&&k<NAMESIZE-1; p++) el[k++]=tolower((int)*p);
+    el[k]='\0';
+    dom=set_element_pos(el,md->fromset,sets,set_elems);
+    if (dom<0) {
+      printf("Error: %s is not an element of set %s, the domain of mapping %s (manual 11.9.2)\n",el,sets[md->fromset].setname,md->mapname);
+      MPI_Abort(PETSC_COMM_WORLD,1);
+    }
+    litdom=1;
+  } else {
+    for (l=0; l<fdim-1; l++) if (strcmp(arg,arSet[l].index_name)==0) break;
+    if (l==fdim-1) {
+      printf("Error: the argument %s of mapping %s is not one of the Formula's quantifier indices\n",arg,md->mapname);
+      MPI_Abort(PETSC_COMM_WORLD,1);
+    }
+    if ((dim_t)arSet[l].setid!=md->fromset) {
+      for (sup=1; sup<MAXSUPSET; sup++) if (sets[arSet[l].setid].subsetid[sup]==md->fromset) break;
+      if (sup==MAXSUPSET) {
+        printf("Error: index %s of the Formula for mapping %s does not range over its domain set %s or a subset of it (manual 11.9.2)\n",arg,md->mapname,sets[md->fromset].setname);
+        MPI_Abort(PETSC_COMM_WORLD,1);
+      }
+    }
+  }
+  while (*rhs==' ') rhs++;
+  if (rhs[0]=='"') {
+    k=0;
+    for (p=rhs+1; *p!='"'&&*p!='\0'&&k<NAMESIZE-1; p++) el[k++]=tolower((int)*p);
+    el[k]='\0';
+    codlit=set_element_pos(el,md->toset,sets,set_elems);
+    if (codlit<0) {
+      printf("Error: %s is not an element of set %s, the codomain of mapping %s (manual 11.9.2)\n",el,sets[md->toset].setname,md->mapname);
+      MPI_Abort(PETSC_COMM_WORLD,1);
+    }
+  } else {
+    if (byele) {
+      printf("Error: Formula (by_elements) for mapping %s needs a quoted codomain element on the right-hand side (manual 10.13.1)\n",md->mapname);
+      MPI_Abort(PETSC_COMM_WORLD,1);
+    }
+    if(!formula_compile(rhs,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,&nops,arSet,fdim-1))MPI_Abort(PETSC_COMM_WORLD,1);
+  }
+  for (t=0; t<nloops; t++) {
+    dim_t cod,d;
+    i4=t;
+    for (dcount=0; dcount<fdim-1; dcount++) {
+      i3=(offset_t) i4/dcountdim1[dcount];
+      arSet[dcount].indx=i3;
+      i4=i4-i3*dcountdim1[dcount];
+    }
+    if (litdom) d=dom;
+    else {
+      d=arSet[l].indx;
+      if (sup>0) d=set_elems[sets[arSet[l].setid].offset+d].superset_pos[sup];
+    }
+    if (codlit>=0) cod=codlit;
+    else {
+      solve_real v=formula_eval(elem_vals,sets,set_elems,sum_vals,ops,nops,arSet,fdim-1,zerodivide);
+      cod=(dim_t)lround((double)v)-1;
+    }
+    mapping_store_value(mm,d,cod,sets,set_elems);
+  }
+}
+
 offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset, set_element *set_elems, array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar, elem_value *elem_vals,offset_t ncofvar,offset_t ncofele,bool IsIni) {
   FILE * filehandle;
   char line[TABREADLINE],line1[TABREADLINE],line2[TABREADLINE],linecopy[TABREADLINE],condvar[MAXVARDIM][NAMESIZE];
@@ -1630,6 +1913,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
     }
     {
       IsFomIni=IsDefFomIni;
+      int byele=0;
       if(strstr(line, "(initial)")!=NULL) {
         str_replace_first(line, "(initial)", "");
         IsFomIni=true;
@@ -1637,6 +1921,12 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
       if(strstr(line, "(always)")!=NULL) {
         str_replace_first(line, "(always)", "");
         IsFomIni=false;
+      }
+      /* Formula (by_elements): a mapping assigned by codomain element
+         name rather than position (manual 10.13.1/11.9.12) */
+      if(strstr(line, "(by_elements)")!=NULL) {
+        str_replace_first(line, "(by_elements)", "");
+        byele=1;
       }
       if(!(IsFomIni&&!IsIni)) {
         zdiv_capture();
@@ -1666,6 +1956,31 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
         readitem =str_rfind_toplevel(line,'=');//readitem =strrchr(line,'=');
         line[readitem-line]='\0';
         fdim=str_count_char(line, '(');
+        /* unquantified mapping assignment MAP("dom") = "cod" | <pos>
+           (manual 10.13.1): no tuple machinery involved */
+        if (teems_nmap>0&&strstr(line,"(all,")==NULL&&(strchr(line,'(')!=NULL||strchr(line,'@')!=NULL)) {
+          char mname[NAMESIZE];
+          dim_t mm;
+          int mk=0;
+          for (p=line; *p!='\0'&&*p!='('&&*p!='@'&&mk<NAMESIZE-1; p++) mname[mk++]=*p;
+          mname[mk]='\0';
+          for (mm=0; mm<teems_nmap; mm++) if (strcmp(mname,teems_maps[mm].mapname)==0) break;
+          if (mm<teems_nmap) {
+            char *rhs;
+            /* values are fixed once the mapping has been used (manual
+               11.9.9): later formula passes re-run the statement
+               sequence, whose final state is already in the table */
+            if (!teems_maps[mm].used) {
+              strcpy(line,linecopy);
+              rhs=str_rfind_toplevel(line,'=');
+              *rhs='\0';
+              rhs++;
+              mapping_assign_literal(mm,line,rhs,sets,set_elems,byele);
+            }
+            j++;
+            continue;
+          }
+        }
         if (fdim==1) {
           fdim=fdim+1;
         }
@@ -1823,6 +2138,26 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
           sumcount++;
         }
         strcpy(line1,readitem);
+        /* quantified mapping assignment (manual 10.13.1): the LHS is a
+           declared mapping, the RHS a codomain position ($POS shapes) or,
+           under (by_elements), a quoted codomain element */
+        if (teems_nmap>0) {
+          char mname[NAMESIZE];
+          dim_t mm;
+          int mk=0;
+          for (p=vname; *p!='\0'&&*p!='('&&*p!='@'&&mk<NAMESIZE-1; p++) mname[mk++]=*p;
+          mname[mk]='\0';
+          for (mm=0; mm<teems_nmap; mm++) if (strcmp(mname,teems_maps[mm].mapname)==0) break;
+          if (mm<teems_nmap) {
+            if (!teems_maps[mm].used) mapping_assign_formula(mm,vname,line1,byele,sets,set_elems,sum_vals,elem_vals,arSet,fdim,dcountdim1,nloops,ops,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,zerodivide);
+            free(sum_cof);
+            free(sum_vals);
+            free(arSet);
+            free(ops);
+            j++;
+            continue;
+          }
+        }
         offset_t index=ncof-1, offset=0;//,simpl=0;
         bool check10=true;
         offset_t varsize=0;

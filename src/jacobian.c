@@ -525,6 +525,10 @@ static void linvar_map_dim_check(eq_var_ref *ref, dim_t d, offset_t frame_setid,
     printf("Error: a lead/lag offset on the mapped index of %s (mapping %s) is not supported\n",ref->LinVarName,md->mapname);
     MPI_Abort(PETSC_COMM_WORLD,1);
   }
+  if(!md->has_values) {
+    printf("Error: mapping %s is used (in %s) before a Formula has assigned all of its values (manual 10.13.1/11.9.1)\n",md->mapname,ref->LinVarName);
+    MPI_Abort(PETSC_COMM_WORLD,1);
+  }
   md->used=true;
 }
 

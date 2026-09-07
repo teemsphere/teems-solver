@@ -590,7 +590,7 @@ int tab_preprocess(char *filename, char *newtabfile) {
     printf("Error: cannot open %s\n",filename);
     return -1;
   }
-  int check,i1,i2,i,setindx,varindx,l1,l2,l3,l4,k1,k2,j,j1,j2;//,necheck,npcheck;//,j;,check1
+  int check,i1,i2,i,setindx,varindx,l1,l2,l3,l4,k1,k2,j,j1,j2,l5;//,necheck,npcheck;//,j;,check1
   strcpy(newtabfile1,newtabfile);
   str_replace_all(newtabfile1,".","1.");
   fout = fopen(newtabfile1,"w");
@@ -831,8 +831,11 @@ int tab_preprocess(char *filename, char *newtabfile) {
     l2=str_find_ci(line,"formula");
     l3=str_find_ci(line,"read");
     l4=str_find_ci(line,"update");
+    /* assertions too (manual 10.14): a quoted element argument used to
+       fall through to the executor, which read element 0 silently */
+    l5=str_find_ci(line,"assertion");
     if (l3==0&&str_count_ci(line,"\"")<3) l3=-1;
-    if (l1==0||l2==0||l3==0||l4==0) {
+    if (l1==0||l2==0||l3==0||l4==0||l5==0) {
       if (l1==0||l4==0) {
         n=strstr(line,"c_");
         while (n!=NULL) {
@@ -857,12 +860,36 @@ int tab_preprocess(char *filename, char *newtabfile) {
         while (n!=NULL) {
           strncpy(line2,line1,n-line1);
           line2[n-line1]='\0';
-          n1=strrchr(line2,'(');
+          /* the owner of the quoted argument is the call whose '(' is
+             still open at the quote, and the argument position is the
+             comma count at that depth -- strrchr took the last '(' and
+             mis-attributed a literal following a mapping call,
+             X(MAP(i),"el") (manual 11.9.5) */
+          {
+            char *sc;
+            int sdepth=0;
+            n1=NULL;
+            setindx=0;
+            for (sc=line2; *sc!='\0'; sc++) {
+              if (*sc=='(') { if (sdepth==0) { n1=sc; setindx=0; } sdepth++; }
+              else if (*sc==')') { if (sdepth>0) sdepth--; if (sdepth==0) n1=NULL; }
+              else if (*sc==','&&sdepth==1) setindx++;
+            }
+            /* nested: the innermost still-open '(' */
+            if (n1!=NULL&&sdepth>1) {
+              int d=0;
+              setindx=0;
+              for (sc=line2; *sc!='\0'; sc++) {
+                if (*sc=='(') { d++; if (d==sdepth) { n1=sc; setindx=0; } }
+                else if (*sc==')') d--;
+                else if (*sc==','&&d==sdepth) setindx++;
+              }
+            }
+          }
           if (n1==NULL) {
             printf("Error: malformed indexed expression in TAB file: %s\n",line);
             return -1;
           }
-          setindx=str_count_ci(n1,",");
           varindx=n1-line2+1;
           line2[varindx]='\0';
           n1=strrchr(line2,' ');
@@ -909,7 +936,26 @@ int tab_preprocess(char *filename, char *newtabfile) {
              j1--;
              }
            }
-          tab_read_set_name(newtabfile1,n1,setindx,setname);
+          if (tab_read_set_name(newtabfile1,n1,setindx,setname)==-1) {
+            /* the quoted element is not an argument of a declared
+               coefficient or variable -- a $POS("el",S) literal or a
+               mapping's domain/codomain element in a Formula (manual
+               11.5.6, 10.13.1): leave it for the statement's executor.
+               The pair is masked so the scan moves on and restored on
+               output. */
+            char *q2=strchr(n+1,'\"');
+            if (q2==NULL) {
+              printf("Error: unterminated element literal in TAB file: %s\n",line);
+              return -1;
+            }
+            *n='\001';
+            *q2='\001';
+            strcpy(line,line1);
+            strcpy(line2,line1);
+            n=strchr(line1,'\"');
+            if (l3==0&&str_count_ci(line1,"\"")<3) n=NULL;
+            continue;
+          }
           strcpy(indx,"i");
           sprintf(indx1, "%d",i);
           strcat(indx,indx1);
@@ -1010,6 +1056,9 @@ int tab_preprocess(char *filename, char *newtabfile) {
           if (l3==0&&str_count_ci(line1,"\"")<3) n=NULL;
           i++;
         }
+        str_replace_char_all(readline,'\001','\"');
+        str_replace_char_all(readline1,'\001','\"');
+        str_replace_char_all(line2,'\001','\"');
         fprintf(fout,"%s%s%s",readline,readline1,line2);
       } else fprintf(fout,"%s",line);
     } else fprintf(fout,"%s",line);
@@ -1279,9 +1328,12 @@ int tab_read_set_name(char *filename, char *varname, int indx, char *setname) {
         else p=strtok(NULL,",");
         if (p==NULL) { fclose(filehandle); return -1; }
       }
-      if (strlen(p)+1>=sizeof(indxname)) { fclose(filehandle); return -1; }
+      if (strlen(p)+2>=sizeof(indxname)) { fclose(filehandle); return -1; }
+      /* ",idx," -- the bare ",idx" prefix matched inside qualifier
+         groups such as (linear,change) for an index named c */
       strcpy(indxname,",");
       strcat(indxname,p);
+      strcat(indxname,",");
       strcpy(line,line1);
       n=str_find_ci(line,indxname);
       if (n<0) { fclose(filehandle); return -1; }
@@ -1480,6 +1532,7 @@ int tab_postsim_split(char *newtabfile, char *psfile) {
     if(strncmp(line,"set ",4)==0)ps_decl_name(line,4,nm);
     else if(strncmp(line,"subset ",7)==0)ps_decl_name(line,7,nm);
     else if(strncmp(line,"file ",5)==0)ps_decl_name(line,5,nm);
+    else if(strncmp(line,"mapping ",8)==0)ps_decl_name(line,8,nm);
     else if(strncmp(line,"coefficient ",12)==0) {
       ps_decl_name(line,12,nm);
       if(nm[0]!='\0') {
@@ -1561,7 +1614,9 @@ int tab_postsim_split(char *newtabfile, char *psfile) {
       nps++;
       continue;
     }
-    if(strncmp(line,"set ",4)==0||strncmp(line,"subset ",7)==0||strncmp(line,"coefficient ",12)==0||strncmp(line,"file ",5)==0) {
+    if(strncmp(line,"set ",4)==0||strncmp(line,"subset ",7)==0||strncmp(line,"coefficient ",12)==0||strncmp(line,"file ",5)==0||strncmp(line,"mapping ",8)==0) {
+      /* declarations (mappings included: their formula-assigned values
+         arrive in the PostSim pass, manual 10.13.1) ride the main stream */
       fputs(line,fmain);
       continue;
     }

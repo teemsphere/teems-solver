@@ -83,7 +83,14 @@ enum operand_type { OT_ARRAY=0, OT_LINVAR=1, OT_SUM=2, OT_LINVAR2=3,
                     OT_TEMP=4, OT_CONST=5, OT_CHANGE=6,
                     OT_TEMP_ID01=41, OT_TEMP_ABS=42, OT_TEMP_LOG=43,
                     OT_TEMP_EXP=44, OT_TEMP_SQRT=45, OT_TEMP_LOG10=46,
-                    OT_TEMP_ROUND=47, OT_TEMP_TRUNC0=48, OT_TEMP_TRUNCB=49 };
+                    OT_TEMP_ROUND=47, OT_TEMP_TRUNC0=48, OT_TEMP_TRUNCB=49,
+                    /* $POS(...) (manual 11.5.6): an OP_LOAD whose value is
+                       a quantifier index's 1-based position -- Var1BegAdd
+                       = quantifier slot, Var1Dims[0].MapId routes through
+                       a mapping first, Var1Dims[0].SupSet/SSIndx then lift
+                       into a named superset (Var1Dims[0].ADims = the set
+                       the position is lifted from) */
+                    OT_POS=50 };
 
 
 /* ================= cmf_io.c — command (CMF) file and data I/O ========== */
@@ -150,6 +157,14 @@ typedef struct
   bool regional;
   int regsup;
 } set_def ;
+/* set product SET = A x B (manual 10.1.6), parallel to sets[] (the
+   set_def layout is the sol.set dump read by teems-R, so it stays):
+   isprod marks a definition that is exactly one product, prod1/prod2
+   are the factor set ids with the first varying fastest -- Mapping
+   (project) projects onto a factor (10.13.2) */
+extern bool *teems_set_isprod;
+extern dim_t *teems_set_prod1;
+extern dim_t *teems_set_prod2;
 /* one set element with its position in each superset */
 typedef struct
 {
@@ -170,6 +185,16 @@ typedef struct
   bool has_values;
   bool used;
   dim_t *values;   /* per domain element: position in the codomain */
+  /* value sources beyond Read (by_elements): a Mapping (project)
+     qualifier (10.13.2) fills the table from the domain's product
+     structure at declaration; formula_assigned marks a mapping that
+     some Formula assigns (10.13.1/11.9.1b) -- validated complete at
+     first use instead of up front, with `assigned` tracking domain
+     positions written so far */
+  bool project;
+  bool formula_assigned;
+  unsigned char *assigned;
+  dim_t nassigned;
 } map_def ;
 
 /* a COEFFICIENT or VARIABLE declaration: name, dimensionality and layout */
@@ -325,6 +350,18 @@ extern bool *teems_coef_ifhdr;
    consumed by the operand binder/eval and the statement guards */
 extern map_def *teems_maps;
 extern dim_t teems_nmap;
+/* the set table, for name lookups inside the formula compiler ($POS
+   set arguments) -- set once the elements are built */
+extern set_def *teems_sets;
+extern dim_t teems_nset;
+extern set_element *teems_set_elems;
+/* mark mappings assigned by Formula statements in fname (main TAB or
+   the PostSim split) so mappings_validate defers their completeness
+   check to first use */
+void mapping_formula_scan(char *fname, map_def *maps, dim_t nmap);
+int mapping_check_onto(map_def *maps, dim_t j, set_def *sets, set_element *set_elems);
+void set_expr_mark_product(char *buf);
+dim_t set_expr_bound(char **pp, set_def *record, dim_t nset, const char *owner, int *err);
 /* GEMPACK dual-class zerodivide state (manual 10.11; plan A1): tracked
    positionally by the statement scanner, consulted by formula
    evaluation only under -gpzerodivide 1 (default 0 = the legacy single

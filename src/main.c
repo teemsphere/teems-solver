@@ -1414,6 +1414,9 @@ int main(int argc,char **args) {
     MPI_Bcast(&nset,sizeof(dim_t), MPI_BYTE,0, PETSC_COMM_WORLD);
   }
   set_def *sets= (set_def *) calloc (nset,sizeof(set_def));
+  teems_set_isprod= (bool *) calloc (nset>0?nset:1,sizeof(bool));
+  teems_set_prod1= (dim_t *) calloc (nset>0?nset:1,sizeof(dim_t));
+  teems_set_prod2= (dim_t *) calloc (nset>0?nset:1,sizeof(dim_t));
   for(i=0; i<nset; i++) {
     sets[i].subsetid[0]=i;
     for(j=0; j<MAXSUPSET; j++)sets[i].subsetid[j]=-1;
@@ -1435,6 +1438,9 @@ int main(int argc,char **args) {
     MPI_Bcast(&nsetspace,sizeof(offset_t), MPI_BYTE,0, PETSC_COMM_WORLD);
   }
   set_element *set_elems= (set_element *) calloc (nsetspace,sizeof(set_element));
+  teems_sets=sets;
+  teems_nset=nset;
+  teems_set_elems=set_elems;
   logmsg(2,"nset %d nsetspace %ld\n",nset,nsetspace);
   for (i=0; i<nsetspace; i++)for (j=0; j<MAXSUPSET; j++)set_elems[i].superset_pos[j]=-1;
   if(rank==0) {
@@ -1519,6 +1525,11 @@ int main(int argc,char **args) {
       maps= (map_def *) calloc (nmap,sizeof(map_def));
       mappings_read(tabfile,maps,nmap,sets,nset);
       mapping_values_read(tabfile,niodata,iodata,maps,nmap,sets,set_elems);
+      /* formula-assigned mappings (manual 10.13.1) get their values
+         when their Formula executes (main passes or PostSim), so the
+         completeness check moves to first use for those */
+      mapping_formula_scan(tabfile,maps,nmap);
+      if(npostsim>0)mapping_formula_scan(psfile,maps,nmap);
       mappings_validate(maps,nmap,sets,set_elems);
     }
     /* C1: complementarity quantifier sets vs the variable's and
@@ -1536,6 +1547,7 @@ int main(int argc,char **args) {
       MPI_Bcast(maps,nmap*sizeof(map_def), MPI_BYTE,0, PETSC_COMM_WORLD);
       for(i=0; i<nmap; i++) {
         if(rank!=0) maps[i].values= (dim_t *) calloc (sets[maps[i].fromset].size>0?sets[maps[i].fromset].size:1,sizeof(dim_t));
+        if(rank!=0) maps[i].assigned= (unsigned char *) calloc (sets[maps[i].fromset].size>0?sets[maps[i].fromset].size:1,sizeof(unsigned char));
         MPI_Bcast(maps[i].values,sets[maps[i].fromset].size*sizeof(dim_t), MPI_BYTE,0, PETSC_COMM_WORLD);
       }
     }
@@ -1829,6 +1841,17 @@ int main(int argc,char **args) {
   if(rank==0) {
     formulas_execute(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,IsIni);
 assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,IsIni,teems_assertions_mode,0);
+  }
+  /* formula-assigned mappings (manual 10.13.1) got their values on rank
+     0 during the pass above; the equation side on every rank routes
+     mapped indices through the same tables */
+  if(nohsl&&nmap>0) {
+    for(i=0; i<nmap; i++) if(maps[i].formula_assigned) {
+      MPI_Bcast(&maps[i].has_values,sizeof(bool), MPI_BYTE,0, PETSC_COMM_WORLD);
+      MPI_Bcast(&maps[i].nassigned,sizeof(dim_t), MPI_BYTE,0, PETSC_COMM_WORLD);
+      MPI_Bcast(maps[i].values,sets[maps[i].fromset].size*sizeof(dim_t), MPI_BYTE,0, PETSC_COMM_WORLD);
+      MPI_Bcast(maps[i].assigned,sets[maps[i].fromset].size*sizeof(unsigned char), MPI_BYTE,0, PETSC_COMM_WORLD);
+    }
   }
   gettimeofday(&endtime, NULL);
   if(rank==0)logmsg(1,"Variable calculation time %.2f s\n",(endtime.tv_sec - begintime.tv_sec)+((double)(endtime.tv_usec - begintime.tv_usec))/ 1000000);
