@@ -843,6 +843,22 @@ the CMF (which is a file manifest only), and are echoed in
 
 ## 13. Known limitations and planned work
 
+- **DBBD with subintervals on large shocks can hit a structurally singular
+  border Schur complement mid-path.** Seen on the 1.4M-equation GTAPv7
+  R32 x medium rig with a uniform `aoall` +20 shock: `-matsol 2
+  -nsubints 2` fails in the second subinterval with MA48 `INFO(1) = -4`
+  on the 8,16x-row border system (rank one short; the on-failure probe
+  names the under-determined variable and the over-constrained
+  equation), while `-nsubints 1` and `4` solve. A flow reaches exactly
+  zero along the subinterval path and the realized border pattern loses
+  connectivity -- the same class as the value-dependent pattern the
+  `-fastrefac` per-step test guards against. Reproduced twice on the
+  calibration host, not on the development build with the identical
+  inputs, so it is host-deterministic (2026-09). Remedies, as the
+  diagnosis prints: change the subinterval count, or use a method that
+  does not factorize that border (LU, or SBBD/NDBBD for intertemporal
+  systems). Reproducer inputs are kept with the HPC archive.
+
 - **Error handling** is largely `printf` + `exit`/`return`; parse errors
   on one rank can abort non-collectively. Messages carry
   `Error:`/`Warning:` prefixes with file/flag/remedy named, and teems-R
