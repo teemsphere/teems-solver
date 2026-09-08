@@ -105,8 +105,9 @@ The solver reads a GEMPACK-style TAB subset (statement syntax per [GM]):
   element under `(by_elements)`; a formula-assigned mapping must be
   complete before its first use and is frozen after it, 11.9.9); used
   in index expressions and in conditional sums
-  (`sum{j,S: MAP(j) = i, ...}`); mapped equations solve under every
-  matrix method.
+  (`sum{j,S: MAP(j) = i, ...}`, where `i` ranges over the codomain or
+  a declared subset of it, or names a codomain element); mapped
+  equations solve under every matrix method.
 - `coefficient` / `variable` — levels or percentage-change quantities
   (`(change)`, `(levels)` variables — levels equations and
   `Formula & Equation` pairs are linearized by `levels.c` at
@@ -124,8 +125,10 @@ The solver reads a GEMPACK-style TAB subset (statement syntax per [GM]):
   TRUNCB, …) and `$POS` in its five forms ([GM] 11.5.6: index,
   index in a superset, element literal in a set, mapped index, mapped
   index in a superset; compiled to a per-tuple position operand).
-  `IF[...]` conditional expressions are rewritten by the R front end
-  into these forms.
+  Element-membership `IF[i in S, ...]` expressions are rewritten by
+  the R front end into these forms; value-comparison `if(a op b, x)`
+  compiles directly, with the comparison spelled either way
+  (`< <= = <> > >=` or `lt le eq ne gt ge`).
 - `assertion` (`-assertions` off/warn/fatal), `zerodivide` statements,
   `Default` statements ([GM] 10.19), `PostSim (Begin/End)` sections
   ([GM] ch. 12; `-postsim`, split by the preprocess and executed after

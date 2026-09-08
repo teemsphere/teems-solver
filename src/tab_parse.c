@@ -1417,7 +1417,7 @@ offset_t sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
             }
           }
         }
-        l3=sum_cond_carry_rhs(&sum_cof[j],arSet,fdim,l3,interchar);
+        l3=sum_cond_carry_rhs(&sum_cof[j],arSet,fdim,l3,interchar,sets);
         if (interchar[strlen(interchar)-1]==',') {
           interchar[strlen(interchar)-1]='}';
         } else {
@@ -1566,7 +1566,7 @@ offset_t sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
             }
           }
         }
-        l3=sum_cond_carry_rhs(&sum_cof[j],arSet,fdim,l3,interchar);
+        l3=sum_cond_carry_rhs(&sum_cof[j],arSet,fdim,l3,interchar,sets);
         if (interchar[strlen(interchar)-1]==',') {
           interchar[strlen(interchar)-1]='}';
         } else {
@@ -2413,19 +2413,26 @@ int sum_cofcond_test(const sum_cofcond *cc, elem_value *elem_vals, quantifier *f
    name in the frame gives a per-tuple compare (the quantifier must
    range over the codomain exactly), a codomain element name a fixed
    position; anything else is a named fatal. */
-void sum_cond_rhs_resolve(int cond_mapid, const char *cond_rhs, quantifier *frame, dim_t nframe, set_def *sets, set_element *set_elems, int *condpos, offset_t *condfix) {
-  dim_t l;
+void sum_cond_rhs_resolve(int cond_mapid, const char *cond_rhs, quantifier *frame, dim_t nframe, set_def *sets, set_element *set_elems, int *condpos, offset_t *condfix, dim_t *condss) {
+  dim_t l,ss;
   offset_t cs;
   *condpos=-1;
   *condfix=-1;
+  *condss=0;
   if (cond_mapid==0) return;
   for (l=0; l<nframe; l++) if (strcmp(cond_rhs,frame[l].index_name)==0) {
-      if (frame[l].setid!=(offset_t)teems_maps[cond_mapid-1].toset) {
-        printf("Error: the RHS index %s of the condition on mapping %s does not range over the mapping's codomain set\n",cond_rhs,teems_maps[cond_mapid-1].mapname);
+      /* the quantifier may range over the codomain or a declared
+         subset of it (GTAP-AEZ: (all,a,FORSLCOV) against a mapping
+         into FOPALCOV); a subset position lifts through superset_pos
+         at eval (sum_cond_target) */
+      ss=set_supset_slot(sets,frame[l].setid,(dim_t)teems_maps[cond_mapid-1].toset);
+      if (ss<0) {
+        printf("Error: the RHS index %s of the condition on mapping %s ranges over set %s, which is not the mapping's codomain set %s or a declared subset of it\n",cond_rhs,teems_maps[cond_mapid-1].mapname,sets[frame[l].setid].setname,sets[teems_maps[cond_mapid-1].toset].setname);
         MPI_Abort(PETSC_COMM_WORLD,1);
         return;
       }
       *condpos=(int)l;
+      *condss=ss;
       return;
     }
   cs=(offset_t)teems_maps[cond_mapid-1].toset;
@@ -2453,14 +2460,15 @@ void sum_cond_domain_check(sum_def *sc, set_def *sets) {
    references it (the GTAP-E shape: tot(b) = sum over the domain of
    the r with MAP(r)=b): append it as a carried dim so the sum store
    holds one slot per RHS element.  The RHS quantifier must range over
-   the codomain exactly.  Returns the updated carried-dim count. */
-dim_t sum_cond_carry_rhs(sum_def *sc, quantifier *arSet, dim_t fdim, dim_t l3, char *interchar) {
+   the codomain or a declared subset of it.  Returns the updated
+   carried-dim count. */
+dim_t sum_cond_carry_rhs(sum_def *sc, quantifier *arSet, dim_t fdim, dim_t l3, char *interchar, set_def *sets) {
   dim_t l4,l5;
   if (sc->cond_mapid==0) return l3;
   for (l5=0; l5<fdim-1; l5++) if (strcmp(sc->cond_rhs,arSet[l5].index_name)==0) break;
   if (l5>=fdim-1) return l3; /* not a quantifier (scalar statements have fdim 0): codomain element, resolved at eval */
-  if (arSet[l5].setid!=(offset_t)teems_maps[sc->cond_mapid-1].toset) {
-    printf("Error: the RHS quantifier %s of the condition on mapping %s does not range over the mapping's codomain set\n",sc->cond_rhs,teems_maps[sc->cond_mapid-1].mapname);
+  if (set_supset_slot(sets,arSet[l5].setid,(dim_t)teems_maps[sc->cond_mapid-1].toset)<0) {
+    printf("Error: the RHS quantifier %s of the condition on mapping %s ranges over set %s, which is not the mapping's codomain set %s or a declared subset of it\n",sc->cond_rhs,teems_maps[sc->cond_mapid-1].mapname,sets[arSet[l5].setid].setname,sets[teems_maps[sc->cond_mapid-1].toset].setname);
     MPI_Abort(PETSC_COMM_WORLD,1);
     return l3;
   }
@@ -4815,6 +4823,32 @@ dim_t set_supset_slot(set_def *sets, dim_t sub, dim_t sup) {
     if (sets[sub].subsetid[s]==sup) return s;
   }
   return -1;
+}
+
+/* Rewrite the word comparison operators ge le gt lt ne eq to their
+   symbol forms (manual 11.4.11 lists both spellings).  A word op is
+   only recognised space-delimited and outside quotes, so identifier
+   fragments and element names are untouched; callers run this ahead
+   of whitespace stripping, after which "x le 0" would be unreadable. */
+void tab_wordops_normalize(char *line) {
+  static const char *w[6]={" ge "," le "," gt "," lt "," ne "," eq "};
+  static const char *s[6]={">=","<=",">","<","<>","="};
+  int k,inq;
+  size_t sl;
+  char *p,*q;
+  for (p=line,inq=0; *p!='\0'; ) {
+    if (*p=='"') { inq=!inq; p++; continue; }
+    if (inq) { p++; continue; }
+    for (k=0; k<6; k++) if (strncasecmp(p,w[k],4)==0) break;
+    if (k==6) { p++; continue; }
+    sl=strlen(s[k]);
+    q=p+4;
+    p[0]=' ';
+    memcpy(p+1,s[k],sl);
+    p[1+sl]=' ';
+    memmove(p+2+sl,q,strlen(q)+1);
+    p+=2+sl;
+  }
 }
 
 /* named fatal for an index (idx != NULL) or a set qualifier (idx ==

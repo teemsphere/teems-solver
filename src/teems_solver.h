@@ -651,8 +651,21 @@ void sum_cond_parse(char *settok, const char *sumindx, int *cond_mapid, char *co
 void sum_cond_coef_resolve(sum_def *sc, quantifier *frame, dim_t nframe, set_def *sets, set_element *set_elems, array_def *coefs, offset_t ncof, sum_cofcond *out);
 int sum_cofcond_test(const sum_cofcond *cc, elem_value *elem_vals, quantifier *frame, offset_t l1);
 void sum_cond_domain_check(sum_def *sc, set_def *sets);
-dim_t sum_cond_carry_rhs(sum_def *sc, quantifier *arSet, dim_t fdim, dim_t l3, char *interchar);
-void sum_cond_rhs_resolve(int cond_mapid, const char *cond_rhs, quantifier *frame, dim_t nframe, set_def *sets, set_element *set_elems, int *condpos, offset_t *condfix);
+dim_t sum_cond_carry_rhs(sum_def *sc, quantifier *arSet, dim_t fdim, dim_t l3, char *interchar, set_def *sets);
+void sum_cond_rhs_resolve(int cond_mapid, const char *cond_rhs, quantifier *frame, dim_t nframe, set_def *sets, set_element *set_elems, int *condpos, offset_t *condfix, dim_t *condss);
+/* codomain position a mapping-equality condition compares against:
+   the fixed element, or the RHS quantifier's current position lifted
+   from its (sub)set into the codomain via superset_pos slot condss
+   (0 = the quantifier ranges over the codomain itself) */
+static inline offset_t sum_cond_target(int condpos, dim_t condss, offset_t condfix, const quantifier *frame, const set_def *sets, const set_element *set_elems) {
+  if (condpos<0) return condfix;
+  if (condss==0) return (offset_t)frame[condpos].indx;
+  return (offset_t)set_elems[sets[frame[condpos].setid].offset+frame[condpos].indx].superset_pos[condss];
+}
+/* rewrite the word comparison operators (ge le gt lt ne eq, space-
+   delimited, outside quotes) to their symbol forms ahead of
+   whitespace stripping */
+void tab_wordops_normalize(char *line);
 int mappings_validate(map_def *maps, dim_t nmap, set_def *sets, set_element *set_elems);
 offset_t postsim_reads_execute(char *psname, int niodata, cmf_file_entry *iodata, set_def *sets, dim_t nset, set_element *set_elems, array_def *coefs, offset_t ncof, offset_t ncofele, array_def *vars, offset_t nvar, offset_t nvarele, elem_value *elem_vals);
 /* Default-statement helpers (manual 10.19; audit A6): positional

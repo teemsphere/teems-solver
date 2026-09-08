@@ -34,6 +34,7 @@ typedef struct
   int cond_mapid;                   /* >0: mapping-equality condition (M3) */
   int cond_pos;                     /* RHS frame position, or -1 */
   offset_t cond_fixed;              /* fixed codomain position, or -1 */
+  dim_t cond_ss;                    /* superset_pos slot lifting the RHS position, 0 = none */
   sum_cofcond cofcond;              /* coefficient comparison (gap 2); cofid -1 = none */
 } sum_prog;
 
@@ -52,6 +53,7 @@ typedef struct
   int condmap[MAXVARDIM];           /* >0: enclosing-sum mapping-equality gate (M3) */
   int condpos[MAXVARDIM];           /* its RHS frame position, or -1 */
   offset_t condfix[MAXVARDIM];      /* fixed codomain position, or -1 */
+  dim_t condss[MAXVARDIM];          /* superset_pos slot lifting the RHS position, 0 = none */
   dim_t dimleadlag[MAXVARDIM];
   sum_prog *sums;                   /* coefficient-expression sums */
   int nsums;
@@ -136,7 +138,7 @@ static int sum_prog_build(char *formulain, char *commsyntax, bool skip_linvar_su
         strcpy(out->arSet[sum_cof[j].size].index_name,sum_cof[j].sumindx);
         out->sumset_size=sets[sum_cof[j].sumsetid].size;
         out->cond_mapid=sum_cof[j].cond_mapid;
-        sum_cond_rhs_resolve(out->cond_mapid,sum_cof[j].cond_rhs,out->arSet,(dim_t)(sum_cof[j].size+1),sets,set_elems,&out->cond_pos,&out->cond_fixed);
+        sum_cond_rhs_resolve(out->cond_mapid,sum_cof[j].cond_rhs,out->arSet,(dim_t)(sum_cof[j].size+1),sets,set_elems,&out->cond_pos,&out->cond_fixed,&out->cond_ss);
         sum_cond_coef_resolve(&sum_cof[j],out->arSet,(dim_t)(sum_cof[j].size+1),sets,set_elems,coefs,ncof,&out->cofcond);
         nops=0;
         if(!formula_compile(p,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,&nops,out->arSet,(dim_t)(sum_cof[j].size+1)))MPI_Abort(PETSC_COMM_WORLD,1);
@@ -208,7 +210,7 @@ static void sum_prog_eval(sum_prog *sp, set_def *sets, set_element *set_elems, e
     for (l1=0; l1<sp->sumset_size; l1++) {
       /* mapping-equality condition (M3): only domain elements mapping
          to the target codomain position contribute */
-      if (sp->cond_mapid>0&&(offset_t)teems_maps[sp->cond_mapid-1].values[l1]!=(sp->cond_pos>=0?(offset_t)arSet2[sp->cond_pos].indx:sp->cond_fixed)) continue;
+      if (sp->cond_mapid>0&&(offset_t)teems_maps[sp->cond_mapid-1].values[l1]!=sum_cond_target(sp->cond_pos,sp->cond_ss,sp->cond_fixed,arSet2,sets,set_elems)) continue;
       /* coefficient-comparison condition (11.4.11; IF-survey gap 2) */
       if (sp->cofcond.cofid>=0&&!sum_cofcond_test(&sp->cofcond,elem_vals,arSet2,l1)) continue;
       arSet2[sp->nouter].indx=l1;
@@ -327,7 +329,7 @@ static void stmt_prog_execute(stmt_prog *st, offset_t matrow, PetscInt *eq_addr,
                same tuples */
             int csk=0;
             for (dcount=0; dcount<vars[lv->LinVarIndx].size; dcount++)
-              if (lv->condmap[dcount]>0&&(offset_t)teems_maps[lv->condmap[dcount]-1].values[arSet1[lv->dcountdim3[dcount]].indx]!=(lv->condpos[dcount]>=0?(offset_t)arSet1[lv->condpos[dcount]].indx:lv->condfix[dcount])) {csk=1;break;}
+              if (lv->condmap[dcount]>0&&(offset_t)teems_maps[lv->condmap[dcount]-1].values[arSet1[lv->dcountdim3[dcount]].indx]!=sum_cond_target(lv->condpos[dcount],lv->condss[dcount],lv->condfix[dcount],arSet1,sets,set_elems)) {csk=1;break;}
             if (csk) continue;
           }
           li3=0;
@@ -765,6 +767,7 @@ static void stmt_prog_build_one(char *line, stmt_prog *stp, char *commsyntax,
   dim_t fdim,np,dcount,fdimlin=0,i4,sup,supset[MAXSUPSET];
   int condmap[MAXVARDIM],condpos[MAXVARDIM];
   offset_t condfix[MAXVARDIM];
+  dim_t condss[MAXVARDIM];
   int totalsum,sumcount=1,sumcount1=0,lvar,lvar1,lvar2,lvar3,lvar4;
   offset_t lj,l1,i1=0,sumbegadd,dcountdim1[4*MAXVARDIM],dcountdim2[4*MAXVARDIM],dcountdim3[4*MAXVARDIM],nloops,nloopslin,nloopsfac,li3,nsumele,nsumele1,l2;
   int sumindx,npow,npar,nmul,nplu,ndiv,nmin,nops=0,nlinvars,leadlag,varindx1,varindx2;
@@ -772,6 +775,7 @@ static void stmt_prog_build_one(char *line, stmt_prog *stp, char *commsyntax,
 
       str_replace_first(line, commsyntax, "");
       str_replace_first(line, "(linear)", "");
+      tab_wordops_normalize(line);
       {
         /* equation name for the linearity-check messages */
         const char *q=line;
@@ -1129,12 +1133,13 @@ static void stmt_prog_build_one(char *line, stmt_prog *stp, char *commsyntax,
             condmap[dcount]=LinVars[i].dimcondmap[dcount];
             condpos[dcount]=-1;
             condfix[dcount]=-1;
+            condss[dcount]=0;
             if (condmap[dcount]>0) {
               if (arSet[dcountdim3[dcount]].setid!=(offset_t)teems_maps[condmap[dcount]-1].fromset) {
                 printf("Error: the condition on mapping %s gates index %s, which does not loop over the mapping's domain set\n",teems_maps[condmap[dcount]-1].mapname,LinVars[i].dimnames[dcount]);
                 MPI_Abort(PETSC_COMM_WORLD,1);
               }
-              sum_cond_rhs_resolve(condmap[dcount],LinVars[i].dimcondrhs[dcount],arSet,fdimlin,sets,set_elems,&condpos[dcount],&condfix[dcount]);
+              sum_cond_rhs_resolve(condmap[dcount],LinVars[i].dimcondrhs[dcount],arSet,fdimlin,sets,set_elems,&condpos[dcount],&condfix[dcount],&condss[dcount]);
             }
             if(LinVars[i].dimmapid[dcount]>0) {
               linvar_map_dim_check(&LinVars[i],dcount,arSet[dcountdim3[dcount]].setid,vars);
@@ -1159,6 +1164,7 @@ static void stmt_prog_build_one(char *line, stmt_prog *stp, char *commsyntax,
             stp->lv[i].condmap[dcount]=condmap[dcount];
             stp->lv[i].condpos[dcount]=condpos[dcount];
             stp->lv[i].condfix[dcount]=condfix[dcount];
+            stp->lv[i].condss[dcount]=condss[dcount];
             stp->lv[i].dimleadlag[dcount]=LinVars[i].dimleadlag[dcount];
           }
           stp->lv[i].built=true;
@@ -1340,7 +1346,7 @@ static void bs_prog_execute(bs_prog *bp, set_def *sets, set_element *set_elems,
           {
             int csk=0;
             for (dcount=0; dcount<vars[lv->LinVarIndx].size; dcount++)
-              if (lv->condmap[dcount]>0&&(offset_t)teems_maps[lv->condmap[dcount]-1].values[arSet1[lv->dcountdim3[dcount]].indx]!=(lv->condpos[dcount]>=0?(offset_t)arSet1[lv->condpos[dcount]].indx:lv->condfix[dcount])) {csk=1;break;}
+              if (lv->condmap[dcount]>0&&(offset_t)teems_maps[lv->condmap[dcount]-1].values[arSet1[lv->dcountdim3[dcount]].indx]!=sum_cond_target(lv->condpos[dcount],lv->condss[dcount],lv->condfix[dcount],arSet1,sets,set_elems)) {csk=1;break;}
             if (csk) continue;
           }
           li3=0;
@@ -1647,7 +1653,7 @@ int eq_sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifier 
               }
             }
           }
-          l3=sum_cond_carry_rhs(&sum_cof[j],arSet,fdim,l3,interchar);
+          l3=sum_cond_carry_rhs(&sum_cof[j],arSet,fdim,l3,interchar,sets);
           if (interchar[strlen(interchar)-1]==',') {
             interchar[strlen(interchar)-1]='}';
           }
@@ -1809,7 +1815,7 @@ int eq_sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifier 
               }
             }
           }
-          l3=sum_cond_carry_rhs(&sum_cof[j],arSet,fdim,l3,interchar);
+          l3=sum_cond_carry_rhs(&sum_cof[j],arSet,fdim,l3,interchar,sets);
           if (interchar[strlen(interchar)-1]==',') {
             interchar[strlen(interchar)-1]='}';
           }
@@ -2155,6 +2161,7 @@ int equation_order_read(char *fname, char *commsyntax,set_def *sets,dim_t nset,s
     if (strstr(line,"(default")==NULL) {
       str_replace_first(line, commsyntax, "");
       str_replace_first(line, "(linear)", "");
+      tab_wordops_normalize(line);
       while (str_replace_all(line,"  ", " "));
       while (str_replace_char(line, '[', '('));
       while (str_replace_char(line, ']', ')'));
@@ -2500,6 +2507,7 @@ int equation_order_read_nested(char *fname, char *commsyntax,set_def *sets,dim_t
     if (strstr(line,"(default")==NULL) {
       str_replace_first(line, commsyntax, "");
       str_replace_first(line, "(linear)", "");
+      tab_wordops_normalize(line);
       while (str_replace_all(line,"  ", " "));
       while (str_replace_char(line, '[', '('));
       while (str_replace_char(line, ']', ')'));
@@ -2828,6 +2836,7 @@ int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,
   dim_t fdim=0,np,i4,sup,supset[MAXSUPSET];
   int condmap[MAXVARDIM],condpos[MAXVARDIM];
   offset_t condfix[MAXVARDIM];
+  dim_t condss[MAXVARDIM];
   offset_t rowindx,rowindxorg,l,l1,lj,dcountdim1[4*MAXVARDIM],dcountdim2[4*MAXVARDIM],dcountdim3[4*MAXVARDIM],dcountdim4[4*MAXVARDIM],dcountdim5[4*MAXVARDIM],nloops,nloopslin,nloopsfac,li3,l2,matrow,matroworg,ltime,lreg,leq=0,eqindx=0;//,sizelinvars,totlinvars,templinvars
   offset_t nreg=0,nint=0,sj,i,i3;
   if(allregset>-1)nreg=sets[allregset].size;
@@ -2845,6 +2854,7 @@ int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,
       if(eqmeta!=NULL)tab_equation_name(line,eqmeta[eqindx].eqname);
       str_replace_first(line, commsyntax, "");
       str_replace_first(line, "(linear)", "");
+      tab_wordops_normalize(line);
       while (str_replace_all(line,"  ", " "));
       while (str_replace_char(line, '[', '('));
       while (str_replace_char(line, ']', ')'));
@@ -3091,12 +3101,13 @@ int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,
           condmap[dcount]=LinVars[i].dimcondmap[dcount];
           condpos[dcount]=-1;
           condfix[dcount]=-1;
+          condss[dcount]=0;
           if (condmap[dcount]>0) {
             if (arSet[dcountdim5[dcount]].setid!=(offset_t)teems_maps[condmap[dcount]-1].fromset) {
               printf("Error: the condition on mapping %s gates index %s, which does not loop over the mapping's domain set\n",teems_maps[condmap[dcount]-1].mapname,LinVars[i].dimnames[dcount]);
               MPI_Abort(PETSC_COMM_WORLD,1);
             }
-            sum_cond_rhs_resolve(condmap[dcount],LinVars[i].dimcondrhs[dcount],arSet,fdimlin,sets,set_elems,&condpos[dcount],&condfix[dcount]);
+            sum_cond_rhs_resolve(condmap[dcount],LinVars[i].dimcondrhs[dcount],arSet,fdimlin,sets,set_elems,&condpos[dcount],&condfix[dcount],&condss[dcount]);
           }
           if(LinVars[i].dimmapid[dcount]>0) {
             linvar_map_dim_check(&LinVars[i],dcount,arSet[dcountdim5[dcount]].setid,vars);
@@ -3200,7 +3211,7 @@ int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,
                write above must happen regardless */
             int csk=0;
             for (dcount=0; dcount<vars[LinVars[i].LinVarIndx].size; dcount++)
-              if (condmap[dcount]>0&&(offset_t)teems_maps[condmap[dcount]-1].values[arSet[dcountdim5[dcount]].indx]!=(condpos[dcount]>=0?(offset_t)arSet[condpos[dcount]].indx:condfix[dcount])) {csk=1;break;}
+              if (condmap[dcount]>0&&(offset_t)teems_maps[condmap[dcount]-1].values[arSet[dcountdim5[dcount]].indx]!=sum_cond_target(condpos[dcount],condss[dcount],condfix[dcount],arSet,sets,set_elems)) {csk=1;break;}
             if (csk) continue;
           }
           Iindx=closure_vals[vars[LinVars[i].LinVarIndx].offset+li3].exo_index;
