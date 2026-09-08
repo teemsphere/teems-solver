@@ -638,6 +638,43 @@ int probe_structural(PetscInt VecSize,offset_t nvarele,offset_t ncofele,PetscInt
     }
   for(j5=0; j5<VecSize; j5++)if(eq_addr[j5]>=0&&eq_addr[j5]<VecSize)row2leq[eq_addr[j5]]=j5;
 
+  /* -probepattern 1: write the assembled structural pattern with element
+     names, one row per line ("eq(ele,..)\tvar(ele,..) var(ele,..) ..."),
+     to <solfiles>.probe.pattern -- the element-level view the aggregated
+     report cannot give when an entanglement has to be traced by hand */
+  {
+    PetscInt probepattern=0;
+    PetscOptionsGetInt(NULL,NULL,"-probepattern",&probepattern,NULL);
+    if(probepattern>0) {
+      char patpath[TABREADLINE+16];
+      int pidx;
+      for(pidx=niodata+noutdata; pidx<niodata+noutdata+nsoldata; pidx++)if(strcmp("solfiles",iodata[pidx].logname)==0)break;
+      if(pidx<niodata+noutdata+nsoldata)strcpy(patpath,iodata[pidx].filname);
+      else strcpy(patpath,"solution");
+      strcat(patpath,".probe.pattern");
+      FILE *pf=fopen(patpath,"w");
+      if(pf==NULL)printf("Warning: cannot write probe pattern %s\n",patpath);
+      else {
+        PetscInt ncols,c;
+        const PetscInt *cols;
+        const PetscScalar *pvals;
+        char pname[TABREADLINE];
+        for(i=0; i<VecSize; i++) {
+          probe_eq_ele_name(row2leq[i],eqmeta,neqmeta,sets,set_elems,pname);
+          fprintf(pf,"%s\t",pname);
+          MatGetRow(A,i,&ncols,&cols,&pvals);
+          for(c=0; c<ncols; c++) {
+            probe_var_ele_name(col2ele[cols[c]],vars,nvar,sets,set_elems,pname);
+            fprintf(pf,"%s%s%s",(c>0)?" ":"",pname,(pvals[c]==0.0)?"=0":"");
+          }
+          MatRestoreRow(A,i,&ncols,&cols,&pvals);
+          fprintf(pf,"\n");
+        }
+        fclose(pf);
+        printf("probe: element-level pattern written to %s\n",patpath);
+      }
+    }
+  }
   mc79_default_control_i(&control);
   control.f_arrays=1;
   rowmatch= (int *) malloc (VecSize*sizeof(int));
@@ -751,6 +788,20 @@ int probe_structural(PetscInt VecSize,offset_t nvarele,offset_t ncofele,PetscInt
           nitems=0;
           for(i=VecSize-info.m3; i<VecSize; i++)items[nitems++]=rowperm[i]-1;
           probe_agg_report(fp,"dm_over_by_eq","DM over-determined block by equation",items,nitems,1,col2ele,row2leq,vars,nvar,eqmeta,neqmeta);
+        }
+        /* the other side of each defective block: the columns the
+           over-determined rows compete for, and the rows the
+           under-determined columns share -- names the variables that
+           are structurally short of equations */
+        if(info.n3>0) {
+          nitems=0;
+          for(i=VecSize-info.n3; i<VecSize; i++)items[nitems++]=colperm[i]-1;
+          probe_agg_report(fp,"dm_over_by_var","DM over-determined block by variable",items,nitems,0,col2ele,row2leq,vars,nvar,eqmeta,neqmeta);
+        }
+        if(info.m1>0) {
+          nitems=0;
+          for(i=0; i<info.m1; i++)items[nitems++]=rowperm[i]-1;
+          probe_agg_report(fp,"dm_under_by_eq","DM under-determined block by equation",items,nitems,1,col2ele,row2leq,vars,nvar,eqmeta,neqmeta);
         }
       }
       free(rowperm);

@@ -934,10 +934,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
                   dims=dims*sets[n].size;
                   dim[n1]=sets[n].size;
                   offset[n1]=sets[n].offset;
-                  for(l1=0; l1<MAXSUPSET; l1++)if(strcmp(sets[sets[n].subsetid[l1]].setname,sets[coefs[i].setid[n1]].setname)==0) {
-                      supsetid[n1]=l1;
-                      break;
-                    }
+                  { dim_t ss=set_supset_slot(sets,n,coefs[i].setid[n1]); if(ss<0)set_supset_fatal(NULL,vname,NULL,sets,n,coefs[i].setid[n1]); supsetid[n1]=ss; }
                   break;
                 }
               }
@@ -1112,10 +1109,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
                   dims=dims*sets[n].size;
                   dim[n1]=sets[n].size;
                   offset[n1]=sets[n].offset;
-                  for(l1=0; l1<MAXSUPSET; l1++)if(strcmp(sets[sets[n].subsetid[l1]].setname,sets[vars[i].setid[n1]].setname)==0) {
-                      supsetid[n1]=l1;
-                      break;
-                    }
+                  { dim_t ss=set_supset_slot(sets,n,vars[i].setid[n1]); if(ss<0)set_supset_fatal(NULL,vname,NULL,sets,n,vars[i].setid[n1]); supsetid[n1]=ss; }
                   break;
                 }
               }
@@ -2710,7 +2704,7 @@ offset_t closure_read(char *fname, char *commsyntax,closure_entry *closure_vals,
                 } else {
                   for (l1=0; l1<nset; l1++) if (strcmp(p,sets[l1].setname)==0) {
                       arSet[0].setid=l1;
-                      for(sup=1; sup<MAXSUPSET; sup++)if(sets[l1].subsetid[sup]==vars[j].setid[0])supsetid[0]=sup;
+                      { dim_t ss=set_supset_slot(sets,l1,vars[j].setid[0]); if(ss<0)set_supset_fatal(NULL,vars[j].cofname,"closure file",sets,l1,vars[j].setid[0]); supsetid[0]=ss; }
                       exoantidim[0]=1;//arSet[0].SetSize;
                       dims=sets[arSet[0].setid].size;
                       break;
@@ -2774,7 +2768,7 @@ offset_t closure_read(char *fname, char *commsyntax,closure_entry *closure_vals,
                   } else {
                     for(l1=0; l1<nset; l1++) if (strcmp(p,sets[l1].setname)==0) {
                         arSet[l].setid=l1;
-                        for(sup=1; sup<MAXSUPSET; sup++)if(sets[l1].subsetid[sup]==vars[j].setid[l])supsetid[l]=sup;
+                        { dim_t ss=set_supset_slot(sets,l1,vars[j].setid[l]); if(ss<0)set_supset_fatal(NULL,vars[j].cofname,"closure file",sets,l1,vars[j].setid[l]); supsetid[l]=ss; }
                         dims=dims*sets[arSet[l].setid].size;
                         break;
                       }
@@ -4802,6 +4796,38 @@ dim_t set_difference(set_element *set_elems, set_def *sets,dim_t nset,dim_t i) {
    elements, or parenthesized subexpressions; operators apply left to
    right. Validity (per the manual): '+' operands must be disjoint;
    '-' may only remove elements that are present. */
+
+/* superset slot of `sup` for `sub`: 0 when sub is sup itself, the
+   superset_pos column (>0) when the relation is declared or implied
+   (Subset statement, set expression, set builder, set equality), -1
+   when it is not.  Every binding of an index that ranges over `sub`
+   to an argument position declared over `sup` resolves through here.
+   An undeclared relation used to fall back to indexing by position
+   within `sub`, silently addressing the wrong elements of `sup`
+   (GTAP-AEZ scoping, 2026-09: a hand-listed LANDACTS without
+   "Subset LANDACTS is subset of ACTS" turned qfe(e,livestock,r) rows
+   into qfe(e,food,r) entries and a structurally singular system). */
+dim_t set_supset_slot(set_def *sets, dim_t sub, dim_t sup) {
+  dim_t s;
+  if (sub==sup) return 0;
+  for (s=1; s<MAXSUPSET; s++) {
+    if (sets[sub].subsetid[s]==-1) break;
+    if (sets[sub].subsetid[s]==sup) return s;
+  }
+  return -1;
+}
+
+/* named fatal for an index (idx != NULL) or a set qualifier (idx ==
+   NULL) ranging over `sub` at an argument position of `symname`
+   declared over `sup` without a declared subset relation -- TABLO
+   requires the Subset statement (manual 10.1.2).  `where` names the
+   input file class for the message ("closure file"), NULL for TAB. */
+void set_supset_fatal(const char *idx, const char *symname, const char *where, set_def *sets, dim_t sub, dim_t sup) {
+  const char *wo=(where!=NULL)?" (":"",*ww=(where!=NULL)?where:"",*wc=(where!=NULL)?")":"";
+  if (idx!=NULL) printf("Error: index %s of %s ranges over set %s, which is not %s (the declared set at that argument position) or a declared subset of it; add 'Subset %s is subset of %s;' (manual 10.1.2)%s%s%s\n",idx,symname,sets[sub].setname,sets[sup].setname,sets[sub].setname,sets[sup].setname,wo,ww,wc);
+  else printf("Error: %s is qualified by set %s at an argument position declared over %s, and %s is not a declared subset of %s; add 'Subset %s is subset of %s;' (manual 10.1.2)%s%s%s\n",symname,sets[sub].setname,sets[sup].setname,sets[sub].setname,sets[sup].setname,sets[sub].setname,sets[sup].setname,wo,ww,wc);
+  MPI_Abort(PETSC_COMM_WORLD,1);
+}
 
 /* record sup as a superset of sub and fill element positions */
 static void set_register_subset(set_element *se, set_def *sets, dim_t sub, dim_t sup) {

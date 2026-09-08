@@ -298,17 +298,11 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
               map_dim_bind(varindex==2?&ops[nops].Var2Dims[l]:&ops[nops].Var1Dims[l],mp,arSet[l].setid,coefs[index].setid[0],coefs[index].strides[0],leadlag,coefs[index].cofname);
             } else
             if(varindex==2) {
-              if (sets[coefs[index].setid[0]].size>sets[arSet[l].setid].size) {
-                ops[nops].Var2Dims[l].SupSet=1;
-                for(sup=1;sup<MAXSUPSET;sup++)if(sets[arSet[l].setid].subsetid[sup]==coefs[index].setid[0]){ops[nops].Var2Dims[l].SSIndx=sup;break;}
-              }
+              { dim_t ss=set_supset_slot(sets,arSet[l].setid,coefs[index].setid[0]); if(ss<0)set_supset_fatal(p,coefs[index].cofname,NULL,sets,arSet[l].setid,coefs[index].setid[0]); if(ss>0){ops[nops].Var2Dims[l].SupSet=1; ops[nops].Var2Dims[l].SSIndx=(int)ss;} }
               ops[nops].Var2Dims[l].ADims=coefs[index].strides[0];
               ops[nops].Var2Dims[l].leadlag=leadlag;
             } else {
-              if (sets[coefs[index].setid[0]].size>sets[arSet[l].setid].size) {
-                ops[nops].Var1Dims[l].SupSet=1;
-                for(sup=1;sup<MAXSUPSET;sup++)if(sets[arSet[l].setid].subsetid[sup]==coefs[index].setid[0]){ops[nops].Var1Dims[l].SSIndx=sup;break;}
-              }
+              { dim_t ss=set_supset_slot(sets,arSet[l].setid,coefs[index].setid[0]); if(ss<0)set_supset_fatal(p,coefs[index].cofname,NULL,sets,arSet[l].setid,coefs[index].setid[0]); if(ss>0){ops[nops].Var1Dims[l].SupSet=1; ops[nops].Var1Dims[l].SSIndx=(int)ss;} }
               ops[nops].Var1Dims[l].ADims=coefs[index].strides[0];
               ops[nops].Var1Dims[l].leadlag=leadlag;
             }
@@ -341,17 +335,11 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
                 break;
               }
               if(varindex==2) {
-                if (sets[coefs[index].setid[l]].size>sets[arSet[l1].setid].size) {
-                  ops[nops].Var2Dims[l1].SupSet=1;
-                  for(sup=1;sup<MAXSUPSET;sup++)if(sets[arSet[l1].setid].subsetid[sup]==coefs[index].setid[l]){ops[nops].Var2Dims[l1].SSIndx=sup;break;}
-                }
+                { dim_t ss=set_supset_slot(sets,arSet[l1].setid,coefs[index].setid[l]); if(ss<0)set_supset_fatal(p,coefs[index].cofname,NULL,sets,arSet[l1].setid,coefs[index].setid[l]); if(ss>0){ops[nops].Var2Dims[l1].SupSet=1; ops[nops].Var2Dims[l1].SSIndx=(int)ss;} }
                 ops[nops].Var2Dims[l1].ADims=coefs[index].strides[l];
                 ops[nops].Var2Dims[l1].leadlag=leadlag;
               } else {
-                if (sets[coefs[index].setid[l]].size>sets[arSet[l1].setid].size) {
-                  ops[nops].Var1Dims[l1].SupSet=1;
-                  for(sup=1;sup<MAXSUPSET;sup++)if(sets[arSet[l1].setid].subsetid[sup]==coefs[index].setid[l]){ops[nops].Var1Dims[l1].SSIndx=sup;break;}
-                }
+                { dim_t ss=set_supset_slot(sets,arSet[l1].setid,coefs[index].setid[l]); if(ss<0)set_supset_fatal(p,coefs[index].cofname,NULL,sets,arSet[l1].setid,coefs[index].setid[l]); if(ss>0){ops[nops].Var1Dims[l1].SupSet=1; ops[nops].Var1Dims[l1].SSIndx=(int)ss;} }
                 ops[nops].Var1Dims[l1].ADims=coefs[index].strides[l];
                 ops[nops].Var1Dims[l1].leadlag=leadlag;
               }
@@ -370,17 +358,11 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
                 break;
               }
             if(varindex==2) {
-              if (sets[coefs[index].setid[l]].size>sets[arSet[l1].setid].size) {
-                ops[nops].Var2Dims[l1].SupSet=1;
-                for(sup=1;sup<MAXSUPSET;sup++)if(sets[arSet[l1].setid].subsetid[sup]==coefs[index].setid[l]){ops[nops].Var2Dims[l1].SSIndx=sup;break;}
-              }
+              { dim_t ss=set_supset_slot(sets,arSet[l1].setid,coefs[index].setid[l]); if(ss<0)set_supset_fatal(p,coefs[index].cofname,NULL,sets,arSet[l1].setid,coefs[index].setid[l]); if(ss>0){ops[nops].Var2Dims[l1].SupSet=1; ops[nops].Var2Dims[l1].SSIndx=(int)ss;} }
               ops[nops].Var2Dims[l1].ADims=coefs[index].strides[l];
               ops[nops].Var2Dims[l1].leadlag=leadlag;
             } else {
-              if (sets[coefs[index].setid[l]].size>sets[arSet[l1].setid].size) {
-                ops[nops].Var1Dims[l1].SupSet=1;
-                for(sup=1;sup<MAXSUPSET;sup++)if(sets[arSet[l1].setid].subsetid[sup]==coefs[index].setid[l]){ops[nops].Var1Dims[l1].SSIndx=sup;break;}
-              }
+              { dim_t ss=set_supset_slot(sets,arSet[l1].setid,coefs[index].setid[l]); if(ss<0)set_supset_fatal(p,coefs[index].cofname,NULL,sets,arSet[l1].setid,coefs[index].setid[l]); if(ss>0){ops[nops].Var1Dims[l1].SupSet=1; ops[nops].Var1Dims[l1].SSIndx=(int)ss;} }
               ops[nops].Var1Dims[l1].ADims=coefs[index].strides[l];
               ops[nops].Var1Dims[l1].leadlag=leadlag;
             }
@@ -445,17 +427,11 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
               map_dim_bind(varindex==2?&ops[nops].Var2Dims[l]:&ops[nops].Var1Dims[l],mp,arSet[l].setid,vars[index].setid[0],vars[index].strides[0],leadlag,vars[index].cofname);
             } else
             if(varindex==2) {
-              if (sets[vars[index].setid[0]].size>sets[arSet[l].setid].size) {
-                ops[nops].Var2Dims[l].SupSet=1;
-                for(sup=1;sup<MAXSUPSET;sup++)if(sets[arSet[l].setid].subsetid[sup]==vars[index].setid[0]){ops[nops].Var2Dims[l].SSIndx=sup;break;}
-              }
+              { dim_t ss=set_supset_slot(sets,arSet[l].setid,vars[index].setid[0]); if(ss<0)set_supset_fatal(p,vars[index].cofname,NULL,sets,arSet[l].setid,vars[index].setid[0]); if(ss>0){ops[nops].Var2Dims[l].SupSet=1; ops[nops].Var2Dims[l].SSIndx=(int)ss;} }
               ops[nops].Var2Dims[l].ADims=vars[index].strides[0];
               ops[nops].Var2Dims[l].leadlag=leadlag;
             } else {
-              if (sets[vars[index].setid[0]].size>sets[arSet[l].setid].size) {
-                ops[nops].Var1Dims[l].SupSet=1;
-                for(sup=1;sup<MAXSUPSET;sup++)if(sets[arSet[l].setid].subsetid[sup]==vars[index].setid[0]){ops[nops].Var1Dims[l].SSIndx=sup;break;}
-              }
+              { dim_t ss=set_supset_slot(sets,arSet[l].setid,vars[index].setid[0]); if(ss<0)set_supset_fatal(p,vars[index].cofname,NULL,sets,arSet[l].setid,vars[index].setid[0]); if(ss>0){ops[nops].Var1Dims[l].SupSet=1; ops[nops].Var1Dims[l].SSIndx=(int)ss;} }
               ops[nops].Var1Dims[l].ADims=vars[index].strides[0];
               ops[nops].Var1Dims[l].leadlag=leadlag;
             }
@@ -488,17 +464,11 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
                 break;
               }
               if(varindex==2) {
-                if (sets[vars[index].setid[l]].size>sets[arSet[l1].setid].size) {
-                  ops[nops].Var2Dims[l1].SupSet=1;
-                  for(sup=1;sup<MAXSUPSET;sup++)if(sets[arSet[l1].setid].subsetid[sup]==vars[index].setid[l]){ops[nops].Var2Dims[l1].SSIndx=sup;break;}
-                }
+                { dim_t ss=set_supset_slot(sets,arSet[l1].setid,vars[index].setid[l]); if(ss<0)set_supset_fatal(p,vars[index].cofname,NULL,sets,arSet[l1].setid,vars[index].setid[l]); if(ss>0){ops[nops].Var2Dims[l1].SupSet=1; ops[nops].Var2Dims[l1].SSIndx=(int)ss;} }
                 ops[nops].Var2Dims[l1].ADims=vars[index].strides[l];
                 ops[nops].Var2Dims[l1].leadlag=leadlag;
               } else {
-                if (sets[vars[index].setid[l]].size>sets[arSet[l1].setid].size) {
-                  ops[nops].Var1Dims[l1].SupSet=1;
-                  for(sup=1;sup<MAXSUPSET;sup++)if(sets[arSet[l1].setid].subsetid[sup]==vars[index].setid[l]){ops[nops].Var1Dims[l1].SSIndx=sup;break;}
-                }
+                { dim_t ss=set_supset_slot(sets,arSet[l1].setid,vars[index].setid[l]); if(ss<0)set_supset_fatal(p,vars[index].cofname,NULL,sets,arSet[l1].setid,vars[index].setid[l]); if(ss>0){ops[nops].Var1Dims[l1].SupSet=1; ops[nops].Var1Dims[l1].SSIndx=(int)ss;} }
                 ops[nops].Var1Dims[l1].ADims=vars[index].strides[l];
                 ops[nops].Var1Dims[l1].leadlag=leadlag;
               }
@@ -517,17 +487,11 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
                 break;
               }
             if(varindex==2) {
-              if (sets[vars[index].setid[l]].size>sets[arSet[l1].setid].size) {
-                ops[nops].Var2Dims[l1].SupSet=1;
-                for(sup=1;sup<MAXSUPSET;sup++)if(sets[arSet[l1].setid].subsetid[sup]==vars[index].setid[l]){ops[nops].Var2Dims[l1].SSIndx=sup;break;}
-              }
+              { dim_t ss=set_supset_slot(sets,arSet[l1].setid,vars[index].setid[l]); if(ss<0)set_supset_fatal(p,vars[index].cofname,NULL,sets,arSet[l1].setid,vars[index].setid[l]); if(ss>0){ops[nops].Var2Dims[l1].SupSet=1; ops[nops].Var2Dims[l1].SSIndx=(int)ss;} }
               ops[nops].Var2Dims[l1].ADims=vars[index].strides[l];
               ops[nops].Var2Dims[l1].leadlag=leadlag;
             } else {
-              if (sets[vars[index].setid[l]].size>sets[arSet[l1].setid].size) {
-                ops[nops].Var1Dims[l1].SupSet=1;
-                for(sup=1;sup<MAXSUPSET;sup++)if(sets[arSet[l1].setid].subsetid[sup]==vars[index].setid[l]){ops[nops].Var1Dims[l1].SSIndx=sup;break;}
-              }
+              { dim_t ss=set_supset_slot(sets,arSet[l1].setid,vars[index].setid[l]); if(ss<0)set_supset_fatal(p,vars[index].cofname,NULL,sets,arSet[l1].setid,vars[index].setid[l]); if(ss>0){ops[nops].Var1Dims[l1].SupSet=1; ops[nops].Var1Dims[l1].SSIndx=(int)ss;} }
               ops[nops].Var1Dims[l1].ADims=vars[index].strides[l];
               ops[nops].Var1Dims[l1].leadlag=leadlag;
             }
@@ -2215,10 +2179,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
               for (l=0; l<fdim-1; l++) if (strcmp(arSet[l].index_name,p)==0) {
                   varantidim[dcount]=vars[index].strides[dcount];
                   vararset[dcount]=l+1;
-                  if (sets[arSet[l].setid].size!=sets[vars[index].setid[dcount]].size){
-                    varsubset[dcount]=1;
-                    for(sup=1;sup<MAXSUPSET;sup++)if(sets[arSet[l].setid].subsetid[sup]==vars[index].setid[dcount]){varsupsetid[dcount]=sup;break;}
-                  }
+                  { dim_t ss=set_supset_slot(sets,arSet[l].setid,vars[index].setid[dcount]); if(ss<0)set_supset_fatal(p,vars[index].cofname,NULL,sets,arSet[l].setid,vars[index].setid[dcount]); if(ss>0){varsubset[dcount]=1; varsupsetid[dcount]=ss;} }
                   break;
                 }
             }
@@ -2229,10 +2190,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
               for (l=0; l<fdim-1; l++) if (strcmp(arSet[l].index_name,p)==0) {
                   varantidim[dcount]=coefs[index].strides[dcount];
                   vararset[dcount]=l+1;
-                  if (sets[arSet[l].setid].size!=sets[coefs[index].setid[dcount]].size){
-                    varsubset[dcount]=1;
-                    for(sup=1;sup<MAXSUPSET;sup++)if(sets[arSet[l].setid].subsetid[sup]==coefs[index].setid[dcount]){varsupsetid[dcount]=sup;break;}
-                  }
+                  { dim_t ss=set_supset_slot(sets,arSet[l].setid,coefs[index].setid[dcount]); if(ss<0)set_supset_fatal(p,coefs[index].cofname,NULL,sets,arSet[l].setid,coefs[index].setid[dcount]); if(ss>0){varsubset[dcount]=1; varsupsetid[dcount]=ss;} }
                   break;
                 }
             }
@@ -2262,7 +2220,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
                   for(j=0; j<fdim; j++) {
                     if(strcmp(arSet[j].index_name,p)==0) {
                       logiantidim[i1][j]=coefs[index].strides[i];
-                      for(sup=1; sup<MAXSUPSET; sup++)if(sets[arSet[j].setid].subsetid[sup]==coefs[index].setid[i]){logisup[i1][j]=sup;break;}
+                      { dim_t ss=set_supset_slot(sets,arSet[j].setid,coefs[index].setid[i]); if(ss<0)set_supset_fatal(p,coefs[index].cofname,NULL,sets,arSet[j].setid,coefs[index].setid[i]); logisup[i1][j]=(ss>0)?ss:0; }
                       break;
                     }
                   }
@@ -2287,7 +2245,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
                     for(j=0; j<fdim-1; j++) {
                       if(strcmp(arSet[j].index_name,p)==0) {
                         logiantidim[i1][j]=vars[index].strides[i];
-                        for(sup=1; sup<MAXSUPSET; sup++)if(sets[arSet[j].setid].subsetid[sup]==vars[index].setid[i]){logisup[i1][j]=sup;break;}
+                        { dim_t ss=set_supset_slot(sets,arSet[j].setid,vars[index].setid[i]); if(ss<0)set_supset_fatal(p,vars[index].cofname,NULL,sets,arSet[j].setid,vars[index].setid[i]); logisup[i1][j]=(ss>0)?ss:0; }
                         break;
                       }
                     }
@@ -2649,10 +2607,7 @@ offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_el
               for (l=0; l<fdim-1; l++) if (strcmp(arSet[l].index_name,p)==0) {
                   varantidim[dcount]=vars[index].strides[dcount];
                   vararset[dcount]=l+1;
-                  if (sets[arSet[l].setid].size!=sets[vars[index].setid[dcount]].size){
-                    varsubset[dcount]=1;
-                    for(sup=1;sup<MAXSUPSET;sup++)if(sets[arSet[l].setid].subsetid[sup]==vars[index].setid[dcount]){varsupsetid[dcount]=sup;break;}
-                  }
+                  { dim_t ss=set_supset_slot(sets,arSet[l].setid,vars[index].setid[dcount]); if(ss<0)set_supset_fatal(p,vars[index].cofname,NULL,sets,arSet[l].setid,vars[index].setid[dcount]); if(ss>0){varsubset[dcount]=1; varsupsetid[dcount]=ss;} }
                   break;
                 }
             }
@@ -2663,10 +2618,7 @@ offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_el
               for (l=0; l<fdim-1; l++) if (strcmp(arSet[l].index_name,p)==0) {
                   varantidim[dcount]=coefs[index].strides[dcount];
                   vararset[dcount]=l+1;
-                  if (sets[arSet[l].setid].size!=sets[coefs[index].setid[dcount]].size){
-                    varsubset[dcount]=1;
-                    for(sup=1;sup<MAXSUPSET;sup++)if(sets[arSet[l].setid].subsetid[sup]==coefs[index].setid[dcount]){varsupsetid[dcount]=sup;break;}
-                  }
+                  { dim_t ss=set_supset_slot(sets,arSet[l].setid,coefs[index].setid[dcount]); if(ss<0)set_supset_fatal(p,coefs[index].cofname,NULL,sets,arSet[l].setid,coefs[index].setid[dcount]); if(ss>0){varsubset[dcount]=1; varsupsetid[dcount]=ss;} }
                   break;
                 }
             }
@@ -2947,10 +2899,7 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
               for (l=0; l<fdim-1; l++) if (strcmp(arSet[l].index_name,p)==0) {
                   varantidim[dcount]=vars[index].strides[dcount];
                   vararset[dcount]=l+1;
-                  if (sets[arSet[l].setid].size!=sets[vars[index].setid[dcount]].size){
-                    varsubset[dcount]=1;
-                    for(sup=1;sup<MAXSUPSET;sup++)if(sets[arSet[l].setid].subsetid[sup]==vars[index].setid[dcount]){varsupsetid[dcount]=sup;break;}
-                  }
+                  { dim_t ss=set_supset_slot(sets,arSet[l].setid,vars[index].setid[dcount]); if(ss<0)set_supset_fatal(p,vars[index].cofname,NULL,sets,arSet[l].setid,vars[index].setid[dcount]); if(ss>0){varsubset[dcount]=1; varsupsetid[dcount]=ss;} }
                   break;
                 }
             }
@@ -2961,10 +2910,7 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
               for (l=0; l<fdim-1; l++) if (strcmp(arSet[l].index_name,p)==0) {
                   varantidim[dcount]=coefs[index].strides[dcount];
                   vararset[dcount]=l+1;
-                  if (sets[arSet[l].setid].size!=sets[coefs[index].setid[dcount]].size){
-                    varsubset[dcount]=1;
-                    for(sup=1;sup<MAXSUPSET;sup++)if(sets[arSet[l].setid].subsetid[sup]==coefs[index].setid[dcount]){varsupsetid[dcount]=sup;break;}
-                  }
+                  { dim_t ss=set_supset_slot(sets,arSet[l].setid,coefs[index].setid[dcount]); if(ss<0)set_supset_fatal(p,coefs[index].cofname,NULL,sets,arSet[l].setid,coefs[index].setid[dcount]); if(ss>0){varsubset[dcount]=1; varsupsetid[dcount]=ss;} }
                   break;
                 }
             }

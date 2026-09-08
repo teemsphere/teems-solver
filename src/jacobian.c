@@ -1141,13 +1141,7 @@ static void stmt_prog_build_one(char *line, stmt_prog *stp, char *commsyntax,
               supset[dcount]=0;
               continue;
             }
-            if(sets[vars[LinVars[i].LinVarIndx].setid[dcount]].size!=sets[arSet[dcountdim3[dcount]].setid].size) {
-              for(sup=1; sup<MAXSUPSET; sup++)if(vars[LinVars[i].LinVarIndx].setid[dcount]==sets[arSet[dcountdim3[dcount]].setid].subsetid[sup]) {
-                  supset[dcount]=sup;
-                  break;
-                }
-            }
-            else supset[dcount]=0;
+            { dim_t ss=set_supset_slot(sets,arSet[dcountdim3[dcount]].setid,vars[LinVars[i].LinVarIndx].setid[dcount]); if(ss<0)set_supset_fatal(LinVars[i].dimnames[dcount],LinVars[i].LinVarName,NULL,sets,arSet[dcountdim3[dcount]].setid,vars[LinVars[i].LinVarIndx].setid[dcount]); supset[dcount]=(ss>0)?ss:0; }
           }
           stp->lv[i].ops= (formula_op *) malloc (nops*sizeof(formula_op));
           memcpy(stp->lv[i].ops,ops,nops*sizeof(formula_op));
@@ -1587,7 +1581,7 @@ int eq_sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifier 
                   strcpy(sum_cof[j].dimnames[l3],sum_dim_identity(p));
                   l6=0;
                   for (l5=0; l5<fdim-1; l5++) if(strcmp(sum_dim_identity(p),arSet[l5].index_name)==0) {
-                      sum_cof[j].setid[l3]=l5;
+                      sum_cof[j].setid[l3]=arSet[l5].setid; /* the quantifier's set, not its frame position */
                       l6++;
                     }
                   if (l6==0) {
@@ -1627,7 +1621,7 @@ int eq_sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifier 
                     strcat(interchar,sum_cof[j].dimnames[l3]);
                     l6=0;
                     for (l5=0; l5<fdim-1; l5++) if(strcmp(sum_dim_identity(p),arSet[l5].index_name)==0) {
-                        sum_cof[j].setid[l3]=l5;
+                        sum_cof[j].setid[l3]=arSet[l5].setid; /* the quantifier's set, not its frame position */
                         l6++;
                         break;
                       }
@@ -1749,7 +1743,7 @@ int eq_sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifier 
                   strcat(interchar,sum_cof[j].dimnames[l3]);
                   l6=0;
                   for (l5=0; l5<fdim-1; l5++) if(strcmp(sum_dim_identity(p),arSet[l5].index_name)==0) {
-                      sum_cof[j].setid[l3]=l5;
+                      sum_cof[j].setid[l3]=arSet[l5].setid; /* the quantifier's set, not its frame position */
                       l6++;
                     }
                   if (l6==0) {
@@ -1790,7 +1784,7 @@ int eq_sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifier 
                     strcat(interchar,",");
                     l6=0;
                     for (l5=0; l5<fdim-1; l5++) if(strcmp(sum_dim_identity(p),arSet[l5].index_name)==0) {
-                        sum_cof[j].setid[l3]=arSet[l5].setid;//l5;
+                        sum_cof[j].setid[l3]=arSet[l5].setid;
                         l6++;
                       }
                     if (l6==0) {
@@ -3109,13 +3103,7 @@ int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,
             supset[dcount]=0;
             continue;
           }
-          if(sets[vars[LinVars[i].LinVarIndx].setid[dcount]].size!=sets[arSet[dcountdim5[dcount]].setid].size) {
-            for(sup=1; sup<MAXSUPSET; sup++)if(vars[LinVars[i].LinVarIndx].setid[dcount]==sets[arSet[dcountdim5[dcount]].setid].subsetid[sup]) {
-                supset[dcount]=sup;
-                break;
-              }
-          }
-          else supset[dcount]=0;
+          { dim_t ss=set_supset_slot(sets,arSet[dcountdim5[dcount]].setid,vars[LinVars[i].LinVarIndx].setid[dcount]); if(ss<0)set_supset_fatal(LinVars[i].dimnames[dcount],LinVars[i].LinVarName,NULL,sets,arSet[dcountdim5[dcount]].setid,vars[LinVars[i].LinVarIndx].setid[dcount]); supset[dcount]=(ss>0)?ss:0; }
         }
         for (lj=0; lj<nloopslin; lj++) {
           l2=lj;

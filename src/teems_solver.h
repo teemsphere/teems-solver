@@ -608,6 +608,10 @@ void set_equality_build(set_element *set_elems, set_def *sets,dim_t i); /* "=<id
 dim_t set_union_op(set_element *set_elems, set_def *sets,dim_t nset,dim_t i);
 dim_t set_difference(set_element *set_elems, set_def *sets,dim_t nset,dim_t i);
 dim_t subset_map_build(set_element *set_elems, set_def *sets,dim_t nset,offset_t* contin);
+/* superset slot (0 = same set, >0 = superset_pos column, -1 = not a
+   declared subset) and the named fatal for the -1 case */
+dim_t set_supset_slot(set_def *sets, dim_t sub, dim_t sup);
+void set_supset_fatal(const char *idx, const char *symname, const char *where, set_def *sets, dim_t sub, dim_t sup);
 char *closure_next_statement(char *commsyntax, FILE *filehandle, char *readline);
 char *tab_next_statement(char *commsyntax, FILE *filehandle, char *readline,offset_t rlinesize);
 char *tab_next_statement_resolved(char *commsyntax, FILE *filehandle, char *readline, elem_value *record, array_def *coefs,offset_t ncof,solve_real *zerodivide,offset_t rlinesize);

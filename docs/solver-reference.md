@@ -184,6 +184,15 @@ Generated temporaries use the reserved prefixes `gen_sum`, `gen_par`,
    slice-per-blank-line text layout).
 3. **Sets** (`sets_read`, `sets_read_intertemporal`, `subsets_read`,
    `subset_map_build`) — element lists plus superset position maps.
+   Every binding of a quantifier index to an argument position of a
+   coefficient or variable resolves through `set_supset_slot`: the
+   index's set must be the declared set or a declared/implied subset of
+   it (manual 10.1.2), else `set_supset_fatal` names the index, the
+   symbol and the missing `Subset` statement — in equations, formulas
+   (operands, targets, IF conditions), partial Reads and set-qualified
+   closure entries alike. The former fallback bound the index by its
+   position within its own set and silently addressed the wrong
+   elements of the declared set.
 4. **Declarations** (`coefficients_read`, `variables_read`) — offsets and
    strides into the value vector.
 5. **Data** (`data_read_files`) then **formulas** (`formulas_execute`) —
@@ -803,6 +812,7 @@ needs corpus calibration.
 | `-ndcutcache {0,1,2,3}` | 1 | NDBBD only: reuse the step-1 cuts for the following steps and RK stages instead of re-probing every block with a throwaway MA48 factorization. The regional cut (rank-deficient block tails migrated into the time-interface blocks, permutations, block sizes) is structural and its reuse is bit-identical; the interface cut (each chain block's MA51 rank probe: rank plus row/column selection) is value-dependent, and reusing it moves outputs at the rounding level (≤1e-6 on the reference rigs, accuracy summaries identical). Dropped at every subinterval start and at the complementarity re-entry. 0 = re-probe every step (the previous behaviour; the remedy named in the MA48B failure message when a cached interface selection goes singular on a later step); 2/3 = regional-only / interface-only, bisect aids |
 | `-nsbbdblocks n` | 2 | SBBD block-count hint |
 | `-probefine {0,1}` | 0 | with `-solmed probe`: add the MC79 fine-DM strongly-connected-component report (§5) |
+| `-probepattern {0,1}` | 0 | with `-solmed probe`: also write the assembled structural pattern with element names to `<solfiles>.probe.pattern` — one line per equation element, its variable elements space-separated (`=0` marks an entry that is zero at base data); the element-level view for tracing an entangled block by hand when the aggregated report is not enough |
 | `-condest {0,1}` | 0 | sequential LU only: per-solve quality diagnostics (MA60/MC71) — componentwise backward error ω₁/ω₂ with iterative refinement, forward-error bound, and the Arioli–Demmel–Duff scaled condition numbers κω₁/κω₂ — logged per linear solve and recorded as run maxima in `stats.json` (`condest` object). Diagnostic-only: solutions are bit-identical with the flag on or off (refinement runs on a copy). Null-shock (zero-rhs) solves are skipped with a note; κω₂ > 1e15 adds a numerically-near-singular warning — the class the structural probe cannot see. Ignored (with a warning) for the bordered methods, whose composed systems have no transpose-solve path |
 | `-adaptive {no,yes,accuracy-only}` | no | embedded RK pairs only: error-controlled stepping against `-epstol` (default 0.1; teems-R defaults to 0.01, which is where the log-chart driver matches the previous driver's accuracy at a third of the factorizations); `-retryadj` (0.5) / `-maxretries` (3) tune the check-failure retries (warn-level range/assertion violations are accepted with a warning once the retries are exhausted) |
 | `-rkchart {log,percent}` | log | RK stage chart (§5) |
