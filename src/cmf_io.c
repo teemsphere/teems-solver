@@ -1969,6 +1969,104 @@ static int sb_op_test(double v, const char *op, double c) {
   return -1;
 }
 
+/* Indicator-formula operand (GTAP-AEZ UNITD* flags): a coefficient
+   that is not file-Read but assigned only constants -- `C(i) = c`
+   over a set and `C(i) = C(i) + [c]` / `- [c]` over a (sub)set, the
+   shape the front end's IF rewrite emits for `C(i) = 0 + IF[i in S,
+   1]`.  Applied in file order to the `nele` elements `ele` (elements
+   of a formula set outside `ele` are skipped).  Returns 1 with *out
+   allocated when every formula targeting `coef` has that shape and
+   at least one exists, else 0 (the caller keeps its named fatal). */
+static int sb_indicator_eval(char *tabfile, cmf_file_entry *iodata, int niodata, const char *coef, char (*ele)[NAMESIZE], int nele, double **out) {
+  FILE *f;
+  char line[TABREADLINE];
+  char (*sele)[NAMESIZE]=NULL;
+  double *v=NULL;
+  int nf=0,ok=1;
+  size_t cl=strlen(coef);
+  f=fopen(tabfile,"r");
+  if (f==NULL) return 0;
+  v=calloc(nele>0?nele:1,sizeof(double));
+  sele=calloc(SB_MAXELE,NAMESIZE);
+  if (v==NULL||sele==NULL) { free(v); free(sele); fclose(f); return 0; }
+  while (ok&&fgets(line,TABREADLINE,f)) {
+    char *p=line,*q,idx[NAMESIZE],set[NAMESIZE],rhs[TABREADLINE];
+    int nq=0,tl,mode,k,ns,e;
+    double c;
+    if (strncmp(p,"formula",7)!=0) continue;
+    p+=7;
+    /* qualifier groups and the one quantifier */
+    for (;;) {
+      while (*p==' ') p++;
+      if (*p!='(') break;
+      if (strncmp(p,"(all,",5)==0) {
+        p+=5;
+        tl=0; while (*p!='\0'&&*p!=','&&tl<NAMESIZE-1) { if (*p!=' ') idx[tl++]=*p; p++; }
+        idx[tl]='\0'; if (*p==',') p++;
+        tl=0; while (*p!='\0'&&*p!=')'&&*p!=':'&&tl<NAMESIZE-1) { if (*p!=' ') set[tl++]=*p; p++; }
+        set[tl]='\0';
+        if (*p==':') nq=99; /* conditional quantifier: not an indicator shape */
+        while (*p!='\0'&&*p!=')') p++;
+        if (*p==')') p++;
+        nq++;
+      } else {
+        while (*p!='\0'&&*p!=')') p++;
+        if (*p==')') p++;
+      }
+    }
+    /* the target: coef(idx) = */
+    if (strncmp(p,coef,cl)!=0) continue;
+    q=p+cl;
+    while (*q==' ') q++;
+    if (*q!='(') continue;
+    nf++;
+    if (nq!=1) { ok=0; break; }
+    q++;
+    tl=0; while (*q!='\0'&&*q!=')'&&tl<NAMESIZE-1) { if (*q!=' ') rhs[tl++]=*q; q++; }
+    rhs[tl]='\0';
+    if (strcmp(rhs,idx)!=0||*q!=')') { ok=0; break; }
+    q++;
+    while (*q==' ') q++;
+    if (*q!='=') { ok=0; break; }
+    q++;
+    /* rhs without blanks, brackets or the terminator */
+    tl=0;
+    for (; *q!='\0'&&*q!=';'&&*q!='\n'&&*q!='\r'; q++) if (*q!=' '&&*q!='['&&*q!=']'&&*q!='('&&*q!=')'&&tl<TABREADLINE-1) rhs[tl++]=*q;
+    rhs[tl]='\0';
+    /* C idx + c  |  C idx - c  |  c   (the brackets are gone: "coef" "idx") */
+    {
+      char self[NAMESIZE*2];
+      size_t sl;
+      strcpy(self,coef); strcat(self,idx);
+      sl=strlen(self);
+      if (strncmp(rhs,self,sl)==0&&(rhs[sl]=='+'||rhs[sl]=='-')) {
+        char *endp=NULL;
+        mode=1;
+        c=strtod(rhs+sl+1,&endp);
+        if (endp==rhs+sl+1||*endp!='\0') { ok=0; break; }
+        if (rhs[sl]=='-') c=-c;
+      } else {
+        char *endp=NULL;
+        mode=0;
+        c=strtod(rhs,&endp);
+        if (endp==rhs||*endp!='\0') { ok=0; break; }
+      }
+    }
+    ns=sb_elements(tabfile,iodata,niodata,set,sele);
+    if (ns<=0) { ok=0; break; }
+    for (k=0; k<ns; k++) {
+      e=sb_ele_find(ele,nele,sele[k]);
+      if (e<0) continue;
+      if (mode==0) v[e]=c; else v[e]+=c;
+    }
+  }
+  fclose(f);
+  free(sele);
+  if (!ok||nf==0) { free(v); return 0; }
+  *out=v;
+  return 1;
+}
+
 int tab_setbuilder_transform(char *fname, cmf_file_entry *iodata, int niodata) {
   FILE *f,*fout;
   char line[TABREADLINE],tmpname[TABREADLINE];
@@ -2126,7 +2224,10 @@ int tab_setbuilder_transform(char *fname, cmf_file_entry *iodata, int niodata) {
               }
             }
             if (ok) {
-              if (!sb_coef_read_stmt(fname,c2,logname,header)) ok=0;
+              if (!sb_coef_read_stmt(fname,c2,logname,header)) {
+                /* not file-Read: an indicator-formula operand (GTAP-AEZ) */
+                if (!sb_indicator_eval(fname,iodata,niodata,c2,s2ele,ns2,&v2)) ok=0;
+              }
               else {
                 path=sb_iodata_path(iodata,niodata,logname);
                 if (path==NULL||sb_read_reals(path,header,&v2)!=ns2) ok=0;
@@ -2144,7 +2245,7 @@ int tab_setbuilder_transform(char *fname, cmf_file_entry *iodata, int niodata) {
           free(mlab);
           free(v2);
           if (!ok) {
-            printf("Error: set builder %s: cannot evaluate the mapping-conditional sum '%s' (the mapping and the summed coefficient must be file-Read; manual 10.1.2)\n",name,opnd);
+            printf("Error: set builder %s: cannot evaluate the mapping-conditional sum '%s' (the mapping must be file-Read and the summed coefficient file-Read or an indicator assigned only constants; manual 10.1.2)\n",name,opnd);
             free(srcele);
             rc=-1;
             break;
@@ -2176,12 +2277,21 @@ int tab_setbuilder_transform(char *fname, cmf_file_entry *iodata, int niodata) {
           nd=sb_coef_dims(fname,coef,dimset);
           if (nd!=nargs||nd<=0) ok=0;
           if (ok&&!sb_coef_read_stmt(fname,coef,logname,header)) {
-            printf("Error: set builder %s: condition coefficient %s must be Read from an input file (formula-computed operands cannot drive set resolution; manual 10.1.2)\n",name,coef);
-            free(srcele);
-            rc=-1;
-            break;
+            /* a 1-D indicator assigned only constants evaluates from
+               its formulas (GTAP-AEZ); anything else stays fatal */
+            if (nd==1&&strcmp(args[0],idx)==0&&sb_indicator_eval(fname,iodata,niodata,coef,srcele,nsrc,&cv)) {
+              for (k=0; k<nsrc; k++) keep[k]=(char)sb_op_test(cv[k],op,cval);
+              free(cv);
+              cv=NULL;
+              ok=2;
+            } else {
+              printf("Error: set builder %s: condition coefficient %s must be Read from an input file or be an indicator assigned only constants (formula-computed operands cannot drive set resolution; manual 10.1.2)\n",name,coef);
+              free(srcele);
+              rc=-1;
+              break;
+            }
           }
-          if (ok) {
+          if (ok==1) {
             /* per-dim sizes + fixed-element offsets */
             char (*dele)[NAMESIZE]=calloc(SB_MAXELE,NAMESIZE);
             int nde;
