@@ -1717,7 +1717,23 @@ static char *sb_iodata_path(cmf_file_entry *iodata, int nio, const char *logname
 /* elements of a set declared with an explicit list or a
    read-elements statement; returns count or -1 */
 #define SB_MAXELE 4096
+/* nesting allowed while resolving a synthesized narrowing set: the IF
+   rewrite emits at most one level over a declared set, the limit only
+   stops a malformed tab looping */
+#define SB_MAXDEPTH 8
+
+static int sb_elements_d(char *tabfile, cmf_file_entry *iodata, int nio, const char *setname, char (*ele)[NAMESIZE], int depth);
+
+static int sb_eqi(const char *a, const char *b) {
+  for (; *a!='\0'&&*b!='\0'; a++,b++) if (tolower((int)*a)!=tolower((int)*b)) return 0;
+  return *a=='\0'&&*b=='\0';
+}
+
 static int sb_elements(char *tabfile, cmf_file_entry *iodata, int nio, const char *setname, char (*ele)[NAMESIZE]) {
+  return sb_elements_d(tabfile,iodata,nio,setname,ele,0);
+}
+
+static int sb_elements_d(char *tabfile, cmf_file_entry *iodata, int nio, const char *setname, char (*ele)[NAMESIZE], int depth) {
   FILE *f;
   char line[TABREADLINE];
   int n=-1;
@@ -1778,6 +1794,49 @@ static int sb_elements(char *tabfile, cmf_file_entry *iodata, int nio, const cha
         }
         free(lab);
       }
+      break;
+    }
+    if (*p=='=') {
+      /* a set the IF rewrite synthesized for an element-equality
+         condition: "ele" & RANGE. Set builders are evaluated ahead of
+         set resolution, so the one narrowing form teems-R emits is
+         resolved here rather than left to the resolver. */
+      char lit[NAMESIZE],rng[NAMESIZE];
+      char (*rele)[NAMESIZE];
+      int tl=0,nr,i;
+      p++;
+      while (*p==' ') p++;
+      if (*p!='\"') break;
+      p++;
+      while (*p!='\0'&&*p!='\"'&&tl<NAMESIZE-1) lit[tl++]=*p++;
+      lit[tl]='\0';
+      if (*p!='\"') break;
+      p++;
+      while (*p==' ') p++;
+      if (*p!='&') break;
+      p++;
+      while (*p==' ') p++;
+      tl=0;
+      while (*p!='\0'&&*p!=' '&&*p!=';'&&*p!='\n'&&*p!='\r'&&tl<NAMESIZE-1) rng[tl++]=*p++;
+      rng[tl]='\0';
+      if (rng[0]=='\0'||depth>=SB_MAXDEPTH) break;
+      rele=calloc(SB_MAXELE,NAMESIZE);
+      if (rele==NULL) break;
+      nr=sb_elements_d(tabfile,iodata,nio,rng,rele,depth+1);
+      n=(nr<0)?-1:0;
+      /* case-insensitive: the literal comes from the lowercased TAB,
+         the range from an explicit list (lowercased) or a data file
+         (author's case); the range's spelling is kept so the caller's
+         element lookups against that range match */
+      for (i=0; i<nr; i++) {
+        if (sb_eqi(rele[i],lit)) {
+          strncpy(ele[0],rele[i],NAMESIZE-1);
+          ele[0][NAMESIZE-1]='\0';
+          n=1;
+          break;
+        }
+      }
+      free(rele);
       break;
     }
     break;
@@ -2053,7 +2112,10 @@ static int sb_indicator_eval(char *tabfile, cmf_file_entry *iodata, int niodata,
       }
     }
     ns=sb_elements(tabfile,iodata,niodata,set,sele);
-    if (ns<=0) { ok=0; break; }
+    if (ns<0) { ok=0; break; }
+    /* an empty quantifier set (a narrowing set whose element is not
+       in the range) makes the formula a no-op, as TABLO has it */
+    if (ns==0) continue;
     for (k=0; k<ns; k++) {
       e=sb_ele_find(ele,nele,sele[k]);
       if (e<0) continue;

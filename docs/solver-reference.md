@@ -93,7 +93,10 @@ The solver reads a GEMPACK-style TAB subset (statement syntax per [GM]):
   set builders `Set X = (all,i,SRC: <cond>)` ([GM] 10.1.2 — evaluated
   from the input files ahead of set resolution by
   `tab_setbuilder_transform`; the condition coefficient must be
-  file-Read), and intertemporal set declarations (`(intertemporal)`),
+  file-Read or an indicator assigned constants only, its narrowing
+  quantifier over a declared subset or the front end's synthesized
+  `"ele" & RANGE` set, which the pre-pass resolves itself), and
+  intertemporal set declarations (`(intertemporal)`),
   which mark the time dimension used by the bordered orderings, and
   set products `Set P = A x B` ([GM] 10.1.6; elements `a_b`, first
   factor fastest, the 11.7.11 compromise names when a pair would exceed
