@@ -5825,16 +5825,29 @@ int backsolve_validate_refs(char *fname, array_def *vars) {
     }
     if (hit>=0) eqfound[hit]=1;
     /* M2b: backsolve recovery inverts a row->element bijection of the
-       defining equation; a mapped (many-to-one) reference breaks it by
-       construction, so a nominated defining equation carrying lowered
-       mapping tokens is rejected up front rather than failing the
-       runtime one-to-one check with a generic message */
+       defining equation. A mapped reference to ANOTHER variable is an
+       ordinary column (the recovery program routes its element through
+       the mapping table, as the Jacobian fill does); only the
+       backsolved variable's own occurrence carrying a lowered mapping
+       token (p_x(map@i): rows to elements many-to-one) breaks the
+       bijection, and is rejected up front with its own message */
     if (hit>=0&&strchr(line,'@')!=NULL) {
-      printf("Error: defining equation %s for backsolved variable %s uses a set mapping; backsolving through mapped references is not supported (the row-to-element recovery is no longer one-to-one)\n",eqname,vars[backsolves[hit].varindx].cofname);
-      fclose(filehandle);
-      free(eqfound);
-      MPI_Abort(PETSC_COMM_WORLD,1);
-      return -1;
+      char *q;
+      strcpy(ref,"p_");
+      strcat(ref,vars[backsolves[hit].varindx].cofname);
+      strcat(ref,"(");
+      for (q=line; (q=strstr(q,ref))!=NULL; q+=strlen(ref)) {
+        char *r2;
+        if (q>line&&(isalnum((int)q[-1])||q[-1]=='_')) continue;
+        for (r2=q+strlen(ref); *r2!='\0'&&*r2!=')'; r2++) if (*r2=='@') break;
+        if (*r2=='@') {
+          printf("Error: backsolved variable %s is referenced through a set mapping in its defining equation %s; the row-to-element recovery would not be one-to-one\n",vars[backsolves[hit].varindx].cofname,eqname);
+          fclose(filehandle);
+          free(eqfound);
+          MPI_Abort(PETSC_COMM_WORLD,1);
+          return -1;
+        }
+      }
     }
     for (i=0; i<nbacksolve; i++) {
       strcpy(ref,"p_");

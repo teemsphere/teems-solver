@@ -113,7 +113,11 @@ The solver reads a GEMPACK-style TAB subset (statement syntax per [GM]):
   equations, assertions and on the right-hand side of updates
   (`NCTAXLEV(r) = del_nctaxb(REGTOBLOC(r))`); a mapping in a
   left-hand-side argument list is a named fatal ([GM] 11.9.9); mapped
-  equations solve under every matrix method.
+  equations solve under every matrix method, and a backsolved
+  variable's defining equation may reference other variables through
+  mappings (the recovery program routes the column like the Jacobian
+  fill), while the backsolved variable's own occurrence must be plain
+  (a mapped pivot is many-to-one: named fatal).
 - `coefficient` / `variable` — levels or percentage-change quantities
   (`(change)`, `(levels)` variables — levels equations and
   `Formula & Equation` pairs are linearized by `levels.c` at
