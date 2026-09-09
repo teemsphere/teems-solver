@@ -2447,7 +2447,12 @@ offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_el
   zdiv_disable();
   filehandle = fopen(fname,"r");
   while (tab_next_statement_resolved(commsyntax,filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
-    mapping_reject_in(line,"Update");
+    /* a mapped argument on the RHS lowers to map@idx and binds through
+       the formula operand binder like any expression (manual 11.9.4;
+       GTAP-E NCTAXLEV(r) = del_nctaxb(REGTOBLOC(r))); on the LHS it
+       stays a named fatal (11.9.9) */
+    mapping_reject_lhs(line,"Update");
+    if (teems_nmap>0) mapping_lower_calls(line);
     /* update statements have no condition machinery: a ':' used to make
        the set lookup miss and expand over sets[0] in silence (M3) */
     if (strchr(line,':')!=NULL) {
@@ -2738,7 +2743,12 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
   zdiv_disable();
   filehandle = fopen(fname,"r");
   while (tab_next_statement_resolved(commsyntax,filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
-    mapping_reject_in(line,"Update");
+    /* a mapped argument on the RHS lowers to map@idx and binds through
+       the formula operand binder like any expression (manual 11.9.4;
+       GTAP-E NCTAXLEV(r) = del_nctaxb(REGTOBLOC(r))); on the LHS it
+       stays a named fatal (11.9.9) */
+    mapping_reject_lhs(line,"Update");
+    if (teems_nmap>0) mapping_lower_calls(line);
     /* update statements have no condition machinery: a ':' used to make
        the set lookup miss and expand over sets[0] in silence (M3) */
     if (strchr(line,':')!=NULL) {

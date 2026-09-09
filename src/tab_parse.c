@@ -2066,19 +2066,23 @@ int mapping_use_guards(char *fname, map_def *maps, dim_t nmap) {
        10.13.1/11.9.1b): executed by formulas_execute */
   }
   fclose(filehandle);
-  /* updates cannot carry mapping calls yet (corpus: none do); equations
-     are lowered in the tab_write_variables rewrite and compiled through
-     the mapped linear-variable machinery (design doc M2b) */
+  /* an update's RHS may carry mapping calls like any expression
+     (manual 11.9.4/10.10; GTAP-E NCTAXLEV(r) = del_nctaxb(REGTOBLOC(r))),
+     lowered in updates_apply; a mapping in the LHS argument list is
+     the 11.9.9 restriction (many-to-one target) and stays a named
+     fatal. Equations are lowered in the tab_write_variables rewrite and
+     compiled through the mapped linear-variable machinery (M2b) */
   filehandle = fopen(fname,"r");
   while (tab_next_statement("update",filehandle,line,TABREADLINE)) {
     dim_t gm;
     int gpos;
-    char gfind[NAMESIZE+2];
+    char gfind[NAMESIZE+2],*eq=strchr(line,'=');
+    if (eq!=NULL) *eq='\0';
     for (gm=0; gm<nmap; gm++) {
       sprintf(gfind,"%s(",maps[gm].mapname);
       gpos=str_find_ci(line,gfind);
       if (gpos==0||(gpos>0&&!isalnum((int)line[gpos-1])&&line[gpos-1]!='_')) {
-        printf("Error: mapping-valued indices in Update statements are not supported yet (mapping %s)\n",maps[gm].mapname);
+        printf("Error: a set mapping on the left-hand side of an Update statement is not supported (mapping %s; manual 11.9.9)\n",maps[gm].mapname);
         fclose(filehandle);
         MPI_Abort(PETSC_COMM_WORLD,1);
         return -1;
@@ -2494,6 +2498,28 @@ void mapping_reject_in(char *line, const char *what) {
       MPI_Abort(PETSC_COMM_WORLD,1);
     }
   }
+}
+
+/* named fatal for a mapping call in the LHS argument list of a
+   statement whose RHS accepts them (manual 11.9.9: many-to-one
+   targets are ambiguous); the text before the first '=' is scanned */
+void mapping_reject_lhs(char *line, const char *what) {
+  dim_t m;
+  int k;
+  char find[NAMESIZE+2],*eq;
+  if (teems_nmap==0) return;
+  eq=strchr(line,'=');
+  if (eq==NULL) return;
+  *eq='\0';
+  for (m=0; m<teems_nmap; m++) {
+    sprintf(find,"%s(",teems_maps[m].mapname);
+    k=str_find_ci(line,find);
+    if (k==0||(k>0&&!isalnum((int)line[k-1])&&line[k-1]!='_')) {
+      printf("Error: a set mapping on the left-hand side of an %s statement is not supported (mapping %s; manual 11.9.9)\n",what,teems_maps[m].mapname);
+      MPI_Abort(PETSC_COMM_WORLD,1);
+    }
+  }
+  *eq='=';
 }
 
 /* Mark the mappings assigned by Formula statements in fname (manual

@@ -640,6 +640,7 @@ int mapping_values_read(char *fname, int niodata, cmf_file_entry *iodata, map_de
 int mapping_use_guards(char *fname, map_def *maps, dim_t nmap);
 void mapping_lower_calls(char *line);
 void mapping_reject_in(char *line, const char *what);
+void mapping_reject_lhs(char *line, const char *what);
 char *mapping_token_split(char *p, int *mp);
 char *sum_dim_identity(char *p);
 char *sum_settok_extract(const char *sumtext);

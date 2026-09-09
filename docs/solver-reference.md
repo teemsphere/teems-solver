@@ -109,7 +109,10 @@ The solver reads a GEMPACK-style TAB subset (statement syntax per [GM]):
   complete before its first use and is frozen after it, 11.9.9); used
   in index expressions and in conditional sums
   (`sum{j,S: MAP(j) = i, ...}`, where `i` ranges over the codomain or
-  a declared subset of it, or names a codomain element); mapped
+  a declared subset of it, or names a codomain element) in formulas,
+  equations, assertions and on the right-hand side of updates
+  (`NCTAXLEV(r) = del_nctaxb(REGTOBLOC(r))`); a mapping in a
+  left-hand-side argument list is a named fatal ([GM] 11.9.9); mapped
   equations solve under every matrix method.
 - `coefficient` / `variable` — levels or percentage-change quantities
   (`(change)`, `(levels)` variables — levels equations and
