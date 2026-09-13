@@ -624,6 +624,30 @@ flag-on solutions came out exactly identical.
 - **OpenMP** within rank: `-maxthreads` (global), `-smllthreads` (caps
   selected sections); formula evaluation and updates parallelize over
   elements with per-thread copies of the op-list.
+- **NDBBD thread budget.** Four NDBBD regions own per-thread working
+  sets that scale with the interface, not the rank count, so resident
+  memory grows with threads × footprint (Q34, 234M equations, one rank:
+  62 GB + 2.9 GB per thread measured at 4/8/16 threads). Each region is
+  sized from its own structure just before its team starts and its team
+  is capped so the ranks on the node fit 0.8 × the memory the node can
+  still give: the presolve factor+schur team (dense interface product +
+  Schur staging + MA48 workspace of the largest regional block), the
+  interface-rank probe (the compressed interface staged at `-laDi`
+  percent, 16 B per entry, + MA51 workspace), the interface
+  factorization in `ndbbd_solve` (the same staging + a pristine copy for
+  workspace-growth retries) and the outer Schur region (a chain block's
+  factor set read back from scratch; aliased when resident). The cap
+  only lowers `-maxthreads`/`-smllthreads`; block-to-thread assignment
+  does not change results (goldens bit-identical at 1 and 4 threads).
+  Each choice is logged once as `ndbbd threads: <region> rank r uses k of
+  n (per thread X GB: <breakdown>; budget B GB = 0.8 x A GB available /
+  m rank(s) on this node)` (again only when it moves; every step at
+  `-verbosity 2`) and recorded in `stats.json` as `ndbbd_threads`
+  (`asked`, `presolve`, `interface_rank`, `interface_factor`, `schur`).
+  "Available" is `MemAvailable` capped by the container's cgroup limit
+  minus its anonymous usage (`/sys/fs/cgroup/memory.max` or the v1
+  `memory.limit_in_bytes`), so a Docker Desktop `--memory` cap is honoured
+  even though `/proc/meminfo` reports the VM's total.
 - NDBBD's per-time interface blocks are rank-revealed in-solve: the
   ordering presolve bounds each block's rank by min(nrow,ncol), the
   MA51 presolve factorization measures the true numerical rank, and
@@ -665,7 +689,8 @@ handoff (its rationale — factor-file traffic needing the page cache —
 no longer applies in resident mode) and awaits an idle-machine A/B at
 bench-inter-L scale before flipping. A startup check estimates
 residency cost and falls back to spilling (with a warning) if it
-exceeds half of `MemAvailable`. Explicit `-inmemory 0/1` always wins.
+exceeds half of the available memory (`MemAvailable` capped by the
+container's cgroup limit, see §7). Explicit `-inmemory 0/1` always wins.
 
 ## 9. Measured characteristics
 

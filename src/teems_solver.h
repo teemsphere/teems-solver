@@ -40,6 +40,8 @@ extern int verbosity; /* -verbosity: 0 = errors/warnings + results only,
 #define logmsg(lvl, ...) do{ if(verbosity>=(lvl)) printf(__VA_ARGS__); }while(0)
 extern int inmemory; /* -inmemory: keep value arrays resident instead of spilling to scratch */
 extern int section_threads;
+extern int ndbbd_threads_used[4]; /* NDBBD team sizes chosen by the thread budget: presolve, interface-rank, interface-factor, schur; 0 = region not run */
+double teems_mem_avail_bytes(void); /* bytes the node can still give this process: MemAvailable capped by the cgroup limit; -1 if unreadable */
 extern int max_threads;
 extern double step_ratio2,step_ratio3,extrap_w1,extrap_w2,extrap_w3;
 extern int steps1,steps2,steps3;

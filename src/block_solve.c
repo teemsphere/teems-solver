@@ -26,6 +26,99 @@ static PetscInt *ndbbd_fac_nz=NULL;
 static offset_t *ndbbd_fac_la=NULL; /* per-block LA; grows on MA48 -3 returns and stays grown */
 static dim_t ndbbd_fastrefac=-1;
 
+/* ==== NDBBD thread budget ====
+   Four OpenMP regions own per-thread working sets that scale with the
+   interface rather than with the rank count, so resident memory grows
+   with threads x footprint: the presolve factor+schur team (dense
+   interface product, MA48 workspace, Schur staging), the interface-rank
+   probe (the compressed interface staged at laDi percent), ndbbd_solve's
+   interface factorization (the same staging plus a pristine copy for the
+   workspace-growth retries) and the outer Schur region (a chain block's
+   factor set read back from scratch).  Q34 (234M) on one rank: 62 GB +
+   2.9 GB per thread measured at t4/t8/t16, where the first budget
+   (dense product + workspace only) predicted 0.62 GB per thread and let
+   32 threads run into the 125 GB host.  Each region is now sized from
+   its own structure just before its team starts and capped so the ranks
+   on this node fit 0.8 of the memory the node can still give (the rest
+   is factors, the outer solve and the drivers).  Caps only lower the
+   team size; block-to-thread assignment does not change results. */
+int ndbbd_threads_used[4]={0,0,0,0}; /* presolve, interface-rank, interface-factor, schur; 0 = not run */
+static long ndbbd_iface_nzmax=0,ndbbd_iface_nrowmax=0,ndbbd_iface_ncolmax=0; /* this rank's interface maxima from the last presolve */
+
+/* Bytes the node can still give this process.  /proc/meminfo is the
+   host's (or the Docker Desktop VM's) view; a container --memory cap is
+   the cgroup's, so take the smaller of MemAvailable and the cgroup
+   limit minus its anonymous usage (file cache is reclaimable).  -1 when
+   nothing could be read. */
+double teems_mem_avail_bytes(void) {
+  long kb=-1;
+  double avail=-1;
+  char buf[256];
+  FILE *f=fopen("/proc/meminfo","r");
+  if(f!=NULL) {
+    while(fgets(buf,sizeof(buf),f))if(sscanf(buf,"MemAvailable: %ld kB",&kb)==1)break;
+    fclose(f);
+  }
+  if(kb>0)avail=(double)kb*1024.0;
+  const char *limf[2]={"/sys/fs/cgroup/memory.max","/sys/fs/cgroup/memory/memory.limit_in_bytes"};
+  const char *statf[2]={"/sys/fs/cgroup/memory.stat","/sys/fs/cgroup/memory/memory.stat"};
+  const char *statkey[2]={"anon ","rss "};
+  const char *curf[2]={"/sys/fs/cgroup/memory.current","/sys/fs/cgroup/memory/memory.usage_in_bytes"};
+  int k;
+  for(k=0; k<2; k++) {
+    double limit=-1,used=-1;
+    f=fopen(limf[k],"r");
+    if(f==NULL)continue;
+    if(fgets(buf,sizeof(buf),f)!=NULL&&buf[0]!='m')limit=atof(buf); /* "max" = unlimited */
+    fclose(f);
+    if(limit>0&&limit<9.0e18) {
+      f=fopen(statf[k],"r");
+      if(f!=NULL) {
+        size_t kl=strlen(statkey[k]);
+        while(fgets(buf,sizeof(buf),f))if(strncmp(buf,statkey[k],kl)==0) { used=atof(buf+kl); break; }
+        fclose(f);
+      }
+      if(used<0) {
+        f=fopen(curf[k],"r");
+        if(f!=NULL) { if(fgets(buf,sizeof(buf),f)!=NULL)used=atof(buf); fclose(f); }
+      }
+      if(used<0)used=0;
+      double room=limit-used;
+      if(room<0)room=0;
+      if(avail<0||room<avail)avail=room;
+    }
+    break;
+  }
+  return avail;
+}
+
+/* Cap one region's team: `want` threads shrink until want x per_thread_b
+   fits 0.8 x available / ranks-on-node.  Records the choice for
+   stats.json and logs one `ndbbd threads:` line (rank 0 always, every
+   rank that was capped). */
+static int ndbbd_team_cap(int region,const char *name,int want,double per_thread_b,const char *detail,PetscInt rank) {
+  int use=want,nnode=1;
+  double avail=teems_mem_avail_bytes(),budget=-1;
+  MPI_Comm_size(node_comm,&nnode);
+  if(avail>0&&per_thread_b>0) {
+    budget=0.8*avail/(double)nnode;
+    int fit=(int)(budget/per_thread_b);
+    if(fit<1)fit=1;
+    if(fit<use)use=fit;
+  }
+  /* one line per region at verbosity 1 the first time and whenever the
+     choice moves (multi-step runs re-budget every step); every call at 2 */
+  static int last_use[4]={-1,-1,-1,-1};
+  int lvl=2;
+  if(region>=0&&region<4) {
+    ndbbd_threads_used[region]=use;
+    if(last_use[region]!=use)lvl=1;
+    last_use[region]=use;
+  }
+  if(rank==0||use<want)logmsg(lvl,"ndbbd threads: %s rank %d uses %d of %d (per thread %.2f GB: %s; budget %.1f GB = 0.8 x %.1f GB available / %d rank(s) on this node)\n",name,(int)rank,use,want,per_thread_b/1073741824.0,detail,budget>0?budget/1073741824.0:0.0,avail>0?avail/1073741824.0:0.0,nnode);
+  return use;
+}
+
 /* Scratch I/O that must not fail silently: NDBBD factor traffic
    defaults to /tmp (the container layer under Docker), and a full
    scratch filesystem previously surfaced as an unchecked fopen
@@ -1617,22 +1710,18 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
   int jthrd,nthrd;
   ndbbd_cut_iface_init(nmatint);
   teems_stage_mark("presolve:factor+schur");
-  /* NDBBD thread budget.  Every presolve thread owns a dense interface
-     product (the border rows x border columns present in its chain
-     block, solve_real) and an MA48 workspace of lasize entries, so
-     resident memory grows with threads x that footprint rather than
-     with ranks: Q34 on one rank with 32 threads reached 130 GB where
-     four ranks x one thread needed 71 GB.  Size the per-thread
-     footprint from the structure before the team starts and cap the
-     team so the ranks on this node fit MemAvailable (0.8 of it, the
-     rest is for the factors and the outer solve).  The cap only lowers
-     -maxthreads, and block-to-thread assignment does not change
-     results. */
+  /* Region 1: presolve factor+schur team (see the thread-budget note at
+     the top of the file).  Per thread: the dense interface product plus
+     its Schur staging (vecbivi grows to nz0+nz on the border append;
+     irn1/jcn1 hold nz+lj indices), the MA48 workspace of the largest
+     regional block, and the small per-thread vectors. */
   int ndthr=omp_get_max_threads();
+  long nz1max_all=0,nrowmax_all=0,ncolmax_all=0; /* maxima over this rank's chain blocks, reduced from the team for region 2 */
   {
-    long int vmax=0,lmax=0,rmax=0,cmax=0,bbmax=0,rs,cs,ls;
+    long int vmax=0,lmax=0,rmax=0,cmax=0,bbmax=0,nebmax=0,rs,cs,ls;
     PetscInt pnz,pnrow,anr,anc,*pai;
     Mat_SeqAIJ *pb,*pa;
+    char detail[256];
     for(j3=0; j3<nmatint; j3++) {
       bbrowij=submatBij[j3*(nreg+1)][0]->rmap->n;
       if(bbrowij>bbmax)bbmax=bbrowij;
@@ -1649,6 +1738,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
         pb=(Mat_SeqAIJ*)submatBij[j4][0]->data;
         pai=pb->i;
         pnz=pb->nz;
+        if(pnz>nebmax)nebmax=pnz;
         pnrow=submatBij[j4][0]->rmap->n;
         for(i=0; i<pnrow-1; i++)if(pai[i]!=pai[i+1])prow[i]++;
         if(pnrow>0&&pai[pnrow-1]<pnz)prow[pnrow-1]++;
@@ -1672,23 +1762,11 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
     free(prow);
     free(pcol);
     double dense_b=(double)vmax*sizeof(solve_real);
+    double stage_b=(double)(vmax+nebmax)*(sizeof(solve_real)+2*sizeof(int))-dense_b; /* Schur staging beyond the product: index pairs + the border append */
     double ws_b=(double)lmax*(2*sizeof(int)+sizeof(solve_real))+(double)(rmax+9*cmax+7)*sizeof(int)+(double)5*(rmax>cmax?rmax:cmax)*sizeof(solve_real)+(double)(6*rmax+3*cmax)*sizeof(int);
-    long int avail=0;
-    char mline[256];
-    FILE *mi=fopen("/proc/meminfo","r");
-    if(mi!=NULL) {
-      while(fgets(mline,sizeof(mline),mi))if(sscanf(mline,"MemAvailable: %ld kB",&avail)==1)break;
-      fclose(mi);
-    }
-    int nnode=1;
-    MPI_Comm_size(node_comm,&nnode);
-    if(avail>0&&dense_b+ws_b>0) {
-      double budget=0.8*(double)avail*1024.0/(double)nnode;
-      int fit=(int)(budget/(dense_b+ws_b));
-      if(fit<1)fit=1;
-      if(fit<ndthr)ndthr=fit;
-    }
-    if(rank==0||ndthr<omp_get_max_threads())logmsg(1,"ndbbd threads: rank %d uses %d of %d (per thread: dense interface product %.2f GB, MA48 workspace %.2f GB; %d rank(s) on this node, MemAvailable %.1f GB)\n",(int)rank,ndthr,omp_get_max_threads(),dense_b/1073741824.0,ws_b/1073741824.0,nnode,(double)avail/1048576.0);
+    double small_b=(double)bbmax*(2*sizeof(long int)+sizeof(PetscInt)+sizeof(PetscReal))+(double)2*rmax*sizeof(solve_real)+(double)nebmax*sizeof(int);
+    snprintf(detail,sizeof(detail),"dense interface product %.2f GB, Schur staging %.2f GB, MA48 workspace %.2f GB",dense_b/1073741824.0,stage_b/1073741824.0,ws_b/1073741824.0);
+    ndthr=ndbbd_team_cap(0,"presolve",ndthr,dense_b+stage_b+ws_b+small_b,detail,rank);
   }
   #pragma omp parallel num_threads(ndthr) private(jthrd,nthrd,j3,j4,bivirowsize,bivicolsize,bbrowij,ai,nz,nrow,i,j,j1,j2,li,lj,ddrowi,vecbivisize,aic,ajc,valsc,nzc,nrowc,ncolc,ncolb,nrowb,aj,vals,lj2,nz0,j1name,filename,presolfile,fwrt,fd1,nz1,cntl6in,ncol,lasize,ldsize) shared(insize,submatAij,submatBij,submatCij)
   {
@@ -2166,6 +2244,46 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
     bivinzcol1=NULL;
     free(vecbivi);//1
     vecbivi=NULL;
+  #pragma omp critical
+  {
+  if(nz1max>nz1max_all)nz1max_all=nz1max;
+  if(nrowmax>nrowmax_all)nrowmax_all=nrowmax;
+  if(ncolmax>ncolmax_all)ncolmax_all=ncolmax;
+  }
+  } /* end of the presolve factor+schur team */
+  ndbbd_iface_nzmax=nz1max_all;
+  ndbbd_iface_nrowmax=nrowmax_all;
+  ndbbd_iface_ncolmax=ncolmax_all;
+  /* Region 2: interface-rank probe.  The compressed interface of a
+     chain block is staged at laDi percent of its nonzeros (16 B per
+     entry) with the MA51 workspace of the largest interface; exact now
+     that every block's nz is known (the first budget bounded it by the
+     dense product).  The team allocates from the rank-wide maxima
+     instead of each thread's own, which changes capacities only. */
+  int ndthr2=omp_get_max_threads();
+  {
+    char detail[256];
+    long mx=nrowmax_all>ncolmax_all?nrowmax_all:ncolmax_all;
+    offset_t ld=ma48_la_from_pct(laDi,nz1max_all);
+    if(ld<nz1max_all)ld=nz1max_all;
+    ld+=10;
+    double stage_b=(double)ld*(2*sizeof(int)+sizeof(solve_real));
+    double ws_b=(double)(nrowmax_all+ncolmax_all)*sizeof(int)+(double)(nrowmax_all+9*ncolmax_all+7)*sizeof(int)+(double)5*mx*sizeof(solve_real)+(double)(6*nrowmax_all+3*ncolmax_all)*sizeof(int);
+    snprintf(detail,sizeof(detail),"interface staging %.2f GB (%ld entries at laDi %ld of %ld nz), MA51 workspace %.2f GB",stage_b/1073741824.0,(long)ld,(long)laDi,nz1max_all,ws_b/1073741824.0);
+    ndthr2=ndbbd_team_cap(1,"interface-rank",ndthr2,stage_b+ws_b,detail,rank);
+  }
+  #pragma omp parallel num_threads(ndthr2) private(jthrd,nthrd,j3,j4,ai,nz,nrow,i,j,j1,j2,li,lj,aj,vals,lj2,nz0,j1name,filename,presolfile,fwrt,fd1,nz1,cntl6in,ncol,lasize,ldsize) shared(insize,submatAij,submatBij,submatCij)
+  {
+  int *irn=NULL,*jcn=NULL,*irn1=NULL,*jcn1=NULL,*keep=NULL,*iw51=NULL;
+  solve_real *vecbivi=NULL,*w51=NULL;
+  long int nz1max=nz1max_all,nrowmax=nrowmax_all,ncolmax=ncolmax_all;
+  int windx=0,bindx,eindx;
+  jthrd=omp_get_thread_num();
+  nthrd=omp_get_max_threads( );
+  nthrd=90/nthrd;
+  bindx=nthrd*jthrd;
+  eindx=bindx+nthrd;
+  windx=bindx;
   ldsize=ma48_la_from_pct(laDi,nz1max);
   /* a starved -laDi (<100) must still hold all staged entries */
   if(ldsize<nz1max)ldsize=nz1max;
@@ -2873,8 +2991,26 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
   long int nz0=0,nz1,nz3;//,nz2,halfj2;
   int fd1,fd2,fd3,frrsl1,frrsl2,frrsl3;
   teems_stage_mark("solve:interface-factor");
+  /* Region 3: interface factorization.  Per thread the staged interface
+     triplet at laDi percent plus a pristine copy of it for the
+     workspace-growth retries and the MA48 workspace of the largest
+     interface; sized from the maxima the presolve reduced (no cap when
+     the presolve did not run in this process). */
+  int ndthr3=section_threads;
+  if(ndbbd_iface_nzmax>0) {
+    char detail[256];
+    long nr=ndbbd_iface_nrowmax,nc=ndbbd_iface_ncolmax;
+    offset_t ld=ma48_la_from_pct(laDi,ndbbd_iface_nzmax);
+    if(ld<ndbbd_iface_nzmax)ld=ndbbd_iface_nzmax;
+    ld+=10;
+    double stage_b=(double)ld*(2*sizeof(int)+sizeof(solve_real));
+    double copy_b=(double)ndbbd_iface_nzmax*(2*sizeof(int)+sizeof(solve_real));
+    double ws_b=(double)nr*(sizeof(int)+sizeof(solve_real))+(double)nc*sizeof(int)+(double)(6*nr+3*nc)*sizeof(int)+(double)(nr+9*nc+7)*sizeof(int);
+    snprintf(detail,sizeof(detail),"interface staging %.2f GB (%ld entries at laDi %ld), retry copy %.2f GB, MA48 workspace %.2f GB",stage_b/1073741824.0,(long)ld,(long)laDi,copy_b/1073741824.0,ws_b/1073741824.0);
+    ndthr3=ndbbd_team_cap(2,"interface-factor",section_threads,stage_b+copy_b+ws_b,detail,rank);
+  }
   omp_set_num_threads(section_threads);
-  #pragma omp parallel private(jthrd,nthrd,j4,j1name,filename,frd,fd1,nrow,ncol,i,j,presolfile,nz,nz1,cntl6in,fwrt,ldsize,j3) shared(insize)
+  #pragma omp parallel num_threads(ndthr3) private(jthrd,nthrd,j4,j1name,filename,frd,fd1,nrow,ncol,i,j,presolfile,nz,nz1,cntl6in,fwrt,ldsize,j3) shared(insize)
   {
   int windx=0,bindx,eindx;
   long int insizeda0=0,insizeda1=0,insizeda2=0;
@@ -3172,7 +3308,36 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
   int maxrowcij;
   solve_real *xi1 = (solve_real*)calloc(sumrowcolin,sizeof(solve_real));
   teems_stage_mark("solve:schur");
-  #pragma omp parallel private(jthrd,timestr,aic,ajc,valsc,nrowc,ncolc,a1i,a1j,val1s,nz,a2i,a2j,val2s,nrowb,ncolb,i,j,j2,xi1point,xi1indx,maxrowcij,la1,fp1,fp2,fp3,freadresult,frrsl1,frrsl2,frrsl3,longsize,nzc) shared(submatC,submatB1,submatB2,xi1,submatCij,submatBij,insize,yi1,vecbivi,vecbiui)
+  /* Region 4: outer Schur.  Per thread a chain block's factor set read
+     back from scratch (LA x 12 B + KEEP per regional block and the
+     interface block; aliased, not copied, when the factors are
+     resident), the transposed border block, the merged B rows and the
+     MA48 solve workspace. */
+  int ndthr4=max_threads;
+  {
+    char detail[256];
+    double fac_max=0,fac;
+    long nzc_max=0,nzb_max=0;
+    int resident=(inmemory||nfr_flag());
+    for(j1=0; j1<nmatint; j1++) {
+      fac=0;
+      if(!resident)for(i=0; i<nreg+1; i++) {
+        j2=j1*(nreg+1)+i;
+        fac+=(double)insize[j2*insizes+16]*(sizeof(int)+sizeof(solve_real))+(double)insize[j2*insizes+12]*sizeof(int);
+      }
+      if(fac>fac_max)fac_max=fac;
+      Mat_SeqAIJ *cc=(Mat_SeqAIJ*)submatC[j1]->data;
+      if(cc->nz>nzc_max)nzc_max=cc->nz;
+      long nzb=((Mat_SeqAIJ*)submatB1[j1][0]->data)->nz+((Mat_SeqAIJ*)submatB2[j1][0]->data)->nz;
+      if(nzb>nzb_max)nzb_max=nzb;
+    }
+    double ct_b=(double)nzc_max*(sizeof(PetscInt)+sizeof(PetscScalar))+(double)(maxcolc+1)*sizeof(PetscInt);
+    double b12_b=(double)nzb_max*(sizeof(PetscInt)+sizeof(PetscScalar))+(double)(maxrowc+1)*sizeof(PetscInt);
+    double ws_b=(double)maxcolc*(4*sizeof(solve_real)+sizeof(int))+(double)2*maxrowc*sizeof(solve_real)+(double)maxcolc*sizeof(solve_real);
+    snprintf(detail,sizeof(detail),"chain-block factors %.2f GB%s, border transpose %.2f GB, B rows %.2f GB, workspace %.2f GB",fac_max/1073741824.0,resident?" (resident, aliased)":"",ct_b/1073741824.0,b12_b/1073741824.0,ws_b/1073741824.0);
+    ndthr4=ndbbd_team_cap(3,"schur",max_threads,fac_max+ct_b+b12_b+ws_b,detail,rank);
+  }
+  #pragma omp parallel num_threads(ndthr4) private(jthrd,timestr,aic,ajc,valsc,nrowc,ncolc,a1i,a1j,val1s,nz,a2i,a2j,val2s,nrowb,ncolb,i,j,j2,xi1point,xi1indx,maxrowcij,la1,fp1,fp2,fp3,freadresult,frrsl1,frrsl2,frrsl3,longsize,nzc) shared(submatC,submatB1,submatB2,xi1,submatCij,submatBij,insize,yi1,vecbivi,vecbiui)
   {
   int icntl[20],info[20];
   solve_real cntl[10],rinfo[10],error1[3];

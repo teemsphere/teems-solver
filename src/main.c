@@ -291,6 +291,49 @@ static void stats_rk_patch(cmf_file_entry *iodata, int niodata, int noutdata, in
   free(buf);
 }
 
+/* NDBBD thread-budget record: the team size each capped region ran
+   with on the last step (-maxthreads / -smllthreads asked, the budget
+   chose), patched into stats.json like la_used; absent unless NDBBD ran */
+static void stats_ndbbd_threads_patch(cmf_file_entry *iodata, int niodata, int noutdata, int nsoldata) {
+  char statspath[TABREADLINE+16];
+  int i;
+  if(ndbbd_threads_used[0]<=0)return;
+  for (i=niodata+noutdata; i<niodata+noutdata+nsoldata; i++) {
+    if (strcmp("solfiles",iodata[i].logname)==0)break;
+  }
+  if(i<niodata+noutdata+nsoldata)strcpy(statspath,iodata[i].filname);
+  else strcpy(statspath,"solution");
+  strcat(statspath,".stats.json");
+  FILE *fp=fopen(statspath,"r");
+  if (fp==NULL)return;
+  fseek(fp,0,SEEK_END);
+  long len=ftell(fp);
+  fseek(fp,0,SEEK_SET);
+  char *buf=(char *) malloc (len+1);
+  size_t rd=fread(buf,1,len,fp);
+  fclose(fp);
+  if((long)rd!=len) {
+    free(buf);
+    return;
+  }
+  buf[len]='\0';
+  char *end=strrchr(buf,'}');
+  if(end==NULL) {
+    free(buf);
+    return;
+  }
+  *end='\0';
+  fp=fopen(statspath,"w");
+  if (fp==NULL) {
+    free(buf);
+    return;
+  }
+  fprintf(fp,"%s,\n  \"ndbbd_threads\": {\"asked\": %d, \"presolve\": %d, \"interface_rank\": %d, \"interface_factor\": %d, \"schur\": %d}\n}\n",
+          buf,(int)max_threads,ndbbd_threads_used[0],ndbbd_threads_used[1],ndbbd_threads_used[2],ndbbd_threads_used[3]);
+  fclose(fp);
+  free(buf);
+}
+
 /* phase resident-memory record (6.16(a)): per phase the max-over-ranks
    and sum-over-ranks resident set in GB and the run's high-water mark,
    patched into stats.json like la_used (same append-at-tail flow) */
@@ -2576,14 +2619,8 @@ comp_accurate_reentry:
        fits comfortably in available memory. */
     long need=(long)(ncofele+nvarele)*sizeof(elem_value)
              +(long)nvarele*(sizeof(closure_entry)+sizeof(unsigned char)+sizeof(store_real)+6*sizeof(solve_real)+sizeof(int));
-    long avail=-1;
-    FILE *mi=fopen("/proc/meminfo","r");
-    if(mi) {
-      char mline[256];
-      while(fgets(mline,sizeof(mline),mi))if(sscanf(mline,"MemAvailable: %ld kB",&avail)==1)break;
-      fclose(mi);
-      if(avail>0)avail*=1024;
-    }
+    double av=teems_mem_avail_bytes();
+    long avail=av>0?(long)av:-1; /* MemAvailable capped by the container's cgroup limit */
     if(avail>0&&2*need>avail) {
       if(rank==0)printf("Warning: -inmemory needs ~%ld MB per rank but only ~%ld MB is available; using scratch files instead\n",need/1048576,avail/1048576);
       inmemory=0;
@@ -2816,6 +2853,7 @@ comp_accurate_reentry:
      mark (collective), then patch the per-phase table */
   teems_rss_probe("solution write");
   if(rank==0)stats_rss_patch(iodata,niodata,noutdata,nsoldata);
+  if(rank==0)stats_ndbbd_threads_patch(iodata,niodata,noutdata,nsoldata);
   /* PostSim foundation F3 (early Tier 0): after the solve, coefficient
      slots hold post-simulation (updated) values and xcf holds the
      composed solution; expose the solution to the formula engine and
