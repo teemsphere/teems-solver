@@ -1788,8 +1788,11 @@ static int sb_elements_d(char *tabfile, cmf_file_entry *iodata, int nio, const c
         datafile_read_labels(header,path,SB_MAXELE,lab);
         n=0;
         for (i=0; i<SB_MAXELE&&lab[i].ch[0]!='\0'; i++) {
-          strncpy(ele[n],lab[i].ch,NAMESIZE-1);
-          ele[n][NAMESIZE-1]='\0';
+          int j;
+          /* data-file labels enter the synthesized set in lowercase,
+             the case sets_read gives every other element */
+          for (j=0; j<NAMESIZE-1&&lab[i].ch[j]!='\0'; j++) ele[n][j]=(char)tolower((int)lab[i].ch[j]);
+          ele[n][j]='\0';
           n++;
         }
         free(lab);

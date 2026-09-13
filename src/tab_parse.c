@@ -2296,7 +2296,7 @@ void sum_cond_parse(char *settok, const char *sumindx, int *cond_mapid, char *co
     p=q+1;
     while (*p!='\0'&&*p!=')'&&*p!='}'&&*p!=']'&&sc->cond_cofnargs<MAXVARDIM) {
       tl=0;
-      if (*p=='\"') { p++; while (*p!='\0'&&*p!='\"'&&tl<NAMESIZE-1) sc->cond_cofargs[sc->cond_cofnargs][tl++]=*p++; if (*p=='\"') p++; }
+      if (*p=='\"') { p++; while (*p!='\0'&&*p!='\"'&&tl<NAMESIZE-1) sc->cond_cofargs[sc->cond_cofnargs][tl++]=(char)tolower((int)*p++); if (*p=='\"') p++; }
       else while (*p!='\0'&&*p!=','&&*p!=')'&&*p!='}'&&*p!=']'&&tl<NAMESIZE-1) sc->cond_cofargs[sc->cond_cofnargs][tl++]=*p++;
       sc->cond_cofargs[sc->cond_cofnargs][tl]='\0';
       sc->cond_cofnargs++;
@@ -2641,20 +2641,13 @@ offset_t closure_read(char *fname, char *commsyntax,closure_entry *closure_vals,
     while (str_replace_all(line," (", "("));
     while (str_replace_all(line," \"", "\""));
     while (str_replace_all(line,"\" ", "\""));
+    /* element names are lowercase throughout (set elements are
+       lowercased at read, main.c), so a quoted closure element is
+       lowercased too: qo("NatlRes","USA") names the same component
+       as qo("natlres","usa") */
     k1=0;
-    k2=0;
     while (line[k1]!= '\0') {
-      if(line[k1]=='\"') {
-        if(k2==0) {
-          k2=1;
-        } else {
-          k2=0;
-        }
-      } else {
-        if(k2==0) {
-          line[k1]=tolower((int)line[k1]);
-        }
-      }
+      line[k1]=tolower((int)line[k1]);
       k1++;
     }
     n1=str_count_char(line,' ');
