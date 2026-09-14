@@ -1,4 +1,5 @@
 #include <teems_solver.h>
+#include <errno.h>
 
 /* bounded in-place replace-all used by the declaration parsers' set-symbol
    substitution: see the definition below str_replace_all. */
@@ -3724,6 +3725,10 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
             strcpy(commsyntax,"read ");
             strcat(commsyntax,readitem);
             filehandle = fopen(fname,"r");
+            if (filehandle==NULL) {
+              printf("Error: cannot open TAB file %s: %s\n",fname,strerror(errno));
+              return -1;
+            }
             while (tab_next_statement(commsyntax,filehandle,line,TABREADLINE)) {
               readitem = strtok(line," ");
               readitem = strtok(NULL," ");
@@ -3750,7 +3755,15 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               break;
             }
             fclose(filehandle);
+            if (k1>=niodata) {
+              printf("Error: intertemporal set declaration reads elements from logical file %s, which the command file does not declare\n",floginame);
+              return -1;
+            }
             filehandle = fopen(iodata[k1].filname,"r");
+            if (filehandle==NULL) {
+              printf("Error: cannot open %s (logical file %s) for the intertemporal set elements: %s\n",iodata[k1].filname,floginame,strerror(errno));
+              return -1;
+            }
             while (fgets(line,TABREADLINE,filehandle)) {
               if (str_count_char(line,'\"')>1) {
                 readitem = strtok(line,"\"");
@@ -3786,6 +3799,10 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
             strcpy(commsyntax,"read ");
             strcat(commsyntax,readitem);
             filehandle = fopen(fname,"r");
+            if (filehandle==NULL) {
+              printf("Error: cannot open TAB file %s: %s\n",fname,strerror(errno));
+              return -1;
+            }
             while (tab_next_statement(commsyntax,filehandle,line,TABREADLINE)) {
               readitem = strtok(line," ");
               readitem = strtok(NULL," ");
@@ -3812,7 +3829,15 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               break;
             }
             fclose(filehandle);
+            if (k1>=niodata) {
+              printf("Error: intertemporal set declaration reads elements from logical file %s, which the command file does not declare\n",floginame);
+              return -1;
+            }
             filehandle = fopen(iodata[k1].filname,"r");
+            if (filehandle==NULL) {
+              printf("Error: cannot open %s (logical file %s) for the intertemporal set elements: %s\n",iodata[k1].filname,floginame,strerror(errno));
+              return -1;
+            }
             while (fgets(line,TABREADLINE,filehandle)) {
               if (str_count_char(line,'\"')>1) {
                 readitem = strtok(line,"\"");
@@ -3845,6 +3870,10 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
             strcpy(commsyntax,"read ");
             strcat(commsyntax,readitem);
             filehandle = fopen(fname,"r");
+            if (filehandle==NULL) {
+              printf("Error: cannot open TAB file %s: %s\n",fname,strerror(errno));
+              return -1;
+            }
             while (tab_next_statement(commsyntax,filehandle,line,TABREADLINE)) {
               readitem = strtok(line," ");
               readitem = strtok(NULL," ");
@@ -3871,7 +3900,15 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               break;
             }
             fclose(filehandle);
+            if (k1>=niodata) {
+              printf("Error: intertemporal set declaration reads elements from logical file %s, which the command file does not declare\n",floginame);
+              return -1;
+            }
             filehandle = fopen(iodata[k1].filname,"r");
+            if (filehandle==NULL) {
+              printf("Error: cannot open %s (logical file %s) for the intertemporal set elements: %s\n",iodata[k1].filname,floginame,strerror(errno));
+              return -1;
+            }
             while (fgets(line,TABREADLINE,filehandle)) {
               if (str_count_char(line,'\"')>1) {
                 readitem = strtok(line,"\"");
@@ -3931,6 +3968,10 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
             strcpy(commsyntax,"read ");
             strcat(commsyntax,readitem);
             filehandle = fopen(fname,"r");
+            if (filehandle==NULL) {
+              printf("Error: cannot open TAB file %s: %s\n",fname,strerror(errno));
+              return -1;
+            }
             while (tab_next_statement(commsyntax,filehandle,line,TABREADLINE)) {
               readitem = strtok(line," ");
               readitem = strtok(NULL," ");
@@ -3957,7 +3998,15 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               break;
             }
             fclose(filehandle);
+            if (k1>=niodata) {
+              printf("Error: intertemporal set declaration reads elements from logical file %s, which the command file does not declare\n",floginame);
+              return -1;
+            }
             filehandle = fopen(iodata[k1].filname,"r");
+            if (filehandle==NULL) {
+              printf("Error: cannot open %s (logical file %s) for the intertemporal set elements: %s\n",iodata[k1].filname,floginame,strerror(errno));
+              return -1;
+            }
             while (fgets(line,TABREADLINE,filehandle)) {
               if (str_count_char(line,'\"')>1) {
                 readitem = strtok(line,"\"");
@@ -3993,6 +4042,10 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
             strcpy(commsyntax,"read ");
             strcat(commsyntax,readitem);
             filehandle = fopen(fname,"r");
+            if (filehandle==NULL) {
+              printf("Error: cannot open TAB file %s: %s\n",fname,strerror(errno));
+              return -1;
+            }
             while (tab_next_statement(commsyntax,filehandle,line,TABREADLINE)) {
               readitem = strtok(line," ");
               readitem = strtok(NULL," ");
@@ -4019,7 +4072,15 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               break;
             }
             fclose(filehandle);
+            if (k1>=niodata) {
+              printf("Error: intertemporal set declaration reads elements from logical file %s, which the command file does not declare\n",floginame);
+              return -1;
+            }
             filehandle = fopen(iodata[k1].filname,"r");
+            if (filehandle==NULL) {
+              printf("Error: cannot open %s (logical file %s) for the intertemporal set elements: %s\n",iodata[k1].filname,floginame,strerror(errno));
+              return -1;
+            }
             while (fgets(line,TABREADLINE,filehandle)) {
               if (str_count_char(line,'\"')>1) {
                 readitem = strtok(line,"\"");
@@ -4052,6 +4113,10 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
             strcpy(commsyntax,"read ");
             strcat(commsyntax,readitem);
             filehandle = fopen(fname,"r");
+            if (filehandle==NULL) {
+              printf("Error: cannot open TAB file %s: %s\n",fname,strerror(errno));
+              return -1;
+            }
             while (tab_next_statement(commsyntax,filehandle,line,TABREADLINE)) {
               readitem = strtok(line," ");
               readitem = strtok(NULL," ");
@@ -4078,7 +4143,15 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               break;
             }
             fclose(filehandle);
+            if (k1>=niodata) {
+              printf("Error: intertemporal set declaration reads elements from logical file %s, which the command file does not declare\n",floginame);
+              return -1;
+            }
             filehandle = fopen(iodata[k1].filname,"r");
+            if (filehandle==NULL) {
+              printf("Error: cannot open %s (logical file %s) for the intertemporal set elements: %s\n",iodata[k1].filname,floginame,strerror(errno));
+              return -1;
+            }
             while (fgets(line,TABREADLINE,filehandle)) {
               if (str_count_char(line,'\"')>1) {
                 readitem = strtok(line,"\"");
@@ -4135,6 +4208,10 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
             strcpy(commsyntax,"read ");
             strcat(commsyntax,readitem);
             filehandle = fopen(fname,"r");
+            if (filehandle==NULL) {
+              printf("Error: cannot open TAB file %s: %s\n",fname,strerror(errno));
+              return -1;
+            }
             while (tab_next_statement(commsyntax,filehandle,line,TABREADLINE)) {
               readitem = strtok(line," ");
               readitem = strtok(NULL," ");
@@ -4161,7 +4238,15 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               break;
             }
             fclose(filehandle);
+            if (k1>=niodata) {
+              printf("Error: intertemporal set declaration reads elements from logical file %s, which the command file does not declare\n",floginame);
+              return -1;
+            }
             filehandle = fopen(iodata[k1].filname,"r");
+            if (filehandle==NULL) {
+              printf("Error: cannot open %s (logical file %s) for the intertemporal set elements: %s\n",iodata[k1].filname,floginame,strerror(errno));
+              return -1;
+            }
             while (fgets(line,TABREADLINE,filehandle)) {
               if (str_count_char(line,'\"')>1) {
                 readitem = strtok(line,"\"");
@@ -4198,6 +4283,10 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
             strcpy(commsyntax,"read ");
             strcat(commsyntax,readitem);
             filehandle = fopen(fname,"r");
+            if (filehandle==NULL) {
+              printf("Error: cannot open TAB file %s: %s\n",fname,strerror(errno));
+              return -1;
+            }
             while (tab_next_statement(commsyntax,filehandle,line,TABREADLINE)) {
               readitem = strtok(line," ");
               readitem = strtok(NULL," ");
@@ -4224,7 +4313,15 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               break;
             }
             fclose(filehandle);
+            if (k1>=niodata) {
+              printf("Error: intertemporal set declaration reads elements from logical file %s, which the command file does not declare\n",floginame);
+              return -1;
+            }
             filehandle = fopen(iodata[k1].filname,"r");
+            if (filehandle==NULL) {
+              printf("Error: cannot open %s (logical file %s) for the intertemporal set elements: %s\n",iodata[k1].filname,floginame,strerror(errno));
+              return -1;
+            }
             while (fgets(line,TABREADLINE,filehandle)) {
               if (str_count_char(line,'\"')>1) {
                 readitem = strtok(line,"\"");
@@ -4257,6 +4354,10 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
             strcpy(commsyntax,"read ");
             strcat(commsyntax,readitem);
             filehandle = fopen(fname,"r");
+            if (filehandle==NULL) {
+              printf("Error: cannot open TAB file %s: %s\n",fname,strerror(errno));
+              return -1;
+            }
             while (tab_next_statement(commsyntax,filehandle,line,TABREADLINE)) {
               readitem = strtok(line," ");
               readitem = strtok(NULL," ");
@@ -4283,7 +4384,15 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               break;
             }
             fclose(filehandle);
+            if (k1>=niodata) {
+              printf("Error: intertemporal set declaration reads elements from logical file %s, which the command file does not declare\n",floginame);
+              return -1;
+            }
             filehandle = fopen(iodata[k1].filname,"r");
+            if (filehandle==NULL) {
+              printf("Error: cannot open %s (logical file %s) for the intertemporal set elements: %s\n",iodata[k1].filname,floginame,strerror(errno));
+              return -1;
+            }
             while (fgets(line,TABREADLINE,filehandle)) {
               if (str_count_char(line,'\"')>1) {
                 readitem = strtok(line,"\"");
