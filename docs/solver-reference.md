@@ -777,6 +777,16 @@ each; raw walls in `.audit/ab_phase5_results.txt`):
   it is baked into the runtime images as an `ENV` and is
   golden-bit-identical.
 
+- **ISA level re-checked** (2026-09-14, solver 9b10a38, `.audit/ab_march2.sh`,
+  fresh v2/v3 base pair, real-shock rigs): `x86-64-v3` vs `v2` medians
+  on the Linux box 32.9/33.0 s (static Johansen LU-1), 340.5/344.7 s
+  (static Gragg 2-4-8 LU-1), 101.5/102.7 s (intertemporal Gragg SBBD-2,
+  P-core pinned); on a Windows Docker Desktop laptop 76.0/76.6,
+  632.0/637.3 and 383.3/414.0 s, v3 slower in every intertemporal
+  pair. Verdict stands: no v3 win, v2 only. On hybrid CPUs pin
+  multi-rank A/Bs to the performance cores (`AB_CPUSET`), otherwise
+  rank placement adds ±20 % noise.
+
 Determinism: repeated same-binary runs are bit-identical for every
 method (basis of the golden-run verification, below).
 
