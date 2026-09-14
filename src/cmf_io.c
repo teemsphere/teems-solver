@@ -286,6 +286,23 @@ int cmf_read(char *filename, int niodata, cmf_file_entry *iodata, char *tabfile,
    repeated-index sum over b (the *sum-name class the bordered-map
    kit's condsum leg caught -- the rename here rewrote a variable's
    argument list) */
+/* One rename pass of sum_dedup_indices: replace every occurrence of `a`
+   in line1 (which points into a TABREADLINE buffer with `cap` bytes left)
+   by `b`.  Forward-scanning: the old restart-from-the-start loop spun
+   forever when the replacement re-created the pattern at its boundary
+   (an empty sum index makes the pattern two spaces and b ends in one;
+   fuzz batch 13 hang class), and could grow the line past its buffer. */
+static void dedup_subst(char *line1, const char *a, const char *b, size_t cap) {
+  if (a[0]=='\0') {
+    printf("Error: cannot rename a sum index: malformed sum(<index>,<set>,...) in a formula or equation\n");
+    MPI_Abort(PETSC_COMM_WORLD,1);
+  }
+  if (str_subst_all_bounded(line1,a,b,cap)!=0) {
+    printf("Error: renaming sum index %s does not fit the statement buffer (%d characters)\n",a,(int)TABREADLINE);
+    MPI_Abort(PETSC_COMM_WORLD,1);
+  }
+}
+
 int sum_dedup_indices(char *formulain) {
   char line[TABREADLINE],finditem[TABREADLINE],replitem[TABREADLINE],newreplitem[TABREADLINE],temp[TABREADLINE],replitem1[TABREADLINE],newreplitem1[TABREADLINE];
   char*readitem,*line1;
@@ -309,9 +326,14 @@ int sum_dedup_indices(char *formulain) {
       sprintf(temp, "%d", l);
       strcat(temp,"?");
       l++;
+      /* the later sum was found case-insensitively (str_find_token_ci),
+         but the rename below is a literal replace: take the index as it
+         is spelled at the hit, not as the first sum spelled it, or a
+         sum(S,...) found from sum(s,...) is never renamed and the
+         re-find below loops forever (fuzz batch 13 hang class) */
       for(j=4;j<k1;j++){
-        replitem[j-4]=finditem[j];
-        newreplitem[j-4]=finditem[j];
+        replitem[j-4]=line1[j];
+        newreplitem[j-4]=line1[j];
       }
       replitem[j-4]='\0';
       newreplitem[j-4]='\0';
@@ -326,7 +348,7 @@ int sum_dedup_indices(char *formulain) {
       newreplitem1[1]='\0';
       strcat(newreplitem1,newreplitem);
       strcat(newreplitem1,")");
-      while(str_replace_all(line1,replitem1,newreplitem1));
+      dedup_subst(line1,replitem1,newreplitem1,(size_t)TABREADLINE-(size_t)(line1-line));
 
       replitem1[0]='(';
       replitem1[1]='\0';
@@ -336,7 +358,7 @@ int sum_dedup_indices(char *formulain) {
       newreplitem1[1]='\0';
       strcat(newreplitem1,newreplitem);
       strcat(newreplitem1,"]");
-      while(str_replace_all(line1,replitem1,newreplitem1));
+      dedup_subst(line1,replitem1,newreplitem1,(size_t)TABREADLINE-(size_t)(line1-line));
 
       replitem1[0]='(';
       replitem1[1]='\0';
@@ -346,7 +368,7 @@ int sum_dedup_indices(char *formulain) {
       newreplitem1[1]='\0';
       strcat(newreplitem1,newreplitem);
       strcat(newreplitem1,"}");
-      while(str_replace_all(line1,replitem1,newreplitem1));
+      dedup_subst(line1,replitem1,newreplitem1,(size_t)TABREADLINE-(size_t)(line1-line));
 
       replitem1[0]='(';
       replitem1[1]='\0';
@@ -356,7 +378,7 @@ int sum_dedup_indices(char *formulain) {
       newreplitem1[1]='\0';
       strcat(newreplitem1,newreplitem);
       strcat(newreplitem1,",");
-      while(str_replace_all(line1,replitem1,newreplitem1));
+      dedup_subst(line1,replitem1,newreplitem1,(size_t)TABREADLINE-(size_t)(line1-line));
 
       replitem1[0]='(';
       replitem1[1]='\0';
@@ -366,7 +388,7 @@ int sum_dedup_indices(char *formulain) {
       newreplitem1[1]='\0';
       strcat(newreplitem1,newreplitem);
       strcat(newreplitem1," ");
-      while(str_replace_all(line1,replitem1,newreplitem1));
+      dedup_subst(line1,replitem1,newreplitem1,(size_t)TABREADLINE-(size_t)(line1-line));
 
 
       replitem1[0]='[';
@@ -377,7 +399,7 @@ int sum_dedup_indices(char *formulain) {
       newreplitem1[1]='\0';
       strcat(newreplitem1,newreplitem);
       strcat(newreplitem1,")");
-      while(str_replace_all(line1,replitem1,newreplitem1));
+      dedup_subst(line1,replitem1,newreplitem1,(size_t)TABREADLINE-(size_t)(line1-line));
 
       replitem1[0]='[';
       replitem1[1]='\0';
@@ -387,7 +409,7 @@ int sum_dedup_indices(char *formulain) {
       newreplitem1[1]='\0';
       strcat(newreplitem1,newreplitem);
       strcat(newreplitem1,"]");
-      while(str_replace_all(line1,replitem1,newreplitem1));
+      dedup_subst(line1,replitem1,newreplitem1,(size_t)TABREADLINE-(size_t)(line1-line));
 
       replitem1[0]='[';
       replitem1[1]='\0';
@@ -397,7 +419,7 @@ int sum_dedup_indices(char *formulain) {
       newreplitem1[1]='\0';
       strcat(newreplitem1,newreplitem);
       strcat(newreplitem1,"}");
-      while(str_replace_all(line1,replitem1,newreplitem1));
+      dedup_subst(line1,replitem1,newreplitem1,(size_t)TABREADLINE-(size_t)(line1-line));
 
       replitem1[0]='[';
       replitem1[1]='\0';
@@ -407,7 +429,7 @@ int sum_dedup_indices(char *formulain) {
       newreplitem1[1]='\0';
       strcat(newreplitem1,newreplitem);
       strcat(newreplitem1,",");
-      while(str_replace_all(line1,replitem1,newreplitem1));
+      dedup_subst(line1,replitem1,newreplitem1,(size_t)TABREADLINE-(size_t)(line1-line));
 
       replitem1[0]='[';
       replitem1[1]='\0';
@@ -417,7 +439,7 @@ int sum_dedup_indices(char *formulain) {
       newreplitem1[1]='\0';
       strcat(newreplitem1,newreplitem);
       strcat(newreplitem1," ");
-      while(str_replace_all(line1,replitem1,newreplitem1));
+      dedup_subst(line1,replitem1,newreplitem1,(size_t)TABREADLINE-(size_t)(line1-line));
 
       replitem1[0]='{';
       replitem1[1]='\0';
@@ -427,7 +449,7 @@ int sum_dedup_indices(char *formulain) {
       newreplitem1[1]='\0';
       strcat(newreplitem1,newreplitem);
       strcat(newreplitem1,")");
-      while(str_replace_all(line1,replitem1,newreplitem1));
+      dedup_subst(line1,replitem1,newreplitem1,(size_t)TABREADLINE-(size_t)(line1-line));
 
       replitem1[0]='{';
       replitem1[1]='\0';
@@ -437,7 +459,7 @@ int sum_dedup_indices(char *formulain) {
       newreplitem1[1]='\0';
       strcat(newreplitem1,newreplitem);
       strcat(newreplitem1,"]");
-      while(str_replace_all(line1,replitem1,newreplitem1));
+      dedup_subst(line1,replitem1,newreplitem1,(size_t)TABREADLINE-(size_t)(line1-line));
 
       replitem1[0]='{';
       replitem1[1]='\0';
@@ -447,7 +469,7 @@ int sum_dedup_indices(char *formulain) {
       newreplitem1[1]='\0';
       strcat(newreplitem1,newreplitem);
       strcat(newreplitem1,"}");
-      while(str_replace_all(line1,replitem1,newreplitem1));
+      dedup_subst(line1,replitem1,newreplitem1,(size_t)TABREADLINE-(size_t)(line1-line));
 
       replitem1[0]='{';
       replitem1[1]='\0';
@@ -457,7 +479,7 @@ int sum_dedup_indices(char *formulain) {
       newreplitem1[1]='\0';
       strcat(newreplitem1,newreplitem);
       strcat(newreplitem1,",");
-      while(str_replace_all(line1,replitem1,newreplitem1));
+      dedup_subst(line1,replitem1,newreplitem1,(size_t)TABREADLINE-(size_t)(line1-line));
 
       replitem1[0]='{';
       replitem1[1]='\0';
@@ -467,7 +489,7 @@ int sum_dedup_indices(char *formulain) {
       newreplitem1[1]='\0';
       strcat(newreplitem1,newreplitem);
       strcat(newreplitem1," ");
-      while(str_replace_all(line1,replitem1,newreplitem1));
+      dedup_subst(line1,replitem1,newreplitem1,(size_t)TABREADLINE-(size_t)(line1-line));
 
       replitem1[0]=' ';
       replitem1[1]='\0';
@@ -477,7 +499,7 @@ int sum_dedup_indices(char *formulain) {
       newreplitem1[1]='\0';
       strcat(newreplitem1,newreplitem);
       strcat(newreplitem1,")");
-      while(str_replace_all(line1,replitem1,newreplitem1));
+      dedup_subst(line1,replitem1,newreplitem1,(size_t)TABREADLINE-(size_t)(line1-line));
 
       replitem1[0]=' ';
       replitem1[1]='\0';
@@ -487,7 +509,7 @@ int sum_dedup_indices(char *formulain) {
       newreplitem1[1]='\0';
       strcat(newreplitem1,newreplitem);
       strcat(newreplitem1,"]");
-      while(str_replace_all(line1,replitem1,newreplitem1));
+      dedup_subst(line1,replitem1,newreplitem1,(size_t)TABREADLINE-(size_t)(line1-line));
 
       replitem1[0]=' ';
       replitem1[1]='\0';
@@ -497,7 +519,7 @@ int sum_dedup_indices(char *formulain) {
       newreplitem1[1]='\0';
       strcat(newreplitem1,newreplitem);
       strcat(newreplitem1,"}");
-      while(str_replace_all(line1,replitem1,newreplitem1));
+      dedup_subst(line1,replitem1,newreplitem1,(size_t)TABREADLINE-(size_t)(line1-line));
 
       replitem1[0]=' ';
       replitem1[1]='\0';
@@ -507,7 +529,7 @@ int sum_dedup_indices(char *formulain) {
       newreplitem1[1]='\0';
       strcat(newreplitem1,newreplitem);
       strcat(newreplitem1,",");
-      while(str_replace_all(line1,replitem1,newreplitem1));
+      dedup_subst(line1,replitem1,newreplitem1,(size_t)TABREADLINE-(size_t)(line1-line));
 
       replitem1[0]=' ';
       replitem1[1]='\0';
@@ -517,7 +539,7 @@ int sum_dedup_indices(char *formulain) {
       newreplitem1[1]='\0';
       strcat(newreplitem1,newreplitem);
       strcat(newreplitem1," ");
-      while(str_replace_all(line1,replitem1,newreplitem1));
+      dedup_subst(line1,replitem1,newreplitem1,(size_t)TABREADLINE-(size_t)(line1-line));
 
       replitem1[0]=',';
       replitem1[1]='\0';
@@ -527,7 +549,7 @@ int sum_dedup_indices(char *formulain) {
       newreplitem1[1]='\0';
       strcat(newreplitem1,newreplitem);
       strcat(newreplitem1,")");
-      while(str_replace_all(line1,replitem1,newreplitem1));
+      dedup_subst(line1,replitem1,newreplitem1,(size_t)TABREADLINE-(size_t)(line1-line));
 
       replitem1[0]=',';
       replitem1[1]='\0';
@@ -537,7 +559,7 @@ int sum_dedup_indices(char *formulain) {
       newreplitem1[1]='\0';
       strcat(newreplitem1,newreplitem);
       strcat(newreplitem1,"]");
-      while(str_replace_all(line1,replitem1,newreplitem1));
+      dedup_subst(line1,replitem1,newreplitem1,(size_t)TABREADLINE-(size_t)(line1-line));
 
       replitem1[0]=',';
       replitem1[1]='\0';
@@ -547,7 +569,7 @@ int sum_dedup_indices(char *formulain) {
       newreplitem1[1]='\0';
       strcat(newreplitem1,newreplitem);
       strcat(newreplitem1,"}");
-      while(str_replace_all(line1,replitem1,newreplitem1));
+      dedup_subst(line1,replitem1,newreplitem1,(size_t)TABREADLINE-(size_t)(line1-line));
 
       replitem1[0]=',';
       replitem1[1]='\0';
@@ -557,7 +579,7 @@ int sum_dedup_indices(char *formulain) {
       newreplitem1[1]='\0';
       strcat(newreplitem1,newreplitem);
       strcat(newreplitem1,",");
-      while(str_replace_all(line1,replitem1,newreplitem1));
+      dedup_subst(line1,replitem1,newreplitem1,(size_t)TABREADLINE-(size_t)(line1-line));
 
       replitem1[0]=',';
       replitem1[1]='\0';
@@ -567,8 +589,12 @@ int sum_dedup_indices(char *formulain) {
       newreplitem1[1]='\0';
       strcat(newreplitem1,newreplitem);
       strcat(newreplitem1," ");
-      while(str_replace_all(line1,replitem1,newreplitem1));
+      dedup_subst(line1,replitem1,newreplitem1,(size_t)TABREADLINE-(size_t)(line1-line));
 
+      if (strcmp(temp,line1)==0) {
+        printf("Error: cannot rename the repeated sum index %s in: %s\n",replitem,temp);
+        MPI_Abort(PETSC_COMM_WORLD,1);
+      }
       str_replace_all(formulain,temp,line1);
       strcpy(line,formulain);
       k2=str_find_token_ci(line,readitem,finditem);

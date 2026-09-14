@@ -29,6 +29,7 @@ solve_real formula_subst_scalar(char *var2, elem_value *record, array_def *coefs
     eval=atof(var2);
     return eval;
   }
+  if (ncof<=0) return eval; /* no coefficient to resolve against: the do-while below started at coefs[-1] */
   index=ncof-1;
   do {
     if (strcmp(coefs[index].cofname,var2)==0) {

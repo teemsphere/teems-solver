@@ -466,7 +466,14 @@ static void linvar_dim_read(char *p, char *linecopy, offset_t lvar,
   l1=str_find_ci(linecopy,lintmp);
   if (l1>-1) {
     p1=&linecopy[0]+l1;
-    strncpy(ref->dimsetnames[d],p1+strlen(lintmp),strchr(p1,')')-p1-strlen(lintmp));
+    {
+      char *close=strchr(p1,')');
+      if (close==NULL||close-p1<(long)strlen(lintmp)||close-p1-(long)strlen(lintmp)>=(long)sizeof(ref->dimsetnames[d])) {
+        printf("Error: malformed quantifier %s... in an equation: no closing parenthesis or set name too long\n",lintmp);
+        MPI_Abort(PETSC_COMM_WORLD,1);
+      }
+      strncpy(ref->dimsetnames[d],p1+strlen(lintmp),close-p1-strlen(lintmp));
+    }
   }
   else {
     strcpy(lintmp,"sum(");
@@ -491,7 +498,14 @@ static void linvar_dim_read(char *p, char *linecopy, offset_t lvar,
       }
     p1=&linecopy[0]+lvar3;
     p1=p1+strlen(lintmp);
-    strncpy(ref->dimsetnames[d],p1,strchr(p1,',')-p1);
+    {
+      char *comma=strchr(p1,',');
+      if (comma==NULL||comma-p1>=(long)sizeof(ref->dimsetnames[d])) {
+        printf("Error: malformed sum %s... in an equation: expected sum(<index>,<set>,...)\n",lintmp);
+        MPI_Abort(PETSC_COMM_WORLD,1);
+      }
+      strncpy(ref->dimsetnames[d],p1,comma-p1);
+    }
     /* the enclosing sum may carry a mapping-equality condition (M3):
        truncate the set at the ':' and record the condition -- it gates
        every column this dim generates once the sum unwraps.  linecopy
@@ -934,8 +948,16 @@ static void stmt_prog_build_one(char *line, stmt_prog *stp, char *commsyntax,
             readitem = strtok(NULL,",");
           }
           readitem = strtok(NULL,",");
+          if (readitem==NULL||strlen(readitem)>=sizeof(arSet[i].index_name)) {
+            printf("Error: malformed quantifier in an equation: expected (all,<index>,<set>)\n");
+            MPI_Abort(PETSC_COMM_WORLD,1);
+          }
           strcpy(arSet[i].index_name,readitem);
           readitem = strtok(NULL,")");
+          if (readitem==NULL) {
+            printf("Error: malformed quantifier in an equation: expected (all,<index>,<set>)\n");
+            MPI_Abort(PETSC_COMM_WORLD,1);
+          }
           for (i4=0; i4<nset; i4++) if(strcmp(readitem,sets[i4].setname)==0) {
               arSet[i].setid=i4;
               break;
@@ -2330,8 +2352,16 @@ int equation_order_read(char *fname, char *commsyntax,set_def *sets,dim_t nset,s
             readitem = strtok(NULL,",");
           }
           readitem = strtok(NULL,",");
+          if (readitem==NULL||strlen(readitem)>=sizeof(arSet[i].index_name)) {
+            printf("Error: malformed quantifier in an equation: expected (all,<index>,<set>)\n");
+            MPI_Abort(PETSC_COMM_WORLD,1);
+          }
           strcpy(arSet[i].index_name,readitem);
           readitem = strtok(NULL,")");
+          if (readitem==NULL) {
+            printf("Error: malformed quantifier in an equation: expected (all,<index>,<set>)\n");
+            MPI_Abort(PETSC_COMM_WORLD,1);
+          }
           for (i4=0; i4<nset; i4++) if(strcmp(readitem,sets[i4].setname)==0) {
               arSet[i].setid=i4;
               eq_defs[eqindx].setid[i]=i4;
@@ -2676,8 +2706,16 @@ int equation_order_read_nested(char *fname, char *commsyntax,set_def *sets,dim_t
             readitem = strtok(NULL,",");
           }
           readitem = strtok(NULL,",");
+          if (readitem==NULL||strlen(readitem)>=sizeof(arSet[i].index_name)) {
+            printf("Error: malformed quantifier in an equation: expected (all,<index>,<set>)\n");
+            MPI_Abort(PETSC_COMM_WORLD,1);
+          }
           strcpy(arSet[i].index_name,readitem);
           readitem = strtok(NULL,")");
+          if (readitem==NULL) {
+            printf("Error: malformed quantifier in an equation: expected (all,<index>,<set>)\n");
+            MPI_Abort(PETSC_COMM_WORLD,1);
+          }
           for (i4=0; i4<nset; i4++) if(strcmp(readitem,sets[i4].setname)==0) {
               arSet[i].setid=i4;
               eq_defs[eqindx].setid[i]=i4;
@@ -2988,8 +3026,16 @@ int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,
             readitem = strtok(NULL,",");
           }
           readitem = strtok(NULL,",");
+          if (readitem==NULL||strlen(readitem)>=sizeof(arSet[i].index_name)) {
+            printf("Error: malformed quantifier in an equation: expected (all,<index>,<set>)\n");
+            MPI_Abort(PETSC_COMM_WORLD,1);
+          }
           strcpy(arSet[i].index_name,readitem);
           readitem = strtok(NULL,")");
+          if (readitem==NULL) {
+            printf("Error: malformed quantifier in an equation: expected (all,<index>,<set>)\n");
+            MPI_Abort(PETSC_COMM_WORLD,1);
+          }
           for (i4=0; i4<nset; i4++) if(strcmp(readitem,sets[i4].setname)==0) {
               arSet[i].setid=i4;
               if(sets[i4].intertemp) *sbbd_overrid=true;

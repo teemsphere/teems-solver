@@ -3,7 +3,6 @@
 
 /* bounded in-place replace-all used by the declaration parsers' set-symbol
    substitution: see the definition below str_replace_all. */
-static int str_subst_all_bounded(char *line, const char *finditem, const char *replitem, size_t linesz);
 
 int formula_normalize(char *fomulain) {
   int index,i,i1,i2,j;
@@ -3375,6 +3374,10 @@ offset_t variables_read(char *fname, char *commsyntax, array_def *record, offset
         strcpy(vname,readitem);
         strcat(vname,",");
         dcount=str_count_char(vname,',');
+        if (dcount>MAXVARDIM) {
+          printf("Error: %s declaration with %d dimensions; at most %d are supported\n",commsyntax,(int)dcount,(int)MAXVARDIM);
+          return -1;
+        }
         add=1;
         for (m=0; m<dcount; m++) {
           if(m==0) {
@@ -3406,6 +3409,10 @@ offset_t variables_read(char *fname, char *commsyntax, array_def *record, offset
         if (n==1) {
           printf("Error: unbalanced parentheses in statement\n");
         } else {
+          if (strlen(line+ncommsyntax)>=sizeof(setname)) {
+            printf("Error: malformed %s declaration in TAB file (name longer than %d characters)\n",commsyntax,(int)sizeof(setname)-1);
+            return -1;
+          }
           strcpy(setname,line+ncommsyntax);
           str_replace_all(setname,";", "");
           str_replace_all(setname,"\n", "");
@@ -3576,6 +3583,10 @@ offset_t coefficients_read(char *fname, char *commsyntax, array_def *record, off
         strcpy(vname,readitem);
         strcat(vname,",");
         dcount=str_count_char(vname,',');
+        if (dcount>MAXVARDIM) {
+          printf("Error: %s declaration with %d dimensions; at most %d are supported\n",commsyntax,(int)dcount,(int)MAXVARDIM);
+          return -1;
+        }
         add=1;
         for (m=0; m<dcount; m++) {
           if(m==0) {
@@ -3607,6 +3618,10 @@ offset_t coefficients_read(char *fname, char *commsyntax, array_def *record, off
         if (n==1) {
           printf("Error: unbalanced parentheses in statement: %s\n",line);
         } else {
+          if (strlen(line+ncommsyntax)>=sizeof(setname)) {
+            printf("Error: malformed %s declaration in TAB file (name longer than %d characters)\n",commsyntax,(int)sizeof(setname)-1);
+            return -1;
+          }
           strcpy(setname,line+ncommsyntax);
           str_replace_all(setname,";", "");
           str_replace_all(setname,"\n", "");
@@ -6039,7 +6054,7 @@ char *str_replace_first_bounded(char *line, char *finditem, char *replitem,dim_t
 char *str_replace_all(char *line, char *finditem, char *replitem) {
   char buffer[DATREADLINE];
   char *p;
-  unsigned short int count2 = 0,index;
+  size_t count2 = 0,index; /* was unsigned short: an offset past 65535 in a TABREADLINE (150000) line wrapped and re-inserted the pattern forever */
   if (line==NULL) return NULL;
   while (finditem[count2] != '\0') {
     count2++;
@@ -6066,7 +6081,7 @@ char *str_replace_all(char *line, char *finditem, char *replitem) {
    unbounded strcpy-back. Returns 0 on success, -1 if the result would
    not fit (valid models stay well under the buffer, so this fires only
    on the malformed/pathological input the old code overflowed on). */
-static int str_subst_all_bounded(char *line, const char *finditem, const char *replitem, size_t linesz) {
+int str_subst_all_bounded(char *line, const char *finditem, const char *replitem, size_t linesz) {
   size_t flen = strlen(finditem), rlen = strlen(replitem);
   char *p, *start = line;
   if (flen == 0) return 0;
