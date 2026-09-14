@@ -121,6 +121,7 @@ int cmf_read(char *filename, int niodata, cmf_file_entry *iodata, char *tabfile,
 int tab_setbuilder_transform(char *fname, cmf_file_entry *iodata, int niodata);
 int tab_preprocess(char *filename, char *newtabfile);
 int tab_read_set_name(char *filename, char *varname, int indx, char *setname);
+void tab_decl_index_free(void);
 
 /* ================= value records ======================================= */
 

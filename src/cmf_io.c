@@ -604,7 +604,17 @@ int sum_dedup_indices(char *formulain) {
 }
 
 
+static int tab_preprocess_run(char *filename, char *newtabfile);
+
+/* the declaration index tab_read_set_name builds lives for one
+   preprocess run, whichever way the run ends */
 int tab_preprocess(char *filename, char *newtabfile) {
+  int r=tab_preprocess_run(filename,newtabfile);
+  tab_decl_index_free();
+  return r;
+}
+
+static int tab_preprocess_run(char *filename, char *newtabfile) {
   FILE * filehandle,*fout;
   char line[TABREADLINE]="\0",line1[TABREADLINE],line2[TABREADLINE],indx[NAMESIZE],indx1[NAMESIZE],indx2[NAMESIZE],*readitem,*readitem1,commsyntax[NAMESIZE],readline[TABREADLINE],readline1[TABREADLINE],*n,newtabfile1[TABREADLINE];
   char setname[NAMESIZE],newset[NAMESIZE],varname[NAMESIZE],*n1,setelement[TABREADLINE];//,*ne,*np;//,*n2;
@@ -1322,19 +1332,72 @@ int tab_write_variables(char *filename, char *newtabfile,array_def *vars,offset_
 }
 
 
-int tab_read_set_name(char *filename, char *varname, int indx, char *setname) {
-  FILE * filehandle;
-  int n,i;
-  offset_t lsize;
-  lsize=TABREADLINE+1;
-  char commsyntax[NAMESIZE],varname1[NAMESIZE+2],indxname[NAMESIZE],line[TABREADLINE+1],line1[TABREADLINE+1],*p,tmp[TABREADLINE+1];//,varname2[NAMESIZE+2],varname3[NAMESIZE+2]
-  strcpy(varname1,")");
-  strcat(varname1,varname);
-  filehandle = fopen(filename,"r");
+/* Declaration index for tab_read_set_name: the preprocessed TAB's
+   variable and coefficient statements, read once per file (spaces
+   already stripped) and searched in memory. Before it, every quoted
+   element in the TAB reopened the file and rescanned every statement
+   through 20 KB line buffers cleared per statement -- quadratic in
+   the statement count (fuzz batch 13: 15 s on a 100 KB input of tiny
+   statements). The lookup logic below is the original's, run over the
+   arrays instead of the file. */
+static char *decl_index_file=NULL;
+static char **decl_var=NULL,**decl_cof=NULL;
+static int n_decl_var=0,n_decl_cof=0;
+
+static int decl_index_read(char *filename, char *commsyntax, char ***out, int *nout) {
+  FILE *filehandle=fopen(filename,"r");
+  char line[TABREADLINE+1];
+  offset_t lsize=TABREADLINE+1;
+  int n=0,cap=0;
+  char **arr=NULL;
   if (filehandle==NULL) return -1;
-  strcpy(commsyntax,"variable");
   while (tab_next_statement(commsyntax,filehandle,line,lsize)) {
     str_delete_char(line,' ');
+    if (n==cap) {
+      cap=cap?2*cap:64;
+      char **grown=(char **)realloc(arr,cap*sizeof(char *));
+      if (grown==NULL) { fclose(filehandle); for (int i=0; i<n; i++) free(arr[i]); free(arr); return -1; }
+      arr=grown;
+    }
+    arr[n]=strdup(line);
+    if (arr[n]==NULL) { fclose(filehandle); for (int i=0; i<n; i++) free(arr[i]); free(arr); return -1; }
+    n++;
+  }
+  fclose(filehandle);
+  *out=arr;
+  *nout=n;
+  return 0;
+}
+
+void tab_decl_index_free(void) {
+  int i;
+  for (i=0; i<n_decl_var; i++) free(decl_var[i]);
+  for (i=0; i<n_decl_cof; i++) free(decl_cof[i]);
+  free(decl_var); free(decl_cof); free(decl_index_file);
+  decl_var=decl_cof=NULL; decl_index_file=NULL;
+  n_decl_var=n_decl_cof=0;
+}
+
+static int decl_index_build(char *filename) {
+  if (decl_index_file!=NULL&&strcmp(decl_index_file,filename)==0) return 0;
+  tab_decl_index_free();
+  decl_index_file=strdup(filename);
+  if (decl_index_file==NULL) return -1;
+  if (decl_index_read(filename,"variable",&decl_var,&n_decl_var)<0) { tab_decl_index_free(); return -1; }
+  if (decl_index_read(filename,"coefficient",&decl_cof,&n_decl_cof)<0) { tab_decl_index_free(); return -1; }
+  return 0;
+}
+
+/* one pass of the lookup over an indexed statement kind; varname1 is
+   shared between the passes on purpose (the p_/c_ fallback rewrites
+   it once and the coefficient pass then sees the rewritten name, as
+   the file-scanning original did). Returns 1 found, -1 malformed,
+   0 not in this kind. */
+static int tab_read_set_name_pass(char **stmts, int nstmt, char *varname, char *varname1, int indx, char *setname) {
+  int n,i,k;
+  char indxname[NAMESIZE],line[TABREADLINE+1],line1[TABREADLINE+1],*p,tmp[TABREADLINE+1];
+  for (k=0; k<nstmt; k++) {
+    strcpy(line,stmts[k]);
     strcpy(line1,line);
     n=str_find_ci(line,varname1);
     if (n==-1&&((varname[0]=='p'&&varname[1]=='_')||(varname[0]=='c'&&varname[1]=='_'))) {
@@ -1345,16 +1408,16 @@ int tab_read_set_name(char *filename, char *varname, int indx, char *setname) {
     if (n>-1) {
       p=strtok(line+n,"(");
       p=strtok(NULL,")");
-      if (p==NULL||strlen(p)+1>=sizeof(tmp)) { fclose(filehandle); return -1; }
+      if (p==NULL||strlen(p)+1>=sizeof(tmp)) return -1;
       strcpy(tmp,p);
       strcat(tmp,",");
       p=NULL;
       for (i=0; i<indx+1; i++) {
         if(i==0) p=strtok(tmp,",");
         else p=strtok(NULL,",");
-        if (p==NULL) { fclose(filehandle); return -1; }
+        if (p==NULL) return -1;
       }
-      if (strlen(p)+2>=sizeof(indxname)) { fclose(filehandle); return -1; }
+      if (strlen(p)+2>=sizeof(indxname)) return -1;
       /* ",idx," -- the bare ",idx" prefix matched inside qualifier
          groups such as (linear,change) for an index named c */
       strcpy(indxname,",");
@@ -1362,54 +1425,27 @@ int tab_read_set_name(char *filename, char *varname, int indx, char *setname) {
       strcat(indxname,",");
       strcpy(line,line1);
       n=str_find_ci(line,indxname);
-      if (n<0) { fclose(filehandle); return -1; }
+      if (n<0) return -1;
       p=strtok(line+n,",");
       p=strtok(NULL,")");
-      if (p==NULL||strlen(p)>=NAMESIZE) { fclose(filehandle); return -1; }
+      if (p==NULL||strlen(p)>=NAMESIZE) return -1;
       strcpy(setname,p);
       return 1;
     }
   }
-  fclose(filehandle);
-  filehandle = fopen(filename,"r");
-  if (filehandle==NULL) return -1;
-  strcpy(commsyntax,"coefficient");
-  while (tab_next_statement(commsyntax,filehandle,line,lsize)) {
-    str_delete_char(line,' ');
-    strcpy(line1,line);
-    n=str_find_ci(line,varname1);
-    if (n==-1&&((varname[0]=='p'&&varname[1]=='_')||(varname[0]=='c'&&varname[1]=='_'))) {
-      strcpy(varname1,")");
-      strcat(varname1,varname+2);
-      n=str_find_ci(line,varname1);
-    }
-    if (n>-1) {
-      p=strtok(line+n,"(");
-      p=strtok(NULL,")");
-      if (p==NULL||strlen(p)+1>=sizeof(tmp)) { fclose(filehandle); return -1; }
-      strcpy(tmp,p);
-      strcat(tmp,",");
-      p=NULL;
-      for (i=0; i<indx+1; i++) {
-        if(i==0) p=strtok(tmp,",");
-        else p=strtok(NULL,",");
-        if (p==NULL) { fclose(filehandle); return -1; }
-      }
-      if (strlen(p)+2>=sizeof(indxname)) { fclose(filehandle); return -1; }
-      strcpy(indxname,",");
-      strcat(indxname,p);
-      strcat(indxname,",");
-      strcpy(line,line1);
-      n=str_find_ci(line,indxname);
-      if (n<0) { fclose(filehandle); return -1; }
-      p=strtok(line+n,",");
-      p=strtok(NULL,")");
-      if (p==NULL||strlen(p)>=NAMESIZE) { fclose(filehandle); return -1; }
-      strcpy(setname,p);
-      return 1;
-    }
-  }
-  fclose(filehandle);
+  return 0;
+}
+
+int tab_read_set_name(char *filename, char *varname, int indx, char *setname) {
+  int r;
+  char varname1[NAMESIZE+2];
+  strcpy(varname1,")");
+  strcat(varname1,varname);
+  if (decl_index_build(filename)<0) return -1;
+  r=tab_read_set_name_pass(decl_var,n_decl_var,varname,varname1,indx,setname);
+  if (r!=0) return r;
+  r=tab_read_set_name_pass(decl_cof,n_decl_cof,varname,varname1,indx,setname);
+  if (r!=0) return r;
   return -1;
 }
 
