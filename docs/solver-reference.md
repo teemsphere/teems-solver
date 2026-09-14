@@ -648,6 +648,21 @@ flag-on solutions came out exactly identical.
   minus its anonymous usage (`/sys/fs/cgroup/memory.max` or the v1
   `memory.limit_in_bytes`), so a Docker Desktop `--memory` cap is honoured
   even though `/proc/meminfo` reports the VM's total.
+- **Reproducibility across thread counts.** LU, SBBD and NDBBD solutions
+  are bit-identical run to run at any `-maxthreads` (measured 2026-09-14,
+  golden GTAPv7 condensed rig, 2 ranks × 2 threads). DBBD is not: its
+  border product and border right-hand side accumulate block
+  contributions with OpenMP atomics (`SPEC48M_MSOL` VECBIVI, `dbbd_solve`
+  vecbiui), so the floating-point summation order follows thread timing.
+  A single Johansen step at 2 or 4 threads differs between two runs by at
+  most ~1e-4 absolute on values of ~2e6 (7e-11 relative; 98 % of
+  elements within 1e-9), numerical zeros flip sign, and Gragg 2-4-8 on a
+  rough rig (2-digit accuracy on tens of thousands of elements) amplifies
+  this to 1e-6..1e-3 relative on a sixth of the elements. Bit-for-bit
+  reproducibility under DBBD needs `-maxthreads 1`; a fixed-order
+  reduction (per-block buffers summed in block order) is the remedy if
+  reproducibility at threads > 1 is ever required, at the cost of one
+  border-sized buffer per block.
 - NDBBD's per-time interface blocks are rank-revealed in-solve: the
   ordering presolve bounds each block's rank by min(nrow,ncol), the
   MA51 presolve factorization measures the true numerical rank, and
