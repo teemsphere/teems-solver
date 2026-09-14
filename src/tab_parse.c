@@ -305,7 +305,12 @@ int formula_normalize(char *fomulain) {
 int sum_extract(char *formula) {
   char *t1=")",*t2="(";
   int i,l,count=0;
-  l=strchr(formula,'(')-formula;//ha_cgefind(formula,"(");
+  char *open=strchr(formula,'(');
+  if (open==NULL) { /* "sum" not followed by an argument list: nothing to extract (fuzz batch 13: the span went negative and read off the buffer) */
+    formula[0]='\0';
+    return 0;
+  }
+  l=open-formula;//ha_cgefind(formula,"(");
 
   for (i=l; formula[i]; i++) {
     if (formula[i]==*t1) {
