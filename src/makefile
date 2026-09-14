@@ -58,6 +58,15 @@ mc71d.o: mc71d.f
 fd15d.o: fd15d.f
 	$(F77) $(F77FLAGS) -w $(OPT) -c $<
 
+# MP48 (HSL source, staged by stage_hsl.sh): its MPI_BCAST/SEND/RECV
+# calls pass scalars and arrays of either type through the same
+# external, which gfortran reports as argument mismatches (11 of them,
+# demoted from errors by -fallow-argument-mismatch). The MPI usage is
+# correct, so compile it with -w like the F77 objects above and let
+# the warnings baseline measure our own files only.
+hsl_mp48d.o: hsl_mp48d.f90
+	$(FC) $(FFLAGS) -w $(OPT) -c $<
+
 # dependencies
 hsl_mp48d.o: ddeps.o
 hsl_mc66d.o: ddeps90.o

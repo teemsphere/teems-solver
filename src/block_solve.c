@@ -2757,7 +2757,9 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
   for(i=0; i<nmatint; i++) {
     j2=0;
     for(j1=0; j1<nreg+1; j1++)j2+=block_sizes[i*(nreg+1)+j1+begblock[rank]];
-    PetscInt *indices= (PetscInt *) calloc (j2,sizeof(PetscInt));
+    /* at least one element: an interface block with no rows makes j2 0,
+       and gcc flags the zero-length region handed to ISCreateGeneral */
+    PetscInt *indices= (PetscInt *) calloc (j2>0?j2:1,sizeof(PetscInt));
     j2=0;
     for(j1=0; j1<nreg+1; j1++) {
       bfirst=counteq[i*(nreg+1)+j1+begblock[rank]];
