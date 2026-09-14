@@ -7,7 +7,7 @@
 int formula_normalize(char *fomulain) {
   int index,i,i1,i2,j;
   char fpart1[TABREADLINE],*p=NULL,*p1=NULL;
-  while (str_replace_all(fomulain, " ", ""));
+  str_delete_char(fomulain,' ');
   p=strchr(fomulain,')');
   if (p==NULL) {
     while (str_replace_char(fomulain, '[', '('));
@@ -2964,7 +2964,7 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
           strcpy(linecopy,readitem);
           strcat(linecopy," ");
           strcat(argu,",");
-          while (str_replace_all(argu," ", ""));
+          str_delete_char(argu,' ');
           for (n1=0; n1<MAXVARDIM; n1++) {
             dimindx[n1]=-1;
             dimbegadd[n1]=-1;
@@ -3300,7 +3300,7 @@ offset_t variables_read(char *fname, char *commsyntax, array_def *record, offset
       fclose(filehandle);
       return -1;
     }
-    while (str_replace_all(line," ", ""));
+    str_delete_char(line,' ');
     strcpy(linecopy,line);
     {
       n=str_count_char(line,')');
@@ -3505,7 +3505,7 @@ offset_t coefficients_read(char *fname, char *commsyntax, array_def *record, off
       teems_coef_gltype2[j]=cgltype2;
       teems_coef_glval2[j]=cglval2;
     }
-    while (str_replace_all(line," ", ""));
+    str_delete_char(line,' ');
     strcpy(linecopy,line);
     {
       n=str_count_char(line,')');
@@ -3713,7 +3713,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
       sign[0]=0;
       sign[1]=0;
       strcpy(line,record[j].readele);
-      while (str_replace_all(line," ", ""));
+      str_delete_char(line,' ');
       strcpy(linecopy,line);
       k0=str_count_ci(line,",");
       if(k0==1) {
@@ -4516,7 +4516,7 @@ int sets_read(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,
            overlapping copies */
         readitem = &line[4];
         strcpy(line2,readitem);
-        while (str_replace_all(line2," ", ""));
+        str_delete_char(line2,' ');
         readitem = strtok(line2,"=");
         strcpy(record[j].setname,readitem);
         /* GEMPACK set expressions (manual 10.1.1.1): UNION, INTERSECT,
@@ -4538,7 +4538,7 @@ int sets_read(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,
           /* set product A x B (manual 10.1.6): the standalone token x
              becomes the operator '*' while spaces still delimit it */
           set_expr_mark_product(exprbuf);
-          while (str_replace_all(exprbuf," ", ""));
+          str_delete_char(exprbuf,' ');
           str_replace_char(exprbuf,'\\','-');
           char *crhs=strchr(exprbuf,'=');
           if (crhs!=NULL) {
@@ -6054,6 +6054,18 @@ char *str_replace_first_bounded(char *line, char *finditem, char *replitem,dim_t
   strcpy(line,buffer);
   free(buffer);
   return line;
+}
+
+/* Delete every occurrence of one character in place, one pass.  The
+   parsers stripped spaces with `str_delete_char(s,' ');`,
+   which restarts from the start of the string and copies it whole for
+   every space: quadratic on a long statement (fuzz batch 13 "hang", 12 s
+   on a 10 KB line with 6,600 spaces).  Same result, linear. */
+void str_delete_char(char *s, char c) {
+  char *r=s,*w=s;
+  if (s==NULL) return;
+  for (; *r!='\0'; r++) if (*r!=c) *w++=*r;
+  *w='\0';
 }
 
 char *str_replace_all(char *line, char *finditem, char *replitem) {

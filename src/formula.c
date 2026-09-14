@@ -23,7 +23,7 @@ static void warn_no_values(const char *name, offset_t idx, int which) {
 solve_real formula_subst_scalar(char *var2, elem_value *record, array_def *coefs,offset_t ncof) {
   offset_t index;
   if (var2==NULL) return 0;
-  while (str_replace_all(var2," ", ""));
+  str_delete_char(var2,' ');
   solve_real eval=0;
   if (var2[0]>='0'&&var2[0]<='9') {
     eval=atof(var2);
@@ -1901,7 +1901,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
         /* if() conditions may spell the comparison as a word
            (GTAP-AEZ: IF[X LE 0, ..]); rewritten before the spaces go */
         tab_wordops_normalize(line);
-        while (str_replace_all(line," ", ""));
+        str_delete_char(line,' ');
         while (str_replace_char(line, '[', '('));
         while (str_replace_char(line, ']', ')'));
         while (str_replace_char(line, '{', '('));
@@ -2474,7 +2474,7 @@ offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_el
        form (parity plan 3.4) -- accept and ignore */
     if(strstr(line, "(product)")!=NULL)str_replace_first(line, "(product)", "");
     str_replace_first(line, commsyntax, "");
-    while (str_replace_all(line," ", ""));
+    str_delete_char(line,' ');
     while (str_replace_char(line, '[', '('));
     while (str_replace_char(line, ']', ')'));
     while (str_replace_char(line, '{', '('));
@@ -2770,7 +2770,7 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
        form (parity plan 3.4) -- accept and ignore */
     if(strstr(line, "(product)")!=NULL)str_replace_first(line, "(product)", "");
     str_replace_first(line, commsyntax, "");
-    while (str_replace_all(line," ", ""));
+    str_delete_char(line,' ');
     while (str_replace_char(line, '[', '('));
     while (str_replace_char(line, ']', ')'));
     while (str_replace_char(line, '{', '('));
@@ -3324,7 +3324,7 @@ offset_t assertions_execute(char *fname,set_def *sets,dim_t nset,set_element *se
     /* word comparison operators need their delimiting spaces */
     tab_wordops_normalize(line);
     str_replace_first(line,"assertion","");
-    while (str_replace_all(line," ", ""));
+    str_delete_char(line,' ');
     while (str_replace_char(line, '[', '('));
     while (str_replace_char(line, ']', ')'));
     while (str_replace_char(line, '{', '('));

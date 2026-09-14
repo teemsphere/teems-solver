@@ -153,7 +153,7 @@ int datafile_read_labels(char *varname, char *filename,dim_t d1, datafile_labels
   dim_t nlength=0,nhead=0,reccount = 0, count1=0,i;
   char *readitem=NULL;
   strcpy(varnamecpy,varname);
-  while (str_replace_all(varnamecpy," ", ""));
+  str_delete_char(varnamecpy,' ');
   while (varnamecpy[nlength] != '\0') nlength++;
   dfile = fopen(filename,"r");
 
@@ -162,13 +162,13 @@ int datafile_read_labels(char *varname, char *filename,dim_t d1, datafile_labels
     readitem = strtok(NULL,"\"");
     if (readitem != NULL) {
       strcpy(header,readitem);
-      while (str_replace_all(header," ", ""));
+      str_delete_char(header,' ');
       nhead=0;
       while (header[nhead] != '\0') nhead++;
       if(nhead<nlength)nhead=nlength;
       if (strncmp(readitem,varnamecpy,nhead) == 0) {
         while (fgets(line,DATREADLINE,dfile)) {
-          while (str_replace_all(line,"\r", ""));
+          str_delete_char(line,'\r');
           while (str_replace_all(line,"  ", " "));
           if (line[0]=='\n') count1=1;
           if (count1!=1) {
@@ -1334,7 +1334,7 @@ int tab_read_set_name(char *filename, char *varname, int indx, char *setname) {
   if (filehandle==NULL) return -1;
   strcpy(commsyntax,"variable");
   while (tab_next_statement(commsyntax,filehandle,line,lsize)) {
-    while (str_replace_all(line," ", ""));
+    str_delete_char(line,' ');
     strcpy(line1,line);
     n=str_find_ci(line,varname1);
     if (n==-1&&((varname[0]=='p'&&varname[1]=='_')||(varname[0]=='c'&&varname[1]=='_'))) {
@@ -1375,7 +1375,7 @@ int tab_read_set_name(char *filename, char *varname, int indx, char *setname) {
   if (filehandle==NULL) return -1;
   strcpy(commsyntax,"coefficient");
   while (tab_next_statement(commsyntax,filehandle,line,lsize)) {
-    while (str_replace_all(line," ", ""));
+    str_delete_char(line,' ');
     strcpy(line1,line);
     n=str_find_ci(line,varname1);
     if (n==-1&&((varname[0]=='p'&&varname[1]=='_')||(varname[0]=='c'&&varname[1]=='_'))) {

@@ -638,7 +638,7 @@ static int chain_refs_scan(char *fname, set_def *sets, dim_t nset, array_def *co
       strcat(readitem,vname);
       strcat(readitem,")");
     }
-    while (str_replace_all(readitem," ", ""));
+    str_delete_char(readitem,' ');
     while (formula_normalize(readitem)==1);
     leadlag_encode(readitem);
     np=str_count_ci(readitem,"p_");
@@ -1532,7 +1532,7 @@ int main(int argc,char **args) {
                 if (dim1<=0) continue; /* nothing allocated to populate; last-set offset==nsetspace */
                 strcpy(copyline,sets[i].readele);
                 strcat(copyline,",");
-                while (str_replace_all(copyline," ", ""));
+                str_delete_char(copyline,' ');
                 readitem = strtok(copyline,",");
                 if (readitem==NULL||strlen(readitem)>=NAMESIZE) {
                   printf("Error: malformed element list for set %s\n",sets[i].setname);

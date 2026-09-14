@@ -831,7 +831,7 @@ static void stmt_prog_build_one(char *line, stmt_prog *stp, char *commsyntax,
         strcat(readitem,vname);
         strcat(readitem,")");
       }
-      while (str_replace_all(readitem," ", ""));
+      str_delete_char(readitem,' ');
       eq_linearity_check(readitem,eqname,coefs,ncof);
       while (formula_normalize(readitem)==1);
       leadlag_encode(readitem);
@@ -2251,7 +2251,7 @@ int equation_order_read(char *fname, char *commsyntax,set_def *sets,dim_t nset,s
         strcat(readitem,vname);
         strcat(readitem,")");
       }
-      while (str_replace_all(readitem," ", ""));
+      str_delete_char(readitem,' ');
       while (formula_normalize(readitem)==1);
       leadlag_encode(readitem);
       strcpy(tline,readitem);
@@ -2605,7 +2605,7 @@ int equation_order_read_nested(char *fname, char *commsyntax,set_def *sets,dim_t
         strcat(readitem,vname);
         strcat(readitem,")");
       }
-      while (str_replace_all(readitem," ", ""));
+      str_delete_char(readitem,' ');
       while (formula_normalize(readitem)==1);
       leadlag_encode(readitem);
       strcpy(tline,readitem);
@@ -2926,7 +2926,7 @@ int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,
         strcat(readitem,vname);
         strcat(readitem,")");
       }
-      while (str_replace_all(readitem," ", ""));
+      str_delete_char(readitem,' ');
       while (formula_normalize(readitem)==1);
       leadlag_encode(readitem);
       strcpy(tline,readitem);
