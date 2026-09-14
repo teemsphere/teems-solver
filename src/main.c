@@ -1012,6 +1012,19 @@ int main(int argc,char **args) {
   PetscOptionsGetInt(NULL,NULL,"-matsol",&matsol,NULL);/* enum matrix_method; >=MM_SBBD needs a regional or time set (first reg set orders variables) */
   if(matsol==MM_DBBD)nohsl=true;
   if(matsol==MM_NDBBD)nohsl=true;
+  if(matsol==MM_NDBBD) {
+    /* measured 2026-09-06 on the 4.36M-eq GTAP-RE rig, NDBBD-2 Gragg:
+       the persistent refactorization is slower under NDBBD (19.0 vs
+       17.4 s per step) and holds +0.4 GB per rank of resident factors;
+       the flag is ignored here so a caller's LU/DBBD habit cannot
+       cost the memory-bound method its reason to exist */
+    dim_t frchk=0;
+    PetscOptionsGetInt(NULL,NULL,"-fastrefac",&frchk,NULL);
+    if(frchk) {
+      if(rank==0)printf("Warning: -fastrefac is ignored under NDBBD (measured slower, +0.4 GB per rank); running without it\n");
+      PetscOptionsSetValue(NULL,"-fastrefac","0");
+    }
+  }
   PetscOptionsGetInt(NULL,NULL,"-laA",&laA,NULL);
   if(laA==0)laA=2;
   PetscOptionsGetInt(NULL,NULL,"-laD",&laD,NULL);
