@@ -3,12 +3,11 @@
 
 int dbbd_order(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscInt Istart, PetscInt Iend, offset_t nvarele, PetscInt *eq_addr,int *row_order,int *col_order, offset_t ndblock,int *block_sizes, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,solve_real cntl6) {
   IS *rowindices,*colindices;//,isrow,iscol;
-  PetscInt bfirst,bend,sblockin,nmatin,nmatinplus,nrowcolin,sumrowcolin;
+  PetscInt bfirst,bend,nmatin,nmatinplus,nrowcolin;
   Mat *submatA;
-  PetscInt i,j,j0,j1,j2,j3,j4,nrow,ncol,nz,nz1,*ai,*aj,la;
+  PetscInt i,j,j1,j2,nrow,ncol,nz,nz1,*ai,*aj;
   PetscScalar *vals;
   PetscErrorCode ierr;
-  PetscViewer viewer;
   offset_t lasize;
   int *row_order1= (int *) calloc (VecSize,sizeof(int));
   int *col_order1= (int *) calloc (VecSize,sizeof(int));
@@ -232,18 +231,15 @@ void ndbbd_cut_iface_put(int j3,int rank_val,const int *irn,const int *jcn,int n
 }
 
 int ndbbd_order_presolve(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscInt Istart, PetscInt Iend,int nreg, int ntime, offset_t nvarele, PetscInt *eq_addr,int *row_order,int *col_order, offset_t ndblock,int *block_sizes, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laDi,solve_real cntl6,PetscInt* ndbbdrank,PetscBool presol) {
-  FILE *presolfile;
-  char j1name[1024],filename[1024],rankname[1024];
-  size_t frd;
-  IS *rowindices=NULL,*colindices=NULL,*rowindicesD=NULL,*colindicesD=NULL;//,isrow,iscol;
-  PetscInt bfirst,bend,sblockin,nmatin,nmatint,nmatinplus,nrowcolin,sumrowcolin,rfirst,cfirst;
+  char filename[1024],rankname[1024];
+  IS *rowindices=NULL,*colindices=NULL;//,isrow,iscol;
+  PetscInt bfirst,bend,nmatin,nmatint;
   Mat *submatA=NULL;//,*submatD=NULL;
-  PetscInt i,j,j0,j1,j2,j3,j4,j5,j6,j7,j8,nrow,ncol,nz,nz1,*ai,*aj,la;
+  PetscInt i,j,j1,j2,j3,j4,j5,j6,j7,j8,nrow,ncol,nz,nz1,*ai,*aj;
   offset_t lasize;
   solve_real cntl6in;
   PetscScalar *vals;
   PetscErrorCode ierr;
-  PetscViewer viewer;
   MatInfo           matinfo;
   if(teems_ndcutcache&&teems_ndcutcache!=3&&ndcut_valid&&ndcut_VecSize==VecSize&&ndcut_ndblock==ndblock&&ndcut_ntime==ntime) { /* 3 = interface cache only (bisect aid) */
     /* the cut is structural: reuse step 1's instead of re-probing */
@@ -573,8 +569,8 @@ int ndbbd_order(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscI
   FILE *presolfile;
   char j1name[1024],filename[1024],rankname[1024];
   size_t frd;
-  PetscInt bfirst,bend,sblockin,nmatin,nmatint,nmatinplus,nrowcolin,sumrowcolin,rfirst,cfirst;
-  PetscInt i,j,j0,j1,j2,j3,j4,j5,j6,j7,j8,nrow,ncol,nz,nz1,*ai,*aj,la;
+  PetscInt bfirst,bend,nmatin,nmatint;
+  PetscInt i,j,j1,j2,j3,j4;
   if(rank<10)strcpy(rankname,"000");
   if(rank<100&&rank>9)strcpy(rankname,"00");
   if(rank<1000&&rank>99)strcpy(rankname,"0");
