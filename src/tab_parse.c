@@ -2129,7 +2129,7 @@ void mapping_lower_calls(char *line) {
         continue;
       }
       int op=k+(int)strlen(find)-1;
-      for (k2=op+1; line[k2]!='\0'&&line[k2]!=')'&&line[k2]!='('; k2++);
+      for (k2=op+1; line[k2]!='\0'&&line[k2]!=')'&&line[k2]!='('; k2++) {}
       /* a '(' before the ')' is an unlowered inner call; an '@' in the
          span is an already-lowered one -- both are composition */
       {
@@ -2712,13 +2712,13 @@ offset_t closure_read(char *fname, char *commsyntax,closure_entry *closure_vals,
                 p+=1;
                 p1=strchr(p,'"');
                 *p1='\0';
-                for (l1=0; l1<sets[vars[j].setid[0]].size; l1++)
+                for (l1=0; l1<sets[vars[j].setid[0]].size; l1++) {
                   if (strcmp(p,set_elems[sets[vars[j].setid[0]].offset+l1].setele)==0) {
                     CL_SET_EXO(vars[j].offset+l1,true);
                     n=n+1;
                     check=false;
                     break;
-                  }
+                  } }
                   if(l1==sets[vars[j].setid[0]].size) {
                     printf("Error: element %s is not in set %s (in %s)\n",p,sets[vars[j].setid[0]].setname,vars[j].cofname);
                     free(arSet);
@@ -5146,7 +5146,12 @@ static int set_product_names(char (*a)[NAMESIZE], dim_t n1, const char *nm1,
         printf("Error: set product in the definition of %s produces more elements than its declared size\n",owner);
         return 0;
       }
-      snprintf(out[k],NAMESIZE,"%s_%s",e1,e2);
+      { size_t l1=strlen(e1),l2=strlen(e2);
+        if (l1+l2+1>=NAMESIZE) {
+          printf("Error: set product element %s_%s in the definition of %s exceeds %d characters\n",e1,e2,owner,NAMESIZE-1);
+          return 0;
+        }
+        memcpy(out[k],e1,l1); out[k][l1]='_'; memcpy(out[k]+l1+1,e2,l2+1); }
     }
   }
   for (k=1; k<n1*n2; k++) for (i=0; i<k; i++) if (strcmp(out[i],out[k])==0) {
@@ -5399,7 +5404,7 @@ offset_t subsets_read(char *fname, set_element *set_elems, set_def *sets,dim_t n
   char set[NAMESIZE],subset[NAMESIZE];
   char *commsyntax="subset";
   dim_t i,sup1;//,nlength;
-  offset_t jj,jjj,j=0,succ=0,ssize=0;
+  offset_t jj,jjj,j=0,succ=0;
   char *readitem=NULL;
 
   filehandle = fopen(fname,"r");
@@ -5430,7 +5435,6 @@ offset_t subsets_read(char *fname, set_element *set_elems, set_def *sets,dim_t n
       if (strcmp(sets[i].setname,subset)==0) { //,subsetd)==0) {
         for (j=0; j<nset; j++) {
           if (strcmp(sets[j].setname,set)==0) { //,setd)==0) {
-            ssize=sets[j].size;
             for (sup1=1; sup1<MAXSUPSET; sup1++)if(sets[i].subsetid[sup1]==-1) {
                 sets[i].subsetid[sup1]=j;
                 break;
