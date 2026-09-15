@@ -201,7 +201,7 @@ static int pos_lower(char *f, set_def *sets, quantifier *arSet, dim_t fdim, form
 int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t ncof, array_def *vars,offset_t nvar,offset_t ncofele,sum_def *sum_cof,int totalsum,formula_op *ops,int nops,quantifier *arSet,dim_t fdim,int varindex) {
   offset_t index;
   char *p=NULL;//,copyvar[TABREADLINE];//,*p1=NULL,*p2=NULL,*p3=NULL,*p4=NULL;
-  dim_t l1,l,sup;//,svar2;//=0,i2=0,i3=0,i4=0,svar1,svar2,checkvar20=0,checkvar10=0,checkvar11=0,checkvar12=0,checkvar16=0,checkvar14=0,l;
+  dim_t l1,l;//,svar2;//=0,i2=0,i3=0,i4=0,svar1,svar2,checkvar20=0,checkvar10=0,checkvar11=0,checkvar12=0,checkvar16=0,checkvar14=0,l;
   int leadlag;
   int mp=0;
   bool IsChange=false;
@@ -975,7 +975,6 @@ static inline offset_t dims_offset(const dim_addr *D, const quantifier *arSet, d
 
 solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,sum_value *sum_vals,formula_op *ops,int nops,quantifier *arSet,dim_t fdim, solve_real zerodivide) {
   int i;
-  dim_t j;
   offset_t l=0,l1=0;
   solve_real eval1=0,eval2=0,eval3=0;
   for (i=0; i<nops; i++) {
@@ -1294,7 +1293,7 @@ solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,
 
 
 int formula_compile_pow(char *fomulain, set_def *sets,int npow,int ipar,array_def *coefs,offset_t ncof, array_def *vars,offset_t nvar,offset_t ncofele,sum_def *sum_cof,int totalsum,formula_op *ops,int *nops,quantifier *arSet,dim_t fdim) {
-  int i,i1,i2,i3,i4,i0,ibar=0,index,j,j1,i5,p1;
+  int i,i1,ibar=0,index,j,j1,i5,p1;
   char *p=NULL;//,*p1=NULL,*p2=NULL,*p3=NULL,*p4=NULL;
   char fpart1[TABREADLINE],fpart2[TABREADLINE],fpart3[TABREADLINE],var1[TABREADLINE],var2[TABREADLINE],interchar[TABREADLINE],interchar1[TABREADLINE];
 
@@ -1388,7 +1387,7 @@ int formula_compile_pow(char *fomulain, set_def *sets,int npow,int ipar,array_de
   return 1;
 }
 int formula_compile_muldiv(char *fomulain, set_def *sets,int nmul,int ipar,array_def *coefs,offset_t ncof, array_def *vars,offset_t nvar,offset_t ncofele,sum_def *sum_cof,int totalsum,formula_op *ops,int *nops,quantifier *arSet,dim_t fdim) {
-  int i,i1,i2,i3,i4,i5,ibar=0,index,j,j1,p1;
+  int i,i1,i5,ibar=0,index,j,j1,p1;
   char *p=NULL;//,*p1=NULL,*p2=NULL,*p3=NULL,*p4=NULL;
   char fpart1[TABREADLINE],fpart2[TABREADLINE],fpart3[TABREADLINE],var1[TABREADLINE],var2[TABREADLINE],interchar[TABREADLINE],interchar1[TABREADLINE];
 
@@ -1488,7 +1487,7 @@ int formula_compile_muldiv(char *fomulain, set_def *sets,int nmul,int ipar,array
 }
 
 int formula_compile_addsub(char *fomulain, set_def *sets,int nplu,int ipar,array_def *coefs,offset_t ncof, array_def *vars,offset_t nvar,offset_t ncofele,sum_def *sum_cof,int totalsum,formula_op *ops,int *nops,quantifier *arSet,dim_t fdim) {
-  int i,i1,i3,i4,i5,ibar=0,index,j,j1,p1;
+  int i,i1,i5,ibar=0,index,j,j1,p1;
   char *p=NULL;//,*p1=NULL,*p2=NULL,*p3=NULL,*p4=NULL;
   char fpart1[TABREADLINE],fpart2[TABREADLINE],fpart3[TABREADLINE],var1[TABREADLINE],var2[TABREADLINE],interchar[TABREADLINE],interchar1[TABREADLINE];
 
@@ -1838,8 +1837,8 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
   char line[TABREADLINE],line1[TABREADLINE],line2[TABREADLINE],linecopy[TABREADLINE],condvar[MAXVARDIM][NAMESIZE];
   char vname[NAMESIZE],sumsyntax[NAMESIZE],argu[NAMESIZE],tempset[NAMESIZE];
   char *readitem=NULL,*p=NULL,*p1=NULL;
-  offset_t i,i1,i3,i4,l,l2=0,j=0,nsumele,dcountdim1[4*MAXVARDIM],ncond,nloops,logioper[MAXVARDIM],logi,logiantidim[MAXVARDIM][MAXVARDIM],logisup[MAXVARDIM][MAXVARDIM],logivarindx[MAXVARDIM],logivartype[MAXVARDIM],index;//m,
-  dim_t fdim,dcount,neqsign=0,sup,varsupsetid[MAXVARDIM];
+  offset_t i,i1,i3,i4,l,l2=0,j=0,nsumele,dcountdim1[4*MAXVARDIM],ncond,nloops,logioper[MAXVARDIM],logi,logiantidim[MAXVARDIM][MAXVARDIM],logisup[MAXVARDIM][MAXVARDIM],logivarindx[MAXVARDIM],logivartype[MAXVARDIM];//m,
+  dim_t fdim,dcount,neqsign=0,varsupsetid[MAXVARDIM];
   int nops=0,totalsum,sumcount=1,npow,nmul,ndiv,nplu,nmin,npar,sumindx,b=0;
   offset_t varantidim[MAXVARDIM],varsubset[MAXVARDIM],vararset[MAXVARDIM];
   solve_real zerodivide=0,cond[MAXVARDIM],eval;
@@ -2435,7 +2434,7 @@ offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_el
   char vname[NAMESIZE],sumsyntax[NAMESIZE],argu[NAMESIZE];
   char *readitem=NULL,*p=NULL;
   offset_t i,i1,i3,i4,l,l2=0,j=0,nsumele,dcountdim1[4*MAXVARDIM],nloops;//m,
-  dim_t fdim,dcount,sup,varsupsetid[MAXVARDIM];
+  dim_t fdim,dcount,varsupsetid[MAXVARDIM];
   int nops=0,totalsum,sumcount=1,npow,nmul,ndiv,nplu,nmin,npar,sumindx;
   bool IsChange=false,IsExplicit=false;
   solve_real zerodivide=0,temp1,temp2;
@@ -2731,7 +2730,7 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
   char vname[NAMESIZE],sumsyntax[NAMESIZE],argu[NAMESIZE];
   char *readitem=NULL,*p=NULL;
   offset_t i,i1,i3,i4,l,l2=0,j=0,nsumele,dcountdim1[4*MAXVARDIM],nloops;//m,
-  dim_t fdim,dcount,sup,varsupsetid[MAXVARDIM];
+  dim_t fdim,dcount,varsupsetid[MAXVARDIM];
   int nops=0,totalsum,sumcount=1,npow,nmul,ndiv,nplu,nmin,npar,sumindx;
   bool IsChange=false,IsExplicit=false;
   solve_real zerodivide=0,temp1;
