@@ -303,6 +303,25 @@ static void dedup_subst(char *line1, const char *a, const char *b, size_t cap) {
   }
 }
 
+/* Write the renamed sum span `b` back over its original text `a` (first
+   occurrence) in the whole statement `line` (capacity cap).  The rename
+   loops above bound the span against the buffer that holds it, but the
+   span was cut out of the statement by sum_extract, so the statement's
+   tail after the span is not in that bound: the old unbounded
+   str_replace_all write-back overflowed `line` by the tail's length
+   (fuzz batch 13 stack overflow, tab_parse.c str_replace_all). */
+static void dedup_subst_back(char *line, const char *a, const char *b, size_t cap) {
+  size_t alen=strlen(a),blen=strlen(b),len=strlen(line);
+  char *p=strstr(line,a);
+  if (p==NULL || alen==0) return;
+  if (len-alen+blen>=cap) {
+    printf("Error: renaming a repeated sum index does not fit the statement buffer (%d characters): %s\n",(int)TABREADLINE,a);
+    MPI_Abort(PETSC_COMM_WORLD,1);
+  }
+  memmove(p+blen,p+alen,len-(size_t)(p-line)-alen+1);
+  memcpy(p,b,blen);
+}
+
 int sum_dedup_indices(char *formulain) {
   char line[TABREADLINE],finditem[TABREADLINE],replitem[TABREADLINE],newreplitem[TABREADLINE],temp[TABREADLINE],replitem1[TABREADLINE],newreplitem1[TABREADLINE];
   char*readitem,*line1;
@@ -595,7 +614,7 @@ int sum_dedup_indices(char *formulain) {
         printf("Error: cannot rename the repeated sum index %s in: %s\n",replitem,temp);
         MPI_Abort(PETSC_COMM_WORLD,1);
       }
-      str_replace_all(formulain,temp,line1);
+      dedup_subst_back(formulain,temp,line1,(size_t)TABREADLINE);
       strcpy(line,formulain);
       k2=str_find_token_ci(line,readitem,finditem);
     }
