@@ -615,6 +615,30 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
     }
     return 1;
   }
+  {
+    /* a signed or leading-dot number is a constant only when the whole
+       token reads as one */
+    char *e;
+    double v=strtod(var2,&e);
+    if (e!=var2&&*e=='\0') {
+      if(varindex==2) {
+        ops[nops].Var2Type=OT_CONST;
+        ops[nops].Var2Val=v;
+      } else {
+        ops[nops].Var1Type=OT_CONST;
+        ops[nops].Var1Val=v;
+      }
+      return 1;
+    }
+  }
+  /* anything else -- a quantifier index, a quoted element, an undeclared
+     name -- used to fall through with the operand left unset and
+     evaluate as 0 without a message (the IF rewrite's `[r] - ["usa"]`
+     helper solved to 0 everywhere, so every such condition held).
+     Callers do not test the return value, so abort here by name. */
+  printf("Error: %s is not a coefficient, variable or number and cannot be an arithmetic operand (an index or quoted element compares through $POS, manual 11.5.6/11.4.11)\n",tokcopy);
+  fflush(stdout);
+  MPI_Abort(PETSC_COMM_WORLD,1);
   return 0;
 }
 
