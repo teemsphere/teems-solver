@@ -774,17 +774,17 @@ static void stmt_prog_build_one(char *line, stmt_prog *stp, char *commsyntax,
                                 PetscInt Istart1, PetscInt Iend1, PetscMPIInt mpisize1,
                                 bool force_all) {
   char tline[TABREADLINE],line1[TABREADLINE],leftline[TABREADLINE],linecopy[TABREADLINE];
-  char vname[TABREADLINE],sumsyntax[NAMESIZE],lintmp[TABREADLINE],eqname[NAMESIZE];
-  char *readitem=NULL,*p=NULL,*p1=NULL;
+  char vname[TABREADLINE],sumsyntax[NAMESIZE],eqname[NAMESIZE];
+  char *readitem=NULL,*p=NULL;
   PetscInt Jindx=0;
   bool isinproc;
-  dim_t fdim,np,dcount,fdimlin=0,i4,sup,supset[MAXSUPSET];
+  dim_t fdim,np,dcount,fdimlin=0,i4,supset[MAXSUPSET];
   int condmap[MAXVARDIM],condpos[MAXVARDIM];
   offset_t condfix[MAXVARDIM];
   dim_t condss[MAXVARDIM];
-  int totalsum,sumcount=1,sumcount1=0,lvar,lvar1,lvar2,lvar3,lvar4;
-  offset_t lj,l1,i1=0,sumbegadd,dcountdim1[4*MAXVARDIM],dcountdim2[4*MAXVARDIM],dcountdim3[4*MAXVARDIM],nloops,nloopslin,nloopsfac,li3,nsumele,nsumele1,l2;
-  int sumindx,npow,npar,nmul,nplu,ndiv,nmin,nops=0,nlinvars,leadlag,varindx1,varindx2;
+  int totalsum,sumcount=1,sumcount1=0,lvar;
+  offset_t lj,i1=0,sumbegadd,dcountdim1[4*MAXVARDIM],dcountdim2[4*MAXVARDIM],dcountdim3[4*MAXVARDIM],nloops,nloopslin,nloopsfac,li3,nsumele,nsumele1,l2;
+  int sumindx,npow,npar,nmul,nplu,ndiv,nmin,nops=0,nlinvars,varindx1,varindx2;
   offset_t sj,l,i3,i,arsetdim=0,nops_alloc=0;
 
       str_replace_first(line, commsyntax, "");
@@ -2167,12 +2167,12 @@ static const char *eq_chain_index(quantifier *arSet, dim_t fdim, set_def *sets) 
 int equation_order_read(char *fname, char *commsyntax,set_def *sets,dim_t nset,set_element *set_elems,array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar,elem_value *elem_vals,offset_t ncofvar,offset_t ncofele,closure_entry *closure_vals,bool *var_inter,bool *ele_inter,array_def *eq_defs,bool *eq_intertemp,dim_t *eq_orderintra,dim_t *eq_orderreg,offset_t allregset,offset_t alltimeset,dim_t *orderintra,dim_t *orderreg) {
   FILE * filehandle;
   char tline[TABREADLINE],line[TABREADLINE],line1[TABREADLINE],linecopy[TABREADLINE];//,set1[NAMESIZE],set2[NAMESIZE];
-  char vname[TABREADLINE],lintmp[TABREADLINE];//,*p1=NULL;
-  char *readitem=NULL,*p=NULL,*p1=NULL;//,*p2=NULL,*varpnts;
+  char vname[TABREADLINE];//,*p1=NULL;
+  char *readitem=NULL,*p=NULL;//,*p2=NULL,*varpnts;
   solve_real zerodivide=0;
   dim_t fdim,np,i4;
-  offset_t rowindx,j,l,l1,lj,dcountdim1[4*MAXVARDIM],dcountdim2[4*MAXVARDIM],nloops,nloopslin,li3,l2,matrow,eqindx=0,nelem,l01,j01;//,sizelinvars,totlinvars,templinvars
-  int sj,i,i3,nlinvars,lvar,lvar1,lvar2,lvar3,lvar4,dcount,fdimlin=0,leadlag,varindx1,varindx2,tempint;
+  offset_t j,l,nloops,matrow,eqindx=0,nelem,l01,j01;//,sizelinvars,totlinvars,templinvars
+  int i,i3,nlinvars,lvar,lvar4,varindx1,varindx2,tempint;
   solve_real dimmat[4*MAXVARDIM];
 
   filehandle = fopen(fname,"r");
@@ -2520,13 +2520,12 @@ int equation_order_read(char *fname, char *commsyntax,set_def *sets,dim_t nset,s
 int equation_order_read_nested(char *fname, char *commsyntax,set_def *sets,dim_t nset,set_element *set_elems,array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar,elem_value *elem_vals,offset_t ncofvar,offset_t ncofele,closure_entry *closure_vals,bool *var_inter,bool *ele_inter,array_def *eq_defs,bool *eq_intertemp,dim_t *eq_orderintra,dim_t *eq_orderreg,offset_t allregset,offset_t alltimeset,dim_t *orderintra,dim_t *orderreg) {
   FILE * filehandle;
   char tline[TABREADLINE],line[TABREADLINE],line1[TABREADLINE],linecopy[TABREADLINE];//,set1[NAMESIZE],set2[NAMESIZE];
-  char vname[TABREADLINE],lintmp[TABREADLINE];//,*p1=NULL;
-  char *readitem=NULL,*p=NULL,*p1=NULL;//,*p2=NULL,*varpnts;
+  char vname[TABREADLINE];//,*p1=NULL;
+  char *readitem=NULL,*p=NULL;//,*p2=NULL,*varpnts;
   solve_real zerodivide=0;
   dim_t fdim,np;
-  offset_t rowindx,j,j01,l,l01,lj,dcountdim1[4*MAXVARDIM],dcountdim2[4*MAXVARDIM],nloops,nloopslin,li3,l2,matrow,eqindx=0,nelem;//,sizelinvars,totlinvars,templinvars
-  offset_t sj,i,i3,i4,nlinvars,lvar,lvar1,lvar2,lvar3,lvar4,dcount,fdimlin=0,varindx1,varindx2,tempint;
-  int leadlag;
+  offset_t j,j01,l,l01,nloops,matrow,eqindx=0,nelem;//,sizelinvars,totlinvars,templinvars
+  offset_t i,i3,i4,nlinvars,lvar,lvar4,varindx1,varindx2;
   solve_real dimmat[4*MAXVARDIM];
 
   filehandle = fopen(fname,"r");
@@ -2867,11 +2866,11 @@ int equation_order_read_nested(char *fname, char *commsyntax,set_def *sets,dim_t
 int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,set_element *set_elems,array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar,elem_value *elem_vals,offset_t ncofvar,offset_t ncofele, offset_t nexo,closure_entry *closure_vals,offset_t ndblock,offset_t alltimeset,offset_t allregset,bool *eq_intertemp,PetscInt *eq_addr,dim_t *eq_time,dim_t *eq_reg,offset_t *counteq,offset_t nintraeq,bool *sbbd_overrid,PetscInt VecSize,PetscInt Istart,PetscInt Iend,PetscInt Cstart,PetscInt Cend,PetscInt *dnz,PetscInt *dnnz,PetscInt *onz,PetscInt *onnz,PetscInt *dnzB,PetscInt *dnnzB,PetscInt *onzB,PetscInt *onnzB,int nesteddbbd,eq_probe_meta *eqmeta,offset_t *neqmeta) {
   FILE * filehandle;
   char tline[TABREADLINE],line[TABREADLINE],line1[TABREADLINE],linecopy[TABREADLINE];//,set1[NAMESIZE],set2[NAMESIZE];
-  char vname[TABREADLINE],lintmp[TABREADLINE];//,*p1=NULL;
-  char *readitem=NULL,*p=NULL,*p1=NULL;//,*p2=NULL,*varpnts;
+  char vname[TABREADLINE];//,*p1=NULL;
+  char *readitem=NULL,*p=NULL;//,*p2=NULL,*varpnts;
   PetscInt Iindx=0,Jindx;
   solve_real zerodivide=0;
-  dim_t fdim=0,np,i4,sup,supset[MAXSUPSET];
+  dim_t fdim=0,np,i4,supset[MAXSUPSET];
   int condmap[MAXVARDIM],condpos[MAXVARDIM];
   offset_t condfix[MAXVARDIM];
   dim_t condss[MAXVARDIM];
@@ -2879,7 +2878,7 @@ int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,
   offset_t nreg=0,nint=0,sj,i,i3;
   if(allregset>-1)nreg=sets[allregset].size;
   if(alltimeset>-1)nint=sets[alltimeset].size;
-  int nlinvars,lvar,lvar1,lvar2,lvar3,lvar4,dcount,fdimlin=0,leadlag,varindx1,varindx2;
+  int nlinvars,lvar,dcount,fdimlin=0,varindx1,varindx2;
   offset_t *counteq1= (offset_t *) calloc (ndblock,sizeof(offset_t));
   for(i=0; i<ndblock; i++)counteq1[i]=counteq[i];
   filehandle = fopen(fname,"r");
