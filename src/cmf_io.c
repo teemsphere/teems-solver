@@ -1178,15 +1178,15 @@ int outputs_write_csv(char *filename, char *newdatlogname, char *newdatfile,set_
               innerloop=1;
               outerloop=0;
             }
-            if(coefs[i].size==1) {
+            else if(coefs[i].size==1) {
               innerloop=sets[coefs[i].setid[0]].size;
               outerloop=0;
             }
-            if(coefs[i].size==2) {
+            else if(coefs[i].size==2) {
               innerloop=sets[coefs[i].setid[0]].size*sets[coefs[i].setid[1]].size;
               outerloop=1;
             }
-            if(coefs[i].size>2) {
+            else {
               innerloop=sets[coefs[i].setid[0]].size*sets[coefs[i].setid[1]].size;
               outerloop=1;
               for(j=2; j<coefs[i].size; j++)outerloop*=sets[coefs[i].setid[j]].size;
@@ -2260,7 +2260,7 @@ int tab_setbuilder_transform(char *fname, cmf_file_entry *iodata, int niodata) {
         else if (c==')'||c=='}'||c==']') depth--;
         else if (depth==0) {
           if (c=='<'||c=='>') { oi=i; olen=(cond[i+1]=='='||cond[i+1]=='>')?2:1; break; }
-          if (c=='='&&(i==0||cond[i-1]!='<'&&cond[i-1]!='>')) { oi=i; olen=1; break; }
+          if (c=='='&&(i==0||(cond[i-1]!='<'&&cond[i-1]!='>'))) { oi=i; olen=1; break; }
           if ((c==' ')&&((strncmp(cond+i+1,"ne ",3)==0)||(strncmp(cond+i+1,"eq ",3)==0)||
                          (strncmp(cond+i+1,"gt ",3)==0)||(strncmp(cond+i+1,"lt ",3)==0)||
                          (strncmp(cond+i+1,"ge ",3)==0)||(strncmp(cond+i+1,"le ",3)==0))) { oi=i+1; olen=2; break; }
@@ -2308,7 +2308,7 @@ int tab_setbuilder_transform(char *fname, cmf_file_entry *iodata, int niodata) {
         memset(keep,0,sizeof(keep));
         if (strncmp(opnd,"sum",3)==0) {
           /* sum{j,S2: MAP(j) = idx, COEF2(j)} */
-          char sidx[NAMESIZE],sset[NAMESIZE],mapname[NAMESIZE],c2[NAMESIZE];
+          char sset[NAMESIZE],mapname[NAMESIZE],c2[NAMESIZE];
           char logname[NAMESIZE],header[NAMESIZE],*path;
           char (*s2ele)[NAMESIZE]=NULL;
           datafile_labels *mlab=NULL;
@@ -2316,8 +2316,8 @@ int tab_setbuilder_transform(char *fname, cmf_file_entry *iodata, int niodata) {
           int ns2,j,ok=1;
           p=opnd+3;
           while (*p=='('||*p=='{'||*p=='['||*p==' ') p++;
-          tl=0; while (*p!='\0'&&*p!=','&&tl<NAMESIZE-1) { if (*p!=' ') sidx[tl++]=*p; p++; }
-          sidx[tl]='\0'; if (*p==',') p++;
+          tl=0; while (*p!='\0'&&*p!=','&&tl<NAMESIZE-1) { if (*p!=' ') tl++; p++; }
+          if (*p==',') p++;
           tl=0; while (*p!='\0'&&*p!=':'&&tl<NAMESIZE-1) { if (*p!=' ') sset[tl++]=*p; p++; }
           sset[tl]='\0'; if (*p==':') p++;
           while (*p==' ') p++;

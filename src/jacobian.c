@@ -783,7 +783,7 @@ static void stmt_prog_build_one(char *line, stmt_prog *stp, char *commsyntax,
   offset_t condfix[MAXVARDIM];
   dim_t condss[MAXVARDIM];
   int totalsum,sumcount=1,sumcount1=0,lvar;
-  offset_t lj,i1=0,sumbegadd,dcountdim1[4*MAXVARDIM],dcountdim2[4*MAXVARDIM],dcountdim3[4*MAXVARDIM],nloops,nloopslin,nloopsfac,li3,nsumele,nsumele1,l2;
+  offset_t lj,i1=0,sumbegadd,dcountdim1[4*MAXVARDIM],dcountdim2[4*MAXVARDIM],dcountdim3[4*MAXVARDIM],nloops,nloopslin,nloopsfac,li3,nsumele,l2;
   int sumindx,npow,npar,nmul,nplu,ndiv,nmin,nops=0,nlinvars,varindx1,varindx2;
   offset_t sj,l,i3,i,arsetdim=0,nops_alloc=0;
 
@@ -1121,7 +1121,6 @@ static void stmt_prog_build_one(char *line, stmt_prog *stp, char *commsyntax,
             sum_cof[i4].offset=sumbegadd;
             sumbegadd=sumbegadd+i1;
           }
-          nsumele1=sumbegadd+nsumele;
           for (i3=sumcount; i3<totalsum; i3++) {
             i1=1;
             /* scalar sum store: no strides (twin of the
@@ -2171,13 +2170,12 @@ int equation_order_read(char *fname, char *commsyntax,set_def *sets,dim_t nset,s
   char *readitem=NULL,*p=NULL;//,*p2=NULL,*varpnts;
   solve_real zerodivide=0;
   dim_t fdim,np,i4;
-  offset_t j,l,nloops,matrow,eqindx=0,nelem,l01,j01;//,sizelinvars,totlinvars,templinvars
+  offset_t j,l,nloops,eqindx=0,nelem,l01,j01;//,sizelinvars,totlinvars,templinvars
   int i,i3,nlinvars,lvar,lvar4,varindx1,varindx2,tempint;
   solve_real dimmat[4*MAXVARDIM];
 
   filehandle = fopen(fname,"r");
   if (filehandle==NULL) return 0;
-  matrow=0;
 
   while (tab_next_statement_resolved(commsyntax,filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
     if (strstr(line,"(default")==NULL) {
@@ -2524,13 +2522,12 @@ int equation_order_read_nested(char *fname, char *commsyntax,set_def *sets,dim_t
   char *readitem=NULL,*p=NULL;//,*p2=NULL,*varpnts;
   solve_real zerodivide=0;
   dim_t fdim,np;
-  offset_t j,j01,l,l01,nloops,matrow,eqindx=0,nelem;//,sizelinvars,totlinvars,templinvars
+  offset_t j,j01,l,l01,nloops,eqindx=0,nelem;//,sizelinvars,totlinvars,templinvars
   offset_t i,i3,i4,nlinvars,lvar,lvar4,varindx1,varindx2;
   solve_real dimmat[4*MAXVARDIM];
 
   filehandle = fopen(fname,"r");
   if (filehandle==NULL) return 0;
-  matrow=0;
 
   while (tab_next_statement_resolved(commsyntax,filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
     if (strstr(line,"(default")==NULL) {
@@ -2874,10 +2871,10 @@ int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,
   int condmap[MAXVARDIM],condpos[MAXVARDIM];
   offset_t condfix[MAXVARDIM];
   dim_t condss[MAXVARDIM];
-  offset_t rowindx,rowindxorg,l,l1,lj,dcountdim1[4*MAXVARDIM],dcountdim2[4*MAXVARDIM],dcountdim3[4*MAXVARDIM],dcountdim4[4*MAXVARDIM],dcountdim5[4*MAXVARDIM],nloops,nloopslin,nloopsfac,li3,l2,matrow,matroworg,ltime,lreg,leq=0,eqindx=0;//,sizelinvars,totlinvars,templinvars
-  offset_t nreg=0,nint=0,sj,i,i3;
+  /* ltime/lreg =0 only for flow analysis: the dimension loop assigns them for every intertemporal equation (eq_time/eq_reg in range) */
+  offset_t rowindx,l,l1,lj,dcountdim1[4*MAXVARDIM],dcountdim2[4*MAXVARDIM],dcountdim3[4*MAXVARDIM],dcountdim4[4*MAXVARDIM],dcountdim5[4*MAXVARDIM],nloops,nloopslin,nloopsfac,li3,l2,matrow,matroworg,ltime=0,lreg=0,leq=0,eqindx=0;//,sizelinvars,totlinvars,templinvars
+  offset_t nreg=0,sj,i,i3;
   if(allregset>-1)nreg=sets[allregset].size;
-  if(alltimeset>-1)nint=sets[alltimeset].size;
   int nlinvars,lvar,dcount,fdimlin=0,varindx1,varindx2;
   offset_t *counteq1= (offset_t *) calloc (ndblock,sizeof(offset_t));
   for(i=0; i<ndblock; i++)counteq1[i]=counteq[i];
@@ -3164,7 +3161,6 @@ int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,
         for (lj=0; lj<nloopslin; lj++) {
           l2=lj;
           rowindx=0;
-          rowindxorg=0;
           for (dcount=0; dcount<fdimlin; dcount++) {
             l1=(offset_t) l2/dcountdim2[dcount];
             arSet[dcount].indx=l1;

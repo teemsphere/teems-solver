@@ -3,7 +3,7 @@
 
 int dbbd_order(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscInt Istart, PetscInt Iend, offset_t nvarele, PetscInt *eq_addr,int *row_order,int *col_order, offset_t ndblock,int *block_sizes, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,solve_real cntl6) {
   IS *rowindices,*colindices;//,isrow,iscol;
-  PetscInt bfirst,bend,nmatin,nmatinplus,nrowcolin;
+  PetscInt bfirst,bend,nmatin,nrowcolin;
   Mat *submatA;
   PetscInt i,j,j1,j2,nrow,ncol,nz,nz1,*ai,*aj;
   PetscScalar *vals;
@@ -15,8 +15,6 @@ int dbbd_order(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscIn
 
   //*****New order test**********//
   nmatin=(offset_t)ndblock/mpisize;
-  if(nmatin*mpisize<ndblock)nmatinplus=nmatin+1;
-  else nmatinplus=nmatin;
   for(i=0; i<mpisize; i++)if(rank+1<=ndblock-mpisize*nmatin)nmatin++;
   int *begblock= (int *) calloc (mpisize,sizeof(int));
   ierr = PetscMalloc(nmatin*sizeof(IS **),&rowindices);

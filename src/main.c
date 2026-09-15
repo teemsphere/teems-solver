@@ -924,7 +924,7 @@ int main(int argc,char **args) {
   MPI_Comm_size(PETSC_COMM_WORLD,&mpisize);
 
   char processor_name[MPI_MAX_PROCESSOR_NAME+1];
-  int name_len,name_len_max,name_beg,class_size,color,group_size,node_rank;
+  int name_len,name_len_max,name_beg,class_size,color=0,group_size,node_rank;  /* color=0 only for flow analysis: the match loop below always assigns it, every rank's own name is in the class list */
   MPI_Get_processor_name(processor_name, &name_len);
   logmsg(2,"rank %d name len %d proc name %s\n",rank,name_len,processor_name);
   MPI_Allreduce(&name_len,&name_len_max,1,MPI_INT,MPI_MAX,PETSC_COMM_WORLD);
@@ -979,7 +979,7 @@ int main(int argc,char **args) {
   char psfile[TABREADLINE]="\0";
   int npostsim=0,postsim_on=1;
   char tempchar[255],solmed[NAMESIZE],solchar[255];
-  int niodata=0,nj,mem_fac=0,noutdata=0,nsoldata=0,nowrites=0,cofdump=1;
+  int niodata=0,nj,noutdata=0,nsoldata=0,nowrites=0,cofdump=1;
   offset_t nsetspace=0,ndblock=0,netcut=0,ndblock1,nreg=0,ntime=0;
   dim_t nset=0,vsize,dim1,nlength=0,matsol=0,laA=2,laDi=2,laD=2,nsbbdblocks=2,nesteddbbd=0,mc66=0,subints=1;
   offset_t alltimeset=-1,allregset=-1;
@@ -1377,9 +1377,6 @@ int main(int argc,char **args) {
   else {
     rank_hsl=0;
   }
-  if(rank==rank_hsl) {
-    mem_fac=1;
-  }
   char *readitem=NULL;
   if(rank==0) {
     niodata=cmf_count_files(filename,"iodata");
@@ -1510,7 +1507,7 @@ int main(int argc,char **args) {
             matvar1[j].ch[nj]=tolower((int) matvar1[j].ch[nj]);
             nj++;
           }
-          strncpy(set_elems[j+sets[i].offset].setele,matvar1[j].ch,strlen(matvar1[j].ch));
+          strcpy(set_elems[j+sets[i].offset].setele,matvar1[j].ch);
           set_elems[j+sets[i].offset].superset_pos[0]=j;
         }
         free(matvar1);
@@ -2211,6 +2208,7 @@ comp_accurate_reentry:
         j2=0;
         j3=0;
         j4=nintraendovar;
+        j6=0; /* flow analysis only: the stride loop assigns it, orderreg[i]>=0 for every intra variable */
         for (i=0; i<nvar; i++) {
           for (j=0; j<vars[i].nelem; j++) {
             j5=j3+j;
@@ -2299,11 +2297,11 @@ comp_accurate_reentry:
             j2=j0/eq_defs[i].strides[j1];
             j0-=j2*eq_defs[i].strides[j1];
           }
-          if(eq_time[i]>-1)if(eq_defs[i].setid[eq_time[i]]==alltimeset)counteq[set_elems[eq_time_offsets[i]+j2].superset_pos[0]]++;
+          if(eq_time[i]>-1){ if(eq_defs[i].setid[eq_time[i]]==alltimeset)counteq[set_elems[eq_time_offsets[i]+j2].superset_pos[0]]++;
             else {
               for(j3=1; j3<MAXSUPSET; j3++)if(sets[eq_defs[i].setid[eq_time[i]]].subsetid[j3]==alltimeset)break;
               counteq[set_elems[eq_time_offsets[i]+j2].superset_pos[j3]]++;
-            }
+            } }
         }
       }
     }
