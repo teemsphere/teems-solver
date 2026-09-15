@@ -198,6 +198,20 @@ static int pos_lower(char *f, set_def *sets, quantifier *arSet, dim_t fdim, form
   return 1;
 }
 
+/* next index token of a reference's argument list: an empty index
+   (x( ), x(c,,t) -- normalize strips the blanks) left strtok NULL and the
+   binder compared it (SEGV, fuzz batch 13 with the real declaration
+   context); abort by name instead */
+static char *bind_next_index(const char *delim, const char *tokcopy) {
+  char *p=strtok(NULL,delim);
+  if (p==NULL) {
+    printf("Error: %s has an empty index in its argument list; a reference must carry exactly the declared indices (manual 10.3, 11.4.10)\n",tokcopy);
+    fflush(stdout);
+    MPI_Abort(PETSC_COMM_WORLD,1);
+  }
+  return p;
+}
+
 int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t ncof, array_def *vars,offset_t nvar,offset_t ncofele,sum_def *sum_cof,int totalsum,formula_op *ops,int nops,quantifier *arSet,dim_t fdim,int varindex) {
   offset_t index;
   char *p=NULL;//,copyvar[TABREADLINE];//,*p1=NULL,*p2=NULL,*p3=NULL,*p4=NULL;
@@ -278,7 +292,7 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
         }
         break;
       case 1:
-        p=strtok(NULL,"}");
+        p=bind_next_index("}",tokcopy);
         leadlag=0;
         parse_index_leadlag(p,&leadlag);
           p=mapping_token_split(p,&mp);
@@ -325,7 +339,7 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
           }
         }
         for (l=0; l<coefs[index].size-1; l++) {
-          p=strtok(NULL,",");
+          p=bind_next_index(",",tokcopy);
           leadlag=0;
           parse_index_leadlag(p,&leadlag);
           p=mapping_token_split(p,&mp);
@@ -348,7 +362,7 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
             }
           }
         }
-        p=strtok(NULL,"}");
+        p=bind_next_index("}",tokcopy);
         leadlag=0;
         parse_index_leadlag(p,&leadlag);
           p=mapping_token_split(p,&mp);
@@ -407,7 +421,7 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
         }
         break;
       case 1:
-        p=strtok(NULL,"}");
+        p=bind_next_index("}",tokcopy);
         leadlag=0;
         parse_index_leadlag(p,&leadlag);
           p=mapping_token_split(p,&mp);
@@ -454,7 +468,7 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
           }
         }
         for (l=0; l<vars[index].size-1; l++) {
-          p=strtok(NULL,",");
+          p=bind_next_index(",",tokcopy);
           leadlag=0;
           parse_index_leadlag(p,&leadlag);
           p=mapping_token_split(p,&mp);
@@ -477,7 +491,7 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
             }
           }
         }
-        p=strtok(NULL,"}");
+        p=bind_next_index("}",tokcopy);
         leadlag=0;
         parse_index_leadlag(p,&leadlag);
           p=mapping_token_split(p,&mp);
@@ -541,7 +555,7 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
         }
         break;
       case 1:
-        p=strtok(NULL,"}");
+        p=bind_next_index("}",tokcopy);
         for (l=0; l<fdim; l++) {
           if (strcmp(p,arSet[l].index_name)==0) {
             if(varindex==2) {
@@ -564,7 +578,7 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
           else ops[nops].Var1Dims[l1].ADims=0;
         }
         for (l=0; l<sum_cof[index].size-1; l++) {
-          p=strtok(NULL,",");
+          p=bind_next_index(",",tokcopy);
           for (l1=0; l1<fdim; l1++) {
             if (strcmp(p,arSet[l1].index_name)==0) {
               if(varindex==2) {
@@ -576,7 +590,7 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
             }
           }
         }
-        p=strtok(NULL,"}");
+        p=bind_next_index("}",tokcopy);
         for (l1=0; l1<fdim; l1++) {
           if (strcmp(p,arSet[l1].index_name)==0) {
             if(varindex==2) {
