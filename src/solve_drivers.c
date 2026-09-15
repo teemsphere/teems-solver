@@ -396,10 +396,9 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
   solve_real *xcf;
   xcf=*xcf2;
 
-  clock_t timestr,timeend,timemulti;
+  clock_t timeend;
   struct timeval endtime;
-  struct timespec gettime_now,gettime_beg,gettime_end;
-  long int start_time=0;
+  struct timespec gettime_beg,gettime_end;
   double rep_time;
   size_t freadresult;
   elem_value *elem_vals;
@@ -605,7 +604,6 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
       MPI_Fint fcomm;
       fcomm = MPI_Comm_c2f(PETSC_COMM_WORLD);
       Mat_SeqAIJ         *aa=(Mat_SeqAIJ*)A->data;
-      FILE *ofp;
 
       if(rank==rank_hsl) {
         ai= aa->i;
@@ -813,7 +811,7 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
 
 bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt* dnnz,PetscInt onz,PetscInt* onnz,Mat* B1,PetscInt dnzB,PetscInt* dnnzB,PetscInt onzB,PetscInt* onnzB,Vec* vecb1,Vec *vece1,PetscInt rank,PetscInt rank_hsl,PetscInt mpisize,char* tabfile, char *commsyntax,set_def *sets,dim_t nset, set_element *set_elems, array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar, elem_value **elem_vals2,offset_t ncofvar,offset_t ncofele,offset_t nvarele,closure_entry **closure_vals2,offset_t alltimeset,offset_t allregset,offset_t nintraeq,dim_t matsol,PetscInt Istart,PetscInt Iend,  offset_t nreg, offset_t ntime, PetscInt *eq_addr, offset_t ndblock, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laDi,dim_t laD,PetscReal cntl3,PetscReal cntl6,dim_t nesteddbbd,int localsize,PetscInt *ndbbddrank1,fortran_int* indata,dim_t mc66,fortran_int *ptx,struct timeval begintime,dim_t subints,MPI_Fint fcomm,int solmethod,solve_real **xcf2){ /* multistep driver: Gragg (smoothed modified midpoint, Pearson 1991 eq. 6.1 / Alg. 7.1.2) or forward Euler, per solmethod */
   char tempfilenam[256],tempchar[256],solchar[255];
-  PetscScalar value,*vals;
+  PetscScalar *vals;
   PetscErrorCode ierr;
   PetscInt count=0,nz01=0,*ai=NULL,*aj=NULL; /* stay 0 on ranks != rank_hsl */
   fortran_int k=0,m=1;
@@ -829,11 +827,8 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
   bool IsIni;
   FILE* tempvar;
   PetscLogDouble time1,time0;
-  clock_t timestr,timeend,timemulti;
+  clock_t timestr,timeend;
   struct timeval endtime;
-  struct timespec gettime_now,gettime_beg,gettime_end;
-  long int start_time=0;
-  double rep_time;
   size_t freadresult;
   elem_value *elem_vals;
   elem_vals=*elem_vals2;
@@ -849,7 +844,7 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
   int stepcount;
   int nsteps=3;
   int sol;
-  solve_real vpercents=1.0,perprecis=0;
+  solve_real vpercents=1.0;
   FILE* solution;
   int maxsol=3;
   /* Euler: forward step on every substep (no leapfrog, no terminal
