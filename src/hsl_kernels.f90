@@ -17,6 +17,19 @@ contains
       if (st/=0) teems_verbosity=1
     end if
   end function teems_verbosity
+  ! Narrow an INTEGER(8) count to the INTEGER(4) the HSL MP48 interface
+  ! takes (NEQ, NE, NBLOCK and the pointer arrays sized by them). Past
+  ! that range the assignment would wrap silently, so abort by name
+  ! instead; collective through the C hook so no rank is left waiting.
+  integer(4) function hsl_i4(x,what)
+    integer(8), intent(in) :: x
+    character(len=*), intent(in) :: what
+    if (x<0_8 .or. x>=int(huge(0_4),8)) then
+      print '(a,a,a,i0,a)', 'Error: ', what, ' = ', x, ' exceeds the 32-bit HSL MP48 interface'
+      call teems_onfail_abort()
+    end if
+    hsl_i4=int(x,4)
+  end function hsl_i4
   ! MA48 pivot threshold override from the C side (-ma48u -> TEEMS_MA48U,
   ! set only when the option is given). Applied right after every
   ! MA48ID/MA48I initialisation and to HSL_MP48's control block; when
@@ -88,11 +101,10 @@ SUBROUTINE SPEC48_SINGLE(indata,irn1,jcn1,b1,values1,x,neleperrow,ai1,fcomm)
   ! rowdiff: row dimension imbalance in percentage term
   integer nblocks,netcut,info,kblocks
   DOUBLE PRECISION rowdiff
-  integer i,j,k,h,o,p
+  integer i,j,h,o
   TYPE (MP48_DATA) data
   INTEGER ERCODE,ST
   INTEGER (4) ZDIAG
-  LOGICAL FLAG
   integer myid, numprocs
   fcomm1=fcomm(1)
 
@@ -108,11 +120,11 @@ SUBROUTINE SPEC48_SINGLE(indata,irn1,jcn1,b1,values1,x,neleperrow,ai1,fcomm)
   data%ICNTL(7) = 3
   IF (data%RANK.EQ.0) THEN
 
-    nz = indata(1)!indata%nz
-    m = indata(2)!indata%m
+    nz = hsl_i4(indata(1),"nz")!indata%nz
+    m = hsl_i4(indata(2),"m")!indata%m
     n = m
     IF (indata(5).GE.2) then !%nsbbdblocks
-      nblocks = indata(5)!%nsbbdblocks
+      nblocks = hsl_i4(indata(5),"nblocks")!%nsbbdblocks
     ELSE
       nblocks = 2
     ENDIF
@@ -210,7 +222,6 @@ SUBROUTINE SPEC48_NOMC66(indata,jcn1,b1,values1,x,neleperrow,fcomm,rowptrin,colp
   TYPE (MP48_DATA) data
   INTEGER ERCODE,ST
   INTEGER (4) ZDIAG
-  LOGICAL FLAG
   integer (4) fcomm(*),fcomm1
   integer(4) neleperrow(*),jcn1(*)
   integer (8) indata(*),rowptrin(*),colptrin(*)
@@ -237,9 +248,9 @@ SUBROUTINE SPEC48_NOMC66(indata,jcn1,b1,values1,x,neleperrow,fcomm,rowptrin,colp
     nz = indata(1)!%nz
     m = indata(2)!%m
     nblocks = indata(4)!%nblock
-    data%NEQ=indata(2)!%m !indata%x
-    data%NBLOCK=nblocks !indata%y
-    data%NE=indata(1)!%nz !indata%z
+    data%NEQ=hsl_i4(indata(2),"NEQ")!%m !indata%x
+    data%NBLOCK=hsl_i4(nblocks,"NBLOCK") !indata%y
+    data%NE=hsl_i4(indata(1),"NE")!%nz !indata%z
     ALLOCATE(data%NEQSB(1:data%NBLOCK),STAT=ST )
     ALLOCATE(data%EQPTR(1:data%NEQ+1),STAT=ST )
     ALLOCATE(data%EQVAR(1:data%NE),STAT=ST )
@@ -248,7 +259,7 @@ SUBROUTINE SPEC48_NOMC66(indata,jcn1,b1,values1,x,neleperrow,fcomm,rowptrin,colp
     ! Read matrix data on host.
     maxsbcols=0
     do i = 1, nblocks
-      data%NEQSB(i)=rowptrin(i+1)-rowptrin(i)!neqsb(i)
+      data%NEQSB(i)=int(rowptrin(i+1)-rowptrin(i),4) ! MP48 fields are INTEGER(4); bounded by the counts hsl_i4 checked
       if (teems_verbosity()>=2) write(*,"('nomc block ',i4,' of dimension  ',i10,' X ',i10)") &
       i,data%NEQSB(i),colptrin(i+1)-colptrin(i)
       ncols=colptrin(i+1)-colptrin(i)
@@ -257,16 +268,16 @@ SUBROUTINE SPEC48_NOMC66(indata,jcn1,b1,values1,x,neleperrow,fcomm,rowptrin,colp
     maxsbcols=maxsbcols+m-colptrin(nblocks+1)
     if (teems_verbosity()>=2) print *, "row ", m,"nz ",nz,"maxcolsb ",maxsbcols
     h=1
-    data%MAXSBCOLS=maxsbcols
+    data%MAXSBCOLS=int(maxsbcols,4)
     do j = 1, m
-      data%EQPTR(j)=h
+      data%EQPTR(j)=int(h,4)
       do i = 1,neleperrow(j)
         data%EQVAR(h)=jcn1(h)
         data%VALUES(h)=values1(h)
         h=h+1
       end do
     end do
-    data%EQPTR(m+1)=h
+    data%EQPTR(m+1)=int(h,4)
     ! Also read right hand side
     do i = 1, m
       data%B(i)=b1(i)
@@ -332,11 +343,9 @@ SUBROUTINE SPEC48_NOMC66_P(indata,jcn1,b1,values1,x,neleperrow,fcomm,rowptrin,co
   use mp48_persist
   use constants
   IMPLICIT NONE
-  integer myid, numprocs
   integer (8) :: i,j,o,h
   integer (8) :: nblocks,maxsbcols,ncols
   INTEGER ERCODE,ST
-  INTEGER (4) ZDIAG
   integer (4) fcomm(*),fcomm1
   integer (4) redo(*)
   integer(4) neleperrow(*),jcn1(*)
@@ -405,9 +414,9 @@ SUBROUTINE SPEC48_NOMC66_P(indata,jcn1,b1,values1,x,neleperrow,fcomm,rowptrin,co
     nz = indata(1)
     m = indata(2)
     nblocks = indata(4)
-    pdata%NEQ=indata(2)
-    pdata%NBLOCK=nblocks
-    pdata%NE=indata(1)
+    pdata%NEQ=hsl_i4(indata(2),"NEQ")
+    pdata%NBLOCK=hsl_i4(nblocks,"NBLOCK")
+    pdata%NE=hsl_i4(indata(1),"NE")
     ! JOB=6 frees only package-allocated arrays; the user-supplied
     ! components survive it and must be released before a rebuild
     IF (ALLOCATED(pdata%NEQSB)) DEALLOCATE(pdata%NEQSB)
@@ -424,7 +433,7 @@ SUBROUTINE SPEC48_NOMC66_P(indata,jcn1,b1,values1,x,neleperrow,fcomm,rowptrin,co
     ALLOCATE(pdata%X(1:pdata%NEQ),STAT=ST )
     maxsbcols=0
     do i = 1, nblocks
-      pdata%NEQSB(i)=rowptrin(i+1)-rowptrin(i)
+      pdata%NEQSB(i)=int(rowptrin(i+1)-rowptrin(i),4) ! MP48 fields are INTEGER(4); bounded by the counts hsl_i4 checked
       if (teems_verbosity()>=2) write(*,"('nomc block ',i4,' of dimension  ',i10,' X ',i10)") &
       i,pdata%NEQSB(i),colptrin(i+1)-colptrin(i)
       ncols=colptrin(i+1)-colptrin(i)
@@ -433,16 +442,16 @@ SUBROUTINE SPEC48_NOMC66_P(indata,jcn1,b1,values1,x,neleperrow,fcomm,rowptrin,co
     maxsbcols=maxsbcols+m-colptrin(nblocks+1)
     if (teems_verbosity()>=2) print *, "row ", m,"nz ",nz,"maxcolsb ",maxsbcols
     h=1
-    pdata%MAXSBCOLS=maxsbcols
+    pdata%MAXSBCOLS=int(maxsbcols,4)
     do j = 1, m
-      pdata%EQPTR(j)=h
+      pdata%EQPTR(j)=int(h,4)
       do i = 1,neleperrow(j)
         pdata%EQVAR(h)=jcn1(h)
         pdata%VALUES(h)=values1(h)
         h=h+1
       end do
     end do
-    pdata%EQPTR(m+1)=h
+    pdata%EQPTR(m+1)=int(h,4)
     do i = 1, m
       pdata%B(i)=b1(i)
     end do
@@ -543,9 +552,9 @@ SUBROUTINE SPEC48_NOMC66_STAGE(indata,ai,aj,a,b1,fcomm,rowptrin,colptrin)
       if (a(i).ne.0) nz = nz+1
     end do
     indata(1) = nz
-    odata%NEQ=m
-    odata%NBLOCK=nblocks
-    odata%NE=nz
+    odata%NEQ=hsl_i4(m,"NEQ")
+    odata%NBLOCK=hsl_i4(nblocks,"NBLOCK")
+    odata%NE=hsl_i4(nz,"NE")
     ALLOCATE(odata%NEQSB(1:odata%NBLOCK),STAT=ST )
     ALLOCATE(odata%EQPTR(1:odata%NEQ+1),STAT=ST )
     ALLOCATE(odata%EQVAR(1:odata%NE),STAT=ST )
@@ -553,7 +562,7 @@ SUBROUTINE SPEC48_NOMC66_STAGE(indata,ai,aj,a,b1,fcomm,rowptrin,colptrin)
     ALLOCATE(odata%B(1:odata%NEQ),STAT=ST )
     maxsbcols=0
     do i = 1, nblocks
-      odata%NEQSB(i)=rowptrin(i+1)-rowptrin(i)
+      odata%NEQSB(i)=int(rowptrin(i+1)-rowptrin(i),4) ! MP48 fields are INTEGER(4); bounded by the counts hsl_i4 checked
       if (teems_verbosity()>=2) write(*,"('nomc block ',i4,' of dimension  ',i10,' X ',i10)") &
       i,odata%NEQSB(i),colptrin(i+1)-colptrin(i)
       ncols=colptrin(i+1)-colptrin(i)
@@ -561,10 +570,10 @@ SUBROUTINE SPEC48_NOMC66_STAGE(indata,ai,aj,a,b1,fcomm,rowptrin,colptrin)
     end do
     maxsbcols=maxsbcols+m-colptrin(nblocks+1)
     if (teems_verbosity()>=2) print *, "row ", m,"nz ",nz,"maxcolsb ",maxsbcols
-    odata%MAXSBCOLS=maxsbcols
+    odata%MAXSBCOLS=int(maxsbcols,4)
     h=1
     do j = 1, m
-      odata%EQPTR(j)=h
+      odata%EQPTR(j)=int(h,4)
       do i = ai(j)+1, ai(j+1)
         if (a(i).ne.0) then
           odata%EQVAR(h)=aj(i)+1
@@ -573,7 +582,7 @@ SUBROUTINE SPEC48_NOMC66_STAGE(indata,ai,aj,a,b1,fcomm,rowptrin,colptrin)
         end if
       end do
     end do
-    odata%EQPTR(m+1)=h
+    odata%EQPTR(m+1)=int(h,4)
     do i = 1, m
       odata%B(i)=b1(i)
     end do
@@ -643,7 +652,6 @@ SUBROUTINE SPEC48_NOMC66_P_CSR(indata,ai,aj,a,b1,x,fcomm,rowptrin,colptrin,redo)
   IMPLICIT NONE
   integer (8) :: i,j,o,nz,m,nblocks,maxsbcols,ncols
   INTEGER ERCODE,ST
-  INTEGER (4) ZDIAG
   integer (4) fcomm(*),fcomm1
   integer (4) redo(*)
   integer (4) ai(*),aj(*)
@@ -710,9 +718,9 @@ SUBROUTINE SPEC48_NOMC66_P_CSR(indata,ai,aj,a,b1,x,fcomm,rowptrin,colptrin,redo)
     nz = ai(m+1)
     nblocks = indata(4)
     indata(1) = nz
-    pdata%NEQ=m
-    pdata%NBLOCK=nblocks
-    pdata%NE=nz
+    pdata%NEQ=hsl_i4(m,"NEQ")
+    pdata%NBLOCK=hsl_i4(nblocks,"NBLOCK")
+    pdata%NE=hsl_i4(nz,"NE")
     IF (ALLOCATED(pdata%NEQSB)) DEALLOCATE(pdata%NEQSB)
     IF (ALLOCATED(pdata%EQPTR)) DEALLOCATE(pdata%EQPTR)
     IF (ALLOCATED(pdata%EQVAR)) DEALLOCATE(pdata%EQVAR)
@@ -727,7 +735,7 @@ SUBROUTINE SPEC48_NOMC66_P_CSR(indata,ai,aj,a,b1,x,fcomm,rowptrin,colptrin,redo)
     ALLOCATE(pdata%X(1:pdata%NEQ),STAT=ST )
     maxsbcols=0
     do i = 1, nblocks
-      pdata%NEQSB(i)=rowptrin(i+1)-rowptrin(i)
+      pdata%NEQSB(i)=int(rowptrin(i+1)-rowptrin(i),4) ! MP48 fields are INTEGER(4); bounded by the counts hsl_i4 checked
       if (teems_verbosity()>=2) write(*,"('nomc block ',i4,' of dimension  ',i10,' X ',i10)") &
       i,pdata%NEQSB(i),colptrin(i+1)-colptrin(i)
       ncols=colptrin(i+1)-colptrin(i)
@@ -735,7 +743,7 @@ SUBROUTINE SPEC48_NOMC66_P_CSR(indata,ai,aj,a,b1,x,fcomm,rowptrin,colptrin,redo)
     end do
     maxsbcols=maxsbcols+m-colptrin(nblocks+1)
     if (teems_verbosity()>=2) print *, "row ", m,"nz ",nz,"maxcolsb ",maxsbcols
-    pdata%MAXSBCOLS=maxsbcols
+    pdata%MAXSBCOLS=int(maxsbcols,4)
     do j = 1, m+1
       pdata%EQPTR(j)=ai(j)+1
     end do
@@ -819,7 +827,7 @@ SUBROUTINE SPEC51M_RANK(INSIZE,CNTL6,IRN,JCN,VA,IRNA,JCNA,KEEP,W,IW)
   integer (4) INSIZE(*)
   integer (4) JCN(*),IRN(*),JCNA(*),IRNA(*),KEEP(*),IW(*)
   real (kind=DPC) VA(*),CNTL6(*),W(*)
-  integer I,LA, MAXN,RANK1,SGNDET,T,NEFAC
+  integer LA,MAXN,RANK1,SGNDET,NEFAC
   real (kind=DPC) LOGDET
   real (kind=DPC), pointer :: CNTL(:),RINFO(:)!,W(:),A(:),
   integer, pointer :: ICNTL(:),INFO(:)!,IW(:),KEEP(:),JCN1(:),IRN1(:),COLS(:),ROWS(:)
@@ -992,8 +1000,8 @@ SUBROUTINE SPEC48M_MSOL(INSIZE,IRN,JCN,VA,B,X,IRNC,JCNC,VAC,IRNB,JCNB,VALUESB,VE
   real(kind=DPC) VA(*),VAC(*),B(*),X(*),VALUESB(*),VECBIVI(*)
   !DOUBLE PRECISION LOGDET,SGNDET!,VAV(*)real (8)
   integer LA, MAXN,NBIVI,MBIVI
-  integer(4) I,J,L,L1,L2,L3,L4,L5,M0,M1,M2,M3,M4,M5,MB,NB,NEB,J2,J3
-  LOGICAL TRANS,checksol
+  integer(4) I,J,L,L2,L3,MB,NB,NEB,J2,J3
+  LOGICAL TRANS
   real(kind=DPC), pointer :: CNTL(:),RINFO(:),W(:),ERROR1(:),SOL(:)!,VOUT(:)!,RHS(:)A(:),
   integer, pointer :: ICNTL(:),INFO(:),IW(:),JCNB1(:)!,IRNOUT(:),JCNOUT(:)!,JCN1(:),IRN1(:)
   M=INSIZE(1)
@@ -1208,8 +1216,8 @@ SUBROUTINE SPEC48M_MSOL_P(INSIZE,IRN,JCN,VA,B,X,IRNC,JCNC,VAC,IRNB,JCNB,VALUESB,
   integer M,N,NE,T,NC,MC,NEC,RANK,J1
   real(kind=DPC) VA(*),VAC(*),B(*),X(*),VALUESB(*),VECBIVI(*)
   integer LA, MAXN,NBIVI,MBIVI
-  integer(4) I,J,L,L1,L2,L3,L4,L5,M0,M1,M2,M3,M4,M5,MB,NB,NEB,J2,J3
-  LOGICAL TRANS,checksol
+  integer(4) I,J,L,L2,L3,MB,NB,NEB,J2,J3
+  LOGICAL TRANS
   real(kind=DPC), pointer :: CNTL(:),RINFO(:),W(:),ERROR1(:),SOL(:)
   integer, pointer :: ICNTL(:),INFO(:),IW(:),JCNB1(:)
   M=INSIZE(1)
@@ -1442,7 +1450,7 @@ SUBROUTINE SPEC48M_ESOL(INSIZE,IRN,VA,KEEP,B,SOL)
   integer(4) INSIZE(*),IRN(*),KEEP(*)
   integer M,N,NE
   real (kind=DPC) VA(*),B(*),SOL(*)
-  integer LA, MAXN,I
+  integer LA,MAXN
   real (kind=DPC), pointer :: CNTL(:),RINFO(:),W(:),ERROR1(:)
   integer, pointer :: ICNTL(:),INFO(:),IW(:)
   LOGICAL TRANS
@@ -1493,15 +1501,15 @@ call teems_apply_ma48u(CNTL)
 END SUBROUTINE SPEC48M_ESOL
 
 
-SUBROUTINE SPEC48M_RPESOL(INSIZE,IRN,VA,KEEP,B,SOL,CNTL,RINFO,ERROR1,ICNTL,INFO,W,IW)
+SUBROUTINE SPEC48M_RPESOL(INSIZE,IRN,VA,KEEP,B,SOL,CNTL,ERROR1,ICNTL,INFO,W,IW)
   use constants
   IMPLICIT NONE
 
   integer NEFAC,JOB
   integer(4) INSIZE(*),IRN(*),KEEP(*),ICNTL(*),INFO(*),IW(*)
-  integer M,N,NE
+  integer N,NE
   real(kind=DPC) VA(*),B(*),SOL(*)
-  real(kind=DPC) CNTL(*),RINFO(*),W(*),ERROR1(*)
+  real(kind=DPC) CNTL(*),W(*),ERROR1(*)
   integer LA!, MAXN,I
   LOGICAL TRANS
   N=INSIZE(2)
@@ -1548,9 +1556,9 @@ SUBROUTINE SPEC48_SSOL2LA(INSIZE,IRN,JCN,VA,B,X)
   integer(4) INSIZE(*)
   integer M,N,NE,T
   real(kind=DPC) VA(*),B(*),X(*)
-  integer I,J,L,LA, MAXN,SGNDET!,IFAIL,LP,II
-  LOGICAL TRANS,checksol
-  real(kind=DPC), pointer :: CNTL(:),RINFO(:),W(:),ERROR1(:),LOGDET!A(:),,R(:),C(:)!,RHS(:),SOL(:)
+  integer I,LA,MAXN!,IFAIL,LP,II
+  LOGICAL TRANS
+  real(kind=DPC), pointer ::CNTL(:),RINFO(:),W(:),ERROR1(:)!A(:),,R(:),C(:)!,RHS(:),SOL(:)
   integer, pointer :: ICNTL(:),INFO(:),IW(:),KEEP(:)!,JCN1(:),IRN1(:)
   ! Runge-Kutta stage solves under adaptive control ask for a soft
   ! failure (INSIZE(5) = INFO(1), no abort) so the driver can retry
@@ -2004,9 +2012,9 @@ SUBROUTINE SPEC48M_SSOL2LA(INSIZE,IRN,JCN,VA,B,X)
   integer(4) INSIZE(*)
   integer M,N,NE,T
   real(kind=DPC) VA(*),B(*),X(*)
-  integer I,J,L,LA, MAXN,SGNDET!,IFAIL,LP,II
-  LOGICAL TRANS,checksol
-  real(kind=DPC), pointer :: CNTL(:),RINFO(:),W(:),ERROR1(:),LOGDET!A(:),,R(:),C(:)!,RHS(:),SOL(:)
+  integer LA,MAXN!,IFAIL,LP,II
+  LOGICAL TRANS
+  real(kind=DPC), pointer ::CNTL(:),RINFO(:),W(:),ERROR1(:)!A(:),,R(:),C(:)!,RHS(:),SOL(:)
   integer, pointer :: ICNTL(:),INFO(:),IW(:),KEEP(:)!,JCN1(:),IRN1(:)
   M=INSIZE(1)
   N=INSIZE(2)
@@ -2216,25 +2224,27 @@ SUBROUTINE MY_SPAR_ADD4L(VECBIVI1,BIVIINDX1,IRN,JCN,NZ1,VECBIVI0,BIVIINDX0,NZ0,N
   INTEGER(8) NZ0(*),NZ1(*),NZ2(*)
   INTEGER(8) BIVIINDX0(0:NZ0(1)),BIVIINDX1(0:NZ2(1))
   INTEGER(8) j,i,l,ncol
+  ! IRN/JCN are the INTEGER(4) row/column indices MA48 takes; the int(,4)
+  ! below narrows an INTEGER(8) linear index already bounded by nrow*ncol
   ncol=NCOL1(1)
   j=NZ0(1)
   i=NZ1(1)
   do l=NZ2(1),1,-1
     if(BIVIINDX1(i).LT.BIVIINDX0(j)) then
       VECBIVI1(l)=VECBIVI0(j)
-          IRN(l)=BIVIINDX0(j)/ncol+1
-          JCN(l)=MOD(BIVIINDX0(j),ncol)+1
+          IRN(l)=int(BIVIINDX0(j)/ncol+1,4)
+          JCN(l)=int(MOD(BIVIINDX0(j),ncol)+1,4)
       j=j-1
     else if(BIVIINDX1(i).EQ.BIVIINDX0(j)) then
       VECBIVI1(l)=VECBIVI1(i)+VECBIVI0(j)
-          IRN(l)=BIVIINDX0(j)/ncol+1
-          JCN(l)=MOD(BIVIINDX0(j),ncol)+1
+          IRN(l)=int(BIVIINDX0(j)/ncol+1,4)
+          JCN(l)=int(MOD(BIVIINDX0(j),ncol)+1,4)
       j=j-1
       i=i-1
     else
       VECBIVI1(l)=VECBIVI1(i)
-          IRN(l)=BIVIINDX1(i)/ncol+1
-          JCN(l)=MOD(BIVIINDX1(i),ncol)+1
+          IRN(l)=int(BIVIINDX1(i)/ncol+1,4)
+          JCN(l)=int(MOD(BIVIINDX1(i),ncol)+1,4)
       i=i-1
     end if
   end do
@@ -2281,17 +2291,13 @@ SUBROUTINE PREP48_ALU1(INSIZE,IRN,JCN,VA,W,IW,KEEP)
   IMPLICIT NONE
   integer NEFAC,JOB
   integer(4) JCN(*),IRN(*),INSIZE(*),IW(*),KEEP(*)
-  integer M,N,NE,T,RANK,J1,J
+  integer M,N,NE,T,RANK,J1
   real(kind=DPC) VA(*),W(*)
   real(kind=DPC) LA1
-  logical isopen
   !DOUBLE PRECISION LOGDET,SGNDET
   integer LA, MAXN
   real(kind=DPC), pointer :: CNTL(:),RINFO(:)
   integer, pointer :: ICNTL(:),INFO(:)
-  character(len=1024) :: filename
-  character(len=512) :: scrdir
-  integer :: slen
   M=INSIZE(1)
   N=INSIZE(2)
   NE=INSIZE(3)
@@ -2393,13 +2399,10 @@ SUBROUTINE PREP48M_MSOL(INSIZE,IRN,JCN,VA,IRNC,JCNC,VAC,IRNB,JCNB,VALUESB,VECBIV
   real(kind=DPC) VA(*),VAC(*),VALUESB(*),VECBIVI(*),SOL(*),B(*),W(*)
   !DOUBLE PRECISION LOGDET,SGNDET!,VAV(*)real (8)
   integer LA, MAXN,NBIVI,MBIVI
-  integer(4) I,J,L,L1,L2,L4,L5,M0,M1,M2,M3,M4,M5,MB,NB,NEB,J2,J3
-  LOGICAL TRANS,checksol,isopen
+  integer(4) I,J,L,L2,MB,NB,NEB,J2,J3
+  LOGICAL TRANS
   real(kind=DPC), pointer :: CNTL(:),RINFO(:),ERROR1(:)!,VOUT(:)!,RHS(:)A(:),,SOL(:),B(:),W(:)
   integer, pointer :: ICNTL(:),INFO(:)!,IRNOUT(:),JCNOUT(:)!,JCN1(:),IRN1(:),JCNB1(:),IW(:),KEEP(:)
-  character(len=1024) :: filename
-  character(len=512) :: scrdir
-  integer :: slen
   M=INSIZE(1)
   N=INSIZE(2)
   NE=INSIZE(3)
@@ -2585,7 +2588,7 @@ SUBROUTINE PREP48M_MSOL_P(INSIZE,IRN,JCN,VA,IRNC,JCNC,VAC,IRNB,JCNB,VALUESB,VECB
   integer M,N,NE,T,NC,MC,NEC,RANK,J1
   real(kind=DPC) VA(*),VAC(*),VALUESB(*),VECBIVI(*),SOL(*),B(*),W(*)
   integer LA, MAXN,NBIVI,MBIVI
-  integer(4) I,J,L,L1,L2,L4,L5,M0,M1,M2,M3,M4,M5,MB,NB,NEB,J2,J3
+  integer(4) I,J,L,L2,MB,NB,NEB,J2,J3
   LOGICAL TRANS
   real(kind=DPC), pointer :: CNTL(:),RINFO(:),ERROR1(:)
   integer, pointer :: ICNTL(:),INFO(:)

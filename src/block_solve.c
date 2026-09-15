@@ -4032,7 +4032,7 @@ bool ndbbd_block_solve_mem(PetscInt rank, int begmat,int nreg,int * insize,int i
       PetscInt n1=insize[j],k;
       for(k=0; k<n1; k++)if(b01[k]!=0)break;
       if(k==n1)memset(sol1,0,n1*sizeof(solve_real));
-      else spec48m_rpesol_(insize1,irnereg[j2],valereg[j2],keepreg[j2],b01,sol1,cntl,rinfo,error1,icntl,info,w,iw);//insize+j
+      else spec48m_rpesol_(insize1,irnereg[j2],valereg[j2],keepreg[j2],b01,sol1,cntl,error1,icntl,info,w,iw);//insize+j
     }
     b01+=insize[j];
     sol1+=insize[j];
@@ -4050,7 +4050,7 @@ bool ndbbd_block_solve_mem(PetscInt rank, int begmat,int nreg,int * insize,int i
   }
   j2=j1-begmat;//-begmat;
   insize1=insize+j1*insizes;
-  spec48m_rpesol_(insize1,irnereg[j2],valereg[j2],keepreg[j2],b01,sol1,cntl,rinfo,error1,icntl,info,w,iw);//insize+j1*insizes
+  spec48m_rpesol_(insize1,irnereg[j2],valereg[j2],keepreg[j2],b01,sol1,cntl,error1,icntl,info,w,iw);//insize+j1*insizes
   sol2=sol;
   b03=b;
   for (j1=begmat; j1<nreg+begmat; j1++) {
@@ -4063,7 +4063,7 @@ bool ndbbd_block_solve_mem(PetscInt rank, int begmat,int nreg,int * insize,int i
     nrow=submatCij[j1][0]->rmap->n;
     spar_mulnoadd_(sol1,&nrow,&nz,ai,aj,vals,b02);
     insize1=insize+j1*insizes;
-    spec48m_rpesol_(insize1,irnereg[j2],valereg[j2],keepreg[j2],b02,b03,cntl,rinfo,error1,icntl,info,w,iw);//insize+j1*insizes
+    spec48m_rpesol_(insize1,irnereg[j2],valereg[j2],keepreg[j2],b02,b03,cntl,error1,icntl,info,w,iw);//insize+j1*insizes
     for(j=0; j<nrow; j++)sol2[j]-=b03[j];
     sol2+=nrow;
   }
