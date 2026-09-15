@@ -338,25 +338,22 @@ static void ndbbd_fac_emit(int rank,int idx,int *irn,int *keep,solve_real *va,lo
 }
 
 int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscInt Istart, PetscInt Iend,int *row_order,int *col_order, offset_t ndblock,int *block_sizes, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laD,PetscReal cntl3) {//,bool iter
-  IS *rowindices,*colindices,*Cindices,*Bindices,*BBindices,*BBiindices;
+  IS *rowindices,*colindices,*Cindices,*Bindices,*BBindices;
   const PetscInt *nindices;
-  PetscInt bfirst,bend,sblockin,nmatin,nmatinplus,nrowcolin,sumrowcolin,i,i1,j,j0,j1,j2,j3,j4,j5,j6,l0,l1,l2,l3,l4,l5,rank1,proc1=0,nnzmax,j1nz,j1irnbs;
-  Mat *submatA,*submatC,*submatB,*submatD,submatBT,submatCT,*submatBB;
-  Vec vecxd;
+  PetscInt bfirst,bend,nmatin,nmatinplus,sumrowcolin,i,j,j1,j2,j3,j6,proc1=0;
+  Mat *submatA,*submatC,*submatB,*submatD,submatCT,*submatBB;
   PetscInt *ai,*aj,*aic,*ajc;
-  PetscInt nrow,ncol,nz,nrowc,ncolc,nrowb,ncolb,nzc,nzv;
+  PetscInt nrow,ncol,nz,nrowc,ncolc,nrowb,ncolb,nzc;
   offset_t lasize,ldsize;
   MPI_Status   status;
   clock_t timestr,timeend;
-  int j2int,la1;
+  int la1;
   size_t freadresult;
-  PetscScalar *vals,*valsc,vecval;
-  solve_real vval;
+  PetscScalar *vals,*valsc;
   PetscErrorCode ierr;
-  PetscViewer viewer;
   FILE* fp1,*fp2,*fp3;
   int *begblock= (int *) calloc (mpisize,sizeof(int));
-  char filename[1024],rankname[1024],j1name[1024],tempchar[1024];//,fn1[1024],fn2[1024],fn3[1024]
+  char filename[1024],rankname[1024],j1name[1024];//,fn1[1024],fn2[1024],fn3[1024]
   if(rank<10)strcpy(rankname,"000");
   if(rank<100&&rank>9)strcpy(rankname,"00");
   if(rank<1000&&rank>99)strcpy(rankname,"0");
@@ -1034,7 +1031,7 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
   obiviindx1[0]=-1;
   biviindx1=obiviindx1;
   biviindx1++;
-  long int nz0,nz1,nz2,nz3=lj,halfj2;
+  long int nz0,nz1,nz3=lj;
   long int lj2=0;
   for(li=0; li<vecbivisize; ++li) {
     if(vecbivi[li]!=0) {
@@ -1048,8 +1045,7 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
   vecbivi=realloc(vecbivi,lj2*sizeof(solve_real));
   nz0=lj2;
   logmsg(2,"lj %ld lj2 %ld rank %d nz0 %ld nz3 %ld\n",lj,lj2,rank,nz0,nz3);
-  char processor_name[MPI_MAX_PROCESSOR_NAME];
-  int name_len,name_len_max,name_beg,class_size,color,group_size,node_rank,group_size1,group_size11,node_tail_rank;
+  int color,group_size,node_rank,group_size1,group_size11,node_tail_rank;
   MPI_Comm_rank( node_comm, &node_rank);
   MPI_Comm_size(node_comm,&group_size);
   if(node_rank==group_size-1)color=1;
@@ -1442,32 +1438,26 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
 
 int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscInt Istart, PetscInt Iend,int *row_order,int *col_order, offset_t ndblock,offset_t nreg,offset_t ntime,int *block_sizes, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laDi,dim_t laD,PetscReal cntl3,PetscReal cntl6,PetscBool presol) {//,bool iter
   IS *rowindices=NULL,*colindices=NULL,*colindicesbc1=NULL,*rowBBij=NULL,*colBBij=NULL;//,*colindicesbcpm,*colindicesbcpm1
-  PetscInt bfirst,bend,sblockin,nmatin,nmatinplus,nmatint,nmatinplust,nmatminust,nrowcolin,i,i1,j,j0,j1,j2,j3,j4,j5,j6,j7,l0,l1,l2,l3,l4,l5,rank1,proc1=0,nnzmax,j1nz,j1irnbs;//,sumrowcolin
+  PetscInt bfirst,nmatin,nmatinplus,nmatint,nmatinplust,nmatminust,i,j,j1,j2,j3,j4;//,sumrowcolin
   Mat *submatAij=NULL,*submatBBij=NULL;//,*submatCij,*submatBij;,*submatB
-  Vec vecxd;
-  PetscInt *ai,*aj,*a1i,*a1j,*a2i,*a2j,*aic,*ajc;
+  PetscInt *ai,*aj,*aic,*ajc;
   PetscReal cntl6in;
   offset_t lasize,ldsize;
-  size_t freadresult,fwrt;
-  PetscInt nrow,ncol,nz,nrowc,ncolc,nrowb,ncolb,nzc,nzv;
-  MPI_Status   status;
-  int j2int,la1,fd1,fd2,fd3,unequal=0;
-  bool ifremove=false;
-  PetscScalar *vals,*val1s,*val2s,*valsc,vecval;
-  solve_real vval;
+  size_t fwrt;
+  PetscInt nrow,ncol,nz,nrowc,ncolc,nrowb,ncolb,nzc;
+  int unequal=0;
+  PetscScalar *vals,*valsc;
   PetscErrorCode ierr;
-  PetscViewer viewer;
   FILE* presolfile;
   int *begblock= (int *) calloc (mpisize,sizeof(int));
   int *ndblockinrank= (int *) calloc (mpisize,sizeof(int));
-  char filename[1024],rankname[1024],j1name[1024],tempchar[1024];//,fn1[1024],fn2[1024],fn3[1024]
+  char filename[1024],rankname[1024],j1name[1024];//,fn1[1024],fn2[1024],fn3[1024]
   if(rank<10)strcpy(rankname,"000");
   if(rank<100&&rank>9)strcpy(rankname,"00");
   if(rank<1000&&rank>99)strcpy(rankname,"0");
   if(rank>=1000)rankname[0]='\0';
   sprintf(filename, "%d",rank);
   strcat(rankname,filename);
-  int nmatinBB=1;
   nmatint=(offset_t)ntime/mpisize;
   if(nmatint*mpisize<ntime)unequal=1;
   nmatminust=nmatint;
@@ -1705,7 +1695,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
 
   int bivirowsize=1,bivicolsize=1,bbrowij,ddrowi;
   long int vecbivisize=0,li,lj;//,halfvec;
-  long int nz0,nz1,nz2,nz3=j,halfj2;
+  long int nz0,nz1;
   long int lj2;
   int jthrd,nthrd;
   ndbbd_cut_iface_init(nmatint);
@@ -1768,7 +1758,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
     snprintf(detail,sizeof(detail),"dense interface product %.2f GB, Schur staging %.2f GB, MA48 workspace %.2f GB",dense_b/1073741824.0,stage_b/1073741824.0,ws_b/1073741824.0);
     ndthr=ndbbd_team_cap(0,"presolve",ndthr,dense_b+stage_b+ws_b+small_b,detail,rank);
   }
-  #pragma omp parallel num_threads(ndthr) private(jthrd,nthrd,j3,j4,bivirowsize,bivicolsize,bbrowij,ai,nz,nrow,i,j,j1,j2,li,lj,ddrowi,vecbivisize,aic,ajc,valsc,nzc,nrowc,ncolc,ncolb,nrowb,aj,vals,lj2,nz0,j1name,filename,presolfile,fwrt,fd1,nz1,cntl6in,ncol,lasize,ldsize) shared(insize,submatAij,submatBij,submatCij)
+  #pragma omp parallel num_threads(ndthr) private(jthrd,nthrd,j3,j4,bivirowsize,bivicolsize,bbrowij,ai,nz,nrow,i,j,j1,j2,li,lj,ddrowi,vecbivisize,aic,ajc,valsc,nzc,nrowc,ncolc,ncolb,nrowb,aj,vals,lj2,nz0,j1name,filename,presolfile,fwrt,nz1,cntl6in,ncol,lasize,ldsize) shared(insize,submatAij,submatBij,submatCij)
   {
   long int *bivinzrow=NULL,irnmems=0;//(long int *) calloc (1,sizeof(long int));
   PetscInt *bivinzcol=NULL;//(PetscInt *) calloc (1,sizeof(PetscInt));
@@ -2272,7 +2262,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
     snprintf(detail,sizeof(detail),"interface staging %.2f GB (%ld entries at laDi %ld of %ld nz), MA51 workspace %.2f GB",stage_b/1073741824.0,(long)ld,(long)laDi,nz1max_all,ws_b/1073741824.0);
     ndthr2=ndbbd_team_cap(1,"interface-rank",ndthr2,stage_b+ws_b,detail,rank);
   }
-  #pragma omp parallel num_threads(ndthr2) private(jthrd,nthrd,j3,j4,ai,nz,nrow,i,j,j1,j2,li,lj,aj,vals,lj2,nz0,j1name,filename,presolfile,fwrt,fd1,nz1,cntl6in,ncol,lasize,ldsize) shared(insize,submatAij,submatBij,submatCij)
+  #pragma omp parallel num_threads(ndthr2) private(jthrd,nthrd,j3,j4,ai,nz,nrow,i,j,j1,j2,li,lj,aj,vals,lj2,nz0,j1name,filename,presolfile,fwrt,nz1,cntl6in,ncol,lasize,ldsize) shared(insize,submatAij,submatBij,submatCij)
   {
   int *irn=NULL,*jcn=NULL,*irn1=NULL,*jcn1=NULL,*keep=NULL,*iw51=NULL;
   solve_real *vecbivi=NULL,*w51=NULL;
@@ -2528,32 +2518,28 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
 
 
 int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscInt Istart, PetscInt Iend,int *row_order,int *col_order, offset_t ndblock,offset_t nreg,offset_t ntime,int *block_sizes, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laDi,dim_t laD,PetscReal cntl3,PetscReal cntl6,PetscBool presol) {//,bool iter
-  IS *rowindices=NULL,*colindices=NULL,*rowindicesbc=NULL,*colindicesbc1=NULL,*colindicesbc2=NULL,*Cindices=NULL,*Bindices=NULL,Cindicesc,Bindicesc,*BBindices=NULL,*BBiindices=NULL,*rowBBij=NULL,*colBBij=NULL;//,*colindicesbcpm,*colindicesbcpm1
+  IS *rowindices=NULL,*colindices=NULL,*rowindicesbc=NULL,*colindicesbc1=NULL,*colindicesbc2=NULL,*Cindices=NULL,*Bindices=NULL,Cindicesc,Bindicesc,*BBindices=NULL,*rowBBij=NULL,*colBBij=NULL;//,*colindicesbcpm,*colindicesbcpm1
   const PetscInt *nindices;
-  PetscInt bfirst,bend,sblockin,nmatin,nmatinplus,nmatint,nmatinplust,nmatminust,nrowcolin,sumrowcolin,i,i1,j,j0,j1,j2,j3,j4,j5,j6,j7,l0,l1,l2,l3,l4,l5,rank1,proc1=0,nnzmax,j1nz,j1irnbs;
-  Mat *submatAij=NULL,*submatC=NULL,*submatD=NULL,*submatBB=NULL,*submatBBij=NULL;//,*submatCij,*submatBij;,*submatB
-  Vec vecxd;
+  PetscInt bfirst,bend,nmatin,nmatinplus,nmatint,nmatinplust,nmatminust,sumrowcolin,i,j,j1,j2,j3,j4,j6,proc1=0;
+  Mat *submatC=NULL,*submatD=NULL,*submatBB=NULL,*submatBBij=NULL;//,*submatCij,*submatBij;,*submatB
   PetscInt *ai,*aj,*a1i,*a1j,*a2i,*a2j,*aic,*ajc;
-  PetscReal cntl6in;
   offset_t ldsize;
   long int *biviindx1,*biviindx0,j7l;
   long int *obiviindx1= NULL;//(long int*)calloc(1,sizeof(long int));
   long int *obiviindx0= NULL;//(long int*)calloc(1,sizeof(long int));
-  size_t freadresult,fwrt,frd;
-  PetscInt nrow,ncol,nz,nrowc,ncolc,nrowb,ncolb,nzc,nzv;
+  size_t freadresult,frd;
+  PetscInt nrow,ncol,nz,nrowc,ncolc,nrowb,ncolb,nzc;
   MPI_Status   status;
   clock_t timestr,timeend;
-  int j2int,la1,colcut,rowcut,jthrd,nthrd=1,unequal=0;
+  int la1,jthrd,nthrd=1,unequal=0;
   nthrd=omp_get_max_threads( );
-  bool ifremove=false,iterstop;
-  PetscScalar *vals,*val1s,*val2s,*valsc,vecval;
-  solve_real vval;
+  bool ifremove=false;
+  PetscScalar *vals,*val1s,*val2s,*valsc;
   PetscErrorCode ierr;
-  PetscViewer viewer;
-  FILE* fp1,*fp2,*fp3,*presolfile;
+  FILE *presolfile;
   int *begblock= (int *) calloc (mpisize,sizeof(int));
   int *ndblockinrank= (int *) calloc (mpisize,sizeof(int));
-  char filename[1024],rankname[1024],j1name[1024],tempchar[1024];//,fn1[1024],fn2[1024],fn3[1024]
+  char filename[1024],rankname[1024],j1name[1024];//,fn1[1024],fn2[1024],fn3[1024]
   if(rank<10)strcpy(rankname,"000");
   if(rank<100&&rank>9)strcpy(rankname,"00");
   if(rank<1000&&rank>99)strcpy(rankname,"0");
@@ -2984,14 +2970,13 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
   long int *bivinzrow=NULL;//(long int *) calloc (1,sizeof(long int));
   PetscInt *bivinzcol=NULL;//(PetscInt *) calloc (1,sizeof(PetscInt));
   PetscReal *ccolnorms=NULL;//(PetscReal *) calloc (1,sizeof(PetscReal));
-  int bivirowsize=1,bivicolsize=1,bbrowij,ddrowi;
+  int bivirowsize=1,bivicolsize=1;
   long int vecbivisize=0,li,lj;//,halfvec;
   solve_real *xi1point;
   long int *bivinzrow1=NULL;//(long int *) calloc (1,sizeof(long int));
   long int *bivinzcol1=NULL;//(long int *) calloc (1,sizeof(long int));
   offset_t xi1indx=0;
   long int nz0=0,nz1,nz3;//,nz2,halfj2;
-  int fd1,fd2,fd3,frrsl1,frrsl2,frrsl3;
   teems_stage_mark("solve:interface-factor");
   /* Region 3: interface factorization.  Per thread the staged interface
      triplet at laDi percent plus a pristine copy of it for the
@@ -3012,7 +2997,7 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
     ndthr3=ndbbd_team_cap(2,"interface-factor",section_threads,stage_b+copy_b+ws_b,detail,rank);
   }
   omp_set_num_threads(section_threads);
-  #pragma omp parallel num_threads(ndthr3) private(jthrd,nthrd,j4,j1name,filename,frd,fd1,nrow,ncol,i,j,presolfile,nz,nz1,cntl6in,fwrt,ldsize,j3) shared(insize)
+  #pragma omp parallel num_threads(ndthr3) private(jthrd,nthrd,j4,j1name,filename,frd,nrow,ncol,i,j,presolfile,nz,nz1,ldsize,j3) shared(insize)
   {
   int windx=0,bindx,eindx;
   long int insizeda0=0,insizeda1=0,insizeda2=0;
@@ -3339,7 +3324,7 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
     snprintf(detail,sizeof(detail),"chain-block factors %.2f GB%s, border transpose %.2f GB, B rows %.2f GB, workspace %.2f GB",fac_max/1073741824.0,resident?" (resident, aliased)":"",ct_b/1073741824.0,b12_b/1073741824.0,ws_b/1073741824.0);
     ndthr4=ndbbd_team_cap(3,"schur",max_threads,fac_max+ct_b+b12_b+ws_b,detail,rank);
   }
-  #pragma omp parallel num_threads(ndthr4) private(jthrd,timestr,aic,ajc,valsc,nrowc,ncolc,a1i,a1j,val1s,nz,a2i,a2j,val2s,nrowb,ncolb,i,j,j2,xi1point,xi1indx,maxrowcij,la1,fp1,fp2,fp3,freadresult,frrsl1,frrsl2,frrsl3,longsize,nzc) shared(submatC,submatB1,submatB2,xi1,submatCij,submatBij,insize,yi1,vecbivi,vecbiui)
+  #pragma omp parallel num_threads(ndthr4) private(jthrd,timestr,aic,ajc,valsc,nrowc,ncolc,a1i,a1j,val1s,nz,a2i,a2j,val2s,nrowb,ncolb,i,j,j2,xi1point,xi1indx,maxrowcij,la1,freadresult,longsize,nzc) shared(submatC,submatB1,submatB2,xi1,submatCij,submatBij,insize,yi1,vecbivi,vecbiui)
   {
   int icntl[20],info[20];
   solve_real cntl[10],rinfo[10],error1[3];
@@ -3910,9 +3895,9 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
 
 bool ndbbd_block_solve(PetscInt rank, int begmat,int nreg,int * insize,int insizes, Mat **submatCij,Mat **submatBij,solve_real *b,solve_real *sol,bool ifremove,char** fn01,char** fn02, char** fn03) {
   FILE* fp1,*fp2,*fp3;
-  PetscScalar *vals,*valsc,vecval;
-  PetscInt *ai,*aj,*aic,*ajc,nrow,nz,maxrowcij;//,ncol
-  PetscInt i,j,j1,j2,indx01,la1;
+  PetscScalar *vals;
+  PetscInt *ai,*aj,nrow,nz,maxrowcij;//,ncol
+  PetscInt j,j1,j2,la1;
   solve_real *b01,*b03,*sol1,*sol2;
   size_t freadresult;
   int *irne= NULL;//(int*)calloc(1,sizeof(int));
@@ -3921,7 +3906,6 @@ bool ndbbd_block_solve(PetscInt rank, int begmat,int nreg,int * insize,int insiz
   maxrowcij=0;
   b01=b;
   sol1=sol;
-  int fd1,fd2,fd3,frrsl1,frrsl2,frrsl3;
   for (j1=begmat; j1<nreg+begmat; j1++) {
     j2=j1*insizes;//-begmat;
     if((submatCij[j1][0]->rmap->n)>maxrowcij)maxrowcij=submatCij[j1][0]->rmap->n;
@@ -4032,7 +4016,7 @@ bool ndbbd_block_solve(PetscInt rank, int begmat,int nreg,int * insize,int insiz
 bool ndbbd_block_solve_mem(PetscInt rank, int begmat,int nreg,int * insize,int insizes, Mat **submatCij,Mat **submatBij,solve_real *b,solve_real *sol,int** irnereg,int** keepreg,solve_real** valereg,solve_real *cntl,solve_real *rinfo,solve_real *error1,int *icntl,int *info,solve_real *w,int *iw,solve_real *b02) {
   PetscScalar *vals;//,*valsc;//,vecval;
   PetscInt *ai,*aj,nrow,nz;//,ncol,*aic,*ajc
-  PetscInt i,j,j1,j2;//,indx01,la1;
+  PetscInt j,j1,j2;//,indx01,la1;
   solve_real *b01,*b03,*sol1,*sol2;//,*b02
   int * insize1;
   b01=b;
@@ -4176,7 +4160,7 @@ int reduce_to_rank(solve_real *vecbivi,fortran_int vecbivisize,PetscInt mpisize,
 int reduce_to_rank_nocompress(solve_real *vecbivi,fortran_int vecbivisize,PetscInt mpisize,PetscInt rank,PetscInt targetrank) {
   if(mpisize==1)return 0;
   MPI_Status   status;
-  int i,j,j1,j2,j3;
+  int i,j1;
   solve_real *vecbivi0= (solve_real *) calloc (1,sizeof(solve_real));
 
   if(rank==targetrank) {
