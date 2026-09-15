@@ -150,7 +150,7 @@ int datafile_read_header_info(char *varname, char *filename,dim_t *vsize, char *
 int datafile_read_labels(char *varname, char *filename,dim_t d1, datafile_labels *record) {
   FILE * dfile;
   char line[DATREADLINE],header[NAMESIZE],varnamecpy[NAMESIZE];
-  dim_t nlength=0,nhead=0,reccount = 0, count1=0,i;
+  dim_t nlength=0,nhead=0,reccount = 0,count1=0;
   char *readitem=NULL;
   strcpy(varnamecpy,varname);
   str_delete_char(varnamecpy,' ');
@@ -618,7 +618,6 @@ static int tab_preprocess_run(char *filename, char *newtabfile) {
   FILE * filehandle,*fout;
   char line[TABREADLINE]="\0",line1[TABREADLINE],line2[TABREADLINE],indx[NAMESIZE],indx1[NAMESIZE],indx2[NAMESIZE],*readitem,*readitem1,commsyntax[NAMESIZE],readline[TABREADLINE],readline1[TABREADLINE],*n,newtabfile1[TABREADLINE];
   char setname[NAMESIZE],newset[NAMESIZE],varname[NAMESIZE],*n1,setelement[TABREADLINE];//,*ne,*np;//,*n2;
-  char msetele[MAXVARDIM][NAMESIZE],msetsymb[MAXVARDIM][NAMESIZE],mset[MAXVARDIM][NAMESIZE];
   char assertmsg[TABREADLINE],*am1,*am2;
   char rawline[TABLINESIZE],*rawpos;
   filehandle = fopen(filename,"r");
@@ -626,7 +625,7 @@ static int tab_preprocess_run(char *filename, char *newtabfile) {
     printf("Error: cannot open %s\n",filename);
     return -1;
   }
-  int check,i1,i2,i,setindx,varindx,l1,l2,l3,l4,k1,k2,j,j1,j2,l5;//,necheck,npcheck;//,j;,check1
+  int check,i1,i2,i,setindx,varindx,l1,l2,l3,l4,k1,k2,j1,j2,l5;//,necheck,npcheck;//,j;,check1
   strcpy(newtabfile1,newtabfile);
   str_replace_all(newtabfile1,".","1.");
   fout = fopen(newtabfile1,"w");
@@ -1107,9 +1106,9 @@ static int tab_preprocess_run(char *filename, char *newtabfile) {
 
 int outputs_write_csv(char *filename, char *newdatlogname, char *newdatfile,set_def *sets,dim_t nset, set_element *set_elems,array_def *coefs,offset_t ncof,offset_t ncofele,array_def *vars,offset_t nvar,offset_t nvarele, elem_value *elem_vals) {
   FILE * filehandle,*fout;
-  char line[TABREADLINE]="\0",*readline,comsyntax[TABREADLINE],longname[TABREADLINE],datline[DATREADLINE],varname[NAMESIZE],*vname1,header[NAMESIZE],setsize[DATREADLINE],tempname[NAMESIZE];
+  char line[TABREADLINE]="\0",*readline,comsyntax[TABREADLINE],longname[TABREADLINE],varname[NAMESIZE],*vname1,header[NAMESIZE],setsize[DATREADLINE],tempname[NAMESIZE];
   filehandle = fopen(filename,"r");
-  long int i,n,j,j1,j2,innerloop,outerloop,l,indx;
+  long int i,n,j,j1,innerloop,outerloop,l,indx;
   long int setindx[MAXVARDIM],antidim[MAXVARDIM];
   strcpy(comsyntax,"to file ");
   strcat(comsyntax,newdatlogname);
@@ -1803,7 +1802,7 @@ static int sb_elements_d(char *tabfile, cmf_file_entry *iodata, int nio, const c
   f=fopen(tabfile,"r");
   if (f==NULL) return -1;
   while (fgets(line,TABREADLINE,f)) {
-    char *p=line,*q;
+    char *p=line;
     if (strncmp(p,"set",3)!=0) continue;
     p+=3;
     while (*p==' ') p++;
