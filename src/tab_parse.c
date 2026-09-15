@@ -1279,7 +1279,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
 offset_t sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifier *arSet,set_def *sets,dim_t nset,dim_t fdim,int j) {
   char *readitem,*p,*p1,*p2,interchar2[TABREADLINE],argu[TABREADLINE];//,line5[TABREADLINE]
   char interchar[TABREADLINE],interchar1[TABREADLINE],line[TABREADLINE],line1[TABREADLINE],line2[TABREADLINE],line3[TABREADLINE],line4[TABREADLINE],tempname[NAMESIZE];
-  offset_t i=0,k=0,k1=0,length,ncur=0,ncuri,l,l1,l2,l3,l4,l5,l6,l7,sup;
+  offset_t i=0,k=0,k1=0,length,ncur=0,ncuri,l,l1,l2,l3,l4,l5,l6,l7;
   length=strlen(formulain);
   readitem=formulain;
   while (i<length) {
@@ -2623,7 +2623,7 @@ offset_t closure_read(char *fname, char *commsyntax,closure_entry *closure_vals,
   FILE * filehandle;
   char line[TABREADLINE]="\0",*readitem=NULL,*p=NULL,*p1=NULL,vname[TABREADLINE],argu[TABREADLINE];//,linecopy[TABREADLINE]
   offset_t i,j,n=0,l=0,l1,l2,n1,m,dims,dcount,exodims,supsetid[MAXSUPSET],sup,doublepr[MAXSUPSET];
-  int k1,k2;
+  int k1;
   bool check;
   filehandle = fopen(fname,"r");
   if (filehandle==NULL) {
@@ -3651,8 +3651,8 @@ offset_t coefficients_read(char *fname, char *commsyntax, array_def *record, off
 
 
 int coef_resolve_sets(array_def *coefs,offset_t ncof, set_def *sets,dim_t nset, elem_store *coef_store) {
-  dim_t l,m,dcount;//,dcount1;//,l3=0,l4=0,ld2=0,ld3=0,ld4=0
-  offset_t l1=0,i;//,sizeele,dcountdim1[MAXVARDIM],l2=0,dcountdim[MAXVARDIM];//,ld1=0
+  dim_t l,dcount;//,dcount1;//,l3=0,l4=0,ld2=0,ld3=0,ld4=0
+  offset_t i;//,sizeele,dcountdim1[MAXVARDIM],l2=0,dcountdim[MAXVARDIM];//,ld1=0
   for (i=0; i<ncof; i++) {
     for (dcount=0; dcount<coefs[i].size; dcount++) {
       for (l=0; l<nset; l++) {
@@ -4844,7 +4844,7 @@ dim_t set_union_named(set_element *set_elems, set_def *sets,dim_t nset,dim_t i) 
   return m;
 }
 dim_t set_union_op(set_element *set_elems, set_def *sets,dim_t nset,dim_t i) {
-  dim_t j,l,n,m,dim1=0,dim2=0,j1,sup1=MAXSUPSET,sup2=MAXSUPSET;
+  dim_t j,l,n,m,dim1=0,dim2=0,sup1=MAXSUPSET,sup2=MAXSUPSET;
   char line[TABREADLINE],*readitem;
   dim_t bound=sets[i].size; /* parse-time upper bound = allocated element slots */
   strcpy(line,sets[i].readele);
@@ -5398,7 +5398,7 @@ offset_t subsets_read(char *fname, set_element *set_elems, set_def *sets,dim_t n
   char line[TABREADLINE]="\0";
   char set[NAMESIZE],subset[NAMESIZE];
   char *commsyntax="subset";
-  dim_t i,setd,subsetd,sup1;//,nlength;
+  dim_t i,sup1;//,nlength;
   offset_t jj,jjj,j=0,succ=0,ssize=0;
   char *readitem=NULL;
 
@@ -5465,7 +5465,7 @@ offset_t subsets_read(char *fname, set_element *set_elems, set_def *sets,dim_t n
 }
 
 dim_t subset_map_build(set_element *set_elems, set_def *sets,dim_t nset,offset_t* contin) {
-  dim_t i,setd,subsetd,sup1,sup2,sup3,b;//,nlength;
+  dim_t i,sup1,sup2,sup3,b;//,nlength;
   offset_t jj,jjj,j=0;
   *contin=0;
   for (i=0; i<nset; i++) {
