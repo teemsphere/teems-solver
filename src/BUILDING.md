@@ -37,6 +37,10 @@ https://licences.stfc.ac.uk) at image build time; see
   `-ffast-math` (FP reassociation, no NaN/Inf guarantees). This is the
   tested production configuration; use `make clean && make OPT=-O3` to
   produce an IEEE-conformant binary for numerical cross-checks.
+- `WARN` (default `-Wall`) — warning flags, applied on top of `OPT` to every
+  build of our own sources; the tree builds warning-free and `.audit/verify.sh`
+  holds the count at 0. The staged HSL sources (MP48 and its dependencies,
+  MC66, MC79, MA60/MC71/FD15) are compiled `-w` as inputs.
 - `make clean` removes objects and the binary (PETSc's clean also removes
   `*.mod`; the staged `hsl_mp01.mod` is restored automatically).
 

@@ -10,6 +10,11 @@ MPICH_DIR = $(BUILD_DIR)/lib/mpi
 FC        = $(MPICH_DIR)/bin/mpif90 -fopenmp
 F77       = $(MPICH_DIR)/bin/mpif77 -fopenmp
 OPT      ?= -Ofast
+# warnings apply to every build regardless of OPT (the Dockerfiles and
+# the audit scripts pass their own OPT); our sources build clean under
+# -Wall and verify.sh holds the count at 0. The staged HSL sources
+# below are compiled -w: they are inputs, not ours to tidy.
+WARN     ?= -Wall
 F77FLAGS  = -I. -I/usr/local/include
 CFLAGS    = -I. -I${PETSC_DIR}/native/include -I ${PETSC_DIR}/include -I${PETSC_DIR}/src/mat/impls/aij/seq -fopenmp
 FFLAGS    = -fallow-argument-mismatch
@@ -32,13 +37,13 @@ teems-solver-f64: $(F64_OBJECTS) $(F_OBJECTS)
 	${CLINKER} -o $@ $^ $(LIBS)
 
 %.o: %.c
-	$(CC) $(CFLAGS) $(OPT) -c $<
+	$(CC) $(CFLAGS) $(OPT) $(WARN) -c $<
 %.f64.o: %.c
-	$(CC) $(CFLAGS) $(OPT) -DTEEMS_STORE_F64 -c $< -o $@
+	$(CC) $(CFLAGS) $(OPT) $(WARN) -DTEEMS_STORE_F64 -c $< -o $@
 %.o: %.f90
-	$(FC) $(FFLAGS) $(OPT) -c $<
+	$(FC) $(FFLAGS) $(OPT) $(WARN) -c $<
 %.o: %.f
-	$(F77) $(F77FLAGS) $(OPT) -c $<
+	$(F77) $(F77FLAGS) $(OPT) $(WARN) -c $<
 
 .PHONY: clean
 # PETSc's clean:: (clean-legacy) already removes *.o and *.mod. That
@@ -65,6 +70,19 @@ fd15d.o: fd15d.f
 # correct, so compile it with -w like the F77 objects above and let
 # the warnings baseline measure our own files only.
 hsl_mp48d.o: hsl_mp48d.f90
+	$(FC) $(FFLAGS) -w $(OPT) -c $<
+
+# the other staged HSL sources (MP48 dependencies, MC66, MC79): same
+# treatment, so -Wall measures hsl_kernels.f90 alone on the Fortran side
+ddeps.o: ddeps.f
+	$(F77) $(F77FLAGS) -w $(OPT) -c $<
+ddeps90.o: ddeps90.f90
+	$(FC) $(FFLAGS) -w $(OPT) -c $<
+hsl_mc66d.o: hsl_mc66d.f90
+	$(FC) $(FFLAGS) -w $(OPT) -c $<
+hsl_mc79i.o: hsl_mc79i.f90
+	$(FC) $(FFLAGS) -w $(OPT) -c $<
+hsl_mc79i_ciface.o: hsl_mc79i_ciface.f90
 	$(FC) $(FFLAGS) -w $(OPT) -c $<
 
 # dependencies

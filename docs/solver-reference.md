@@ -446,7 +446,7 @@ Fortran wrappers and kernels; factor-file paths take the
 
 ### Build and packaging files
 
-`makefile` — PETSc-based; `BUILD_DIR` and `OPT ?= -Ofast` overridable;
+`makefile` — PETSc-based; `BUILD_DIR`, `OPT ?= -Ofast` and `WARN ?= -Wall` (our sources build warning-free; staged HSL sources are `-w`) overridable;
 serial `make` required for the HSL module dependencies. `mp48_mod.sh` +
 `patches/*.patch` — TEEMS modifications applied to the staged HSL MP48
 sources (64-bit duplicate-detection work arrays; `MA48→ZA48`-style
