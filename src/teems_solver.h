@@ -668,6 +668,18 @@ static inline offset_t sum_cond_target(int condpos, dim_t condss, offset_t condf
   if (condss==0) return (offset_t)frame[condpos].indx;
   return (offset_t)set_elems[sets[frame[condpos].setid].offset+frame[condpos].indx].superset_pos[condss];
 }
+
+/* Read exactly n items from a solver scratch file. A short read means the
+   file the earlier pass wrote is truncated or missing (scratch space
+   exhausted, or the file removed under the run): abort with the file name
+   rather than continue on whatever the buffer held. */
+static inline void scratch_read(void *buf,size_t size,size_t n,FILE *fp,const char *fname) {
+  if(fp==NULL||fread(buf,size,n,fp)!=n) {
+    printf("Error: short read on scratch file %s; the pass that writes it did not complete (check free space under -tempdir)\n",fname);
+    fflush(stdout);
+    MPI_Abort(PETSC_COMM_WORLD,1);
+  }
+}
 /* rewrite the word comparison operators (ge le gt lt ne eq, space-
    delimited, outside quotes) to their symbol forms ahead of
    whitespace stripping */

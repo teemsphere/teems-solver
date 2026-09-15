@@ -400,7 +400,6 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
   struct timeval endtime;
   struct timespec gettime_beg,gettime_end;
   double rep_time;
-  size_t freadresult;
   elem_value *elem_vals;
   elem_vals=*elem_vals2;
   elem_value *elem_vals1=NULL;
@@ -720,7 +719,7 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
         printf("Error: cannot open %s for reading\n",tempfilenam);
       }
       *elem_vals2=(elem_value*)realloc (*elem_vals2,(ncofele+nvarele)*sizeof(elem_value));
-      freadresult=fread(*elem_vals2, sizeof(elem_value),ncofele+nvarele, tempvar);
+      scratch_read(*elem_vals2, sizeof(elem_value),ncofele+nvarele,tempvar,tempfilenam);
       fclose(tempvar);
       remove(tempfilenam);
       }
@@ -736,7 +735,7 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
         printf("Error: cannot open %s for reading\n",tempfilenam);
       }
       *closure_vals2=(closure_entry*)realloc (*closure_vals2,(nvarele)*sizeof(closure_entry));
-      freadresult=fread(*closure_vals2, sizeof(closure_entry),nvarele, tempvar);
+      scratch_read(*closure_vals2, sizeof(closure_entry),nvarele,tempvar,tempfilenam);
       fclose(tempvar);
       remove(tempfilenam);
       }
@@ -829,7 +828,6 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
   PetscLogDouble time1,time0;
   clock_t timestr,timeend;
   struct timeval endtime;
-  size_t freadresult;
   elem_value *elem_vals;
   elem_vals=*elem_vals2;
   elem_value *elem_vals1;
@@ -1331,7 +1329,7 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
               printf("Error: cannot open %s for reading\n",tempfilenam);
             }
             *closure_vals2=(closure_entry*)realloc (*closure_vals2,(nvarele)*sizeof(closure_entry));
-            freadresult=fread(*closure_vals2, sizeof(closure_entry),nvarele, tempvar);
+            scratch_read(*closure_vals2, sizeof(closure_entry),nvarele,tempvar,tempfilenam);
             fclose(tempvar);
             remove(tempfilenam);
             }
@@ -1347,7 +1345,7 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
               printf("Error: cannot open %s for reading\n",tempfilenam);
             }
             *elem_vals2=(elem_value*)realloc (*elem_vals2,(ncofele+nvarele)*sizeof(elem_value));
-            freadresult=fread(*elem_vals2, sizeof(elem_value),ncofele+nvarele, tempvar);
+            scratch_read(*elem_vals2, sizeof(elem_value),ncofele+nvarele,tempvar,tempfilenam);
             fclose(tempvar);
             remove(tempfilenam);
             }
@@ -1363,7 +1361,7 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
               printf("Error: cannot open %s for reading\n",tempfilenam);
             }
             clag1=realloc (clag1,(nvarele)*sizeof(solve_real));
-            freadresult=fread(clag1, sizeof(solve_real),nvarele, tempvar);
+            scratch_read(clag1, sizeof(solve_real),nvarele,tempvar,tempfilenam);
             fclose(tempvar);
             remove(tempfilenam);
             }
@@ -1378,7 +1376,7 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
               printf("Error: cannot open %s for reading\n",tempfilenam);
             }
             varchange=realloc (varchange,(nvarele)*sizeof(solve_real));
-            freadresult=fread(varchange, sizeof(solve_real),nvarele, tempvar);
+            scratch_read(varchange, sizeof(solve_real),nvarele,tempvar,tempfilenam);
             fclose(tempvar);
             remove(tempfilenam);
             }
@@ -1948,7 +1946,7 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
             printf("Error: cannot open %s for reading\n",tempfilenam);
           }
           *closure_vals2=(closure_entry*)realloc (*closure_vals2,(nvarele)*sizeof(closure_entry));
-          freadresult=fread(*closure_vals2, sizeof(closure_entry),nvarele, tempvar);
+          scratch_read(*closure_vals2, sizeof(closure_entry),nvarele,tempvar,tempfilenam);
           fclose(tempvar);
           remove(tempfilenam);
           }
@@ -1964,7 +1962,7 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
             printf("Error: cannot open %s for reading\n",tempfilenam);
           }
           *elem_vals2=(elem_value*)realloc (*elem_vals2,(ncofele+nvarele)*sizeof(elem_value));
-          freadresult=fread(*elem_vals2, sizeof(elem_value),ncofele+nvarele, tempvar);
+          scratch_read(*elem_vals2, sizeof(elem_value),ncofele+nvarele,tempvar,tempfilenam);
           fclose(tempvar);
           remove(tempfilenam);
           }
@@ -1980,7 +1978,7 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
             printf("Error: cannot open %s for reading\n",tempfilenam);
           }
           clag1=realloc (clag1,(nvarele)*sizeof(solve_real));
-          freadresult=fread(clag1, sizeof(solve_real),nvarele, tempvar);
+          scratch_read(clag1, sizeof(solve_real),nvarele,tempvar,tempfilenam);
           fclose(tempvar);
           remove(tempfilenam);
           }
@@ -1995,7 +1993,7 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
             printf("Error: cannot open %s for reading\n",tempfilenam);
           }
           varchange=realloc (varchange,(nvarele)*sizeof(solve_real));
-          freadresult=fread(varchange, sizeof(solve_real),nvarele, tempvar);
+          scratch_read(varchange, sizeof(solve_real),nvarele,tempvar,tempfilenam);
           fclose(tempvar);
           remove(tempfilenam);
           }
@@ -2071,7 +2069,7 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
             }
             *xcf2=(solve_real*)realloc (*xcf2,(nvarele)*sizeof(solve_real));
             xcf=*xcf2;
-            freadresult=fread(xcf, sizeof(solve_real),nvarele, tempvar);
+            scratch_read(xcf, sizeof(solve_real),nvarele,tempvar,tempfilenam);
             fclose(tempvar);
             remove(tempfilenam);
             }
@@ -2086,7 +2084,7 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
               printf("Error: cannot open %s for reading\n",tempfilenam);
             }
             xc12=realloc (xc12,(nvarele)*sizeof(solve_real));
-            freadresult=fread(xc12, sizeof(solve_real),nvarele, tempvar);
+            scratch_read(xc12, sizeof(solve_real),nvarele,tempvar,tempfilenam);
             fclose(tempvar);
             remove(tempfilenam);
             }
@@ -2100,7 +2098,7 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
               printf("Error: cannot open %s for reading\n",tempfilenam);
             }
             xc24=realloc (xc24,(nvarele)*sizeof(solve_real));
-            freadresult=fread(xc24, sizeof(solve_real),nvarele, tempvar);
+            scratch_read(xc24, sizeof(solve_real),nvarele,tempvar,tempfilenam);
             fclose(tempvar);
             remove(tempfilenam);
             }
@@ -2116,7 +2114,7 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
             if ((tempvar = fopen(tempfilenam, "rb")) == NULL) {
               printf("Error: cannot open %s for reading\n",tempfilenam);
             }
-            freadresult=fread(xc0, sizeof(solve_real),nvarele, tempvar);
+            scratch_read(xc0, sizeof(solve_real),nvarele,tempvar,tempfilenam);
             fclose(tempvar);
             if(subindx==subints-1&&sol==maxsol-1)remove(tempfilenam);
             }
@@ -2317,7 +2315,7 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
               printf("Error: cannot open %s for reading\n",tempfilenam);
             }
             xc124=realloc (xc124,nvarele*sizeof(int));
-            freadresult=fread(xc124, sizeof(int),nvarele, tempvar);
+            scratch_read(xc124, sizeof(int),nvarele,tempvar,tempfilenam);
             fclose(tempvar);
             remove(tempfilenam);
             }

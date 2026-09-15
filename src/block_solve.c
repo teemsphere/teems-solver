@@ -348,7 +348,6 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
   MPI_Status   status;
   clock_t timestr,timeend;
   int la1;
-  size_t freadresult;
   PetscScalar *vals,*valsc;
   PetscErrorCode ierr;
   FILE* fp1,*fp2,*fp3;
@@ -1354,9 +1353,9 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
         irne = (int*)calloc(la1,sizeof(int));
         keep = (int*)calloc(insize[j1*insizes+12],sizeof(int));
         vale = (solve_real*)calloc(la1,sizeof(solve_real));
-        freadresult=fread(irne,sizeof(int),la1,fp1);
-        freadresult=fread(keep,sizeof(int),insize[j1*insizes+12],fp2);
-        freadresult=fread(vale,sizeof(solve_real),la1,fp3);
+        scratch_read(irne,sizeof(int),la1,fp1,fn01[j1]);
+        scratch_read(keep,sizeof(int),insize[j1*insizes+12],fp2,fn02[j1]);
+        scratch_read(vale,sizeof(solve_real),la1,fp3,fn03[j1]);
         fclose(fp1);
         fclose(fp2);
         fclose(fp3);
@@ -2527,7 +2526,7 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
   long int *biviindx1,*biviindx0,j7l;
   long int *obiviindx1= NULL;//(long int*)calloc(1,sizeof(long int));
   long int *obiviindx0= NULL;//(long int*)calloc(1,sizeof(long int));
-  size_t freadresult,frd;
+  size_t frd;
   PetscInt nrow,ncol,nz,nrowc,ncolc,nrowb,ncolb,nzc;
   MPI_Status   status;
   clock_t timestr,timeend;
@@ -3324,7 +3323,7 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
     snprintf(detail,sizeof(detail),"chain-block factors %.2f GB%s, border transpose %.2f GB, B rows %.2f GB, workspace %.2f GB",fac_max/1073741824.0,resident?" (resident, aliased)":"",ct_b/1073741824.0,b12_b/1073741824.0,ws_b/1073741824.0);
     ndthr4=ndbbd_team_cap(3,"schur",max_threads,fac_max+ct_b+b12_b+ws_b,detail,rank);
   }
-  #pragma omp parallel num_threads(ndthr4) private(jthrd,timestr,aic,ajc,valsc,nrowc,ncolc,a1i,a1j,val1s,nz,a2i,a2j,val2s,nrowb,ncolb,i,j,j2,xi1point,xi1indx,maxrowcij,la1,freadresult,longsize,nzc) shared(submatC,submatB1,submatB2,xi1,submatCij,submatBij,insize,yi1,vecbivi,vecbiui)
+  #pragma omp parallel num_threads(ndthr4) private(jthrd,timestr,aic,ajc,valsc,nrowc,ncolc,a1i,a1j,val1s,nz,a2i,a2j,val2s,nrowb,ncolb,i,j,j2,xi1point,xi1indx,maxrowcij,la1,longsize,nzc) shared(submatC,submatB1,submatB2,xi1,submatCij,submatBij,insize,yi1,vecbivi,vecbiui)
   {
   int icntl[20],info[20];
   solve_real cntl[10],rinfo[10],error1[3];
@@ -3412,17 +3411,17 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
         nfp1[i] = scratch_open(fn01[j2], "rb");
         if (nfp1[i]==NULL)printf("Error: cannot open factor file %s\n",fn01[j2]);
         irnereg[i] = realloc(irnereg[i],la1*sizeof(int));//(int*)calloc(la1,sizeof(int));
-        freadresult=fread(irnereg[i],sizeof(int),la1,nfp1[i]);
+        scratch_read(irnereg[i],sizeof(int),la1,nfp1[i],fn01[j2]);
         fclose(nfp1[i]);
         nfp2[i] = scratch_open(fn02[j2], "rb");
         if (nfp2[i]==NULL)printf("Error: cannot open factor file %s\n",fn02[j2]);
         keepreg[i] = realloc(keepreg[i],insize[j2*insizes+12]*sizeof(int));//(int*)calloc(insize[j1*insizes+12],sizeof(int));
-        freadresult=fread(keepreg[i],sizeof(int),insize[j2*insizes+12],nfp2[i]);
+        scratch_read(keepreg[i],sizeof(int),insize[j2*insizes+12],nfp2[i],fn02[j2]);
         fclose(nfp2[i]);
         nfp3[i] = scratch_open(fn03[j2], "rb");
         if (nfp3[i]==NULL)printf("Error: cannot open factor file %s\n",fn03[j2]);
         valereg[i] = realloc(valereg[i],la1*sizeof(solve_real));//(ha_cgetype*)calloc(la1,sizeof(ha_cgetype));
-        freadresult=fread(valereg[i],sizeof(solve_real),la1,nfp3[i]);
+        scratch_read(valereg[i],sizeof(solve_real),la1,nfp3[i],fn03[j2]);
         fclose(nfp3[i]);
       }
     }
@@ -3899,7 +3898,6 @@ bool ndbbd_block_solve(PetscInt rank, int begmat,int nreg,int * insize,int insiz
   PetscInt *ai,*aj,nrow,nz,maxrowcij;//,ncol
   PetscInt j,j1,j2,la1;
   solve_real *b01,*b03,*sol1,*sol2;
-  size_t freadresult;
   int *irne= NULL;//(int*)calloc(1,sizeof(int));
   int *keep= NULL;//(int*)calloc(1,sizeof(int));
   solve_real *vale = NULL;//(ha_cgetype*)calloc(1,sizeof(ha_cgetype));
@@ -3917,15 +3915,15 @@ bool ndbbd_block_solve(PetscInt rank, int begmat,int nreg,int * insize,int insiz
     vale = realloc(vale,la1*sizeof(solve_real));//(ha_cgetype*)calloc(la1,sizeof(ha_cgetype));
     fp1 = scratch_open(fn01[j1], "rb");
     if (fp1==NULL)printf("Error: cannot open factor file %s\n",fn01[j1]);
-    freadresult=fread(irne,sizeof(int),la1,fp1);
+    scratch_read(irne,sizeof(int),la1,fp1,fn01[j1]);
     fclose(fp1);
     fp2 = scratch_open(fn02[j1], "rb");
     if (fp2==NULL)printf("Error: cannot open factor file %s\n",fn02[j1]);
-    freadresult=fread(keep,sizeof(int),insize[j2+12],fp2);
+    scratch_read(keep,sizeof(int),insize[j2+12],fp2,fn02[j1]);
     fclose(fp2);
     fp3 = scratch_open(fn03[j1], "rb");
     if (fp3==NULL)printf("Error: cannot open factor file %s\n",fn03[j1]);
-    freadresult=fread(vale,sizeof(solve_real),la1,fp3);
+    scratch_read(vale,sizeof(solve_real),la1,fp3,fn03[j1]);
     fclose(fp3);
     }
     spec48m_esol_(insize+j2,irne,vale,keep,b01,sol1);
@@ -3952,15 +3950,15 @@ bool ndbbd_block_solve(PetscInt rank, int begmat,int nreg,int * insize,int insiz
   vale = realloc(vale,la1*sizeof(solve_real));//(ha_cgetype*)calloc(la1,sizeof(ha_cgetype));
   fp1 = scratch_open(fn01[j2], "rb");
   if (fp1==NULL)printf("Error: cannot open factor file %s\n",fn01[j2]);
-  freadresult=fread(irne,sizeof(int),la1,fp1);
+  scratch_read(irne,sizeof(int),la1,fp1,fn01[j2]);
   fclose(fp1);
   fp2 = scratch_open(fn02[j2], "rb");
   if (fp2==NULL)printf("Error: cannot open factor file %s\n",fn02[j2]);
-  freadresult=fread(keep,sizeof(int),insize[j1*insizes+12],fp2);
+  scratch_read(keep,sizeof(int),insize[j1*insizes+12],fp2,fn02[j2]);
   fclose(fp2);
   fp3 = scratch_open(fn03[j2], "rb");
   if (fp3==NULL)printf("Error: cannot open factor file %s\n",fn03[j2]);
-  freadresult=fread(vale,sizeof(solve_real),la1,fp3);
+  scratch_read(vale,sizeof(solve_real),la1,fp3,fn03[j2]);
   fclose(fp3);
     }
   if(ifremove)remove(fn01[j2]);
@@ -3980,15 +3978,15 @@ bool ndbbd_block_solve(PetscInt rank, int begmat,int nreg,int * insize,int insiz
     vale = realloc(vale,la1*sizeof(solve_real));//(ha_cgetype*)calloc(la1,sizeof(ha_cgetype));
     fp1 = scratch_open(fn01[j2], "rb");
     if (fp1==NULL)printf("Error: cannot open factor file %s\n",fn01[j2]);
-    freadresult=fread(irne,sizeof(int),la1,fp1);
+    scratch_read(irne,sizeof(int),la1,fp1,fn01[j2]);
     fclose(fp1);
     fp2 = scratch_open(fn02[j2], "rb");
     if (fp2==NULL)printf("Error: cannot open factor file %s\n",fn02[j2]);
-    freadresult=fread(keep,sizeof(int),insize[j1*insizes+12],fp2);
+    scratch_read(keep,sizeof(int),insize[j1*insizes+12],fp2,fn02[j2]);
     fclose(fp2);
     fp3 = scratch_open(fn03[j2], "rb");
     if (fp3==NULL)printf("Error: cannot open factor file %s\n",fn03[j2]);
-    freadresult=fread(vale,sizeof(solve_real),la1,fp3);
+    scratch_read(vale,sizeof(solve_real),la1,fp3,fn03[j2]);
     fclose(fp3);
     }
     if(ifremove)remove(fn01[j2]);
