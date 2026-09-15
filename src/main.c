@@ -910,18 +910,13 @@ static offset_t partition_auto_select(char *tabfile, set_def *sets, dim_t nset, 
 #undef __FUNCT__
 #define __FUNCT__ "main"
 int main(int argc,char **args) {
-  Vec      vecb,vece,x;  /* approx solution, RHS, exact solution */
+  Vec vecb,vece;  /* approx solution, RHS, exact solution */
   Mat      A,B;    /* linear system matrix */
   PetscInt  rank=0,mpisize,rank_hsl=0;
-  PetscInt     VecSize=0,Istart=0,Iend=0,dnz=0,onz=0,dnzB=0,onzB=0,count,*onnz,*dnnz,*onnzB,*dnnzB,its;
+  PetscInt VecSize=0,Istart=0,Iend=0,dnz=0,onz=0,dnzB=0,onzB=0,*onnz,*dnnz,*onnzB,*dnnzB;
   PetscErrorCode ierr;
   PetscBool   flg;
-  PetscScalar  value,zero=0;
-  PetscLogDouble time0,time1;
-  clock_t timestr,timeend,timemulti;
-  struct timeval begintime, endtime,gettime_now;
-  size_t freadresult;
-  offset_t lasize=1;
+  struct timeval begintime,endtime;
   offset_t i,j;
   offset_t j2=0,j1=0,j0=0,j3,j4,j5,j6;
   PetscInitialize(&argc,&args,(char *)0,help);
@@ -972,7 +967,6 @@ int main(int argc,char **args) {
   gettimeofday(&begintime, NULL);
   bool sbbd_overrid=false;
   PetscBool nohsl=false;
-  char ch='y';
   if(rank==0) {
     logmsg(1,"Coefficient storage: %s precision\n",TEEMS_STORE_PRECISION);
     logmsg(2,"Notes:\n  Shock statement values follow GEMPACK ordering (first subscript varies fastest).\n  Declare intertemporal variables with minimum dimension to minimise the net cut,\n  e.g. capital(REG,TIME)=qo(\"capital\",REG,TIME) rather than shocking qo(COM,REG,TIME).\n  laA/laDi control solver workspace sizes; use the smallest that solves.\n  Beware CRLF line endings in model text files.\n");
@@ -984,10 +978,10 @@ int main(int argc,char **args) {
   char tabfile[TABREADLINE],newtabfile[TABREADLINE]="_temp_tab_file",newtabfile1[TABREADLINE]="_temp_tab_new_file",closure[TABREADLINE],shock[TABREADLINE],filename[TABREADLINE],longname[TABREADLINE],vname[NAMESIZE],copyline[TABREADLINE];
   char psfile[TABREADLINE]="\0";
   int npostsim=0,postsim_on=1;
-  char tempfilenam[255],tempchar[255],solmed[NAMESIZE],solchar[255];
+  char tempchar[255],solmed[NAMESIZE],solchar[255];
   int niodata=0,nj,mem_fac=0,noutdata=0,nsoldata=0,nowrites=0,cofdump=1;
-  offset_t nsetspace=0,dcount,ndblock=0,netcut=0,ndblock1,nreg=0,ntime=0;
-  dim_t nset=0,vsize,dim1,nlength=0,matsol=0,laA=2,laDi=2,laD=2,nsbbdblocks=2,nesteddbbd=0,mc66=0,subints=1,subindx;
+  offset_t nsetspace=0,ndblock=0,netcut=0,ndblock1,nreg=0,ntime=0;
+  dim_t nset=0,vsize,dim1,nlength=0,matsol=0,laA=2,laDi=2,laD=2,nsbbdblocks=2,nesteddbbd=0,mc66=0,subints=1;
   offset_t alltimeset=-1,allregset=-1;
   map_def *maps=NULL;
   dim_t nmap=0;
@@ -1761,7 +1755,6 @@ int main(int argc,char **args) {
   //**************************************************************************************
 
   offset_t nexo=0,nexo1;
-  elem_value *elem_vals1;
   if(rank==0) {
     for (i=0; i<ncofele; i++) {
       elem_vals[i].value=coef_store[i].value;
@@ -2050,7 +2043,7 @@ comp_accurate_reentry:
     eq_time[i]=-1;
     eq_reg[i]=-1;
   }
-  offset_t nintraendovar,summat;
+  offset_t nintraendovar;
   if(rank==rank_hsl) {
     if(nesteddbbd==1) {
       if(!equation_order_read_nested(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,closure_vals,var_inter,ele_inter,eq_defs,eq_intertemp,eq_time,eq_reg,allregset,alltimeset,orderintra,orderreg))MPI_Abort(PETSC_COMM_WORLD,1);
@@ -2595,13 +2588,8 @@ comp_accurate_reentry:
     }
   }
   /* A is symmetric. Set symmetric flag to enable ICC/Cholesky preconditioner */
-  FILE* tempvar;
   MPI_Fint fcomm;
   fcomm = MPI_Comm_c2f(PETSC_COMM_WORLD);
-  PetscInt nz01,*ai,*aj;
-  PetscScalar *vals;
-  FILE *ofp;
-  int sol;
 
   fortran_int indata[5];
   indata[1]=VecSize;
@@ -2611,18 +2599,13 @@ comp_accurate_reentry:
   fortran_int *ptx=NULL;
   ptx = indata;
 
-  solve_real *x1=NULL;//= (ha_cgetype *) calloc (VecSize,sizeof(ha_cgetype));
   solve_real *xcf=NULL;
   solve_real *accmetric=NULL; /* embedded-RK cumulative error metrics */
   solve_real *x0=NULL;// (ha_cgetype *) calloc (1,sizeof(ha_cgetype));
-  solve_real *b1=NULL;//= (ha_cgetype *) calloc (VecSize,sizeof(ha_cgetype));
   extern void spec48_ssol2la_(int *INSIZE,int *IRN, int *JCN, solve_real *VA, solve_real *B, solve_real *X);
   extern void spec48_single_(fortran_int *indata,int *irn, int *jcn,solve_real *b1, solve_real *values,solve_real *x1, int *neleperrow,int *ai1, MPI_Fint *fcomm);
   extern void spec48_nomc66_(fortran_int *indata, int *jcn,solve_real *b1, solve_real *values,solve_real *x1, int *neleperrow, MPI_Fint *fcomm,fortran_int *rowptrin, fortran_int *colptrin);
 
-  fortran_int k=0,m=1;
-  solve_real temp1,temp2;
-  fortran_int tindx1;
   logmsg(2,"rank %d ncof %ld\n",rank,ncof);
   
 
