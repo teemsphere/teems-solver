@@ -1277,12 +1277,12 @@ solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,
         l=dims_offset(ops[i].Var3Dims,arSet,fdim,sets,set_elems);
         eval3=record[ops[i].Var3BegAdd+l].substep_base;
       }
-      if(ops[i].Oper==OP_IF_EQ)if(eval1==eval2)ops[i].TmpVarVal=eval3;else ops[i].TmpVarVal=0;
-      if(ops[i].Oper==OP_IF_GT)if(eval1>eval2)ops[i].TmpVarVal=eval3;else ops[i].TmpVarVal=0;
-      if(ops[i].Oper==OP_IF_LT)if(eval1<eval2)ops[i].TmpVarVal=eval3;else ops[i].TmpVarVal=0;
-      if(ops[i].Oper==OP_IF_NE)if(eval1!=eval2)ops[i].TmpVarVal=eval3;else ops[i].TmpVarVal=0;
-      if(ops[i].Oper==OP_IF_LE)if(eval1<=eval2)ops[i].TmpVarVal=eval3;else ops[i].TmpVarVal=0;
-      if(ops[i].Oper==OP_IF_GE)if(eval1>=eval2)ops[i].TmpVarVal=eval3;else ops[i].TmpVarVal=0;
+      if(ops[i].Oper==OP_IF_EQ){ if(eval1==eval2)ops[i].TmpVarVal=eval3;else ops[i].TmpVarVal=0; }
+      if(ops[i].Oper==OP_IF_GT){ if(eval1>eval2)ops[i].TmpVarVal=eval3;else ops[i].TmpVarVal=0; }
+      if(ops[i].Oper==OP_IF_LT){ if(eval1<eval2)ops[i].TmpVarVal=eval3;else ops[i].TmpVarVal=0; }
+      if(ops[i].Oper==OP_IF_NE){ if(eval1!=eval2)ops[i].TmpVarVal=eval3;else ops[i].TmpVarVal=0; }
+      if(ops[i].Oper==OP_IF_LE){ if(eval1<=eval2)ops[i].TmpVarVal=eval3;else ops[i].TmpVarVal=0; }
+      if(ops[i].Oper==OP_IF_GE){ if(eval1>=eval2)ops[i].TmpVarVal=eval3;else ops[i].TmpVarVal=0; }
       break;
     }
   }
@@ -1324,13 +1324,9 @@ int formula_compile_pow(char *fomulain, set_def *sets,int npow,int ipar,array_de
       j--;
     }
     if(j>0)i5=j;
-    if (i1==i5==-1) {//if (i0==i1==i2==i3==i4==i5==-1) {
-      index=0;
-    } else {
-      index=i1;
-      if (index<i5) {
-        index=i5;
-      }
+    index=i1;
+    if (index<i5) {
+      index=i5;
     }
     strcpy(var1, fpart1+index+1);
     strncpy(fpart1,fomulain,index+1);
@@ -1424,13 +1420,9 @@ int formula_compile_muldiv(char *fomulain, set_def *sets,int nmul,int ipar,array
       j--;
     }
     if(j>0)i5=j;
-    if (i1==i5==-1) {//if (i1==i2==i3==i4==i5==-1) {
-      index=0;
-    } else {
-      index=i1;
-      if (index<i5) {
-        index=i5;
-      }
+    index=i1;
+    if (index<i5) {
+      index=i5;
     }
     strcpy(var1, fpart1+index+1);
     strncpy(fpart1,fomulain,index+1);
@@ -1524,13 +1516,9 @@ int formula_compile_addsub(char *fomulain, set_def *sets,int nplu,int ipar,array
       j--;
     }
     if(j>0)i5=j;
-    if (i1==i5==-1) {//if (i3==i4==i5==-1) {
-      index=0;
-    } else {
-      index=i1;
-      if (index<i5) {
-        index=i5;
-      }
+    index=i1;
+    if (index<i5) {
+      index=i5;
     }
     strcpy(var1, fpart1+index+1);
     strncpy(fpart1,fomulain,index+1);
@@ -1632,8 +1620,8 @@ int formula_compile_if(char *fomulain, set_def *sets,int nif,int ipar,array_def 
     if(*(p+i)==',')j1=i;
     if(*(p+i)=='}')j2=i;
     if(*(p+i)=='{')j3=i;
-    if(j3>-1)if(j1>-1&&j1>j2)break;
-    else if(j1>-1)break;
+    if(j3>-1){ if(j1>-1&&j1>j2)break;
+    else if(j1>-1)break; }
   }
   if(j1<0){
     printf("Error: malformed if() in formula (missing comma before value): %s\n",fomulain);
@@ -3418,12 +3406,13 @@ offset_t assertions_execute(char *fname,set_def *sets,dim_t nset,set_element *se
     }
     right=q+((relop==1||relop==5||relop==6)?1:2);
     *q='\0';
-    if(strlen(p)+strlen(right)+4>=TABREADLINE) {
+    /* strlen(p)+strlen(right)+3 chars plus the terminator must fit TABREADLINE; the
+       return value carries the untruncated length, so a skip on >= is the old guard */
+    if(snprintf(resid,TABREADLINE,"%s-(%s)",p,right)>=TABREADLINE-1) {
       printf("Warning: assertion condition too long -- skipped\n");
       free(arSet);
       continue;
     }
-    sprintf(resid,"%s-(%s)",p,right);
     while (formula_normalize(resid)==1);
     leadlag_encode(resid);
     npow=str_count_char(resid,'^');
