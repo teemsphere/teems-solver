@@ -70,6 +70,24 @@ static int coefficients_dump(const char *stem, array_def *coefs, offset_t ncof, 
 /* -ma48u pivot threshold as given (<=0 = library defaults) */
 static double teems_ma48u_opt=-1.0;
 
+/* Effective BLAS kernel family. The runtime image pins OPENBLAS_CORETYPE
+   (docker/expedited_build/Dockerfile) so the same image gives the same
+   bits on every host it supports, but OpenBLAS ignores a core name that
+   is absent from its dispatch table WITHOUT a diagnostic -- so the run
+   records what the library actually selected, never what was asked for.
+   The symbol is weak: a build against a non-OpenBLAS BLAS, and the fuzz
+   drivers' stub cluster, link and report "unknown". */
+extern char *openblas_get_corename(void) __attribute__((weak));
+
+static const char *blas_corename(void) {
+  static const char *cached=NULL;
+  if(cached==NULL) {
+    const char *n=openblas_get_corename?openblas_get_corename():NULL;
+    cached=(n!=NULL&&n[0]!='\0')?n:"unknown";
+  }
+  return cached;
+}
+
 /* Per-run ordering statistics (<solfiles>.stats.json): netcut, border
    sizes and per-block variable/equation counts. Written before the
    solve so failed runs still record their ordering; consumed by
@@ -180,6 +198,7 @@ static void ordering_stats_write(cmf_file_entry *iodata, int niodata, int noutda
     fprintf(fp,"    \"laA\": %ld,\n    \"laDi\": %ld,\n    \"laD\": %ld,\n",ropt->laA,ropt->laDi,ropt->laD);
     fprintf(fp,"    \"max_threads\": %d,\n",(int)max_threads);
     fprintf(fp,"    \"store_precision\": \"%s\",\n",TEEMS_STORE_PRECISION);
+    fprintf(fp,"    \"blas_core\": \"%s\",\n",blas_corename());
     fprintf(fp,"    \"fastrefac\": %s,\n",frchk?"true":"false");
     if(teems_ma48u_opt>0)fprintf(fp,"    \"ma48u\": %g,\n",teems_ma48u_opt);
     else fprintf(fp,"    \"ma48u\": null,\n");
@@ -990,6 +1009,7 @@ int main(int argc,char **args) {
     printf("teems-solver %s\n",TEEMS_SOLVER_VERSION);
     fflush(stdout);
     logmsg(1,"Coefficient storage: %s precision\n",TEEMS_STORE_PRECISION);
+    logmsg(1,"BLAS kernels: %s\n",blas_corename());
     logmsg(2,"Notes:\n  Shock statement values follow GEMPACK ordering (first subscript varies fastest).\n  Declare intertemporal variables with minimum dimension to minimise the net cut,\n  e.g. capital(REG,TIME)=qo(\"capital\",REG,TIME) rather than shocking qo(COM,REG,TIME).\n  laA/laDi control solver workspace sizes; use the smallest that solves.\n  Beware CRLF line endings in model text files.\n");
   }
   MPI_Barrier(PETSC_COMM_WORLD);

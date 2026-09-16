@@ -1,3 +1,7 @@
+# BuildKit fills TARGETARCH; declared here (global scope) so the runtime
+# base can be selected per architecture further down
+ARG TARGETARCH
+
 FROM debian:bookworm-slim AS builder
 
 ARG TARGETARCH
@@ -53,6 +57,17 @@ RUN echo 'APT::Install-Suggests "0";' >> /etc/apt/apt.conf.d/00-docker \
          *)       ARCH_FLAGS=""                                    ;; \
        esac \
     && if [ "$ARCH" = "unknown" ]; then OPT_FLAGS="-O2"; else OPT_FLAGS="-Ofast $ARCH_FLAGS"; fi \
+    # OpenBLAS kernel family pairing with the ISA level above; see the
+    # runtime stage for why the shipped image pins it
+    && case "$ARCH:$(echo "$ARCH_FLAGS" | sed -n 's/.*-march=\([^ ]*\).*/\1/p')" in \
+         amd64:x86-64-v2) BLAS_CORE="NEHALEM"    ;; \
+         amd64:x86-64-v3) BLAS_CORE="HASWELL"    ;; \
+         amd64:x86-64-v4) BLAS_CORE="SKYLAKEX"   ;; \
+         arm64:*)         BLAS_CORE="ARMV8"      ;; \
+         *)               BLAS_CORE=""           ;; \
+       esac \
+    && mkdir -p ${BUILD_DIR} \
+    && printf "%s" "$BLAS_CORE" > ${BUILD_DIR}/blascore \
     && BLAS_LIB=$(find /usr/lib/$(gcc -print-multiarch) -name "libopenblas.so" | head -1) \
     # MPICH
     && mkdir -p ${TEEMS_TMP} \
@@ -139,6 +154,9 @@ RUN echo 'APT::Install-Suggests "0";' >> /etc/apt/apt.conf.d/00-docker \
     && cd ${BUILD_DIR}/src \
     && make OPT="-Ofast $ARCH_FLAGS" teems-solver teems-solver-f64 \
     && mv ${BUILD_DIR}/src ${BUILD_DIR}/solver \
+    # the recorded ISA level rides with the binaries (always a file)
+    && { cp ${BUILD_DIR}/blascore ${BUILD_DIR}/solver/blascore 2>/dev/null \
+         || : > ${BUILD_DIR}/solver/blascore; } \
     && rm -rf ${TEEMS_TMP} ${BUILD_DIR}/hsl \
     && mkdir -p ${BUILD_DIR}/mpi-runtime/lib ${BUILD_DIR}/mpi-runtime/bin \
     && find ${BUILD_DIR}/lib/mpi/lib -name "*.so*" \
@@ -149,7 +167,29 @@ RUN echo 'APT::Install-Suggests "0";' >> /etc/apt/apt.conf.d/00-docker \
        done; true
 
 # ── runtime image ──────────────────────────────────────────────────────────────
-FROM debian:bookworm-slim
+# Debian's libopenblas is built DYNAMIC_ARCH: it chooses its kernels from
+# CPUID at run time, so the same image otherwise produces different bits
+# per host (measured: Haswell kernels on one laptop, the Prescott fallback
+# on an unrecognised 13th-gen part; 211 of 1,173 variables differed).
+# Pinning OPENBLAS_CORETYPE makes the numerics a property of the image.
+# The name pairs with the ISA level this build compiled at, so it is
+# chosen per architecture -- BuildKit expands ${TARGETARCH} in FROM -- and
+# a --build-arg MARCH=x86-64-v3 build passes BLAS_CORETYPE=HASWELL with
+# it. Add a stage here to publish another
+# architecture; the per-architecture FROM needs BuildKit (the default
+# builder -- the removed legacy builder does not expand TARGETARCH).
+FROM debian:bookworm-slim AS runtime-amd64
+ARG BLAS_CORETYPE=
+# Nehalem = the newest kernel family the default x86-64-v2 floor guarantees
+ENV OPENBLAS_CORETYPE=${BLAS_CORETYPE:-NEHALEM}
+
+FROM debian:bookworm-slim AS runtime-arm64
+ARG BLAS_CORETYPE=
+# ARMV8 = the aarch64 baseline family, present on every Apple-silicon and
+# server part (0.3.21 has no Apple-specific kernel)
+ENV OPENBLAS_CORETYPE=${BLAS_CORETYPE:-ARMV8}
+
+FROM runtime-${TARGETARCH}
 # solver version label = pre-pull hint only; ground truth is the binary's
 # -version (src/version.h). Keep this default equal to that constant, or
 # pass --build-arg TEEMS_VERSION="$(sed -n 's/.*TEEMS_SOLVER_VERSION "\(.*\)"/\1/p' src/version.h)"
@@ -178,6 +218,8 @@ ENV OPENBLAS_NUM_THREADS=1
 # solver binary and LICENSES
 COPY --from=builder ${BUILD_DIR}/solver/teems-solver     ${BUILD_DIR}/solver/teems-solver
 COPY --from=builder ${BUILD_DIR}/solver/teems-solver-f64 ${BUILD_DIR}/solver/teems-solver-f64
+# ISA level this build compiled at, for the pairing check below
+COPY --from=builder ${BUILD_DIR}/solver/blascore     ${BUILD_DIR}/solver/blascore
 COPY --from=builder ${BUILD_DIR}/LICENSES            ${BUILD_DIR}/LICENSES
 
 # HSL shared libraries (MA48 and MA51 are linked dynamically)
@@ -203,6 +245,23 @@ RUN echo 'APT::Install-Suggests "0";' >> /etc/apt/apt.conf.d/00-docker \
     && rm -rf /var/lib/apt/lists/* \
     && echo "${BUILD_DIR}/lib/mpi/lib" > /etc/ld.so.conf.d/teems-mpi.conf \
     && ldconfig \
+    # the pin must be a name in THIS library's dispatch table: OpenBLAS
+    # ignores an unknown OPENBLAS_CORETYPE silently, which would ship an
+    # image whose bits still depend on the host. Ask the built binary what
+    # the library actually selected, and fail the build on a mismatch.
+    && CORE_WANT="$(echo "$OPENBLAS_CORETYPE" | tr '[:lower:]' '[:upper:]')" \
+    && CORE_GOT="$(OPENBLAS_VERBOSE=2 ${BUILD_DIR}/solver/teems-solver -version 2>&1 \
+                   | sed -n 's/^Core: *//p' | head -1 | tr '[:lower:]' '[:upper:]')" \
+    && if [ "$CORE_GOT" != "$CORE_WANT" ]; then \
+         echo "OPENBLAS_CORETYPE=$OPENBLAS_CORETYPE not honoured: library selected '$CORE_GOT'" >&2; \
+         exit 1; \
+       fi \
+    # and it must pair with the ISA level the solver compiled at
+    && if [ -s ${BUILD_DIR}/solver/blascore ] \
+       && [ "$(cat ${BUILD_DIR}/solver/blascore)" != "$CORE_WANT" ]; then \
+         echo "BLAS pin $CORE_WANT does not match the build's ISA level ($(cat ${BUILD_DIR}/solver/blascore))" >&2; \
+         exit 1; \
+       fi \
     # transition symlink for scripts referencing the old binary name;
     # remove one release after the rename ships
     && ln -s teems-solver ${BUILD_DIR}/solver/hsl \

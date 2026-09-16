@@ -2,6 +2,10 @@
 # README, ISA levels); the solver and HSL libraries below are
 # compiled at the level recorded in the base image's archflags file.
 ARG BASE_IMAGE=matthewcantele/teems_base:latest
+# BuildKit fills TARGETARCH; declared here (global scope) so the runtime
+# base can be selected per architecture further down
+ARG TARGETARCH
+
 FROM ${BASE_IMAGE} AS builder
 
 ARG PATH_LIBHSL
@@ -53,6 +57,10 @@ RUN ARCH_FLAGS="$(cat ${BUILD_DIR}/archflags 2>/dev/null || true)" \
     && cd ${BUILD_DIR}/src \
     && make OPT="-Ofast $ARCH_FLAGS" teems-solver teems-solver-f64 \
     && mv ${BUILD_DIR}/src ${BUILD_DIR}/solver \
+    # the base's recorded ISA level rides with the binaries (always a
+    # file, empty against a pre-pin base, so the COPY below never fails)
+    && { cp ${BUILD_DIR}/blascore ${BUILD_DIR}/solver/blascore 2>/dev/null \
+         || : > ${BUILD_DIR}/solver/blascore; } \
     && rm -rf ${BUILD_DIR}/hsl \
     && mkdir -p ${BUILD_DIR}/mpi-runtime/lib ${BUILD_DIR}/mpi-runtime/bin \
     && find ${BUILD_DIR}/lib/mpi/lib -name "*.so*" \
@@ -63,7 +71,29 @@ RUN ARCH_FLAGS="$(cat ${BUILD_DIR}/archflags 2>/dev/null || true)" \
        done; true
 
 # ── runtime image ──────────────────────────────────────────────────────────────
-FROM debian:bookworm-slim
+# Debian's libopenblas is built DYNAMIC_ARCH: it chooses its kernels from
+# CPUID at run time, so the same image otherwise produces different bits
+# per host (measured: Haswell kernels on one laptop, the Prescott fallback
+# on an unrecognised 13th-gen part; 211 of 1,173 variables differed).
+# Pinning OPENBLAS_CORETYPE makes the numerics a property of the image.
+# The name pairs with the ISA level the base compiled at, so it is chosen
+# per architecture -- BuildKit expands ${TARGETARCH} in FROM -- and a base
+# built at another level passes --build-arg BLAS_CORETYPE (e.g. HASWELL
+# for an x86-64-v3 base). Add a stage here to publish another
+# architecture; the per-architecture FROM needs BuildKit (the default
+# builder -- the removed legacy builder does not expand TARGETARCH).
+FROM debian:bookworm-slim AS runtime-amd64
+ARG BLAS_CORETYPE=
+# Nehalem = the newest kernel family the default x86-64-v2 floor guarantees
+ENV OPENBLAS_CORETYPE=${BLAS_CORETYPE:-NEHALEM}
+
+FROM debian:bookworm-slim AS runtime-arm64
+ARG BLAS_CORETYPE=
+# ARMV8 = the aarch64 baseline family, present on every Apple-silicon and
+# server part (0.3.21 has no Apple-specific kernel)
+ENV OPENBLAS_CORETYPE=${BLAS_CORETYPE:-ARMV8}
+
+FROM runtime-${TARGETARCH}
 # solver version label = pre-pull hint only; ground truth is the binary's
 # -version (src/version.h). Keep this default equal to that constant, or
 # pass --build-arg TEEMS_VERSION="$(sed -n 's/.*TEEMS_SOLVER_VERSION "\(.*\)"/\1/p' src/version.h)"
@@ -92,6 +122,9 @@ ENV OPENBLAS_NUM_THREADS=1
 # solver binary and LICENSES
 COPY --from=builder ${BUILD_DIR}/solver/teems-solver     ${BUILD_DIR}/solver/teems-solver
 COPY --from=builder ${BUILD_DIR}/solver/teems-solver-f64 ${BUILD_DIR}/solver/teems-solver-f64
+# ISA level the base compiled at, as recorded by teems_base (absent in
+# pre-pin bases: the pairing check below then only verifies the pin itself)
+COPY --from=builder ${BUILD_DIR}/solver/blascore     ${BUILD_DIR}/solver/blascore
 COPY --from=builder ${BUILD_DIR}/LICENSES            ${BUILD_DIR}/LICENSES
 
 # HSL shared libraries (MA48 and MA51 are linked dynamically)
@@ -117,6 +150,23 @@ RUN echo 'APT::Install-Suggests "0";' >> /etc/apt/apt.conf.d/00-docker \
     && rm -rf /var/lib/apt/lists/* \
     && echo "${BUILD_DIR}/lib/mpi/lib" > /etc/ld.so.conf.d/teems-mpi.conf \
     && ldconfig \
+    # the pin must be a name in THIS library's dispatch table: OpenBLAS
+    # ignores an unknown OPENBLAS_CORETYPE silently, which would ship an
+    # image whose bits still depend on the host. Ask the built binary what
+    # the library actually selected, and fail the build on a mismatch.
+    && CORE_WANT="$(echo "$OPENBLAS_CORETYPE" | tr '[:lower:]' '[:upper:]')" \
+    && CORE_GOT="$(OPENBLAS_VERBOSE=2 ${BUILD_DIR}/solver/teems-solver -version 2>&1 \
+                   | sed -n 's/^Core: *//p' | head -1 | tr '[:lower:]' '[:upper:]')" \
+    && if [ "$CORE_GOT" != "$CORE_WANT" ]; then \
+         echo "OPENBLAS_CORETYPE=$OPENBLAS_CORETYPE not honoured: library selected '$CORE_GOT'" >&2; \
+         exit 1; \
+       fi \
+    # and it must pair with the ISA level the base compiled at
+    && if [ -s ${BUILD_DIR}/solver/blascore ] \
+       && [ "$(cat ${BUILD_DIR}/solver/blascore)" != "$CORE_WANT" ]; then \
+         echo "BLAS pin $CORE_WANT does not match the base image's ISA level ($(cat ${BUILD_DIR}/solver/blascore))" >&2; \
+         exit 1; \
+       fi \
     # transition symlink for scripts referencing the old binary name;
     # remove one release after the rename ships
     && ln -s teems-solver ${BUILD_DIR}/solver/hsl \

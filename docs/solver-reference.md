@@ -822,6 +822,32 @@ method (basis of the golden-run verification, below).
   `make OPT=-O3` builds an IEEE-conformant binary for cross-checks.
 - `zerodivide` defaults substitute configured values on 0/0 per [GM].
 - Levels bounds (`bound_type`) are enforced during formula evaluation.
+- **BLAS kernel pin.** Debian's `libopenblas` is built `DYNAMIC_ARCH`
+  and selects its kernels from CPUID at run time, so an unpinned image
+  produced different last digits per host: measured on the same image,
+  a laptop dispatching `Haswell` against a workstation whose 13th-gen
+  part the library does not recognise falling back to `Prescott`, with
+  211 of 1,173 variables differing (forcing `Haswell` on both made all
+  1,173 bit-identical). The runtime images therefore set
+  `OPENBLAS_CORETYPE` to the family matching the ISA level they were
+  compiled at — `NEHALEM` for the `x86-64-v2` base, `HASWELL` for
+  `x86-64-v3`, `ARMV8` for `arm64` — recorded in
+  `${BUILD_DIR}/blascore` by the base build, and the image build fails
+  if the library does not actually select the pinned family (an
+  unknown name is otherwise ignored silently). Every run records what
+  was selected: `BLAS kernels:` in the log banner and `blas_core` in
+  the `options` object of `<solfiles>.stats.json`. Speed is not a
+  reason to pin or to unpin: the wall is dominated by the sparse
+  factorization, and the same case measured 112.7/98.5 s under
+  `Prescott` against 107.9/98.0 s under `Haswell`.
+- **What the pin buys.** One-task runs of the same deployment are
+  byte-identical on every host an image variant supports. At more than
+  one task, cross-machine agreement is to rounding, not to the byte:
+  the order in which ranks reduce is not fixed (2 of 562 variables at
+  ~1e-14 in the measured pair). Different variants (v2, v3, arm64) are
+  different kernel families and agree to the same rounding level, not
+  bit for bit; and `-Ofast` reassociation means a build at another
+  optimization level is a different numerical configuration again.
 
 Solve-quality diagnostics (`-condest 1`, sequential LU): each linear
 solve is measured with HSL MA60 — iterative refinement plus the

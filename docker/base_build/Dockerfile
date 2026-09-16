@@ -11,7 +11,8 @@ LABEL org.opencontainers.image.licenses="AGPL-3.0"
 ARG TARGETARCH
 # psABI/ISA level for amd64/arm64/arm (e.g. x86-64-v3); empty = portable
 # default per arch. The resolved flags are recorded in
-# ${BUILD_DIR}/archflags so downstream layers compile with the same level.
+# ${BUILD_DIR}/archflags so downstream layers compile with the same level,
+# and the matching OpenBLAS kernel family in ${BUILD_DIR}/blascore.
 ARG MARCH=""
 ARG BUILD_DIR=/opt/teems-solver
 ARG MPICH_VERSION=5.0.1
@@ -58,6 +59,21 @@ RUN echo 'APT::Install-Suggests "0";' >> /etc/apt/apt.conf.d/00-docker \
          ppc64le) ARCH_FLAGS="-mcpu=powerpc64le"                   ;; \
          *)       ARCH_FLAGS=""                                    ;; \
        esac \
+    # OpenBLAS kernel family that PAIRS WITH the ISA level above.
+    # Debian's libopenblas is built DYNAMIC_ARCH and picks its kernels
+    # from CPUID at run time, so without a pin the same image produces
+    # different bits per host (Haswell kernels on one machine, the
+    # Prescott fallback on an unrecognised part). The runtime images
+    # pin OPENBLAS_CORETYPE to this name; it is recorded here so a
+    # downstream build cannot pair v3 code with v2 kernels unnoticed.
+    && case "$ARCH:$(echo "$ARCH_FLAGS" | sed -n 's/.*-march=\([^ ]*\).*/\1/p')" in \
+         amd64:x86-64-v2) BLAS_CORE="NEHALEM"    ;; \
+         amd64:x86-64-v3) BLAS_CORE="HASWELL"    ;; \
+         amd64:x86-64-v4) BLAS_CORE="SKYLAKEX"   ;; \
+         arm64:*)         BLAS_CORE="ARMV8"      ;; \
+         *)               BLAS_CORE=""           ;; \
+       esac \
+    && printf "%s" "$BLAS_CORE" > ${BUILD_DIR}/blascore \
     && if [ "$ARCH" = "unknown" ]; then OPT_FLAGS="-O2"; else OPT_FLAGS="-Ofast $ARCH_FLAGS"; fi \
     && printf "%s" "$ARCH_FLAGS" > ${BUILD_DIR}/archflags \
     && BLAS_LIB=$(find /usr/lib/$(gcc -print-multiarch) -name "libopenblas.so" | head -1) \
