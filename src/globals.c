@@ -2,8 +2,20 @@
  * teems_solver.h. */
 #include <teems_solver.h>
 #include <sys/resource.h>
+#include <stdarg.h>
 
 int verbosity = 1;
+int teems_error_count = 0;
+int errmsg(const char *fmt, ...) {
+  va_list ap;
+  int n;
+  va_start(ap, fmt);
+  n = vprintf(fmt, ap);
+  va_end(ap);
+  fflush(stdout);
+  teems_error_count++;
+  return n;
+}
 int inmemory;
 int section_threads;
 int max_threads;

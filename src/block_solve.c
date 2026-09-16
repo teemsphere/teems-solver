@@ -127,7 +127,7 @@ static int ndbbd_team_cap(int region,const char *name,int want,double per_thread
 static FILE *scratch_open(const char *fn,const char *mode) {
   FILE *fp=fopen(fn,mode);
   if(fp==NULL) {
-    printf("Error: cannot open scratch file %s (%s); the scratch filesystem may be full or unwritable - free space there or point -tempdir at a larger filesystem\n",fn,strerror(errno));
+    errmsg("Error: cannot open scratch file %s (%s); the scratch filesystem may be full or unwritable - free space there or point -tempdir at a larger filesystem\n",fn,strerror(errno));
     fflush(stdout);
     MPI_Abort(PETSC_COMM_WORLD,1);
   }
@@ -135,7 +135,7 @@ static FILE *scratch_open(const char *fn,const char *mode) {
 }
 static void scratch_write(const void *p,size_t esz,size_t n,FILE *fp,const char *fn) {
   if(fwrite(p,esz,n,fp)!=n) {
-    printf("Error: short write on scratch file %s (%s); the scratch filesystem is likely full - free space there or point -tempdir at a larger filesystem\n",fn,strerror(errno));
+    errmsg("Error: short write on scratch file %s (%s); the scratch filesystem is likely full - free space there or point -tempdir at a larger filesystem\n",fn,strerror(errno));
     fflush(stdout);
     MPI_Abort(PETSC_COMM_WORLD,1);
   }
@@ -770,7 +770,7 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
     bivinzrow[li]=(bivinzrow[li]-1)*bivicolsize;//faster MSOL
   }
   vecbivisize=((long int)bivirowsize)*((long int)bivicolsize);
-  if(vecbivisize<0)printf("Error: interface problem size overflow (negative vecbivisize); the border is too large\n");
+  if(vecbivisize<0)errmsg("Error: interface problem size overflow (negative vecbivisize); the border is too large\n");
   solve_real *vecbivi= (solve_real *) calloc (vecbivisize,sizeof(solve_real));
   logmsg(2,"vecbivisize %ld rank %d\n",vecbivisize,rank);
 
@@ -919,7 +919,7 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
           spec48m_msol_p_(insize+j1*insizes,dfr_irn[j1],dfr_jcn[j1],dfr_va[j1],yi1[j1],xi1point,aic,ajc,valsc,ai,aj,vals,vecbivi,bivinzrow,bivinzcol,dfr_keep[j1],&redo_io);
         }
         if(redo_io<0) {
-          printf("Error: MA48 could not factorize %s after repeated retries (the fast refactorization was declined each time); re-run with fastrefac = FALSE, or use a different matrix_method\n",probe_onfail_scope_label());
+          errmsg("Error: MA48 could not factorize %s after repeated retries (the fast refactorization was declined each time); re-run with fastrefac = FALSE, or use a different matrix_method\n",probe_onfail_scope_label());
           MPI_Abort(PETSC_COMM_WORLD,1);
         }
       }
@@ -947,7 +947,7 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
         insize[j1*insizes+16]=(int)lasize;
       }
       if(insize[j1*insizes+17]==-3) {
-        printf("Error: the MA48 workspace for %s did not converge after %d growth attempts; raise the initial workspace (laA/laD/laDi) or use a bordered matrix_method (\"SBBD\" or \"DBBD\")\n",probe_onfail_scope_label(),tries);
+        errmsg("Error: the MA48 workspace for %s did not converge after %d growth attempts; raise the initial workspace (laA/laD/laDi) or use a bordered matrix_method (\"SBBD\" or \"DBBD\")\n",probe_onfail_scope_label(),tries);
         MPI_Abort(PETSC_COMM_WORLD,1);
       }
       MatDestroy(&submatA[j1]);
@@ -1282,7 +1282,7 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
         insizeD[5]=ldsize;
       }
       if(insizeD[4]==-3) {
-        printf("Error: the MA48 workspace for %s did not converge after %d growth attempts; raise the initial workspace (laA/laD/laDi) or use a bordered matrix_method (\"SBBD\" or \"DBBD\")\n",probe_onfail_scope_label(),tries);
+        errmsg("Error: the MA48 workspace for %s did not converge after %d growth attempts; raise the initial workspace (laA/laD/laDi) or use a bordered matrix_method (\"SBBD\" or \"DBBD\")\n",probe_onfail_scope_label(),tries);
         MPI_Abort(PETSC_COMM_WORLD,1);
       }
     }
@@ -1345,11 +1345,11 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
       }
       else {
         fp1 = scratch_open(fn01[j1], "rb");
-        if (fp1==NULL)printf("Error: cannot open factor file %s\n",fn01[j1]);
+        if (fp1==NULL)errmsg("Error: cannot open factor file %s\n",fn01[j1]);
         fp2 = scratch_open(fn02[j1], "rb");
-        if (fp2==NULL)printf("Error: cannot open factor file %s\n",fn02[j1]);
+        if (fp2==NULL)errmsg("Error: cannot open factor file %s\n",fn02[j1]);
         fp3 = scratch_open(fn03[j1], "rb");
-        if (fp3==NULL)printf("Error: cannot open factor file %s\n",fn03[j1]);
+        if (fp3==NULL)errmsg("Error: cannot open factor file %s\n",fn03[j1]);
         irne = (int*)calloc(la1,sizeof(int));
         keep = (int*)calloc(insize[j1*insizes+12],sizeof(int));
         vale = (solve_real*)calloc(la1,sizeof(solve_real));
@@ -1467,7 +1467,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
      block-distribution and interface-reduction paths below assume at
      least one block per rank and SEGV otherwise */
   if(mpisize>ntime) {
-    if(rank==0)printf("Error: NDBBD (-matsol 3) supports at most one MPI rank per chain block (%d ranks > %d chain blocks); re-run with at most %d ranks, or use SBBD/DBBD\n",(int)mpisize,(int)ntime,(int)ntime);
+    if(rank==0)errmsg("Error: NDBBD (-matsol 3) supports at most one MPI rank per chain block (%d ranks > %d chain blocks); re-run with at most %d ranks, or use SBBD/DBBD\n",(int)mpisize,(int)ntime,(int)ntime);
     fflush(stdout);
     /* the condition is uniform across ranks, so the barrier cannot
        deadlock; without it another rank's abort kills rank 0 before
@@ -1838,33 +1838,33 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
 
       int *insized=(int *) calloc (5+nreg*insizes,sizeof(int));
     bivinzrow1=realloc (bivinzrow1,bivirowsizemax*sizeof(long int));
-    if(bivinzrow1==NULL)printf("Error: memory allocation failed for bivinzrow1\n");
+    if(bivinzrow1==NULL)errmsg("Error: memory allocation failed for bivinzrow1\n");
     bivinzcol1=realloc (bivinzcol1,bivicolsizemax*sizeof(long int));
-    if(bivinzcol1==NULL)printf("Error: memory allocation failed for bivinzcol1\n");
+    if(bivinzcol1==NULL)errmsg("Error: memory allocation failed for bivinzcol1\n");
       vecbivi= (solve_real *) malloc (vecbivisizemax*sizeof(solve_real));
-    if(vecbivi==NULL)printf("Error: memory allocation failed for vecbivi\n");
+    if(vecbivi==NULL)errmsg("Error: memory allocation failed for vecbivi\n");
   long int vecbivi_cap=vecbivisizemax; /* grows when the border-row append needs more than the dense interface product */
       irn=(int *) malloc (lasizemax*sizeof(int));
-    if(irn==NULL)printf("Error: memory allocation failed for irn\n");
+    if(irn==NULL)errmsg("Error: memory allocation failed for irn\n");
       jcn=(int *) malloc (lasizemax*sizeof(int));
-    if(jcn==NULL)printf("Error: memory allocation failed for jcn\n");
+    if(jcn==NULL)errmsg("Error: memory allocation failed for jcn\n");
       solve_real *values= (solve_real *) calloc (lasizemax,sizeof(solve_real));
-    if(values==NULL)printf("Error: memory allocation failed for values\n");
+    if(values==NULL)errmsg("Error: memory allocation failed for values\n");
       int* jcnb1=(int *) malloc (nebmax*sizeof(int));
-    if(jcnb1==NULL)printf("Error: memory allocation failed for jcnb1\n");
+    if(jcnb1==NULL)errmsg("Error: memory allocation failed for jcnb1\n");
       solve_real *sol48= (solve_real *) malloc (nrowamax*sizeof(solve_real));
-    if(sol48==NULL)printf("Error: memory allocation failed for sol48\n");
+    if(sol48==NULL)errmsg("Error: memory allocation failed for sol48\n");
       solve_real *b48= (solve_real *) malloc (nrowamax*sizeof(solve_real));
-    if(b48==NULL)printf("Error: memory allocation failed for b48\n");
+    if(b48==NULL)errmsg("Error: memory allocation failed for b48\n");
       int* keep=NULL,*iw51=NULL;
   keep=(int *) malloc ((nrowamax+5*ncolamax+4*ncolamax+7)*sizeof(int));//ICNTL(6)=1
-    if(keep==NULL)printf("Error: memory allocation failed for keep\n");
+    if(keep==NULL)errmsg("Error: memory allocation failed for keep\n");
   solve_real *w51=NULL;
   if(nrowamax>ncolamax) w51=(solve_real *) malloc ((5*nrowamax)*sizeof(solve_real));
   else w51=(solve_real *) malloc ((5*ncolamax)*sizeof(solve_real));
-    if(w51==NULL)printf("Error: memory allocation failed for w51\n");
+    if(w51==NULL)errmsg("Error: memory allocation failed for w51\n");
   iw51=(int *) malloc ((6*nrowamax+3*ncolamax)*sizeof(int));
-    if(iw51==NULL)printf("Error: memory allocation failed for iw51\n");
+    if(iw51==NULL)errmsg("Error: memory allocation failed for iw51\n");
   #pragma omp for schedule (static)
   for(j3=0; j3<nmatint; j3++) {
     bivirowsize=1;
@@ -1910,7 +1910,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
     }
     vecbivisize=((long int)bivirowsize)*((long int)bivicolsize);
     logmsg(2,"rank %d vecbivisize %ld bivirowsize %d bivicolsize %d\n",rank,vecbivisize,bivirowsize,bivicolsize);
-    if(vecbivisize<0)printf("Error: interface problem size overflow (negative vecbivisize); the border is too large\n");
+    if(vecbivisize<0)errmsg("Error: interface problem size overflow (negative vecbivisize); the border is too large\n");
     memset(vecbivi,0,vecbivisize*sizeof(solve_real));
     for(j1=0; j1<nreg; j1++) {
       j4=j1+j3*(nreg+1);
@@ -2012,7 +2012,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
           prep48m_msol_p_(insize+j4*insizes,ndbbd_fac_irn[j4],ndbbd_fac_jcn[j4],ndbbd_fac_va[j4],aic,ajc,valsc,ai,aj,vals,vecbivi,bivinzrow,bivinzcol,jcnb1,sol48,b48,w51,iw51,ndbbd_fac_keep[j4],&redo_io);
         }
         if(redo_io<0) {
-          printf("Error: MA48 could not factorize %s after repeated retries (the fast refactorization was declined each time); re-run with fastrefac = FALSE, or use a different matrix_method\n",probe_onfail_scope_label());
+          errmsg("Error: MA48 could not factorize %s after repeated retries (the fast refactorization was declined each time); re-run with fastrefac = FALSE, or use a different matrix_method\n",probe_onfail_scope_label());
           MPI_Abort(PETSC_COMM_WORLD,1);
         }
       }
@@ -2042,7 +2042,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
         insize[j4*insizes+16]=(int)lasize;
       }
       if(insize[j4*insizes+17]==-3) {
-        printf("Error: the MA48 workspace for %s did not converge after %d growth attempts; raise the initial workspace (laA/laD/laDi) or use a bordered matrix_method (\"SBBD\" or \"DBBD\")\n",probe_onfail_scope_label(),tries);
+        errmsg("Error: the MA48 workspace for %s did not converge after %d growth attempts; raise the initial workspace (laA/laD/laDi) or use a bordered matrix_method (\"SBBD\" or \"DBBD\")\n",probe_onfail_scope_label(),tries);
         MPI_Abort(PETSC_COMM_WORLD,1);
       }
       ndbbd_fac_emit(rank,j4,irn,keep,values,insize[j4*insizes+16],insize[j4*insizes+12]);
@@ -2067,9 +2067,9 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
     #pragma omp critical
     {
     irn1=realloc(irn1,irnmems*sizeof(int));
-    if(irn1==NULL)printf("Error: memory allocation failed for irn1\n");
+    if(irn1==NULL)errmsg("Error: memory allocation failed for irn1\n");
     jcn1=realloc(jcn1,irnmems*sizeof(int));
-    if(jcn1==NULL)printf("Error: memory allocation failed for jcn1\n");
+    if(jcn1==NULL)errmsg("Error: memory allocation failed for jcn1\n");
 
     lj2=0;
     for(i=0; i<bivirowsize; i++) {
@@ -2097,7 +2097,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
       vecbivi_cap=nz0+(long int)nz;
       vecbivi=realloc(vecbivi,vecbivi_cap*sizeof(solve_real));
       if(vecbivi==NULL) {
-        printf("Error: memory allocation failed growing the interface buffer for the border append (rank %d)\n",(int)rank);
+        errmsg("Error: memory allocation failed growing the interface buffer for the border append (rank %d)\n",(int)rank);
         MPI_Abort(PETSC_COMM_WORLD,1);
       }
     }
@@ -2135,30 +2135,30 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
     strcat(filename,j1name);
     strcat(filename,".bin");
     if((presolfile=scratch_open(filename, "wb"))==NULL) {
-      printf("Error: cannot open scratch file %s\n",filename);
+      errmsg("Error: cannot open scratch file %s\n",filename);
     }
     fwrt=fwrite(vecbivi, sizeof(solve_real),nz1, presolfile);
-    if(fwrt== 0) {printf("Error: short write on scratch file %s (%s); the scratch filesystem is likely full - free space there or point -tempdir at a larger filesystem\n",filename,strerror(errno));fflush(stdout);MPI_Abort(PETSC_COMM_WORLD,1);}
+    if(fwrt== 0) {errmsg("Error: short write on scratch file %s (%s); the scratch filesystem is likely full - free space there or point -tempdir at a larger filesystem\n",filename,strerror(errno));fflush(stdout);MPI_Abort(PETSC_COMM_WORLD,1);}
     fclose(presolfile);
     strcpy(filename,scratch_dir);strcat(filename,"_rbvi");
     strcat(filename,rankname);
     strcat(filename,j1name);
     strcat(filename,".bin");
     if((presolfile=scratch_open(filename, "wb"))==NULL) {
-      printf("Error: cannot open scratch file %s\n",filename);
+      errmsg("Error: cannot open scratch file %s\n",filename);
     }
     fwrt=fwrite(irn1, sizeof(int), nz1, presolfile);
-    if(fwrt== 0) {printf("Error: short write on scratch file %s (%s); the scratch filesystem is likely full - free space there or point -tempdir at a larger filesystem\n",filename,strerror(errno));fflush(stdout);MPI_Abort(PETSC_COMM_WORLD,1);}
+    if(fwrt== 0) {errmsg("Error: short write on scratch file %s (%s); the scratch filesystem is likely full - free space there or point -tempdir at a larger filesystem\n",filename,strerror(errno));fflush(stdout);MPI_Abort(PETSC_COMM_WORLD,1);}
     fclose(presolfile);
     strcpy(filename,scratch_dir);strcat(filename,"_cbvi");
     strcat(filename,rankname);
     strcat(filename,j1name);
     strcat(filename,".bin");
     if((presolfile=scratch_open(filename, "wb"))==NULL) {
-      printf("Error: cannot open scratch file %s\n",filename);
+      errmsg("Error: cannot open scratch file %s\n",filename);
     }
     fwrt=fwrite(jcn1, sizeof(int), nz1, presolfile);
-    if(fwrt== 0) {printf("Error: short write on scratch file %s (%s); the scratch filesystem is likely full - free space there or point -tempdir at a larger filesystem\n",filename,strerror(errno));fflush(stdout);MPI_Abort(PETSC_COMM_WORLD,1);}
+    if(fwrt== 0) {errmsg("Error: short write on scratch file %s (%s); the scratch filesystem is likely full - free space there or point -tempdir at a larger filesystem\n",filename,strerror(errno));fflush(stdout);MPI_Abort(PETSC_COMM_WORLD,1);}
     fclose(presolfile);
     free(irn1);//1
     irn1=NULL;
@@ -2195,11 +2195,11 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
       strcat(filename,j1name);
       strcat(filename,".bin");
       if((presolfile=scratch_open(filename, "wb"))==NULL) {
-        printf("Error: cannot open scratch file %s\n",filename);
+        errmsg("Error: cannot open scratch file %s\n",filename);
       }
       logmsg(2,"rank %d nrow %d ncol %d block rank %d nz %d cntl6 %lf\n",rank,nrow,ncol,insized[3],nz,cntl6);
       fwrt=fwrite(insized, sizeof(int), 5+nreg*insizes, presolfile);
-      if(fwrt== 0) {printf("Error: short write on scratch file %s (%s); the scratch filesystem is likely full - free space there or point -tempdir at a larger filesystem\n",filename,strerror(errno));fflush(stdout);MPI_Abort(PETSC_COMM_WORLD,1);}
+      if(fwrt== 0) {errmsg("Error: short write on scratch file %s (%s); the scratch filesystem is likely full - free space there or point -tempdir at a larger filesystem\n",filename,strerror(errno));fflush(stdout);MPI_Abort(PETSC_COMM_WORLD,1);}
       fclose(presolfile);
     insize[j4*insizes+15]=0;
   }
@@ -2278,22 +2278,22 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
   if(ldsize<nz1max)ldsize=nz1max;
   ldsize+=10;
   irn1=realloc(irn1,ldsize*sizeof(int));
-  if(irn1==NULL)printf("Error: memory allocation failed for irn1\n");
+  if(irn1==NULL)errmsg("Error: memory allocation failed for irn1\n");
   jcn1=realloc(jcn1,ldsize*sizeof(int));
-  if(jcn1==NULL)printf("Error: memory allocation failed for jcn1\n");
+  if(jcn1==NULL)errmsg("Error: memory allocation failed for jcn1\n");
   irn=realloc(irn,nrowmax*sizeof(int));
-  if(irn==NULL)printf("Error: memory allocation failed for irn\n");
+  if(irn==NULL)errmsg("Error: memory allocation failed for irn\n");
   jcn=realloc(jcn,ncolmax*sizeof(int));
-  if(jcn==NULL)printf("Error: memory allocation failed for jcn\n");
+  if(jcn==NULL)errmsg("Error: memory allocation failed for jcn\n");
   keep=(int *) malloc ((nrowmax+5*ncolmax+4*ncolmax+7)*sizeof(int));//ICNTL(6)=1
-  if(keep==NULL)printf("Error: memory allocation failed for keep\n");
+  if(keep==NULL)errmsg("Error: memory allocation failed for keep\n");
   if(nrowmax>ncolmax) w51=(solve_real *) malloc ((5*nrowmax)*sizeof(solve_real));
   else w51=(solve_real *) malloc ((5*ncolmax)*sizeof(solve_real));
-  if(w51==NULL)printf("Error: memory allocation failed for w51\n");
+  if(w51==NULL)errmsg("Error: memory allocation failed for w51\n");
   iw51=(int *) malloc ((6*nrowmax+3*ncolmax)*sizeof(int));
-  if(iw51==NULL)printf("Error: memory allocation failed for iw51\n");
+  if(iw51==NULL)errmsg("Error: memory allocation failed for iw51\n");
   vecbivi=realloc(vecbivi,ldsize*sizeof(solve_real));
-  if(vecbivi==NULL)printf("Error: memory allocation failed for vecbivi\n");
+  if(vecbivi==NULL)errmsg("Error: memory allocation failed for vecbivi\n");
   long int probe_cap=ldsize; /* current array length; grows on MA48 -3 */
   int *insizeda=(int *) calloc (5+nreg*insizes,sizeof(int));
   teems_stage_mark("presolve:interface-rank");
@@ -2311,12 +2311,12 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
     strcat(filename,j1name);
     strcat(filename,".bin");
     if((presolfile=scratch_open(filename, "r"))==NULL) {
-      printf("Error: cannot open interface file %s; the presolve pass did not produce it (check scratch space)\n",filename);
+      errmsg("Error: cannot open interface file %s; the presolve pass did not produce it (check scratch space)\n",filename);
     }
     fwrt=fread(insizeda, sizeof(int), 5+nreg*insizes, presolfile);
     fclose(presolfile);
     remove(filename);
-    if( fwrt== 0)printf("Error: short read on interface file %s; the presolve pass did not produce it (check scratch space)\n",filename);
+    if( fwrt== 0)errmsg("Error: short read on interface file %s; the presolve pass did not produce it (check scratch space)\n",filename);
     nrow=insizeda[0];
     ncol=insizeda[1];
     nz1=insizeda[2];
@@ -2326,30 +2326,30 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
       strcat(filename,j1name);
       strcat(filename,".bin");
       if((presolfile=scratch_open(filename, "r"))==NULL) {
-        printf("Error: cannot open scratch file %s\n",filename);
+        errmsg("Error: cannot open scratch file %s\n",filename);
       }
       fwrt=fread(vecbivi, sizeof(solve_real), insizeda[2], presolfile);
-      if(fwrt== 0) printf("Error: short read on scratch file %s (%ld of %d records)\n",filename,fwrt,insizeda[2]);
+      if(fwrt== 0) errmsg("Error: short read on scratch file %s (%ld of %d records)\n",filename,fwrt,insizeda[2]);
       fclose(presolfile);
       strcpy(filename,scratch_dir);strcat(filename,"_rbvi");
       strcat(filename,rankname);
       strcat(filename,j1name);
       strcat(filename,".bin");
       if((presolfile=scratch_open(filename, "r"))==NULL) {
-        printf("Error: cannot open scratch file %s\n",filename);
+        errmsg("Error: cannot open scratch file %s\n",filename);
       }
       fwrt=fread(irn1, sizeof(int), insizeda[2], presolfile);
-      if(fwrt== 0) printf("Error: short read on scratch file %s\n",filename);
+      if(fwrt== 0) errmsg("Error: short read on scratch file %s\n",filename);
       fclose(presolfile);
       strcpy(filename,scratch_dir);strcat(filename,"_cbvi");
       strcat(filename,rankname);
       strcat(filename,j1name);
       strcat(filename,".bin");
       if((presolfile=scratch_open(filename, "r"))==NULL) {
-        printf("Error: cannot open scratch file %s\n",filename);
+        errmsg("Error: cannot open scratch file %s\n",filename);
       }
       fwrt=fread(jcn1, sizeof(int), insizeda[2], presolfile);
-      if(fwrt== 0) printf("Error: short read on scratch file %s\n",filename);
+      if(fwrt== 0) errmsg("Error: short read on scratch file %s\n",filename);
       fclose(presolfile);
 
     insize[j4*insizes]=nrow;
@@ -2405,35 +2405,35 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
         strcat(filename,j1name);
         strcat(filename,".bin");
         if((presolfile=scratch_open(filename, "r"))==NULL) {
-          printf("Error: cannot open scratch file %s\n",filename);
+          errmsg("Error: cannot open scratch file %s\n",filename);
         }
         fwrt=fread(vecbivi, sizeof(solve_real), insized[2], presolfile);
-        if(fwrt== 0) printf("Error: short read on scratch file %s\n",filename);
+        if(fwrt== 0) errmsg("Error: short read on scratch file %s\n",filename);
         fclose(presolfile);
         strcpy(filename,scratch_dir);strcat(filename,"_rbvi");
         strcat(filename,rankname);
         strcat(filename,j1name);
         strcat(filename,".bin");
         if((presolfile=scratch_open(filename, "r"))==NULL) {
-          printf("Error: cannot open scratch file %s\n",filename);
+          errmsg("Error: cannot open scratch file %s\n",filename);
         }
         fwrt=fread(irn1, sizeof(int), insized[2], presolfile);
-        if(fwrt== 0) printf("Error: short read on scratch file %s\n",filename);
+        if(fwrt== 0) errmsg("Error: short read on scratch file %s\n",filename);
         fclose(presolfile);
         strcpy(filename,scratch_dir);strcat(filename,"_cbvi");
         strcat(filename,rankname);
         strcat(filename,j1name);
         strcat(filename,".bin");
         if((presolfile=scratch_open(filename, "r"))==NULL) {
-          printf("Error: cannot open scratch file %s\n",filename);
+          errmsg("Error: cannot open scratch file %s\n",filename);
         }
         fwrt=fread(jcn1, sizeof(int), insized[2], presolfile);
-        if(fwrt== 0) printf("Error: short read on scratch file %s\n",filename);
+        if(fwrt== 0) errmsg("Error: short read on scratch file %s\n",filename);
         fclose(presolfile);
         }
       }
       if(insized[6]==-3) {
-        printf("Error: the MA48 workspace for %s did not converge after %d growth attempts; raise the initial workspace (laA/laD/laDi) or use a bordered matrix_method (\"SBBD\" or \"DBBD\")\n",probe_onfail_scope_label(),tries);
+        errmsg("Error: the MA48 workspace for %s did not converge after %d growth attempts; raise the initial workspace (laA/laD/laDi) or use a bordered matrix_method (\"SBBD\" or \"DBBD\")\n",probe_onfail_scope_label(),tries);
         MPI_Abort(PETSC_COMM_WORLD,1);
       }
       ndbbd_cut_iface_put(j3,insized[3],irn,jcn,nrow,ncol);
@@ -2455,7 +2455,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
       strcat(filename,j1name);
       strcat(filename,".bin");
       if((presolfile=scratch_open(filename, "wb"))==NULL) {
-        printf("Error: cannot open scratch file %s\n",filename);
+        errmsg("Error: cannot open scratch file %s\n",filename);
       }
       logmsg(2,"rank %d nrow %d ncol %d block rank %d nz %d cntl6 %lf\n",rank,nrow,ncol,insized[3],nz,cntl6in);
       if(verbosity>=2) {
@@ -2465,27 +2465,27 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
         printf("ifcut rank %d j3 %d irank %d nrow %d ncol %d permsum %lx\n",rank,j3,insized[3],nrow,ncol,ph);
       }
       fwrt=fwrite(insized, sizeof(int), 5+nreg*insizes, presolfile);
-      if(fwrt== 0) {printf("Error: short write on scratch file %s (%s); the scratch filesystem is likely full - free space there or point -tempdir at a larger filesystem\n",filename,strerror(errno));fflush(stdout);MPI_Abort(PETSC_COMM_WORLD,1);}
+      if(fwrt== 0) {errmsg("Error: short write on scratch file %s (%s); the scratch filesystem is likely full - free space there or point -tempdir at a larger filesystem\n",filename,strerror(errno));fflush(stdout);MPI_Abort(PETSC_COMM_WORLD,1);}
       fclose(presolfile);
       strcpy(filename,scratch_dir);strcat(filename,"_row");
       strcat(filename,rankname);
       strcat(filename,j1name);
       strcat(filename,".bin");
       if((presolfile=scratch_open(filename, "wb"))==NULL) {
-        printf("Error: cannot open scratch file %s\n",filename);
+        errmsg("Error: cannot open scratch file %s\n",filename);
       }
       fwrt=fwrite(irn, sizeof(int), nrow, presolfile);
-      if(fwrt== 0) {printf("Error: short write on scratch file %s (%s); the scratch filesystem is likely full - free space there or point -tempdir at a larger filesystem\n",filename,strerror(errno));fflush(stdout);MPI_Abort(PETSC_COMM_WORLD,1);}
+      if(fwrt== 0) {errmsg("Error: short write on scratch file %s (%s); the scratch filesystem is likely full - free space there or point -tempdir at a larger filesystem\n",filename,strerror(errno));fflush(stdout);MPI_Abort(PETSC_COMM_WORLD,1);}
       fclose(presolfile);
       strcpy(filename,scratch_dir);strcat(filename,"_col");
       strcat(filename,rankname);
       strcat(filename,j1name);
       strcat(filename,".bin");
       if((presolfile=scratch_open(filename, "wb"))==NULL) {
-        printf("Error: cannot open scratch file %s\n",filename);
+        errmsg("Error: cannot open scratch file %s\n",filename);
       }
       fwrt=fwrite(jcn, sizeof(int), ncol, presolfile);
-      if(fwrt== 0) {printf("Error: short write on scratch file %s (%s); the scratch filesystem is likely full - free space there or point -tempdir at a larger filesystem\n",filename,strerror(errno));fflush(stdout);MPI_Abort(PETSC_COMM_WORLD,1);}
+      if(fwrt== 0) {errmsg("Error: short write on scratch file %s (%s); the scratch filesystem is likely full - free space there or point -tempdir at a larger filesystem\n",filename,strerror(errno));fflush(stdout);MPI_Abort(PETSC_COMM_WORLD,1);}
       fclose(presolfile);
       free(insized);//1
     insize[j4*insizes+15]=0;
@@ -2557,7 +2557,7 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
      block-distribution and interface-reduction paths below assume at
      least one block per rank and SEGV otherwise */
   if(mpisize>ntime) {
-    if(rank==0)printf("Error: NDBBD (-matsol 3) supports at most one MPI rank per chain block (%d ranks > %d chain blocks); re-run with at most %d ranks, or use SBBD/DBBD\n",(int)mpisize,(int)ntime,(int)ntime);
+    if(rank==0)errmsg("Error: NDBBD (-matsol 3) supports at most one MPI rank per chain block (%d ranks > %d chain blocks); re-run with at most %d ranks, or use SBBD/DBBD\n",(int)mpisize,(int)ntime,(int)ntime);
     fflush(stdout);
     /* the condition is uniform across ranks, so the barrier cannot
        deadlock; without it another rank's abort kills rank 0 before
@@ -3022,11 +3022,11 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
     #pragma omp critical
     {
     if((presolfile=scratch_open(filename, "r"))==NULL) {
-      printf("Error: cannot open interface file %s; the presolve pass did not produce it (check scratch space)\n",filename);
+      errmsg("Error: cannot open interface file %s; the presolve pass did not produce it (check scratch space)\n",filename);
     }
     frd=fread(insizeda, sizeof(int), 5+nreg*insizes, presolfile);
     fclose(presolfile);
-    if( frd== 0)printf("Error: short read on interface file %s; the presolve pass did not produce it (check scratch space)\n",filename);
+    if( frd== 0)errmsg("Error: short read on interface file %s; the presolve pass did not produce it (check scratch space)\n",filename);
     }
     if(insizeda0<insizeda[0])insizeda0=insizeda[0];
     if(insizeda1<insizeda[1])insizeda1=insizeda[1];
@@ -3038,21 +3038,21 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
   ldsize+=10;
   insizeda2=ldsize;
   int *irn1=(int *) malloc(ldsize*sizeof(int));
-  if(irn1==NULL)printf("Error: memory allocation failed for irn1\n");
+  if(irn1==NULL)errmsg("Error: memory allocation failed for irn1\n");
   int *jcn1=(int *) malloc(ldsize*sizeof(int));
-  if(jcn1==NULL)printf("Error: memory allocation failed for jcn1\n");
+  if(jcn1==NULL)errmsg("Error: memory allocation failed for jcn1\n");
   solve_real *vecbivi0= (solve_real *) malloc (ldsize*sizeof(solve_real));
-  if(vecbivi0==NULL)printf("Error: memory allocation failed for vecbivi0\n");
+  if(vecbivi0==NULL)errmsg("Error: memory allocation failed for vecbivi0\n");
   int *irn1a=(int *) malloc (insizeda0*sizeof(int));
-  if(irn1a==NULL)printf("Error: memory allocation failed for irn1a\n");
+  if(irn1a==NULL)errmsg("Error: memory allocation failed for irn1a\n");
   int *jcn1a=(int *) malloc (insizeda1*sizeof(int));
-  if(jcn1a==NULL)printf("Error: memory allocation failed for jcn1a\n");
+  if(jcn1a==NULL)errmsg("Error: memory allocation failed for jcn1a\n");
   solve_real *fw=(solve_real *) malloc (insizeda0*sizeof(solve_real));
-  if(fw==NULL)printf("Error: memory allocation failed for fw\n");
+  if(fw==NULL)errmsg("Error: memory allocation failed for fw\n");
   int *fiw=(int *) malloc ((6*insizeda0+3*insizeda1)*sizeof(int));
-  if(fiw==NULL)printf("Error: memory allocation failed for fiw\n");
+  if(fiw==NULL)errmsg("Error: memory allocation failed for fiw\n");
   int *fkeep=(int *) malloc ((insizeda0+5*insizeda1+4*insizeda1/1+7)*sizeof(int));//ICNTL(6)=1
-  if(fkeep==NULL)printf("Error: memory allocation failed for fkeep\n");
+  if(fkeep==NULL)errmsg("Error: memory allocation failed for fkeep\n");
   #pragma omp for  schedule (static)
   for(j3=0; j3<nmatint; j3++) {
     j4=nreg+j3*(nreg+1);
@@ -3070,12 +3070,12 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
     strcat(filename,j1name);
     strcat(filename,".bin");
     if((presolfile=scratch_open(filename, "r"))==NULL) {
-      printf("Error: cannot open interface file %s; the presolve pass did not produce it (check scratch space)\n",filename);
+      errmsg("Error: cannot open interface file %s; the presolve pass did not produce it (check scratch space)\n",filename);
     }
     frd=fread(insizeda, sizeof(int), 5+nreg*insizes, presolfile);
     fclose(presolfile);
     remove(filename);
-    if( frd== 0)printf("Error: short read on interface file %s; the presolve pass did not produce it (check scratch space)\n",filename);
+    if( frd== 0)errmsg("Error: short read on interface file %s; the presolve pass did not produce it (check scratch space)\n",filename);
     }
     nrow=insizeda[3];
     ncol=insizeda[3];
@@ -3091,10 +3091,10 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
     strcat(filename,j1name);
     strcat(filename,".bin");
     if((presolfile=scratch_open(filename, "r"))==NULL) {
-      printf("Error: cannot open scratch file %s\n",filename);
+      errmsg("Error: cannot open scratch file %s\n",filename);
     }
     frd=fread(irn1a, sizeof(int), insizeda[0], presolfile);
-    if(frd == 0)printf("Error: short read on scratch file %s\n",filename);
+    if(frd == 0)errmsg("Error: short read on scratch file %s\n",filename);
     fclose(presolfile);
     remove(filename);
     strcpy(filename,scratch_dir);strcat(filename,"_col");
@@ -3102,10 +3102,10 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
     strcat(filename,j1name);
     strcat(filename,".bin");
     if((presolfile=scratch_open(filename, "r"))==NULL) {
-      printf("Error: cannot open scratch file %s\n",filename);
+      errmsg("Error: cannot open scratch file %s\n",filename);
     }
     frd=fread(jcn1a, sizeof(int), insizeda[1], presolfile);
-    if(frd== 0) {printf("Error: short read on scratch file %s; the file is truncated (a scratch write likely failed earlier)\n",filename);fflush(stdout);MPI_Abort(PETSC_COMM_WORLD,1);}
+    if(frd== 0) {errmsg("Error: short read on scratch file %s; the file is truncated (a scratch write likely failed earlier)\n",filename);fflush(stdout);MPI_Abort(PETSC_COMM_WORLD,1);}
     fclose(presolfile);
     remove(filename);
     strcpy(filename,scratch_dir);strcat(filename,"_bivi");
@@ -3113,10 +3113,10 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
     strcat(filename,j1name);
     strcat(filename,".bin");
     if((presolfile=scratch_open(filename, "r"))==NULL) {
-      printf("Error: cannot open scratch file %s\n",filename);
+      errmsg("Error: cannot open scratch file %s\n",filename);
     }
     frd=fread(vecbivi0, sizeof(solve_real), insizeda[2], presolfile);
-    if(frd== 0) printf("Error: short read on scratch file %s (%ld of %d records)\n",filename,frd,insizeda[2]);
+    if(frd== 0) errmsg("Error: short read on scratch file %s (%ld of %d records)\n",filename,frd,insizeda[2]);
     fclose(presolfile);
     remove(filename);
     strcpy(filename,scratch_dir);strcat(filename,"_rbvi");
@@ -3124,10 +3124,10 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
     strcat(filename,j1name);
     strcat(filename,".bin");
     if((presolfile=scratch_open(filename, "r"))==NULL) {
-      printf("Error: cannot open scratch file %s\n",filename);
+      errmsg("Error: cannot open scratch file %s\n",filename);
     }
     frd=fread(irn1, sizeof(int), insizeda[2], presolfile);
-    if(frd== 0) {printf("Error: short read on scratch file %s; the file is truncated (a scratch write likely failed earlier)\n",filename);fflush(stdout);MPI_Abort(PETSC_COMM_WORLD,1);}
+    if(frd== 0) {errmsg("Error: short read on scratch file %s; the file is truncated (a scratch write likely failed earlier)\n",filename);fflush(stdout);MPI_Abort(PETSC_COMM_WORLD,1);}
     fclose(presolfile);
     remove(filename);
     strcpy(filename,scratch_dir);strcat(filename,"_cbvi");
@@ -3135,10 +3135,10 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
     strcat(filename,j1name);
     strcat(filename,".bin");
     if((presolfile=scratch_open(filename, "r"))==NULL) {
-      printf("Error: cannot open scratch file %s\n",filename);
+      errmsg("Error: cannot open scratch file %s\n",filename);
     }
     frd=fread(jcn1, sizeof(int), insizeda[2], presolfile);
-    if(frd== 0) {printf("Error: short read on scratch file %s; the file is truncated (a scratch write likely failed earlier)\n",filename);fflush(stdout);MPI_Abort(PETSC_COMM_WORLD,1);}
+    if(frd== 0) {errmsg("Error: short read on scratch file %s; the file is truncated (a scratch write likely failed earlier)\n",filename);fflush(stdout);MPI_Abort(PETSC_COMM_WORLD,1);}
     fclose(presolfile);
     remove(filename);
     }
@@ -3195,7 +3195,7 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
         insize[j4*insizes+16]=(int)ldsize;
       }
       if(insize[j4*insizes+17]==-3) {
-        printf("Error: the MA48 workspace for %s did not converge after %d growth attempts; raise the initial workspace (laA/laD/laDi) or use a bordered matrix_method (\"SBBD\" or \"DBBD\")\n",probe_onfail_scope_label(),tries);
+        errmsg("Error: the MA48 workspace for %s did not converge after %d growth attempts; raise the initial workspace (laA/laD/laDi) or use a bordered matrix_method (\"SBBD\" or \"DBBD\")\n",probe_onfail_scope_label(),tries);
         MPI_Abort(PETSC_COMM_WORLD,1);
       }
       free(sirn);
@@ -3277,7 +3277,7 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
     }
   }
   vecbivisize=((long int)bivirowsize)*((long int)bivicolsize);
-  if(vecbivisize<0)printf("Error: interface problem size overflow (negative vecbivisize); the border is too large\n");
+  if(vecbivisize<0)errmsg("Error: interface problem size overflow (negative vecbivisize); the border is too large\n");
   solve_real *vecbivi= (solve_real *) calloc (vecbivisize,sizeof(solve_real));
   logmsg(2,"vecbivisize %ld rank %d\n",vecbivisize,rank);
   xi1indx=0;
@@ -3409,17 +3409,17 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
       }
       else {
         nfp1[i] = scratch_open(fn01[j2], "rb");
-        if (nfp1[i]==NULL)printf("Error: cannot open factor file %s\n",fn01[j2]);
+        if (nfp1[i]==NULL)errmsg("Error: cannot open factor file %s\n",fn01[j2]);
         irnereg[i] = realloc(irnereg[i],la1*sizeof(int));//(int*)calloc(la1,sizeof(int));
         scratch_read(irnereg[i],sizeof(int),la1,nfp1[i],fn01[j2]);
         fclose(nfp1[i]);
         nfp2[i] = scratch_open(fn02[j2], "rb");
-        if (nfp2[i]==NULL)printf("Error: cannot open factor file %s\n",fn02[j2]);
+        if (nfp2[i]==NULL)errmsg("Error: cannot open factor file %s\n",fn02[j2]);
         keepreg[i] = realloc(keepreg[i],insize[j2*insizes+12]*sizeof(int));//(int*)calloc(insize[j1*insizes+12],sizeof(int));
         scratch_read(keepreg[i],sizeof(int),insize[j2*insizes+12],nfp2[i],fn02[j2]);
         fclose(nfp2[i]);
         nfp3[i] = scratch_open(fn03[j2], "rb");
-        if (nfp3[i]==NULL)printf("Error: cannot open factor file %s\n",fn03[j2]);
+        if (nfp3[i]==NULL)errmsg("Error: cannot open factor file %s\n",fn03[j2]);
         valereg[i] = realloc(valereg[i],la1*sizeof(solve_real));//(ha_cgetype*)calloc(la1,sizeof(ha_cgetype));
         scratch_read(valereg[i],sizeof(solve_real),la1,nfp3[i],fn03[j2]);
         fclose(nfp3[i]);
@@ -3749,7 +3749,7 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
         insizeD[5]=ldsize;
       }
       if(insizeD[4]==-3) {
-        printf("Error: the MA48 workspace for %s did not converge after %d growth attempts; raise the initial workspace (laA/laD/laDi) or use a bordered matrix_method (\"SBBD\" or \"DBBD\")\n",probe_onfail_scope_label(),tries);
+        errmsg("Error: the MA48 workspace for %s did not converge after %d growth attempts; raise the initial workspace (laA/laD/laDi) or use a bordered matrix_method (\"SBBD\" or \"DBBD\")\n",probe_onfail_scope_label(),tries);
         MPI_Abort(PETSC_COMM_WORLD,1);
       }
     }
@@ -3914,15 +3914,15 @@ bool ndbbd_block_solve(PetscInt rank, int begmat,int nreg,int * insize,int insiz
     keep = realloc(keep,insize[j2+12]*sizeof(int));//(int*)calloc(insize[j1*insizes+12],sizeof(int));
     vale = realloc(vale,la1*sizeof(solve_real));//(ha_cgetype*)calloc(la1,sizeof(ha_cgetype));
     fp1 = scratch_open(fn01[j1], "rb");
-    if (fp1==NULL)printf("Error: cannot open factor file %s\n",fn01[j1]);
+    if (fp1==NULL)errmsg("Error: cannot open factor file %s\n",fn01[j1]);
     scratch_read(irne,sizeof(int),la1,fp1,fn01[j1]);
     fclose(fp1);
     fp2 = scratch_open(fn02[j1], "rb");
-    if (fp2==NULL)printf("Error: cannot open factor file %s\n",fn02[j1]);
+    if (fp2==NULL)errmsg("Error: cannot open factor file %s\n",fn02[j1]);
     scratch_read(keep,sizeof(int),insize[j2+12],fp2,fn02[j1]);
     fclose(fp2);
     fp3 = scratch_open(fn03[j1], "rb");
-    if (fp3==NULL)printf("Error: cannot open factor file %s\n",fn03[j1]);
+    if (fp3==NULL)errmsg("Error: cannot open factor file %s\n",fn03[j1]);
     scratch_read(vale,sizeof(solve_real),la1,fp3,fn03[j1]);
     fclose(fp3);
     }
@@ -3949,15 +3949,15 @@ bool ndbbd_block_solve(PetscInt rank, int begmat,int nreg,int * insize,int insiz
   keep = realloc(keep,insize[j1*insizes+12]*sizeof(int));//(int*)calloc(insize[j1*insizes+12],sizeof(int));
   vale = realloc(vale,la1*sizeof(solve_real));//(ha_cgetype*)calloc(la1,sizeof(ha_cgetype));
   fp1 = scratch_open(fn01[j2], "rb");
-  if (fp1==NULL)printf("Error: cannot open factor file %s\n",fn01[j2]);
+  if (fp1==NULL)errmsg("Error: cannot open factor file %s\n",fn01[j2]);
   scratch_read(irne,sizeof(int),la1,fp1,fn01[j2]);
   fclose(fp1);
   fp2 = scratch_open(fn02[j2], "rb");
-  if (fp2==NULL)printf("Error: cannot open factor file %s\n",fn02[j2]);
+  if (fp2==NULL)errmsg("Error: cannot open factor file %s\n",fn02[j2]);
   scratch_read(keep,sizeof(int),insize[j1*insizes+12],fp2,fn02[j2]);
   fclose(fp2);
   fp3 = scratch_open(fn03[j2], "rb");
-  if (fp3==NULL)printf("Error: cannot open factor file %s\n",fn03[j2]);
+  if (fp3==NULL)errmsg("Error: cannot open factor file %s\n",fn03[j2]);
   scratch_read(vale,sizeof(solve_real),la1,fp3,fn03[j2]);
   fclose(fp3);
     }
@@ -3977,15 +3977,15 @@ bool ndbbd_block_solve(PetscInt rank, int begmat,int nreg,int * insize,int insiz
     keep = realloc(keep,insize[j1*insizes+12]*sizeof(int));//(int*)calloc(insize[j1*insizes+12],sizeof(int));
     vale = realloc(vale,la1*sizeof(solve_real));//(ha_cgetype*)calloc(la1,sizeof(ha_cgetype));
     fp1 = scratch_open(fn01[j2], "rb");
-    if (fp1==NULL)printf("Error: cannot open factor file %s\n",fn01[j2]);
+    if (fp1==NULL)errmsg("Error: cannot open factor file %s\n",fn01[j2]);
     scratch_read(irne,sizeof(int),la1,fp1,fn01[j2]);
     fclose(fp1);
     fp2 = scratch_open(fn02[j2], "rb");
-    if (fp2==NULL)printf("Error: cannot open factor file %s\n",fn02[j2]);
+    if (fp2==NULL)errmsg("Error: cannot open factor file %s\n",fn02[j2]);
     scratch_read(keep,sizeof(int),insize[j1*insizes+12],fp2,fn02[j2]);
     fclose(fp2);
     fp3 = scratch_open(fn03[j2], "rb");
-    if (fp3==NULL)printf("Error: cannot open factor file %s\n",fn03[j2]);
+    if (fp3==NULL)errmsg("Error: cannot open factor file %s\n",fn03[j2]);
     scratch_read(vale,sizeof(solve_real),la1,fp3,fn03[j2]);
     fclose(fp3);
     }

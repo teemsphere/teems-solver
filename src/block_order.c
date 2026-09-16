@@ -116,7 +116,7 @@ int dbbd_order(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscIn
     values=ma48_realloc(values,lasize,sizeof(solve_real));
     }
     if(insize[6]==-3) {
-      printf("Error: the MA48 workspace for %s did not converge after %d growth attempts; raise the initial workspace (laA/laD/laDi) or use a bordered matrix_method (\"SBBD\" or \"DBBD\")\n",probe_onfail_scope_label(),tries);
+      errmsg("Error: the MA48 workspace for %s did not converge after %d growth attempts; raise the initial workspace (laA/laD/laDi) or use a bordered matrix_method (\"SBBD\" or \"DBBD\")\n",probe_onfail_scope_label(),tries);
       MPI_Abort(PETSC_COMM_WORLD,1);
     }
     for(i=0; i<nrow; i++) {
@@ -416,7 +416,7 @@ int ndbbd_order_presolve(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt ran
       }
       }
       if(insize[6]==-3) {
-        printf("Error: the MA48 workspace for %s did not converge after %d growth attempts; raise the initial workspace (laA/laD/laDi) or use a bordered matrix_method (\"SBBD\" or \"DBBD\")\n",probe_onfail_scope_label(),tries);
+        errmsg("Error: the MA48 workspace for %s did not converge after %d growth attempts; raise the initial workspace (laA/laD/laDi) or use a bordered matrix_method (\"SBBD\" or \"DBBD\")\n",probe_onfail_scope_label(),tries);
         MPI_Abort(PETSC_COMM_WORLD,1);
       }
       bfirst=counteq[j3+begblock[rank]];
@@ -629,11 +629,11 @@ int ndbbd_order(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscI
       strcat(filename,j1name);
       strcat(filename,".bin");
       if((presolfile=fopen(filename, "r"))==NULL) {
-        printf("Error: cannot open interface file %s; the presolve pass did not produce it (check scratch space)\n",filename);
+        errmsg("Error: cannot open interface file %s; the presolve pass did not produce it (check scratch space)\n",filename);
       }
       frd=fread(insized, sizeof(int), 5, presolfile);
       fclose(presolfile);
-      if( frd== 0)printf("Error: short read on interface file %s; falling back to the minimum rank assignment\n",filename);
+      if( frd== 0)errmsg("Error: short read on interface file %s; falling back to the minimum rank assignment\n",filename);
       if(ndbbdrank[j4]>insized[3]) {
         int *irn1=(int *) calloc (insized[0],sizeof(int));
         int *jcn1=(int *) calloc (insized[1],sizeof(int));
@@ -642,20 +642,20 @@ int ndbbd_order(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscI
         strcat(filename,j1name);
         strcat(filename,".bin");
         if((presolfile=fopen(filename, "r"))==NULL) {
-          printf("Error: cannot open interface file %s\n",filename);
+          errmsg("Error: cannot open interface file %s\n",filename);
         }
         frd=fread(irn1, sizeof(int), insized[0], presolfile);
-        if(frd == 0)printf("Error: short read on interface file %s\n",filename);
+        if(frd == 0)errmsg("Error: short read on interface file %s\n",filename);
         fclose(presolfile);
         strcpy(filename,scratch_dir);strcat(filename,"_col");
         strcat(filename,rankname);
         strcat(filename,j1name);
         strcat(filename,".bin");
         if((presolfile=fopen(filename, "r"))==NULL) {
-          printf("Error: cannot open interface file %s\n",filename);
+          errmsg("Error: cannot open interface file %s\n",filename);
         }
         frd=fread(jcn1, sizeof(int), insized[0], presolfile);
-        if( frd== 0) printf("Error: short read on interface file %s\n",filename);
+        if( frd== 0) errmsg("Error: short read on interface file %s\n",filename);
         fclose(presolfile);
         int *indices= (int *) calloc (insized[0],sizeof(int));
         for(i=0; i<insized[0]; i++) {

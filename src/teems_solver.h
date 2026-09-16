@@ -17,6 +17,7 @@
 #include <aij.h> /* PETSc private SeqAIJ header; path supplied by makefile */
 #include <petscdmda.h>
 #include <omp.h>
+#include "version.h"
 
 #define NAMESIZE 256
 #define DATREADLINE 150000
@@ -38,6 +39,15 @@ extern int verbosity; /* -verbosity: 0 = errors/warnings + results only,
    warnings (plain printf, "Error:"/"Warning:" prefix) and never inside
    per-element loops — hot-loop prints are removed, not gated. */
 #define logmsg(lvl, ...) do{ if(verbosity>=(lvl)) printf(__VA_ARGS__); }while(0)
+/* errmsg(fmt, ...): every "Error:" line goes through here (printf
+   drop-in: prints to stdout, flushes so the line survives a crash that
+   follows, and counts). The count is the exit-status backstop: main()
+   returns nonzero when any error was printed, so a site that reports
+   and continues can never end in exit 0 (finding 3 of the 2026-09
+   platform gate). Fatal sites still terminate on the spot
+   (MPI_Abort / PetscFinalize + return 1). */
+extern int teems_error_count;
+int errmsg(const char *fmt, ...) __attribute__((format(printf,1,2)));
 extern int inmemory; /* -inmemory: keep value arrays resident instead of spilling to scratch */
 extern int section_threads;
 extern int ndbbd_threads_used[4]; /* NDBBD team sizes chosen by the thread budget: presolve, interface-rank, interface-factor, schur; 0 = region not run */

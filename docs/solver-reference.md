@@ -279,7 +279,11 @@ Johansen LU solves run inline here through `spec48_single_` /
 
 Everything shared: buffer-size constants (`TABREADLINE` …); the globals
 (`scratch_dir`, `inmemory`, thread counts, Gragg step state, node
-communicators — defined once in `globals.c`); precision typedefs
+communicators — defined once in `globals.c`); `version.h`
+(`TEEMS_SOLVER_VERSION`, the one version constant); the two message
+channels — `logmsg(level, …)` for progress gated by `-verbosity`, and
+`errmsg(…)` for every `Error:` line (prints, flushes, counts; the
+count is the exit-status backstop of §11); precision typedefs
 (`solve_real` double / `store_real` float); index typedefs (`dim_t`,
 `offset_t`); the enums of §5–§6 plus `bound_type`, `op_code`,
 `operand_type`; and the model data structures — `set_def`/`set_element`,
@@ -857,6 +861,7 @@ needs corpus calibration.
 
 | option | default | meaning |
 |---|---|---|
+| `-version` (`--version`) | — | print exactly `teems-solver <version>` and exit 0, before MPI/PETSc start (no PETSc banner; the same constant as the log banner and `stats.json`). An image whose solver does not answer predates 1.1.0 |
 | `-cmdfile <path>` | `./reg.cmf` | CMF file |
 | `-matsol {0,1,2,3}` | 0 | matrix method (§6) |
 | `-solmed <name>` | `Gragg` | solution method (§5) |
@@ -894,6 +899,18 @@ needs corpus calibration.
 | `-verbosity {0,1,2}` | 1 | 0 = errors/warnings + accuracy summary only; 1 = phase progress and timings; 2 = per-rank/per-block debug detail (also exported as `TEEMS_VERBOSITY` for the Fortran kernels; MA48 duplicate-entry notes appear only at 2) |
 | `-nox` | — | PETSc: no X output |
 
+**Exit status.** `0` means the run completed and no `Error:` line was
+printed. `1` means an `Error:` line was printed: either a named abort
+(option validation, TAB/closure/shock/data faults, factorization and
+resource failures — `MPI_Abort(…, 1)` or `PetscFinalize` + `return 1`
+on the spot) or a failure that was reported and the run continued to
+the end (every `Error:` line goes through `errmsg()`, which counts,
+and `main()` returns 1 when the count is nonzero; on multi-rank runs
+`mpiexec` propagates any rank's nonzero status). Any other status is a
+crash, a kill (137 = out of memory under a container limit) or an MPI
+launch failure, none of which prints an `Error:` line. The first line
+of every log is `teems-solver <version>`, unconditionally.
+
 teems-R populates these from `ems_solve()`/`ems_RK()` arguments
 (`solution_method`, `matrix_method`, `n_tasks`, `steps`,
 `n_subintervals`, and the validated expert dots — `laA/laD/laDi`,
@@ -911,6 +928,10 @@ the CMF (which is a file manifest only), and are echoed in
   run by comparing output files byte for byte (the maintainers keep
   such golden manifests across methods × ranks × subintervals ×
   in-memory modes and gate every change on them).
+- **Identity**: `teems-solver -version` (`docker run --rm teems:<tag>
+  /opt/teems-solver/solver/teems-solver -version`) names the binary's
+  version; the image label `org.opencontainers.image.version` is only
+  the pre-pull hint set from the same constant at build time.
 - **Smoke test**: the README's *Verification* section runs the shipped
   example through the image; the teems R package's test suite
   exercises the full pipeline against a local `teems:<tag>`
@@ -965,11 +986,13 @@ the CMF (which is a file manifest only), and are echoed in
   and ignored legacy flags are kept precisely so that the released
   1.0.0-era package still runs bit-identically against it), while a
   newer R package may *require* a minimum image (the coefficient dump
-  needs ≥ 1.1.0). A `-version` flag / banner / `stats.json` field
-  surfacing one version constant, checked by the R package as a
-  minimum (no response = pre-1.1 image), is planned for the 1.1.0
-  release; until then the image label is the only version hint. The
-  symlink and aliases are removed only at a real 2.0.0.
+  needs ≥ 1.1.0). The solver side of the handshake is in place: one
+  constant (`src/version.h`) surfaced by `-version`, the ungated log
+  banner, the `solver_version` field of `stats.json`/`probe.json`
+  and the image label. The R package's pre-flight check against it
+  (a minimum-version fence; no response = pre-1.1 image) is the
+  remaining half. The symlink and aliases are removed only at a real
+  2.0.0.
 - **Calibration**: the `matrix_method`/`n_tasks` auto rules, the
   `-fastrefac` and MA48 pivot-threshold default flips, the NDBBD
   `-inmemory` default, RK-vs-Gragg rankings, and the structural-probe

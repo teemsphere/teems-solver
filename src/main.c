@@ -5,9 +5,15 @@
 // Currently logic fdim <> only in formula
 #include <teems_solver.h>
 
-static char help[] = "Solves a CGE model in parallel with KSP.\n\
-           Input parameters include:\n\
-           -None at the moment\n\n";
+static char help[] = "teems-solver " TEEMS_SOLVER_VERSION ": solves a CGE model (TABLO/CMF) in parallel.\n\
+  -version              print the solver version and exit 0\n\
+  -cmdfile <path>       CMF file manifest (default ./reg.cmf)\n\
+  -matsol {0,1,2,3}     matrix method LU/SBBD/DBBD/NDBBD\n\
+  -solmed <name>        Gragg|Euler|RK2|Heun|RK4|BoSha32|DoPri54|Johansen|probe\n\
+  -step1/-step2/-step3  step counts; -nsubints n; -verbosity {0,1,2}\n\
+  Full option table: docs/solver-reference.md section 11.\n\
+  Exit status: 0 = completed with no Error line; 1 = an Error line was\n\
+  printed (named abort or reported failure); other = crash/kill/MPI.\n\n";
 
 /* Coefficient dump (<stem>.cof + <stem>.cbin): the coefficient twin of
    sol.var + sol.bin, written after PostSim so PostSim coefficients carry
@@ -25,7 +31,7 @@ static int coefficients_dump(const char *stem, array_def *coefs, offset_t ncof, 
   strcpy(path,stem);
   strcat(path,".cof");
   if((fp=fopen(path,"wb"))==NULL) {
-    printf("Error: cannot open %s for writing\n",path);
+    errmsg("Error: cannot open %s for writing\n",path);
     return 1;
   }
   hdr[0]=1; hdr[1]=ncof; hdr[2]=ncofele; hdr[3]=0;
@@ -41,7 +47,7 @@ static int coefficients_dump(const char *stem, array_def *coefs, offset_t ncof, 
   strcpy(path,stem);
   strcat(path,".cbin");
   if((fp=fopen(path,"wb"))==NULL) {
-    printf("Error: cannot open %s for writing\n",path);
+    errmsg("Error: cannot open %s for writing\n",path);
     return 1;
   }
   {
@@ -122,6 +128,7 @@ static void ordering_stats_write(cmf_file_entry *iodata, int niodata, int noutda
   bool bordered=alltimeset>=0||allregset>=0;
   fprintf(fp,"{\n");
   fprintf(fp,"  \"version\": 2,\n");
+  fprintf(fp,"  \"solver_version\": \"%s\",\n",TEEMS_SOLVER_VERSION);
   fprintf(fp,"  \"vecsize\": %ld,\n",VecSize);
   fprintf(fp,"  \"nvarele\": %ld,\n",nvarele);
   fprintf(fp,"  \"nexo\": %ld,\n",nexo);
@@ -919,6 +926,16 @@ int main(int argc,char **args) {
   struct timeval begintime,endtime;
   offset_t i,j;
   offset_t j2=0,j1=0,j0=0,j3,j4,j5,j6;
+  /* -version answers before MPI/PETSc start: one line, exit 0, no
+     PETSc banner (PETSc owns -version too and would print its own).
+     A pre-1.1 image gives no such line: no response IS the old-image
+     detection the R side relies on. */
+  for(int a=1; a<argc; a++) {
+    if(strcmp(args[a],"-version")==0||strcmp(args[a],"--version")==0) {
+      printf("teems-solver %s\n",TEEMS_SOLVER_VERSION);
+      return 0;
+    }
+  }
   PetscInitialize(&argc,&args,(char *)0,help);
   MPI_Comm_rank(PETSC_COMM_WORLD,&rank);
   MPI_Comm_size(PETSC_COMM_WORLD,&mpisize);
@@ -968,6 +985,10 @@ int main(int argc,char **args) {
   bool sbbd_overrid=false;
   PetscBool nohsl=false;
   if(rank==0) {
+    /* ungated provenance line: every archived solver log records its
+       producer (same constant as -version and stats.json) */
+    printf("teems-solver %s\n",TEEMS_SOLVER_VERSION);
+    fflush(stdout);
     logmsg(1,"Coefficient storage: %s precision\n",TEEMS_STORE_PRECISION);
     logmsg(2,"Notes:\n  Shock statement values follow GEMPACK ordering (first subscript varies fastest).\n  Declare intertemporal variables with minimum dimension to minimise the net cut,\n  e.g. capital(REG,TIME)=qo(\"capital\",REG,TIME) rather than shocking qo(COM,REG,TIME).\n  laA/laDi control solver workspace sizes; use the smallest that solves.\n  Beware CRLF line endings in model text files.\n");
   }
@@ -1074,7 +1095,7 @@ int main(int argc,char **args) {
     PetscOptionsGetReal(NULL,NULL,"-ma48u",&u,&uflg);
     if(uflg) {
       if(!(u>0&&u<=1)) {
-        if(rank==0)printf("Error: -ma48u must be in (0,1] (MA48 pivot threshold CNTL(2); MA48 default 0.1, HSL_MP48 default 0.01), got %g\n",(double)u);
+        if(rank==0)errmsg("Error: -ma48u must be in (0,1] (MA48 pivot threshold CNTL(2); MA48 default 0.1, HSL_MP48 default 0.01), got %g\n",(double)u);
         PetscFinalize();
         return 1;
       }
@@ -1108,7 +1129,7 @@ int main(int argc,char **args) {
     if(tmpflg) {
       size_t tlen=strlen(tmpopt);
       if(tlen==0||tlen>200) {
-        if(rank==0)printf("Error: -tempdir must be 1-200 characters: %s\n",tmpopt);
+        if(rank==0)errmsg("Error: -tempdir must be 1-200 characters: %s\n",tmpopt);
         PetscFinalize();
         return 1;
       }
@@ -1129,7 +1150,7 @@ int main(int argc,char **args) {
        paths themselves (hsl_kernels.f90) */
     setenv("TEEMS_SCRATCH",scratch_dir,1);
     if(access(scratch_dir,W_OK)!=0) {
-      if(rank==0)printf("Error: -tempdir is not a writable directory: %s\n",scratch_dir);
+      if(rank==0)errmsg("Error: -tempdir is not a writable directory: %s\n",scratch_dir);
       PetscFinalize();
       return 1;
     }
@@ -1167,7 +1188,7 @@ int main(int argc,char **args) {
   if(strcmp(solmed,"Johansen")==0)solmethod=SM_JOHANSEN;
   if(strcmp(solmed,"probe")==0)solmethod=SM_PROBE;
   if(solmethod==0) {
-    if(rank==0)printf("Error: unknown -solmed %s (valid: Gragg, Euler, RK2, Heun, RK4, BoSha32, DoPri54, Johansen, probe)\n",solmed);
+    if(rank==0)errmsg("Error: unknown -solmed %s (valid: Gragg, Euler, RK2, Heun, RK4, BoSha32, DoPri54, Johansen, probe)\n",solmed);
     PetscFinalize();
     return 1;
   }
@@ -1217,12 +1238,12 @@ int main(int argc,char **args) {
       else if(strcmp(adaptbuf,"yes")==0)adaptive=1;
       else if(strcmp(adaptbuf,"accuracy-only")==0)adaptive=2;
       else {
-        if(rank==0)printf("Error: unknown -adaptive %s (valid: no, yes, accuracy-only)\n",adaptbuf);
+        if(rank==0)errmsg("Error: unknown -adaptive %s (valid: no, yes, accuracy-only)\n",adaptbuf);
         PetscFinalize();
         return 1;
       }
       if(adaptive&&!isrk_embedded) {
-        if(rank==0)printf("Error: -adaptive requires an embedded Runge-Kutta method (-solmed BoSha32 or DoPri54)\n");
+        if(rank==0)errmsg("Error: -adaptive requires an embedded Runge-Kutta method (-solmed BoSha32 or DoPri54)\n");
         PetscFinalize();
         return 1;
       }
@@ -1245,7 +1266,7 @@ int main(int argc,char **args) {
         if(strcmp(optbuf,"log")==0)rko.chart=RK_CHART_LOG;
         else if(strcmp(optbuf,"percent")==0)rko.chart=RK_CHART_PERCENT;
         else {
-          if(rank==0)printf("Error: unknown -rkchart %s (valid: log, percent)\n",optbuf);
+          if(rank==0)errmsg("Error: unknown -rkchart %s (valid: log, percent)\n",optbuf);
           PetscFinalize();
           return 1;
         }
@@ -1255,7 +1276,7 @@ int main(int argc,char **args) {
         if(strcmp(optbuf,"max")==0)rko.norm=RK_NORM_MAX;
         else if(strcmp(optbuf,"rms")==0)rko.norm=RK_NORM_RMS;
         else {
-          if(rank==0)printf("Error: unknown -rknorm %s (valid: max, rms)\n",optbuf);
+          if(rank==0)errmsg("Error: unknown -rknorm %s (valid: max, rms)\n",optbuf);
           PetscFinalize();
           return 1;
         }
@@ -1265,7 +1286,7 @@ int main(int argc,char **args) {
         if(strcmp(optbuf,"std")==0)rko.ctrl=RK_CTRL_STD;
         else if(strcmp(optbuf,"pi")==0)rko.ctrl=RK_CTRL_PI;
         else {
-          if(rank==0)printf("Error: unknown -rkctrl %s (valid: std, pi)\n",optbuf);
+          if(rank==0)errmsg("Error: unknown -rkctrl %s (valid: std, pi)\n",optbuf);
           PetscFinalize();
           return 1;
         }
@@ -1275,7 +1296,7 @@ int main(int argc,char **args) {
         if(strcmp(optbuf,"pct")==0)rko.scope=RK_SCOPE_PCT;
         else if(strcmp(optbuf,"all")==0)rko.scope=RK_SCOPE_ALL;
         else {
-          if(rank==0)printf("Error: unknown -rkscope %s (valid: pct, all)\n",optbuf);
+          if(rank==0)errmsg("Error: unknown -rkscope %s (valid: pct, all)\n",optbuf);
           PetscFinalize();
           return 1;
         }
@@ -1283,7 +1304,7 @@ int main(int argc,char **args) {
       PetscOptionsGetReal(NULL,NULL,"-rk_h0",&rtmp,&flg);
       if(flg) {
         if(rtmp<=0||rtmp>1) {
-          if(rank==0)printf("Error: -rk_h0 must lie in (0, 1] (got %g)\n",(double)rtmp);
+          if(rank==0)errmsg("Error: -rk_h0 must lie in (0, 1] (got %g)\n",(double)rtmp);
           PetscFinalize();
           return 1;
         }
@@ -1292,7 +1313,7 @@ int main(int argc,char **args) {
       PetscOptionsGetReal(NULL,NULL,"-rkguard",&rtmp,&flg);
       if(flg) {
         if(rtmp<=1) {
-          if(rank==0)printf("Error: -rkguard must exceed 1 (a level ratio; got %g)\n",(double)rtmp);
+          if(rank==0)errmsg("Error: -rkguard must exceed 1 (a level ratio; got %g)\n",(double)rtmp);
           PetscFinalize();
           return 1;
         }
@@ -1301,17 +1322,17 @@ int main(int argc,char **args) {
     }
     if(isrk) {
       if(steps1<1) {
-        if(rank==0)printf("Error: -step1 must be at least 1 for Runge-Kutta methods (got %d)\n",steps1);
+        if(rank==0)errmsg("Error: -step1 must be at least 1 for Runge-Kutta methods (got %d)\n",steps1);
         PetscFinalize();
         return 1;
       }
       if(subints>1) {
-        if(rank==0)printf("Error: subintervals are not available with Runge-Kutta methods (got -nsubints %d); increase -step1 instead\n",subints);
+        if(rank==0)errmsg("Error: subintervals are not available with Runge-Kutta methods (got -nsubints %d); increase -step1 instead\n",subints);
         PetscFinalize();
         return 1;
       }
       if(epstol<=0||retryadj<=0||retryadj>=1||maxretries<1) {
-        if(rank==0)printf("Error: -epstol and -retryadj must be positive (-retryadj below 1) and -maxretries at least 1\n");
+        if(rank==0)errmsg("Error: -epstol and -retryadj must be positive (-retryadj below 1) and -maxretries at least 1\n");
         PetscFinalize();
         return 1;
       }
@@ -1331,35 +1352,40 @@ int main(int argc,char **args) {
       step_ratio2=steps2/(double)2;
       i=(offset_t)steps2/2;
       if(step_ratio2==i){
-        printf("Error: -step1/-step2/-step3 must be all odd or all even (got %d %d %d)\n",steps1,steps2,steps3);
-        return 0;
+        errmsg("Error: -step1/-step2/-step3 must be all odd or all even (got %d %d %d)\n",steps1,steps2,steps3);
+        PetscFinalize();
+        return 1;
       }
       step_ratio2=steps3/(double)2;
       i=(offset_t)steps3/2;
       if(step_ratio2==i){
-        printf("Error: -step1/-step2/-step3 must be all odd or all even (got %d %d %d)\n",steps1,steps2,steps3);
-        return 0;
+        errmsg("Error: -step1/-step2/-step3 must be all odd or all even (got %d %d %d)\n",steps1,steps2,steps3);
+        PetscFinalize();
+        return 1;
       }
     }else{
       //even
       step_ratio2=steps2/(double)2;
       i=(offset_t)steps2/2;
       if(step_ratio2!=i){
-        printf("Error: -step1/-step2/-step3 must be all odd or all even (got %d %d %d)\n",steps1,steps2,steps3);
-        return 0;
+        errmsg("Error: -step1/-step2/-step3 must be all odd or all even (got %d %d %d)\n",steps1,steps2,steps3);
+        PetscFinalize();
+        return 1;
       }
       step_ratio2=steps3/(double)2;
       i=(offset_t)steps3/2;
       if(step_ratio2!=i){
-        printf("Error: -step1/-step2/-step3 must be all odd or all even (got %d %d %d)\n",steps1,steps2,steps3);
-        return 0;
+        errmsg("Error: -step1/-step2/-step3 must be all odd or all even (got %d %d %d)\n",steps1,steps2,steps3);
+        PetscFinalize();
+        return 1;
       }
     }
   }
   if((solmethod==SM_GRAGG||solmethod==SM_EULER)&&!(steps1<steps2&&steps2<steps3)) {
     /* extrapolation needs three distinct step sizes (GEMPACK: i<j<k) */
-    printf("Error: -step1/-step2/-step3 must be strictly increasing (got %d %d %d)\n",steps1,steps2,steps3);
-    return 0;
+    errmsg("Error: -step1/-step2/-step3 must be strictly increasing (got %d %d %d)\n",steps1,steps2,steps3);
+    PetscFinalize();
+    return 1;
   }
   step_ratio2=steps2/(double)steps1;
   steps2=(PetscInt)steps2/steps1;
@@ -1380,7 +1406,7 @@ int main(int argc,char **args) {
   char *readitem=NULL;
   if(rank==0) {
     niodata=cmf_count_files(filename,"iodata");
-    if(niodata==-1)return 0;
+    if(niodata==-1)MPI_Abort(PETSC_COMM_WORLD,1);/* rank 0 only: the other ranks wait in the Bcast below */
     noutdata=cmf_count_files(filename,"outdata");
     nsoldata=cmf_count_files(filename,"soldata");
   }
@@ -1400,21 +1426,21 @@ int main(int argc,char **args) {
     mopt=teems_assertions_mode;
     PetscOptionsGetInt(NULL,NULL,"-assertions",&mopt,NULL);
     if(mopt<0||mopt>2) {
-      if(rank==0)printf("Error: -assertions must be 0 (off), 1 (warn) or 2 (fatal)\n");
+      if(rank==0)errmsg("Error: -assertions must be 0 (off), 1 (warn) or 2 (fatal)\n");
       MPI_Abort(PETSC_COMM_WORLD,1);
     }
     teems_assertions_mode=(int)mopt;
     mopt=teems_range_test_initial;
     PetscOptionsGetInt(NULL,NULL,"-range_test_initial",&mopt,NULL);
     if(mopt<0||mopt>2) {
-      if(rank==0)printf("Error: -range_test_initial must be 0 (off), 1 (warn) or 2 (fatal)\n");
+      if(rank==0)errmsg("Error: -range_test_initial must be 0 (off), 1 (warn) or 2 (fatal)\n");
       MPI_Abort(PETSC_COMM_WORLD,1);
     }
     teems_range_test_initial=(int)mopt;
     mopt=teems_range_test_updated;
     PetscOptionsGetInt(NULL,NULL,"-range_test_updated",&mopt,NULL);
     if(mopt<0||mopt>2) {
-      if(rank==0)printf("Error: -range_test_updated must be 0 (off), 1 (warn) or 2 (fatal)\n");
+      if(rank==0)errmsg("Error: -range_test_updated must be 0 (off), 1 (warn) or 2 (fatal)\n");
       MPI_Abort(PETSC_COMM_WORLD,1);
     }
     teems_range_test_updated=(int)mopt;
@@ -1425,7 +1451,7 @@ int main(int argc,char **args) {
   if(rank==rank_hsl) {
     cmf_read(filename,niodata,iodata,tabfile,closure,shock);
     for (nj=0; nj<niodata+noutdata+nsoldata; nj++) logmsg(2,"rank %d logname %s fname %s\n",rank,iodata[nj].logname,iodata[nj].filname);
-    if(tab_preprocess(tabfile,newtabfile)==-1)return 0;
+    if(tab_preprocess(tabfile,newtabfile)==-1)MPI_Abort(PETSC_COMM_WORLD,1);
     /* audit A6: fail fast on unsupported/unknown Default statements
        before any reader applies them positionally */
     if(tab_defaults_validate(newtabfile)==-1)MPI_Abort(PETSC_COMM_WORLD,1);
@@ -1473,7 +1499,7 @@ int main(int argc,char **args) {
     if(sets_read_intertemporal(tabfile,niodata,iodata, sets,nset)==-1)MPI_Abort(PETSC_COMM_WORLD,1);
     for (i=0; i<nset; i++) {
       if(sets[i].size<0){
-        printf("Error: set %s has a negative size in TAB file\n",sets[i].setname);
+        errmsg("Error: set %s has a negative size in TAB file\n",sets[i].setname);
         MPI_Abort(PETSC_COMM_WORLD,1);
       }
       sets[i].offset=nsetspace;
@@ -1539,7 +1565,7 @@ int main(int argc,char **args) {
                 str_delete_char(copyline,' ');
                 readitem = strtok(copyline,",");
                 if (readitem==NULL||strlen(readitem)>=NAMESIZE) {
-                  printf("Error: malformed element list for set %s\n",sets[i].setname);
+                  errmsg("Error: malformed element list for set %s\n",sets[i].setname);
                   MPI_Abort(PETSC_COMM_WORLD,1);
                 }
                 strcpy(set_elems[sets[i].offset].setele,readitem);
@@ -1547,7 +1573,7 @@ int main(int argc,char **args) {
                 for (j=1; j<dim1; j++) {
                   readitem = strtok(NULL,",");
                   if (readitem==NULL||strlen(readitem)>=NAMESIZE) {
-                    printf("Error: malformed element list for set %s\n",sets[i].setname);
+                    errmsg("Error: malformed element list for set %s\n",sets[i].setname);
                     MPI_Abort(PETSC_COMM_WORLD,1);
                   }
                   strcpy(set_elems[j+sets[i].offset].setele,readitem);
@@ -1772,15 +1798,15 @@ int main(int argc,char **args) {
   if(rank==0) {
     strcpy(commsyntax,"exogenous");
     nexo=closure_read(closure,commsyntax,closure_vals,vars,nvar,sets,nset,set_elems);
-    if(nexo==-1)return 0;
+    if(nexo==-1)MPI_Abort(PETSC_COMM_WORLD,1);
     nexo1=nexo;
     strcpy(commsyntax,"shock");
-    if(shocks_read(shock,commsyntax,closure_vals,nvarele,vars,nvar,sets,nset,set_elems,subints)==-1)return 0;
+    if(shocks_read(shock,commsyntax,closure_vals,nvarele,vars,nvar,sets,nset,set_elems,subints)==-1)MPI_Abort(PETSC_COMM_WORLD,1);
     /* backsolve statements: mark the eliminated elements (the flags ride
        the closure broadcast) and check the condensed system's references
        before any equation scan runs with the filter active */
-    if(backsolve_read(tabfile,vars,nvar,closure_vals)==-1)return 0;
-    if(backsolve_validate_refs(tabfile,vars)==-1)return 0;
+    if(backsolve_read(tabfile,vars,nvar,closure_vals)==-1)MPI_Abort(PETSC_COMM_WORLD,1);
+    if(backsolve_validate_refs(tabfile,vars)==-1)MPI_Abort(PETSC_COMM_WORLD,1);
     if(nbacksolve>0)logmsg(1,"Backsolving %d variables (%ld elements) from retained defining equations\n",nbacksolve,nbselems);
     /* C1/C2: auto-exogenize del_comp@ and the dummies of ACTIVE
        (X-endogenous) complementarity components; inert components
@@ -1816,7 +1842,7 @@ int main(int argc,char **args) {
     iopt=comp_steps;
     PetscOptionsGetInt(NULL,NULL,"-comp_steps",&iopt,NULL);
     if(iopt<1) {
-      if(rank==0)printf("Error: -comp_steps must be a positive Euler step count (manual 51.6)\n");
+      if(rank==0)errmsg("Error: -comp_steps must be a positive Euler step count (manual 51.6)\n");
       MPI_Abort(PETSC_COMM_WORLD,1);
     }
     comp_steps=(int)iopt;
@@ -1825,7 +1851,7 @@ int main(int argc,char **args) {
     comp_redo=iopt?1:0;
     PetscOptionsGetReal(NULL,NULL,"-comp_redo_min_frac",&minfrac_opt,NULL);
     if(minfrac_opt<=0||minfrac_opt>1) {
-      if(rank==0)printf("Error: -comp_redo_min_frac must lie in (0,1] (manual 51.6)\n");
+      if(rank==0)errmsg("Error: -comp_redo_min_frac must lie in (0,1] (manual 51.6)\n");
       MPI_Abort(PETSC_COMM_WORLD,1);
     }
     comp_minfrac=(double)minfrac_opt;
@@ -1839,7 +1865,7 @@ int main(int argc,char **args) {
     PetscOptionsGetInt(NULL,NULL,"-comp_sberr_warn",&iopt,NULL);
     comp_sberr_warn=iopt?1:0;
     if(!comp_do_approx&&!comp_do_acc) {
-      if(rank==0)printf("Error: -comp_do_approx and -comp_do_acc cannot both be 0\n");
+      if(rank==0)errmsg("Error: -comp_do_approx and -comp_do_acc cannot both be 0\n");
       MPI_Abort(PETSC_COMM_WORLD,1);
     }
     /* state flips change the filtered nonzero pattern between steps,
@@ -1988,14 +2014,14 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
   }
   if(solmethod!=SM_PROBE&&matsol==MM_NDBBD&&(alltimeset<0||allregset<0)) {
     if(rank==0) {
-      if(alltimeset<0)printf("Error: NDBBD (-matsol 3) needs a chain dimension, but no equation couples set elements through lead/lag offsets.\n");
-      if(allregset<0)printf("Error: NDBBD (-matsol 3) needs a diagonal-block partition and no viable set was detected (see the candidate table above); choose another -matsol.\n");
+      if(alltimeset<0)errmsg("Error: NDBBD (-matsol 3) needs a chain dimension, but no equation couples set elements through lead/lag offsets.\n");
+      if(allregset<0)errmsg("Error: NDBBD (-matsol 3) needs a diagonal-block partition and no viable set was detected (see the candidate table above); choose another -matsol.\n");
     }
     PetscFinalize();
     return 1;
   }
   if(solmethod!=SM_PROBE&&matsol==MM_DBBD&&alltimeset<0&&allregset<0) {
-    if(rank==0)printf("Error: DBBD (-matsol 2) needs a diagonal-block partition and no viable set was detected (see the candidate table above); use -matsol 0 (LU).\n");
+    if(rank==0)errmsg("Error: DBBD (-matsol 2) needs a diagonal-block partition and no viable set was detected (see the candidate table above); use -matsol 0 (LU).\n");
     PetscFinalize();
     return 1;
   }
@@ -2008,7 +2034,7 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
     int sbbd_nochain=(rank==0&&alltimeset<0)?1:0;
     MPI_Bcast(&sbbd_nochain,1,MPI_INT,0,PETSC_COMM_WORLD);
     if(sbbd_nochain) {
-      if(rank==0)printf("Error: SBBD (-matsol 1) requires a chain dimension, but the equations couple no set through lead/lag offsets; use -matsol 0 (LU) or -matsol 2 (DBBD) for static models.\n");
+      if(rank==0)errmsg("Error: SBBD (-matsol 1) requires a chain dimension, but the equations couple no set through lead/lag offsets; use -matsol 0 (LU) or -matsol 2 (DBBD) for static models.\n");
       PetscFinalize();
       return 1;
     }
@@ -2714,7 +2740,7 @@ comp_accurate_reentry:
     if(rank==rank_hsl&&comp_nbad>0) {
       if(comp_sberr_warn)printf("Warning: %ld complementarity state/bound error(s) after the accurate run (treated as warnings per -comp_sberr_warn; check the log carefully, manual 51.6)\n",(long)comp_nbad);
       else {
-        printf("Error: %ld complementarity state/bound error(s) after the accurate run; rerun with more Euler steps (-comp_steps) or smaller shocks, or downgrade with -comp_sberr_warn 1 (manual 51.5.4/51.6)\n",(long)comp_nbad);
+        errmsg("Error: %ld complementarity state/bound error(s) after the accurate run; rerun with more Euler steps (-comp_steps) or smaller shocks, or downgrade with -comp_sberr_warn 1 (manual 51.5.4/51.6)\n",(long)comp_nbad);
         MPI_Abort(PETSC_COMM_WORLD,1);
       }
     }
@@ -2762,7 +2788,7 @@ comp_accurate_reentry:
     strcat(solchar,".bin");
     logmsg(2,"solchar %s\n",solchar);
     if ( (solution = fopen(solchar, "wb")) == NULL ) {
-      printf("Error: cannot open %s for writing\n",solchar);
+      errmsg("Error: cannot open %s for writing\n",solchar);
       return 1;
     }
     if(xcf!=NULL)fwrite(xcf, sizeof(solve_real),nvarele, solution); /* probe runs have no solution; sol.bin stays empty */
@@ -2776,7 +2802,7 @@ comp_accurate_reentry:
       strcat(solchar,".est");
       logmsg(2,"solchar %s\n",solchar);
       if ( (solution = fopen(solchar, "wb")) == NULL ) {
-        printf("Error: cannot open %s for writing\n",solchar);
+        errmsg("Error: cannot open %s for writing\n",solchar);
         return 1;
       }
       fwrite(accmetric, sizeof(solve_real),nvarele, solution);
@@ -2786,7 +2812,7 @@ comp_accurate_reentry:
     strcat(solchar,".var");
     logmsg(2,"solchar %s\n",solchar);
     if ( (solution = fopen(solchar, "wb")) == NULL ) {
-      printf("Error: cannot open %s for writing\n",solchar);
+      errmsg("Error: cannot open %s for writing\n",solchar);
       return 1;
     }
     fwrite(vars, sizeof(array_def),nvar, solution);
@@ -2794,7 +2820,7 @@ comp_accurate_reentry:
     strcpy(solchar,tempchar);
     strcat(solchar,".set");
     if ( (solution = fopen(solchar, "wb")) == NULL ) {
-      printf("Error: cannot open %s for writing\n",solchar);
+      errmsg("Error: cannot open %s for writing\n",solchar);
       return 1;
     }
     fwrite(sets, sizeof(set_def),nset, solution);
@@ -2802,7 +2828,7 @@ comp_accurate_reentry:
     strcpy(solchar,tempchar);
     strcat(solchar,".sel");
     if ( (solution = fopen(solchar, "wb")) == NULL ) {
-      printf("Error: cannot open %s for writing\n",solchar);
+      errmsg("Error: cannot open %s for writing\n",solchar);
       return 1;
     }
     fwrite(set_elems, sizeof(set_element),nsetspace, solution);
@@ -2815,7 +2841,7 @@ comp_accurate_reentry:
     strcpy(solchar,tempchar);
     strcat(solchar,".mds");
     if ( (solution = fopen(solchar, "wb")) == NULL ) {
-      printf("Error: cannot open %s for writing\n",solchar);
+      errmsg("Error: cannot open %s for writing\n",solchar);
       return 1;
     }
     fwrite(modeldes, sizeof(offset_t),4, solution);
@@ -2874,8 +2900,8 @@ comp_accurate_reentry:
     logmsg(1,"Wrote coefficient dump (%ld coefficients, %ld elements)\n",(long)ncof,(long)ncofele);
   }
   if(nowrites==0&&rank==0)for(i=0; i<noutdata; i++){
-    outputs_write_csv(tabfile,iodata[i+niodata].logname,iodata[i+niodata].filname,sets,nset,set_elems,coefs,ncof,ncofele,vars,nvar,nvarele,elem_vals);
-    logmsg(1,"Wrote %s\n",iodata[i+niodata].logname);
+    if(outputs_write_csv(tabfile,iodata[i+niodata].logname,iodata[i+niodata].filname,sets,nset,set_elems,coefs,ncof,ncofele,vars,nvar,nvarele,elem_vals)!=-1)
+      logmsg(1,"Wrote %s\n",iodata[i+niodata].logname);
   }
   free(iodata);
   free(countvarintra1);
@@ -2908,7 +2934,9 @@ comp_accurate_reentry:
   MPI_Comm_free(&node_tail_comm);
   ierr = PetscFinalize();
   CHKERRQ(ierr);
-  return 0;
+  /* exit-status contract: 0 only when no Error line was printed by
+     this rank (mpiexec propagates any rank's nonzero status) */
+  return teems_error_count>0?1:0;
 }
 
 

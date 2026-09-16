@@ -150,9 +150,13 @@ RUN echo 'APT::Install-Suggests "0";' >> /etc/apt/apt.conf.d/00-docker \
 
 # ── runtime image ──────────────────────────────────────────────────────────────
 FROM debian:bookworm-slim
+# solver version label = pre-pull hint only; ground truth is the binary's
+# -version (src/version.h). Keep this default equal to that constant, or
+# pass --build-arg TEEMS_VERSION="$(sed -n 's/.*TEEMS_SOLVER_VERSION "\(.*\)"/\1/p' src/version.h)"
+ARG TEEMS_VERSION=1.1.0-dev.4
 
 LABEL org.opencontainers.image.name="TEEMS solver Dockerfile (Debian bookworm-slim)"
-LABEL org.opencontainers.image.version="1.1.0-dev.3"
+LABEL org.opencontainers.image.version="${TEEMS_VERSION}"
 LABEL org.opencontainers.image.description="Debian bookworm-slim build for TEEMS solver"
 LABEL org.opencontainers.image.author="Matthew Cantele <matthew.cantele@protonmail.com>"
 LABEL org.opencontainers.image.maintainer="Matthew Cantele <matthew.cantele@protonmail.com>"

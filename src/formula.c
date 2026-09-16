@@ -53,7 +53,7 @@ char *mapping_token_split(char *p, int *mp) {
   at=strchr(p,'@');
   if (at==NULL) return p;
   if (strchr(at+1,'@')!=NULL) {
-    printf("Error: composition of set mappings is not supported (manual 11.9.6)\n");
+    errmsg("Error: composition of set mappings is not supported (manual 11.9.6)\n");
     MPI_Abort(PETSC_COMM_WORLD,1);
   }
   *at='\0';
@@ -61,7 +61,7 @@ char *mapping_token_split(char *p, int *mp) {
       *mp=(int)m+1;
       return at+1;
     }
-  printf("Error: unknown mapping %s in an index expression\n",p);
+  errmsg("Error: unknown mapping %s in an index expression\n",p);
   MPI_Abort(PETSC_COMM_WORLD,1);
   return at+1;
 }
@@ -72,15 +72,15 @@ char *mapping_token_split(char *p, int *mp) {
    mapped argument is deferred -- named fatal, not a mis-bind) */
 static void map_dim_bind(dim_addr *Dm, int mp, dim_t frame_setid, offset_t arg_setid, offset_t stride, int leadlag, const char *symname) {
   if ((dim_t)teems_maps[mp-1].fromset!=frame_setid) {
-    printf("Error: the index of mapping %s does not range over its domain set (in %s); subset routing around a mapped argument is not supported\n",teems_maps[mp-1].mapname,symname);
+    errmsg("Error: the index of mapping %s does not range over its domain set (in %s); subset routing around a mapped argument is not supported\n",teems_maps[mp-1].mapname,symname);
     MPI_Abort(PETSC_COMM_WORLD,1);
   }
   if ((offset_t)teems_maps[mp-1].toset!=arg_setid) {
-    printf("Error: mapping %s does not map into the argument set at that position of %s (manual 11.9.7)\n",teems_maps[mp-1].mapname,symname);
+    errmsg("Error: mapping %s does not map into the argument set at that position of %s (manual 11.9.7)\n",teems_maps[mp-1].mapname,symname);
     MPI_Abort(PETSC_COMM_WORLD,1);
   }
   if (!teems_maps[mp-1].has_values) {
-    printf("Error: mapping %s is used (in %s) before a Formula has assigned all of its values (manual 10.13.1/11.9.1)\n",teems_maps[mp-1].mapname,symname);
+    errmsg("Error: mapping %s is used (in %s) before a Formula has assigned all of its values (manual 10.13.1/11.9.1)\n",teems_maps[mp-1].mapname,symname);
     MPI_Abort(PETSC_COMM_WORLD,1);
   }
   Dm->ADims=stride;
@@ -114,8 +114,8 @@ static int pos_lower(char *f, set_def *sets, quantifier *arSet, dim_t fdim, form
       if (*close=='('||*close=='{') depth++;
       else if (*close==')'||*close=='}') { depth--; if (depth==0) break; }
     }
-    if (*close=='\0') { printf("Error: unbalanced $POS( in formula: %s\n",f); return 0; }
-    if (close-p>=NAMESIZE-1) { printf("Error: $POS argument too long in formula: %s\n",f); return 0; }
+    if (*close=='\0') { errmsg("Error: unbalanced $POS( in formula: %s\n",f); return 0; }
+    if (close-p>=NAMESIZE-1) { errmsg("Error: $POS argument too long in formula: %s\n",f); return 0; }
     strncpy(inner,p,close-p);
     inner[close-p]='\0';
     /* split on the top-level comma */
@@ -132,22 +132,22 @@ static int pos_lower(char *f, set_def *sets, quantifier *arSet, dim_t fdim, form
       if (*c==',') { *c='\0'; strcpy(arg2,c+1); }
       strcpy(arg1,inner);
     }
-    if (arg1[0]=='\0') { printf("Error: $POS needs an index, element or index expression argument (manual 11.5.6): %s\n",f); return 0; }
+    if (arg1[0]=='\0') { errmsg("Error: $POS needs an index, element or index expression argument (manual 11.5.6): %s\n",f); return 0; }
     dim_t setS=-1;
     if (arg2[0]!='\0') {
       for (setS=0; setS<teems_nset; setS++) if (strcmp(arg2,teems_sets[setS].setname)==0) break;
-      if (setS==teems_nset) { printf("Error: $POS: %s is not a declared set (manual 11.5.6)\n",arg2); return 0; }
+      if (setS==teems_nset) { errmsg("Error: $POS: %s is not a declared set (manual 11.5.6)\n",arg2); return 0; }
     }
     if (arg1[0]=='"') {
       /* $POS("el",S): a constant */
       char el[NAMESIZE];
       dim_t e;
-      if (setS<0) { printf("Error: $POS(\"%s\") needs the set as second argument (manual 11.5.6)\n",arg1); return 0; }
+      if (setS<0) { errmsg("Error: $POS(\"%s\") needs the set as second argument (manual 11.5.6)\n",arg1); return 0; }
       k=0;
       for (p=arg1+1; *p!='"'&&*p!='\0'&&k<NAMESIZE-1; p++) el[k++]=tolower((int)*p);
       el[k]='\0';
       for (e=0; e<teems_sets[setS].size; e++) if (strcmp(el,teems_set_elems[teems_sets[setS].offset+e].setele)==0) break;
-      if (e==teems_sets[setS].size) { printf("Error: $POS: %s is not an element of set %s (manual 11.5.6)\n",el,arg2); return 0; }
+      if (e==teems_sets[setS].size) { errmsg("Error: $POS: %s is not an element of set %s (manual 11.5.6)\n",el,arg2); return 0; }
       snprintf(repl,NAMESIZE,"%d",(int)e+1);
     } else {
       char *at=strchr(arg1,'@'),*idx=arg1;
@@ -158,20 +158,20 @@ static int pos_lower(char *f, set_def *sets, quantifier *arSet, dim_t fdim, form
         *at='\0';
         idx=at+1;
         for (m=0; m<teems_nmap; m++) if (strcmp(arg1,teems_maps[m].mapname)==0) { mp=(int)m+1; break; }
-        if (mp==0) { printf("Error: $POS: unknown mapping %s in an index expression\n",arg1); return 0; }
+        if (mp==0) { errmsg("Error: $POS: unknown mapping %s in an index expression\n",arg1); return 0; }
       }
       for (l=0; l<fdim; l++) if (strcmp(idx,arSet[l].index_name)==0) break;
-      if (l==fdim) { printf("Error: $POS: %s is not an index of the statement's quantifiers (manual 11.5.6): %s\n",idx,f); return 0; }
+      if (l==fdim) { errmsg("Error: $POS: %s is not an index of the statement's quantifiers (manual 11.5.6): %s\n",idx,f); return 0; }
       base=(dim_t)arSet[l].setid;
       if (mp>0) {
-        if ((dim_t)teems_maps[mp-1].fromset!=base) { printf("Error: $POS: the index of mapping %s does not range over its domain set\n",teems_maps[mp-1].mapname); return 0; }
-        if (!teems_maps[mp-1].has_values) { printf("Error: mapping %s is used (in $POS) before a Formula has assigned all of its values (manual 10.13.1/11.9.1)\n",teems_maps[mp-1].mapname); return 0; }
+        if ((dim_t)teems_maps[mp-1].fromset!=base) { errmsg("Error: $POS: the index of mapping %s does not range over its domain set\n",teems_maps[mp-1].mapname); return 0; }
+        if (!teems_maps[mp-1].has_values) { errmsg("Error: mapping %s is used (in $POS) before a Formula has assigned all of its values (manual 10.13.1/11.9.1)\n",teems_maps[mp-1].mapname); return 0; }
         teems_maps[mp-1].used=true;
         base=(dim_t)teems_maps[mp-1].toset;
       }
       if (setS>=0&&setS!=base) {
         for (sup=1; sup<MAXSUPSET; sup++) if (sets[base].subsetid[sup]==setS) break;
-        if (sup==MAXSUPSET) { printf("Error: $POS(%s,%s): %s does not range over a subset of %s (manual 11.5.6)\n",idx,arg2,idx,arg2); return 0; }
+        if (sup==MAXSUPSET) { errmsg("Error: $POS(%s,%s): %s does not range over a subset of %s (manual 11.5.6)\n",idx,arg2,idx,arg2); return 0; }
       }
       ops[*nops].Oper=OP_LOAD;
       ops[*nops].Var1Type=OT_POS;
@@ -189,7 +189,7 @@ static int pos_lower(char *f, set_def *sets, quantifier *arSet, dim_t fdim, form
     {
       char tail[TABREADLINE];
       strcpy(tail,close+1);
-      if ((q-f)+strlen(repl)+strlen(tail)>=TABREADLINE) { printf("Error: formula too long after $POS expansion: %s\n",f); return 0; }
+      if ((q-f)+strlen(repl)+strlen(tail)>=TABREADLINE) { errmsg("Error: formula too long after $POS expansion: %s\n",f); return 0; }
       *q='\0';
       strcat(f,repl);
       strcat(f,tail);
@@ -205,7 +205,7 @@ static int pos_lower(char *f, set_def *sets, quantifier *arSet, dim_t fdim, form
 static char *bind_next_index(const char *delim, const char *tokcopy) {
   char *p=strtok(NULL,delim);
   if (p==NULL) {
-    printf("Error: %s has an empty index in its argument list; a reference must carry exactly the declared indices (manual 10.3, 11.4.10)\n",tokcopy);
+    errmsg("Error: %s has an empty index in its argument list; a reference must carry exactly the declared indices (manual 10.3, 11.4.10)\n",tokcopy);
     fflush(stdout);
     MPI_Abort(PETSC_COMM_WORLD,1);
   }
@@ -268,7 +268,7 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
   if(!PairSkipCoefs) do {
     if (strcmp(coefs[index].cofname,p)==0) {
       if((int)coefs[index].size!=nargs_tok) {
-        printf("Error: coefficient %s is declared with %d %s but is referenced with %d in %s; a reference must carry exactly the declared indices (manual 10.3, 11.4.10)\n",coefs[index].cofname,(int)coefs[index].size,coefs[index].size==1?"index":"indices",nargs_tok,tokcopy);
+        errmsg("Error: coefficient %s is declared with %d %s but is referenced with %d in %s; a reference must carry exactly the declared indices (manual 10.3, 11.4.10)\n",coefs[index].cofname,(int)coefs[index].size,coefs[index].size==1?"index":"indices",nargs_tok,tokcopy);
         MPI_Abort(PETSC_COMM_WORLD,1);
       }
       if(!coefs[index].suplval)warn_no_values(coefs[index].cofname,index,0);
@@ -394,7 +394,7 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
   do {
     if (strcmp(vars[index].cofname,p)==0) {
       if((int)vars[index].size!=nargs_tok) {
-        printf("Error: variable %s is declared with %d %s but is referenced with %d in %s; a reference must carry exactly the declared indices (manual 10.3, 11.4.10)\n",vars[index].cofname,(int)vars[index].size,vars[index].size==1?"index":"indices",nargs_tok,tokcopy);
+        errmsg("Error: variable %s is declared with %d %s but is referenced with %d in %s; a reference must carry exactly the declared indices (manual 10.3, 11.4.10)\n",vars[index].cofname,(int)vars[index].size,vars[index].size==1?"index":"indices",nargs_tok,tokcopy);
         MPI_Abort(PETSC_COMM_WORLD,1);
       }
       if(varindex==2) {
@@ -650,7 +650,7 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
      evaluate as 0 without a message (the IF rewrite's `[r] - ["usa"]`
      helper solved to 0 everywhere, so every such condition held).
      Callers do not test the return value, so abort here by name. */
-  printf("Error: %s is not a coefficient, variable or number and cannot be an arithmetic operand (an index or quoted element compares through $POS, manual 11.5.6/11.4.11)\n",tokcopy);
+  errmsg("Error: %s is not a coefficient, variable or number and cannot be an arithmetic operand (an index or quoted element compares through $POS, manual 11.5.6/11.4.11)\n",tokcopy);
   fflush(stdout);
   MPI_Abort(PETSC_COMM_WORLD,1);
   return 0;
@@ -707,7 +707,7 @@ int formula_compile(char *fomulain, set_def *sets,array_def *coefs, offset_t nco
   if(strstr(fomulain,"$pos(")!=NULL||strstr(fomulain,"$pos{")!=NULL) {
     if(!pos_lower(fomulain,sets,arSet,fdim,ops,nops)) return 0;
   } else if(strstr(fomulain,"$pos")!=NULL) {
-    printf("Error: malformed $POS call in formula: %s\n",fomulain);
+    errmsg("Error: malformed $POS call in formula: %s\n",fomulain);
     return 0;
   }
   npar=str_count_char(fomulain, ')');
@@ -754,7 +754,7 @@ int formula_compile(char *fomulain, set_def *sets,array_def *coefs, offset_t nco
         strncpy(fpart1,fomulain,p-fpart1);
         fpart1[p-fpart1] = '\0';
       } else {
-        printf("Error: malformed formula (unbalanced parentheses)\n");
+        errmsg("Error: malformed formula (unbalanced parentheses)\n");
         return 0;
       }
     } else {
@@ -781,12 +781,12 @@ int formula_compile(char *fomulain, set_def *sets,array_def *coefs, offset_t nco
         if(fpart2[k]=='}')adepth--;
         if((fpart2[k]==','&&adepth==0)||fpart2[k]=='\0') {
           if(nargs>=16) {
-            printf("Error: too many arguments in an intrinsic function call: %s\n",fomulain);
+            errmsg("Error: too many arguments in an intrinsic function call: %s\n",fomulain);
             return 0;
           }
           fl=k-a0;
           if(fl<=0) {
-            printf("Error: empty argument in an intrinsic function call: %s\n",fomulain);
+            errmsg("Error: empty argument in an intrinsic function call: %s\n",fomulain);
             return 0;
           }
           strncpy(abuf,fpart2+a0,fl);
@@ -814,11 +814,11 @@ int formula_compile(char *fomulain, set_def *sets,array_def *coefs, offset_t nco
         }
       }
       if(fnmulti==3&&nargs!=2) {
-        printf("Error: ID0V takes exactly 2 arguments: %s\n",fomulain);
+        errmsg("Error: ID0V takes exactly 2 arguments: %s\n",fomulain);
         return 0;
       }
       if(nargs<2) {
-        printf("Error: %s takes at least 2 arguments: %s\n",(fnmulti==1)?"MAX":"MIN",fomulain);
+        errmsg("Error: %s takes at least 2 arguments: %s\n",(fnmulti==1)?"MAX":"MIN",fomulain);
         return 0;
       }
       for (k=1; k<nargs; k++) {
@@ -933,7 +933,7 @@ int formula_compile(char *fomulain, set_def *sets,array_def *coefs, offset_t nco
         }
     *nops=*nops+1;
     if(strlen(fpart1)+strlen(interchar)+strlen(fpart3)>=TABREADLINE){
-      printf("Error: formula too long to compile (exceeds %d chars): %s\n",TABREADLINE,fomulain);
+      errmsg("Error: formula too long to compile (exceeds %d chars): %s\n",TABREADLINE,fomulain);
       return 0;
     }
     strcat(fpart1, interchar);
@@ -1130,13 +1130,13 @@ solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,
           if(eval1==0) {
             if(zdiv_active.zbz_on)ops[i].TmpVarVal=zdiv_active.zbz_val;
             else {
-              printf("Error: zero divided by zero in a formula while Zerodivide (zero_by_zero) is off\n");
+              errmsg("Error: zero divided by zero in a formula while Zerodivide (zero_by_zero) is off\n");
               MPI_Abort(PETSC_COMM_WORLD,1);
             }
           } else {
             if(zdiv_active.nbz_on)ops[i].TmpVarVal=zdiv_active.nbz_val;
             else {
-              printf("Error: division by zero in a formula; Zerodivide (nonzero_by_zero) is off (GEMPACK default) -- set a default or guard with ID01\n");
+              errmsg("Error: division by zero in a formula; Zerodivide (nonzero_by_zero) is off (GEMPACK default) -- set a default or guard with ID01\n");
               MPI_Abort(PETSC_COMM_WORLD,1);
             }
           }
@@ -1245,7 +1245,7 @@ solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,
       if(eval1==0&&eval2<0) {
         ops[i].TmpVarVal=zerodivide;
       } else {
-        if(eval1<0&&eval2-floor(eval2)!=0)printf("Error: fractional power of a negative number in formula evaluation\n");
+        if(eval1<0&&eval2-floor(eval2)!=0)errmsg("Error: fractional power of a negative number in formula evaluation\n");
         ops[i].TmpVarVal=pow(eval1,eval2);
       }
       break;
@@ -1411,7 +1411,7 @@ int formula_compile_pow(char *fomulain, set_def *sets,int npow,int ipar,array_de
     ops[*nops].Oper=OP_POW;
     *nops=*nops+1;
     if(strlen(fpart1)+strlen(interchar)+strlen(fpart2)>=TABREADLINE){
-      printf("Error: formula too long to compile (exceeds %d chars): %s\n",TABREADLINE,fomulain);
+      errmsg("Error: formula too long to compile (exceeds %d chars): %s\n",TABREADLINE,fomulain);
       return 0;
     }
     strcat(fpart1, interchar);
@@ -1506,7 +1506,7 @@ int formula_compile_muldiv(char *fomulain, set_def *sets,int nmul,int ipar,array
     strcpy(ops[*nops].TmpVarName,interchar);
     *nops=*nops+1;
     if(strlen(fpart1)+strlen(interchar)+strlen(fpart2)>=TABREADLINE){
-      printf("Error: formula too long to compile (exceeds %d chars): %s\n",TABREADLINE,fomulain);
+      errmsg("Error: formula too long to compile (exceeds %d chars): %s\n",TABREADLINE,fomulain);
       return 0;
     }
     strcat(fpart1, interchar);
@@ -1610,7 +1610,7 @@ int formula_compile_addsub(char *fomulain, set_def *sets,int nplu,int ipar,array
     strcpy(ops[*nops].TmpVarName,interchar);
     *nops=*nops+1;
     if(strlen(fpart1)+strlen(interchar)+strlen(fpart2)>=TABREADLINE){
-      printf("Error: formula too long to compile (exceeds %d chars): %s\n",TABREADLINE,fomulain);
+      errmsg("Error: formula too long to compile (exceeds %d chars): %s\n",TABREADLINE,fomulain);
       return 0;
     }
     strcat(fpart1, interchar);
@@ -1627,11 +1627,11 @@ int formula_compile_if(char *fomulain, set_def *sets,int nif,int ipar,array_def 
   p1=fomulain;
   p=strpbrk(p1,"=<>");
   if(p==NULL){
-    printf("Error: malformed if() in formula (no comparison operator): %s\n",fomulain);
+    errmsg("Error: malformed if() in formula (no comparison operator): %s\n",fomulain);
     return 0;
   }
   if(p-p1>=NAMESIZE){
-    printf("Error: if() condition operand too long in formula: %s\n",fomulain);
+    errmsg("Error: if() condition operand too long in formula: %s\n",fomulain);
     return 0;
   }
   strncpy(var1,p1,p-p1);
@@ -1662,11 +1662,11 @@ int formula_compile_if(char *fomulain, set_def *sets,int nif,int ipar,array_def 
     else if(j1>-1)break; }
   }
   if(j1<0){
-    printf("Error: malformed if() in formula (missing comma before value): %s\n",fomulain);
+    errmsg("Error: malformed if() in formula (missing comma before value): %s\n",fomulain);
     return 0;
   }
   if(j1>=NAMESIZE||strlen(p+j1+1)>=NAMESIZE){
-    printf("Error: if() value operand too long in formula: %s\n",fomulain);
+    errmsg("Error: if() value operand too long in formula: %s\n",fomulain);
     return 0;
   }
   strncpy(var2,p,j1);
@@ -1707,11 +1707,11 @@ static void mapping_store_value(dim_t mm, dim_t dom, dim_t cod, set_def *sets, s
   map_def *md=&teems_maps[mm];
   dim_t n=sets[md->fromset].size;
   if (cod<0||cod>=sets[md->toset].size) {
-    printf("Error: Formula assigns mapping %s a position outside its codomain set %s (%d elements): %d (manual 11.9.2)\n",md->mapname,sets[md->toset].setname,(int)sets[md->toset].size,(int)cod+1);
+    errmsg("Error: Formula assigns mapping %s a position outside its codomain set %s (%d elements): %d (manual 11.9.2)\n",md->mapname,sets[md->toset].setname,(int)sets[md->toset].size,(int)cod+1);
     MPI_Abort(PETSC_COMM_WORLD,1);
   }
   if (md->assigned[dom]&&md->values[dom]!=cod&&md->used) {
-    printf("Error: Formula changes the value of mapping %s for element %s after the mapping has been used (manual 11.9.9)\n",md->mapname,set_elems[sets[md->fromset].offset+dom].setele);
+    errmsg("Error: Formula changes the value of mapping %s for element %s after the mapping has been used (manual 11.9.9)\n",md->mapname,set_elems[sets[md->fromset].offset+dom].setele);
     MPI_Abort(PETSC_COMM_WORLD,1);
   }
   md->values[dom]=cod;
@@ -1740,14 +1740,14 @@ static void mapping_assign_literal(dim_t mm, char *lhs, char *rhs, set_def *sets
   /* mapping_lower_calls has rewritten map("el") to map@"el" */
   if (p==NULL) p=strchr(lhs,'@');
   if (p==NULL||p[1]!='"') {
-    printf("Error: unquantified Formula for mapping %s must name a domain element in quotes, e.g. %s(\"food\") (manual 10.13.1)\n",md->mapname,md->mapname);
+    errmsg("Error: unquantified Formula for mapping %s must name a domain element in quotes, e.g. %s(\"food\") (manual 10.13.1)\n",md->mapname,md->mapname);
     MPI_Abort(PETSC_COMM_WORLD,1);
   }
   for (p+=2; *p!='"'&&*p!='\0'&&k<NAMESIZE-1; p++) el[k++]=tolower((int)*p);
   el[k]='\0';
   dom=set_element_pos(el,md->fromset,sets,set_elems);
   if (dom<0) {
-    printf("Error: %s is not an element of set %s, the domain of mapping %s (manual 11.9.2)\n",el,sets[md->fromset].setname,md->mapname);
+    errmsg("Error: %s is not an element of set %s, the domain of mapping %s (manual 11.9.2)\n",el,sets[md->fromset].setname,md->mapname);
     MPI_Abort(PETSC_COMM_WORLD,1);
   }
   while (*rhs==' ') rhs++;
@@ -1758,12 +1758,12 @@ static void mapping_assign_literal(dim_t mm, char *lhs, char *rhs, set_def *sets
     el[k]='\0';
     cod=set_element_pos(el,md->toset,sets,set_elems);
     if (cod<0) {
-      printf("Error: %s is not an element of set %s, the codomain of mapping %s (manual 11.9.2)\n",el,sets[md->toset].setname,md->mapname);
+      errmsg("Error: %s is not an element of set %s, the codomain of mapping %s (manual 11.9.2)\n",el,sets[md->toset].setname,md->mapname);
       MPI_Abort(PETSC_COMM_WORLD,1);
     }
   } else {
     if (byele) {
-      printf("Error: Formula (by_elements) for mapping %s needs a quoted codomain element on the right-hand side (manual 10.13.1)\n",md->mapname);
+      errmsg("Error: Formula (by_elements) for mapping %s needs a quoted codomain element on the right-hand side (manual 10.13.1)\n",md->mapname);
       MPI_Abort(PETSC_COMM_WORLD,1);
     }
     cod=(dim_t)atoi(rhs)-1;
@@ -1786,13 +1786,13 @@ static void mapping_assign_formula(dim_t mm, char *vname, char *rhs, int byele, 
   /* mapping_lower_calls has rewritten map(i) to map@i */
   if (p==NULL) p=strchr(vname,'@');
   if (p==NULL) {
-    printf("Error: Formula for mapping %s has no argument (manual 10.13.1)\n",md->mapname);
+    errmsg("Error: Formula for mapping %s has no argument (manual 10.13.1)\n",md->mapname);
     MPI_Abort(PETSC_COMM_WORLD,1);
   }
   for (p++; *p!=')'&&*p!='}'&&*p!='\0'&&k<NAMESIZE-1; p++) arg[k++]=*p;
   arg[k]='\0';
   if (strchr(arg,',')!=NULL) {
-    printf("Error: mapping %s takes one argument in a Formula (manual 10.13.1): %s\n",md->mapname,vname);
+    errmsg("Error: mapping %s takes one argument in a Formula (manual 10.13.1): %s\n",md->mapname,vname);
     MPI_Abort(PETSC_COMM_WORLD,1);
   }
   if (arg[0]=='"') {
@@ -1801,20 +1801,20 @@ static void mapping_assign_formula(dim_t mm, char *vname, char *rhs, int byele, 
     el[k]='\0';
     dom=set_element_pos(el,md->fromset,sets,set_elems);
     if (dom<0) {
-      printf("Error: %s is not an element of set %s, the domain of mapping %s (manual 11.9.2)\n",el,sets[md->fromset].setname,md->mapname);
+      errmsg("Error: %s is not an element of set %s, the domain of mapping %s (manual 11.9.2)\n",el,sets[md->fromset].setname,md->mapname);
       MPI_Abort(PETSC_COMM_WORLD,1);
     }
     litdom=1;
   } else {
     for (l=0; l<fdim-1; l++) if (strcmp(arg,arSet[l].index_name)==0) break;
     if (l==fdim-1) {
-      printf("Error: the argument %s of mapping %s is not one of the Formula's quantifier indices\n",arg,md->mapname);
+      errmsg("Error: the argument %s of mapping %s is not one of the Formula's quantifier indices\n",arg,md->mapname);
       MPI_Abort(PETSC_COMM_WORLD,1);
     }
     if ((dim_t)arSet[l].setid!=md->fromset) {
       for (sup=1; sup<MAXSUPSET; sup++) if (sets[arSet[l].setid].subsetid[sup]==md->fromset) break;
       if (sup==MAXSUPSET) {
-        printf("Error: index %s of the Formula for mapping %s does not range over its domain set %s or a subset of it (manual 11.9.2)\n",arg,md->mapname,sets[md->fromset].setname);
+        errmsg("Error: index %s of the Formula for mapping %s does not range over its domain set %s or a subset of it (manual 11.9.2)\n",arg,md->mapname,sets[md->fromset].setname);
         MPI_Abort(PETSC_COMM_WORLD,1);
       }
     }
@@ -1826,12 +1826,12 @@ static void mapping_assign_formula(dim_t mm, char *vname, char *rhs, int byele, 
     el[k]='\0';
     codlit=set_element_pos(el,md->toset,sets,set_elems);
     if (codlit<0) {
-      printf("Error: %s is not an element of set %s, the codomain of mapping %s (manual 11.9.2)\n",el,sets[md->toset].setname,md->mapname);
+      errmsg("Error: %s is not an element of set %s, the codomain of mapping %s (manual 11.9.2)\n",el,sets[md->toset].setname,md->mapname);
       MPI_Abort(PETSC_COMM_WORLD,1);
     }
   } else {
     if (byele) {
-      printf("Error: Formula (by_elements) for mapping %s needs a quoted codomain element on the right-hand side (manual 10.13.1)\n",md->mapname);
+      errmsg("Error: Formula (by_elements) for mapping %s needs a quoted codomain element on the right-hand side (manual 10.13.1)\n",md->mapname);
       MPI_Abort(PETSC_COMM_WORLD,1);
     }
     if(!formula_compile(rhs,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,&nops,arSet,fdim-1))MPI_Abort(PETSC_COMM_WORLD,1);
@@ -1889,7 +1889,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
        scope, so the combined form stays fatal by design rather than
        running the formula half while the equation silently vanishes */
     if (strstr(line,"& equation")!=NULL||strstr(line,"&equation")!=NULL) {
-      printf("Error: 'Formula & Equation' is not supported: its expansion needs a levels equation (manual 10.9.1); linearize the equation and set the base value with Formula (initial)\n");
+      errmsg("Error: 'Formula & Equation' is not supported: its expansion needs a levels equation (manual 10.9.1); linearize the equation and set the base value with Formula (initial)\n");
       MPI_Abort(PETSC_COMM_WORLD,1);
     }
     /* positional INITIAL/ALWAYS default (manual 10.19; audit A6):
@@ -1999,7 +1999,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
                  a mapping equality here would atof its RHS to 0 and
                  filter silently wrong (M3) */
               if (strchr(p,'@')!=NULL) {
-                printf("Error: mapping equalities in Formula quantifier conditions are not supported; move the condition into a sum (manual 11.4.11)\n");
+                errmsg("Error: mapping equalities in Formula quantifier conditions are not supported; move the condition into a sum (manual 11.4.11)\n");
                 MPI_Abort(PETSC_COMM_WORLD,1);
               }
               strncpy(tempset,readitem,p-readitem);
@@ -2192,11 +2192,11 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
            12.2.2): never a Variable, never an ordinary Coefficient */
         if (teems_ps_pass) {
           if (check10) {
-            printf("Error: PostSim Formula assigns variable %s; simulation results cannot be changed (manual 12.2.2)\n",vars[index].cofname);
+            errmsg("Error: PostSim Formula assigns variable %s; simulation results cannot be changed (manual 12.2.2)\n",vars[index].cofname);
             MPI_Abort(PETSC_COMM_WORLD,1);
           }
           if (teems_coef_is_ps==NULL||!teems_coef_is_ps[index]) {
-            printf("Error: PostSim Formula assigns ordinary coefficient %s; the LHS must be a PostSim Coefficient (manual 12.2.2)\n",coefs[index].cofname);
+            errmsg("Error: PostSim Formula assigns ordinary coefficient %s; the LHS must be a PostSim Coefficient (manual 12.2.2)\n",coefs[index].cofname);
             MPI_Abort(PETSC_COMM_WORLD,1);
           }
         }
@@ -2482,7 +2482,7 @@ offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_el
     /* update statements have no condition machinery: a ':' used to make
        the set lookup miss and expand over sets[0] in silence (M3) */
     if (strchr(line,':')!=NULL) {
-      printf("Error: conditions in Update statements are not supported\n");
+      errmsg("Error: conditions in Update statements are not supported\n");
       MPI_Abort(PETSC_COMM_WORLD,1);
     }
     IsChange=false;
@@ -2778,7 +2778,7 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
     /* update statements have no condition machinery: a ':' used to make
        the set lookup miss and expand over sets[0] in silence (M3) */
     if (strchr(line,':')!=NULL) {
-      printf("Error: conditions in Update statements are not supported\n");
+      errmsg("Error: conditions in Update statements are not supported\n");
       MPI_Abort(PETSC_COMM_WORLD,1);
     }
     IsChange=false;
@@ -3073,7 +3073,7 @@ int sum_eval(char *formulain, char *commsyntax,set_def *sets,dim_t nset, set_ele
            carry commas the old comma-splits broke on (gap 2) */
         p=sum_body_extract(line1);
         if (p==NULL) {
-          printf("Error: malformed sum statement '%s'\n",line1);
+          errmsg("Error: malformed sum statement '%s'\n",line1);
           MPI_Abort(PETSC_COMM_WORLD,1);
         }
         strcpy(line2,p);
@@ -3178,7 +3178,7 @@ int sum_eval(char *formulain, char *commsyntax,set_def *sets,dim_t nset, set_ele
            carry commas the old comma-splits broke on (gap 2) */
         p=sum_body_extract(line1);
         if (p==NULL) {
-          printf("Error: malformed sum statement '%s'\n",line1);
+          errmsg("Error: malformed sum statement '%s'\n",line1);
           MPI_Abort(PETSC_COMM_WORLD,1);
         }
         arsetsize=sum_cof[j].size+1;
@@ -3537,7 +3537,7 @@ offset_t assertions_execute(char *fname,set_def *sets,dim_t nset,set_element *se
         printf("Warning: assertion failed at a Runge-Kutta stage state; the step will be retried\n");
       }
       else if(mode==2) {
-        printf("Error: assertion failed (-assertions 1 downgrades this abort to a warning, -assertions 0 skips the checks)\n");
+        errmsg("Error: assertion failed (-assertions 1 downgrades this abort to a warning, -assertions 0 skips the checks)\n");
         MPI_Abort(PETSC_COMM_WORLD,1);
       }
     }

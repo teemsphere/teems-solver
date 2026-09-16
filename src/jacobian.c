@@ -113,7 +113,7 @@ static int sum_prog_build(char *formulain, char *commsyntax, bool skip_linvar_su
            carry commas the old comma-splits broke on (gap 2) */
         p=sum_body_extract(line1);
         if (p==NULL) {
-          printf("Error: malformed sum statement '%s'\n",line1);
+          errmsg("Error: malformed sum statement '%s'\n",line1);
           MPI_Abort(PETSC_COMM_WORLD,1);
         }
         out->nouter=sum_cof[j].size;
@@ -469,7 +469,7 @@ static void linvar_dim_read(char *p, char *linecopy, offset_t lvar,
     {
       char *close=strchr(p1,')');
       if (close==NULL||close-p1<(long)strlen(lintmp)||close-p1-(long)strlen(lintmp)>=(long)sizeof(ref->dimsetnames[d])) {
-        printf("Error: malformed quantifier %s... in an equation: no closing parenthesis or set name too long\n",lintmp);
+        errmsg("Error: malformed quantifier %s... in an equation: no closing parenthesis or set name too long\n",lintmp);
         MPI_Abort(PETSC_COMM_WORLD,1);
       }
       strncpy(ref->dimsetnames[d],p1+strlen(lintmp),close-p1-strlen(lintmp));
@@ -501,7 +501,7 @@ static void linvar_dim_read(char *p, char *linecopy, offset_t lvar,
     {
       char *comma=strchr(p1,',');
       if (comma==NULL||comma-p1>=(long)sizeof(ref->dimsetnames[d])) {
-        printf("Error: malformed sum %s... in an equation: expected sum(<index>,<set>,...)\n",lintmp);
+        errmsg("Error: malformed sum %s... in an equation: expected sum(<index>,<set>,...)\n",lintmp);
         MPI_Abort(PETSC_COMM_WORLD,1);
       }
       strncpy(ref->dimsetnames[d],p1,comma-p1);
@@ -530,19 +530,19 @@ static void linvar_map_dim_check(eq_var_ref *ref, dim_t d, offset_t frame_setid,
                                  array_def *vars) {
   map_def *md=&teems_maps[ref->dimmapid[d]-1];
   if((offset_t)md->fromset!=frame_setid) {
-    printf("Error: the index of mapping %s does not range over its domain set (in %s); subset routing around a mapped argument is not supported\n",md->mapname,ref->LinVarName);
+    errmsg("Error: the index of mapping %s does not range over its domain set (in %s); subset routing around a mapped argument is not supported\n",md->mapname,ref->LinVarName);
     MPI_Abort(PETSC_COMM_WORLD,1);
   }
   if((offset_t)md->toset!=vars[ref->LinVarIndx].setid[d]) {
-    printf("Error: mapping %s does not map into the argument set at that position of %s (manual 11.9.7)\n",md->mapname,ref->LinVarName);
+    errmsg("Error: mapping %s does not map into the argument set at that position of %s (manual 11.9.7)\n",md->mapname,ref->LinVarName);
     MPI_Abort(PETSC_COMM_WORLD,1);
   }
   if(ref->dimleadlag[d]!=0) {
-    printf("Error: a lead/lag offset on the mapped index of %s (mapping %s) is not supported\n",ref->LinVarName,md->mapname);
+    errmsg("Error: a lead/lag offset on the mapped index of %s (mapping %s) is not supported\n",ref->LinVarName,md->mapname);
     MPI_Abort(PETSC_COMM_WORLD,1);
   }
   if(!md->has_values) {
-    printf("Error: mapping %s is used (in %s) before a Formula has assigned all of its values (manual 10.13.1/11.9.1)\n",md->mapname,ref->LinVarName);
+    errmsg("Error: mapping %s is used (in %s) before a Formula has assigned all of its values (manual 10.13.1/11.9.1)\n",md->mapname,ref->LinVarName);
     MPI_Abort(PETSC_COMM_WORLD,1);
   }
   md->used=true;
@@ -594,7 +594,7 @@ static int lin_isnamec(char ch) {
 
 static void lin_fatal(lin_ctx *c, const char *what) {
   if(c->fail) return;
-  printf("Error: equation %s is not linear in its variables: %s. A linear equation may use a linear variable only as coefficient-expression * variable (manual 11.4.8); a nonlinear relation between levels is written as Equation (Levels) over Variable (Levels) declarations (manual 9.2, 18.1)\n",c->eqname,what);
+  errmsg("Error: equation %s is not linear in its variables: %s. A linear equation may use a linear variable only as coefficient-expression * variable (manual 11.4.8); a nonlinear relation between levels is written as Equation (Levels) over Variable (Levels) declarations (manual 9.2, 18.1)\n",c->eqname,what);
   c->fail=1;
 }
 
@@ -760,7 +760,7 @@ static void eq_linearity_check(const char *text, const char *eqname, array_def *
     lin_fatal_tok(&c,"unexpected text at",c.p,n>40?40:n);
   }
   if(!c.fail&&d==0) {
-    printf("Error: equation %s contains no linear variable (manual 11.4.8: every term of a linear equation is coefficient-expression * variable)\n",eqname);
+    errmsg("Error: equation %s contains no linear variable (manual 11.4.8: every term of a linear equation is coefficient-expression * variable)\n",eqname);
     c.fail=1;
   }
   if(c.fail) MPI_Abort(PETSC_COMM_WORLD,1);
@@ -883,7 +883,7 @@ static void stmt_prog_build_one(char *line, stmt_prog *stp, char *commsyntax,
             offset_t lr=linvar_resolve(vname,vars,nvar);
             if (lr<0) {
               /* was a silent break dropping every later column */
-              printf("Error: equation references p_%s but no variable %s, p_%s or c_%s is declared\n",vname,vname,vname,vname);
+              errmsg("Error: equation references p_%s but no variable %s, p_%s or c_%s is declared\n",vname,vname,vname,vname);
               MPI_Abort(PETSC_COMM_WORLD,1);
             }
             l=lr;
@@ -923,7 +923,7 @@ static void stmt_prog_build_one(char *line, stmt_prog *stp, char *commsyntax,
             offset_t lr=linvar_resolve(vname,vars,nvar);
             if (lr<0) {
               /* was a silent miss leaving LinVarIndx=0 (variable 0) */
-              printf("Error: equation references p_%s but no variable %s, p_%s or c_%s is declared\n",vname,vname,vname,vname);
+              errmsg("Error: equation references p_%s but no variable %s, p_%s or c_%s is declared\n",vname,vname,vname,vname);
               MPI_Abort(PETSC_COMM_WORLD,1);
             }
             LinVars[i3].LinVarIndx=lr;
@@ -949,13 +949,13 @@ static void stmt_prog_build_one(char *line, stmt_prog *stp, char *commsyntax,
           }
           readitem = strtok(NULL,",");
           if (readitem==NULL||strlen(readitem)>=sizeof(arSet[i].index_name)) {
-            printf("Error: malformed quantifier in an equation: expected (all,<index>,<set>)\n");
+            errmsg("Error: malformed quantifier in an equation: expected (all,<index>,<set>)\n");
             MPI_Abort(PETSC_COMM_WORLD,1);
           }
           strcpy(arSet[i].index_name,readitem);
           readitem = strtok(NULL,")");
           if (readitem==NULL) {
-            printf("Error: malformed quantifier in an equation: expected (all,<index>,<set>)\n");
+            errmsg("Error: malformed quantifier in an equation: expected (all,<index>,<set>)\n");
             MPI_Abort(PETSC_COMM_WORLD,1);
           }
           for (i4=0; i4<nset; i4++) if(strcmp(readitem,sets[i4].setname)==0) {
@@ -1157,7 +1157,7 @@ static void stmt_prog_build_one(char *line, stmt_prog *stp, char *commsyntax,
             condss[dcount]=0;
             if (condmap[dcount]>0) {
               if (arSet[dcountdim3[dcount]].setid!=(offset_t)teems_maps[condmap[dcount]-1].fromset) {
-                printf("Error: the condition on mapping %s gates index %s, which does not loop over the mapping's domain set\n",teems_maps[condmap[dcount]-1].mapname,LinVars[i].dimnames[dcount]);
+                errmsg("Error: the condition on mapping %s gates index %s, which does not loop over the mapping's domain set\n",teems_maps[condmap[dcount]-1].mapname,LinVars[i].dimnames[dcount]);
                 MPI_Abort(PETSC_COMM_WORLD,1);
               }
               sum_cond_rhs_resolve(condmap[dcount],LinVars[i].dimcondrhs[dcount],arSet,fdimlin,sets,set_elems,&condpos[dcount],&condfix[dcount],&condss[dcount]);
@@ -1411,7 +1411,7 @@ static void bs_prog_execute(bs_prog *bp, set_def *sets, set_element *set_elems,
     }
   }
   if (pivbad) {
-    printf("Error: the occurrences of %s in defining equation %s map to different elements in the same row; the condensation must combine same-pattern terms before deployment (GEMPACK manual 14.1.10)\n",vars[bd->varindx].cofname,bd->eqname);
+    errmsg("Error: the occurrences of %s in defining equation %s map to different elements in the same row; the condensation must combine same-pattern terms before deployment (GEMPACK manual 14.1.10)\n",vars[bd->varindx].cofname,bd->eqname);
     MPI_Abort(PETSC_COMM_WORLD,1);
   }
   if (!bp->checked) {
@@ -1420,7 +1420,7 @@ static void bs_prog_execute(bs_prog *bp, set_def *sets, set_element *set_elems,
     char *seen= (char *) calloc (vars[bd->varindx].nelem,sizeof(char));
     for (i5=0; i5<st->nloops; i5++) {
       if (pivelem[i5]<0||pivelem[i5]>=vars[bd->varindx].nelem||seen[pivelem[i5]]) {
-        printf("Error: defining equation %s does not map one-to-one onto backsolved variable %s; redeploy the model so the condensation validates this backsolve\n",bd->eqname,vars[bd->varindx].cofname);
+        errmsg("Error: defining equation %s does not map one-to-one onto backsolved variable %s; redeploy the model so the condensation validates this backsolve\n",bd->eqname,vars[bd->varindx].cofname);
         MPI_Abort(PETSC_COMM_WORLD,1);
       }
       seen[pivelem[i5]]=1;
@@ -1431,7 +1431,7 @@ static void bs_prog_execute(bs_prog *bp, set_def *sets, set_element *set_elems,
   for (i5=0; i5<st->nloops; i5++) {
     if (piv[i5]==0) {
       bs_element_label(vars,bd->varindx,pivelem[i5],sets,set_elems,label);
-      printf("Error: zero pivot backsolving %s from equation %s at this step; the defining equation cannot determine the variable here (GEMPACK would report the same singularity) -- nominate a different equation or leave the variable in the system\n",label,bd->eqname);
+      errmsg("Error: zero pivot backsolving %s from equation %s at this step; the defining equation cannot determine the variable here (GEMPACK would report the same singularity) -- nominate a different equation or leave the variable in the system\n",label,bd->eqname);
       MPI_Abort(PETSC_COMM_WORLD,1);
     }
     bsvals[bd->elem_base+pivelem[i5]]=-acc[i5]/piv[i5];
@@ -1480,7 +1480,7 @@ int backsolve_recover(char *fname, char *commsyntax,set_def *sets,offset_t nset,
       bp->st.zerodivide=zerodivide;
       stmt_prog_build_one(line,&bp->st,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,ncofele,NULL,0,0,0,1,true);
       if (bp->st.nloops!=vars[backsolves[pr].varindx].nelem) {
-        printf("Error: defining equation %s has %ld rows but backsolved variable %s has %ld elements; they must match one-to-one\n",backsolves[pr].eqname,bp->st.nloops,vars[backsolves[pr].varindx].cofname,vars[backsolves[pr].varindx].nelem);
+        errmsg("Error: defining equation %s has %ld rows but backsolved variable %s has %ld elements; they must match one-to-one\n",backsolves[pr].eqname,bp->st.nloops,vars[backsolves[pr].varindx].cofname,vars[backsolves[pr].varindx].nelem);
         MPI_Abort(PETSC_COMM_WORLD,1);
       }
       {
@@ -1489,24 +1489,24 @@ int backsolve_recover(char *fname, char *commsyntax,set_def *sets,offset_t nset,
           if (bp->st.lv[i].LinVarIndx!=backsolves[pr].varindx) continue;
           npivot++;
           if (bp->st.lv[i].nloopsfac!=1) {
-            printf("Error: an occurrence of %s in defining equation %s carries indices outside the equation's quantifiers; it cannot be backsolved from this equation (GEMPACK manual 14.1.10)\n",vars[backsolves[pr].varindx].cofname,backsolves[pr].eqname);
+            errmsg("Error: an occurrence of %s in defining equation %s carries indices outside the equation's quantifiers; it cannot be backsolved from this equation (GEMPACK manual 14.1.10)\n",vars[backsolves[pr].varindx].cofname,backsolves[pr].eqname);
             MPI_Abort(PETSC_COMM_WORLD,1);
           }
           for (d=0; d<vars[backsolves[pr].varindx].size; d++) {
             if (bp->st.lv[i].dimleadlag[d]!=0) {
-              printf("Error: an occurrence of %s in defining equation %s carries a lead/lag offset; it cannot be backsolved from this equation (GEMPACK manual 14.1.10)\n",vars[backsolves[pr].varindx].cofname,backsolves[pr].eqname);
+              errmsg("Error: an occurrence of %s in defining equation %s carries a lead/lag offset; it cannot be backsolved from this equation (GEMPACK manual 14.1.10)\n",vars[backsolves[pr].varindx].cofname,backsolves[pr].eqname);
               MPI_Abort(PETSC_COMM_WORLD,1);
             }
           }
         }
         if (npivot==0) {
-          printf("Error: defining equation %s does not reference backsolved variable %s\n",backsolves[pr].eqname,vars[backsolves[pr].varindx].cofname);
+          errmsg("Error: defining equation %s does not reference backsolved variable %s\n",backsolves[pr].eqname,vars[backsolves[pr].varindx].cofname);
           MPI_Abort(PETSC_COMM_WORLD,1);
         }
       }
     }
     if (bs_cache_n!=nbacksolve) {
-      printf("Error: %d backsolve statements but %d nominated defining equations found in the TAB file\n",nbacksolve,bs_cache_n);
+      errmsg("Error: %d backsolve statements but %d nominated defining equations found in the TAB file\n",nbacksolve,bs_cache_n);
       MPI_Abort(PETSC_COMM_WORLD,1);
     }
     bs_cache_built=true;
@@ -1565,7 +1565,7 @@ int eq_sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifier 
           }
           if (i>10000) {
             strcat(interchar,"gen_sum");
-            printf("Error: too many sum() terms in one statement\n");
+            errmsg("Error: too many sum() terms in one statement\n");
           }
           strcat(interchar,interchar1);
           strcpy(sum_cof[j].sumname,interchar);
@@ -1727,7 +1727,7 @@ int eq_sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifier 
           }
           if (i>10000) {
             strcat(interchar,"gen_sum");
-            printf("Error: too many sum() terms in one statement\n");
+            errmsg("Error: too many sum() terms in one statement\n");
           }
           strcat(interchar,interchar1);
           strcpy(sum_cof[j].sumname,interchar);
@@ -2192,14 +2192,14 @@ int equation_order_read(char *fname, char *commsyntax,set_def *sets,dim_t nset,s
       if (fdim==0) {
         readitem = strtok(line+1," ");
         if (readitem==NULL||strlen(readitem)>=sizeof(eq_defs[eqindx].cofname)) {
-          printf("Error: malformed %s statement in TAB file: %s\n",commsyntax,linecopy);
+          errmsg("Error: malformed %s statement in TAB file: %s\n",commsyntax,linecopy);
           fclose(filehandle);
           return 0;
         }
         strcpy(eq_defs[eqindx].cofname,readitem);
         readitem = strtok(NULL,"=");
         if (readitem==NULL) {
-          printf("Error: malformed %s statement in TAB file: %s\n",commsyntax,linecopy);
+          errmsg("Error: malformed %s statement in TAB file: %s\n",commsyntax,linecopy);
           fclose(filehandle);
           return 0;
         }
@@ -2208,7 +2208,7 @@ int equation_order_read(char *fname, char *commsyntax,set_def *sets,dim_t nset,s
         readitem = strtok(line,"=");
         readitem = strtok(NULL,";");
         if (readitem==NULL||(readitem-line)+strlen(readitem)+strlen(vname)+4>=sizeof(line)) {
-          printf("Error: malformed %s statement in TAB file: %s\n",commsyntax,linecopy);
+          errmsg("Error: malformed %s statement in TAB file: %s\n",commsyntax,linecopy);
           fclose(filehandle);
           return 0;
         }
@@ -2220,7 +2220,7 @@ int equation_order_read(char *fname, char *commsyntax,set_def *sets,dim_t nset,s
       else {
         readitem = strtok(line+1,"(");
         if (readitem==NULL||strlen(readitem)>=sizeof(eq_defs[eqindx].cofname)) {
-          printf("Error: malformed %s statement in TAB file: %s\n",commsyntax,linecopy);
+          errmsg("Error: malformed %s statement in TAB file: %s\n",commsyntax,linecopy);
           fclose(filehandle);
           return 0;
         }
@@ -2231,7 +2231,7 @@ int equation_order_read(char *fname, char *commsyntax,set_def *sets,dim_t nset,s
         readitem = strtok(readitem,")");
         readitem = strtok(NULL,"=");
         if (readitem==NULL) {
-          printf("Error: malformed %s statement in TAB file: %s\n",commsyntax,linecopy);
+          errmsg("Error: malformed %s statement in TAB file: %s\n",commsyntax,linecopy);
           fclose(filehandle);
           return 0;
         }
@@ -2240,7 +2240,7 @@ int equation_order_read(char *fname, char *commsyntax,set_def *sets,dim_t nset,s
         readitem = strtok(line,"=");
         readitem = strtok(NULL,";");
         if (readitem==NULL||(readitem-line)+strlen(readitem)+strlen(vname)+4>=sizeof(line)) {
-          printf("Error: malformed %s statement in TAB file: %s\n",commsyntax,linecopy);
+          errmsg("Error: malformed %s statement in TAB file: %s\n",commsyntax,linecopy);
           fclose(filehandle);
           return 0;
         }
@@ -2286,7 +2286,7 @@ int equation_order_read(char *fname, char *commsyntax,set_def *sets,dim_t nset,s
             offset_t lr=linvar_resolve(vname,vars,nvar);
             if (lr<0) {
               /* was a silent break dropping every later column */
-              printf("Error: equation references p_%s but no variable %s, p_%s or c_%s is declared\n",vname,vname,vname,vname);
+              errmsg("Error: equation references p_%s but no variable %s, p_%s or c_%s is declared\n",vname,vname,vname,vname);
               MPI_Abort(PETSC_COMM_WORLD,1);
             }
             l=lr;
@@ -2326,7 +2326,7 @@ int equation_order_read(char *fname, char *commsyntax,set_def *sets,dim_t nset,s
             offset_t lr=linvar_resolve(vname,vars,nvar);
             if (lr<0) {
               /* was a silent miss leaving LinVarIndx=0 (variable 0) */
-              printf("Error: equation references p_%s but no variable %s, p_%s or c_%s is declared\n",vname,vname,vname,vname);
+              errmsg("Error: equation references p_%s but no variable %s, p_%s or c_%s is declared\n",vname,vname,vname,vname);
               MPI_Abort(PETSC_COMM_WORLD,1);
             }
             LinVars[i3].LinVarIndx=lr;
@@ -2351,13 +2351,13 @@ int equation_order_read(char *fname, char *commsyntax,set_def *sets,dim_t nset,s
           }
           readitem = strtok(NULL,",");
           if (readitem==NULL||strlen(readitem)>=sizeof(arSet[i].index_name)) {
-            printf("Error: malformed quantifier in an equation: expected (all,<index>,<set>)\n");
+            errmsg("Error: malformed quantifier in an equation: expected (all,<index>,<set>)\n");
             MPI_Abort(PETSC_COMM_WORLD,1);
           }
           strcpy(arSet[i].index_name,readitem);
           readitem = strtok(NULL,")");
           if (readitem==NULL) {
-            printf("Error: malformed quantifier in an equation: expected (all,<index>,<set>)\n");
+            errmsg("Error: malformed quantifier in an equation: expected (all,<index>,<set>)\n");
             MPI_Abort(PETSC_COMM_WORLD,1);
           }
           for (i4=0; i4<nset; i4++) if(strcmp(readitem,sets[i4].setname)==0) {
@@ -2544,14 +2544,14 @@ int equation_order_read_nested(char *fname, char *commsyntax,set_def *sets,dim_t
       if (fdim==0) {
         readitem = strtok(line+1," ");
         if (readitem==NULL||strlen(readitem)>=sizeof(eq_defs[eqindx].cofname)) {
-          printf("Error: malformed %s statement in TAB file: %s\n",commsyntax,linecopy);
+          errmsg("Error: malformed %s statement in TAB file: %s\n",commsyntax,linecopy);
           fclose(filehandle);
           return 0;
         }
         strcpy(eq_defs[eqindx].cofname,readitem);
         readitem = strtok(NULL,"=");
         if (readitem==NULL) {
-          printf("Error: malformed %s statement in TAB file: %s\n",commsyntax,linecopy);
+          errmsg("Error: malformed %s statement in TAB file: %s\n",commsyntax,linecopy);
           fclose(filehandle);
           return 0;
         }
@@ -2560,7 +2560,7 @@ int equation_order_read_nested(char *fname, char *commsyntax,set_def *sets,dim_t
         readitem = strtok(line,"=");
         readitem = strtok(NULL,";");
         if (readitem==NULL||(readitem-line)+strlen(readitem)+strlen(vname)+4>=sizeof(line)) {
-          printf("Error: malformed %s statement in TAB file: %s\n",commsyntax,linecopy);
+          errmsg("Error: malformed %s statement in TAB file: %s\n",commsyntax,linecopy);
           fclose(filehandle);
           return 0;
         }
@@ -2572,7 +2572,7 @@ int equation_order_read_nested(char *fname, char *commsyntax,set_def *sets,dim_t
       else {
         readitem = strtok(line+1,"(");
         if (readitem==NULL||strlen(readitem)>=sizeof(eq_defs[eqindx].cofname)) {
-          printf("Error: malformed %s statement in TAB file: %s\n",commsyntax,linecopy);
+          errmsg("Error: malformed %s statement in TAB file: %s\n",commsyntax,linecopy);
           fclose(filehandle);
           return 0;
         }
@@ -2583,7 +2583,7 @@ int equation_order_read_nested(char *fname, char *commsyntax,set_def *sets,dim_t
         readitem = strtok(readitem,")");
         readitem = strtok(NULL,"=");
         if (readitem==NULL) {
-          printf("Error: malformed %s statement in TAB file: %s\n",commsyntax,linecopy);
+          errmsg("Error: malformed %s statement in TAB file: %s\n",commsyntax,linecopy);
           fclose(filehandle);
           return 0;
         }
@@ -2592,7 +2592,7 @@ int equation_order_read_nested(char *fname, char *commsyntax,set_def *sets,dim_t
         readitem = strtok(line,"=");
         readitem = strtok(NULL,";");
         if (readitem==NULL||(readitem-line)+strlen(readitem)+strlen(vname)+4>=sizeof(line)) {
-          printf("Error: malformed %s statement in TAB file: %s\n",commsyntax,linecopy);
+          errmsg("Error: malformed %s statement in TAB file: %s\n",commsyntax,linecopy);
           fclose(filehandle);
           return 0;
         }
@@ -2638,7 +2638,7 @@ int equation_order_read_nested(char *fname, char *commsyntax,set_def *sets,dim_t
             offset_t lr=linvar_resolve(vname,vars,nvar);
             if (lr<0) {
               /* was a silent break dropping every later column */
-              printf("Error: equation references p_%s but no variable %s, p_%s or c_%s is declared\n",vname,vname,vname,vname);
+              errmsg("Error: equation references p_%s but no variable %s, p_%s or c_%s is declared\n",vname,vname,vname,vname);
               MPI_Abort(PETSC_COMM_WORLD,1);
             }
             l=lr;
@@ -2678,7 +2678,7 @@ int equation_order_read_nested(char *fname, char *commsyntax,set_def *sets,dim_t
             offset_t lr=linvar_resolve(vname,vars,nvar);
             if (lr<0) {
               /* was a silent miss leaving LinVarIndx=0 (variable 0) */
-              printf("Error: equation references p_%s but no variable %s, p_%s or c_%s is declared\n",vname,vname,vname,vname);
+              errmsg("Error: equation references p_%s but no variable %s, p_%s or c_%s is declared\n",vname,vname,vname,vname);
               MPI_Abort(PETSC_COMM_WORLD,1);
             }
             LinVars[i3].LinVarIndx=lr;
@@ -2703,13 +2703,13 @@ int equation_order_read_nested(char *fname, char *commsyntax,set_def *sets,dim_t
           }
           readitem = strtok(NULL,",");
           if (readitem==NULL||strlen(readitem)>=sizeof(arSet[i].index_name)) {
-            printf("Error: malformed quantifier in an equation: expected (all,<index>,<set>)\n");
+            errmsg("Error: malformed quantifier in an equation: expected (all,<index>,<set>)\n");
             MPI_Abort(PETSC_COMM_WORLD,1);
           }
           strcpy(arSet[i].index_name,readitem);
           readitem = strtok(NULL,")");
           if (readitem==NULL) {
-            printf("Error: malformed quantifier in an equation: expected (all,<index>,<set>)\n");
+            errmsg("Error: malformed quantifier in an equation: expected (all,<index>,<set>)\n");
             MPI_Abort(PETSC_COMM_WORLD,1);
           }
           for (i4=0; i4<nset; i4++) if(strcmp(readitem,sets[i4].setname)==0) {
@@ -2959,7 +2959,7 @@ int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,
             offset_t lr=linvar_resolve(vname,vars,nvar);
             if (lr<0) {
               /* was a silent break dropping every later column */
-              printf("Error: equation references p_%s but no variable %s, p_%s or c_%s is declared\n",vname,vname,vname,vname);
+              errmsg("Error: equation references p_%s but no variable %s, p_%s or c_%s is declared\n",vname,vname,vname,vname);
               MPI_Abort(PETSC_COMM_WORLD,1);
             }
             l=lr;
@@ -2999,7 +2999,7 @@ int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,
             offset_t lr=linvar_resolve(vname,vars,nvar);
             if (lr<0) {
               /* was a silent miss leaving LinVarIndx=0 (variable 0) */
-              printf("Error: equation references p_%s but no variable %s, p_%s or c_%s is declared\n",vname,vname,vname,vname);
+              errmsg("Error: equation references p_%s but no variable %s, p_%s or c_%s is declared\n",vname,vname,vname,vname);
               MPI_Abort(PETSC_COMM_WORLD,1);
             }
             LinVars[i3].LinVarIndx=lr;
@@ -3023,13 +3023,13 @@ int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,
           }
           readitem = strtok(NULL,",");
           if (readitem==NULL||strlen(readitem)>=sizeof(arSet[i].index_name)) {
-            printf("Error: malformed quantifier in an equation: expected (all,<index>,<set>)\n");
+            errmsg("Error: malformed quantifier in an equation: expected (all,<index>,<set>)\n");
             MPI_Abort(PETSC_COMM_WORLD,1);
           }
           strcpy(arSet[i].index_name,readitem);
           readitem = strtok(NULL,")");
           if (readitem==NULL) {
-            printf("Error: malformed quantifier in an equation: expected (all,<index>,<set>)\n");
+            errmsg("Error: malformed quantifier in an equation: expected (all,<index>,<set>)\n");
             MPI_Abort(PETSC_COMM_WORLD,1);
           }
           for (i4=0; i4<nset; i4++) if(strcmp(readitem,sets[i4].setname)==0) {
@@ -3146,7 +3146,7 @@ int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,
           condss[dcount]=0;
           if (condmap[dcount]>0) {
             if (arSet[dcountdim5[dcount]].setid!=(offset_t)teems_maps[condmap[dcount]-1].fromset) {
-              printf("Error: the condition on mapping %s gates index %s, which does not loop over the mapping's domain set\n",teems_maps[condmap[dcount]-1].mapname,LinVars[i].dimnames[dcount]);
+              errmsg("Error: the condition on mapping %s gates index %s, which does not loop over the mapping's domain set\n",teems_maps[condmap[dcount]-1].mapname,LinVars[i].dimnames[dcount]);
               MPI_Abort(PETSC_COMM_WORLD,1);
             }
             sum_cond_rhs_resolve(condmap[dcount],LinVars[i].dimcondrhs[dcount],arSet,fdimlin,sets,set_elems,&condpos[dcount],&condfix[dcount],&condss[dcount]);
@@ -3284,7 +3284,7 @@ int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,
           if(nesteddbbd==1) {
             if(eq_reg[eqindx]>-1)for(lj=0; lj<sets[arSet[eq_time[eqindx]].setid].size; lj++)for(l2=0; l2<sets[arSet[eq_reg[eqindx]].setid].size; l2++) {
                   counteq1[set_elems[sets[arSet[eq_time[eqindx]].setid].offset+lj].superset_pos[sets[arSet[eq_time[eqindx]].setid].intsup]*(nreg+1)+set_elems[sets[arSet[eq_reg[eqindx]].setid].offset+l2].superset_pos[sets[arSet[eq_reg[eqindx]].setid].regsup]]+=nloops/sets[arSet[eq_time[eqindx]].setid].size/sets[arSet[eq_reg[eqindx]].setid].size;
-                  if(sets[arSet[eq_reg[eqindx]].setid].regsup!=0)printf("Error: subsets of the regional partition set are not supported in NDBBD ordering\n");
+                  if(sets[arSet[eq_reg[eqindx]].setid].regsup!=0)errmsg("Error: subsets of the regional partition set are not supported in NDBBD ordering\n");
                 }
             else for(lj=0; lj<sets[arSet[eq_time[eqindx]].setid].size; lj++)
                 counteq1[set_elems[sets[arSet[eq_time[eqindx]].setid].offset+lj].superset_pos[sets[arSet[eq_time[eqindx]].setid].intsup]*(nreg+1)+nreg]+=nloops/sets[arSet[eq_time[eqindx]].setid].size;

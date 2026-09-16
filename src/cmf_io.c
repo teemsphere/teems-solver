@@ -90,7 +90,7 @@ int cmf_count_files(char *fname,char *comsyntax) {
   int j=0;
   filehandle = fopen(fname,"r");
   if(filehandle==NULL){
-    printf("Error: cannot open %s\n",fname);
+    errmsg("Error: cannot open %s\n",fname);
     return -1;
   }
   while (tab_next_statement(comsyntax,filehandle,line,TABREADLINE)) {
@@ -110,7 +110,7 @@ int datafile_read_header_info(char *varname, char *filename,dim_t *vsize, char *
   while (varname[nlength] != '\0') nlength++;
   filehandle = fopen(filename,"r");
   if(filehandle==NULL){
-    printf("Error: cannot open %s\n",filename);
+    errmsg("Error: cannot open %s\n",filename);
     return -1;
   }
 
@@ -143,7 +143,7 @@ int datafile_read_header_info(char *varname, char *filename,dim_t *vsize, char *
   fclose(filehandle);
   *d1=din1;
   *vsize=vsizein;
-  if(succ==0)printf("Error: header \"%s\" not found in %s\n",varname,filename);
+  if(succ==0)errmsg("Error: header \"%s\" not found in %s\n",varname,filename);
   return succ;
 }
 
@@ -197,7 +197,7 @@ int cmf_read(char *filename, int niodata, cmf_file_entry *iodata, char *tabfile,
   strcpy(commsyntax,"iodata");
   filehandle = fopen(filename,"r");
   if(filehandle==NULL){
-    printf("Error: cannot open %s\n",filename);
+    errmsg("Error: cannot open %s\n",filename);
     return -1;
   }
   while (tab_next_statement(commsyntax,filehandle,line,TABREADLINE)) {
@@ -294,11 +294,11 @@ int cmf_read(char *filename, int niodata, cmf_file_entry *iodata, char *tabfile,
    fuzz batch 13 hang class), and could grow the line past its buffer. */
 static void dedup_subst(char *line1, const char *a, const char *b, size_t cap) {
   if (a[0]=='\0') {
-    printf("Error: cannot rename a sum index: malformed sum(<index>,<set>,...) in a formula or equation\n");
+    errmsg("Error: cannot rename a sum index: malformed sum(<index>,<set>,...) in a formula or equation\n");
     MPI_Abort(PETSC_COMM_WORLD,1);
   }
   if (str_subst_all_bounded(line1,a,b,cap)!=0) {
-    printf("Error: renaming sum index %s does not fit the statement buffer (%d characters)\n",a,(int)TABREADLINE);
+    errmsg("Error: renaming sum index %s does not fit the statement buffer (%d characters)\n",a,(int)TABREADLINE);
     MPI_Abort(PETSC_COMM_WORLD,1);
   }
 }
@@ -315,7 +315,7 @@ static void dedup_subst_back(char *line, const char *a, const char *b, size_t ca
   char *p=strstr(line,a);
   if (p==NULL || alen==0) return;
   if (len-alen+blen>=cap) {
-    printf("Error: renaming a repeated sum index does not fit the statement buffer (%d characters): %s\n",(int)TABREADLINE,a);
+    errmsg("Error: renaming a repeated sum index does not fit the statement buffer (%d characters): %s\n",(int)TABREADLINE,a);
     MPI_Abort(PETSC_COMM_WORLD,1);
   }
   memmove(p+blen,p+alen,len-(size_t)(p-line)-alen+1);
@@ -611,7 +611,7 @@ int sum_dedup_indices(char *formulain) {
       dedup_subst(line1,replitem1,newreplitem1,(size_t)TABREADLINE-(size_t)(line1-line));
 
       if (strcmp(temp,line1)==0) {
-        printf("Error: cannot rename the repeated sum index %s in: %s\n",replitem,temp);
+        errmsg("Error: cannot rename the repeated sum index %s in: %s\n",replitem,temp);
         MPI_Abort(PETSC_COMM_WORLD,1);
       }
       dedup_subst_back(formulain,temp,line1,(size_t)TABREADLINE);
@@ -641,7 +641,7 @@ static int tab_preprocess_run(char *filename, char *newtabfile) {
   char rawline[TABLINESIZE],*rawpos;
   filehandle = fopen(filename,"r");
   if(filehandle==NULL){
-    printf("Error: cannot open %s\n",filename);
+    errmsg("Error: cannot open %s\n",filename);
     return -1;
   }
   int check,i1,i2,i,setindx,varindx,l1,l2,l3,l4,k1,k2,j1,j2,l5;//,necheck,npcheck;//,j;,check1
@@ -689,7 +689,7 @@ static int tab_preprocess_run(char *filename, char *newtabfile) {
       }
     }
     if (strlen(readline)+strlen(line)>=sizeof(readline)) {
-      printf("Error: TAB statement too long (exceeds %d chars)\n",TABREADLINE);
+      errmsg("Error: TAB statement too long (exceeds %d chars)\n",TABREADLINE);
       return -1;
     }
     strcat(readline,line);
@@ -941,7 +941,7 @@ static int tab_preprocess_run(char *filename, char *newtabfile) {
             }
           }
           if (n1==NULL) {
-            printf("Error: malformed indexed expression in TAB file: %s\n",line);
+            errmsg("Error: malformed indexed expression in TAB file: %s\n",line);
             return -1;
           }
           varindx=n1-line2+1;
@@ -963,12 +963,12 @@ static int tab_preprocess_run(char *filename, char *newtabfile) {
           n1=strrchr(line2,'=');
           if (n1!=NULL&&(n1-line2)>varindx) varindx=n1-line2;
           if (cmf_strcpy_bounded(varname,&line2[varindx+1],sizeof(varname))) {
-            printf("Error: TAB statement too complex in tab_preprocess: %s\n",line);
+            errmsg("Error: TAB statement too complex in tab_preprocess: %s\n",line);
             return -1;
           }
           n1=strrchr(varname,'(');
           if (n1==NULL) {
-            printf("Error: malformed indexed expression in TAB file: %s\n",line);
+            errmsg("Error: malformed indexed expression in TAB file: %s\n",line);
             return -1;
           }
           varname[n1-varname+1]='\0';
@@ -999,7 +999,7 @@ static int tab_preprocess_run(char *filename, char *newtabfile) {
                output. */
             char *q2=strchr(n+1,'\"');
             if (q2==NULL) {
-              printf("Error: unterminated element literal in TAB file: %s\n",line);
+              errmsg("Error: unterminated element literal in TAB file: %s\n",line);
               return -1;
             }
             *n='\001';
@@ -1018,7 +1018,7 @@ static int tab_preprocess_run(char *filename, char *newtabfile) {
           i1=n-line1;
           readitem=strtok(n,"\"");
           if (readitem==NULL||cmf_strcpy_bounded(setelement,readitem,sizeof(setelement))) {
-            printf("Error: malformed indexed expression in TAB file: %s\n",line);
+            errmsg("Error: malformed indexed expression in TAB file: %s\n",line);
             return -1;
           }
           k1=0;
@@ -1029,7 +1029,7 @@ static int tab_preprocess_run(char *filename, char *newtabfile) {
           if (cmf_strcpy_bounded(indx1,"\"",sizeof(indx1)) ||
               cmf_strcat_bounded(indx1,readitem,sizeof(indx1)) ||
               cmf_strcat_bounded(indx1,"\"",sizeof(indx1))) {
-            printf("Error: TAB statement too complex in tab_preprocess: %s\n",line);
+            errmsg("Error: TAB statement too complex in tab_preprocess: %s\n",line);
             return -1;
           }
           if (cmf_strcat_bounded(readline,"set ",sizeof(readline)) ||
@@ -1042,7 +1042,7 @@ static int tab_preprocess_run(char *filename, char *newtabfile) {
               cmf_strcat_bounded(readline1," is subset of ",sizeof(readline1)) ||
               cmf_strcat_bounded(readline1,setname,sizeof(readline1)) ||
               cmf_strcat_bounded(readline1," ;\n",sizeof(readline1))) {
-            printf("Error: TAB statement too complex in tab_preprocess: %s\n",line);
+            errmsg("Error: TAB statement too complex in tab_preprocess: %s\n",line);
             return -1;
           }
           str_replace_all(line,indx1,indx);
@@ -1050,12 +1050,12 @@ static int tab_preprocess_run(char *filename, char *newtabfile) {
           if (readitem1==NULL||
               cmf_strcpy_bounded(line2,readitem1,sizeof(line2)) ||
               cmf_strcat_bounded(line2," ",sizeof(line2))) {
-            printf("Error: malformed indexed expression in TAB file: %s\n",line);
+            errmsg("Error: malformed indexed expression in TAB file: %s\n",line);
             return -1;
           }
           readitem1=strtok(NULL," ");
           if (readitem1==NULL) {
-            printf("Error: malformed indexed expression in TAB file: %s\n",line);
+            errmsg("Error: malformed indexed expression in TAB file: %s\n",line);
             return -1;
           }
           strcpy(indx2,indx);
@@ -1064,12 +1064,12 @@ static int tab_preprocess_run(char *filename, char *newtabfile) {
             if(l1==0){//if(l1==0&&strchr(line2,'(')!=NULL) {
               if (cmf_strcat_bounded(line2,readitem1,sizeof(line2)) ||
                   cmf_strcat_bounded(line2," ",sizeof(line2))) {
-                printf("Error: TAB statement too complex in tab_preprocess: %s\n",line);
+                errmsg("Error: TAB statement too complex in tab_preprocess: %s\n",line);
                 return -1;
               }
               readitem1=strtok(NULL," ");
               if (readitem1==NULL) {
-                printf("Error: malformed indexed expression in TAB file: %s\n",line);
+                errmsg("Error: malformed indexed expression in TAB file: %s\n",line);
                 return -1;
               }
             }
@@ -1080,7 +1080,7 @@ static int tab_preprocess_run(char *filename, char *newtabfile) {
                 cmf_strcat_bounded(line2,")",sizeof(line2)) ||
                 cmf_strcat_bounded(line2,readitem1,sizeof(line2)) ||
                 cmf_strcat_bounded(line2," ",sizeof(line2))) {
-              printf("Error: TAB statement too complex in tab_preprocess: %s\n",line);
+              errmsg("Error: TAB statement too complex in tab_preprocess: %s\n",line);
               return -1;
             }
           } else {
@@ -1091,17 +1091,17 @@ static int tab_preprocess_run(char *filename, char *newtabfile) {
                 cmf_strcat_bounded(line2,")",sizeof(line2)) ||
                 cmf_strcat_bounded(line2," ",sizeof(line2)) ||
                 cmf_strcat_bounded(line2,readitem1,sizeof(line2))) {
-              printf("Error: TAB statement too complex in tab_preprocess: %s\n",line);
+              errmsg("Error: TAB statement too complex in tab_preprocess: %s\n",line);
               return -1;
             }
           }
           readitem1=strtok(NULL,"\n");
           if(readitem1!=NULL&&cmf_strcat_bounded(line2,readitem1,sizeof(line2))) {
-            printf("Error: TAB statement too complex in tab_preprocess: %s\n",line);
+            errmsg("Error: TAB statement too complex in tab_preprocess: %s\n",line);
             return -1;
           }
           if (cmf_strcat_bounded(line2,"\n",sizeof(line2))) {
-            printf("Error: TAB statement too complex in tab_preprocess: %s\n",line);
+            errmsg("Error: TAB statement too complex in tab_preprocess: %s\n",line);
             return -1;
           }
           strcpy(line,line2);
@@ -1134,6 +1134,19 @@ int outputs_write_csv(char *filename, char *newdatlogname, char *newdatfile,set_
   strcat(comsyntax," header \"");
   n=strlen(comsyntax);
   fout = fopen(newdatfile,"w");
+  /* named failure instead of writing through a NULL handle; the caller
+     goes on to the remaining outputs and the errmsg count makes the
+     exit status nonzero */
+  if(filehandle==NULL) {
+    errmsg("Error: cannot open %s for reading\n",filename);
+    if(fout!=NULL)fclose(fout);
+    return -1;
+  }
+  if(fout==NULL) {
+    errmsg("Error: cannot open %s for writing\n",newdatfile);
+    fclose(filehandle);
+    return -1;
+  }
   i=0;
   while (fgets(line,TABREADLINE,filehandle)) {
     if(strncmp(line,"write",5)==0&&strstr(line,comsyntax)!=NULL) {
@@ -1284,7 +1297,7 @@ int tab_write_variables(char *filename, char *newtabfile,array_def *vars,offset_
        the per-step update pass may never run (a broken system dies in
        the solver first), so fail here (M3) */
     if((updpos==0||updpos==1)&&strchr(line,':')!=NULL) {
-      printf("Error: conditions in Update statements are not supported\n");
+      errmsg("Error: conditions in Update statements are not supported\n");
       fclose(filehandle);
       fclose(fout);
       MPI_Abort(PETSC_COMM_WORLD,1);
@@ -1332,7 +1345,7 @@ int tab_write_variables(char *filename, char *newtabfile,array_def *vars,offset_
         while((qf=str_find_ci(&line[qk],"(all,"))>-1) {
           for(qk=qk+qf+5; line[qk]!='\0'&&line[qk]!=')'; qk++) {
             if(line[qk]==':') {
-              printf("Error: conditions on Equation quantifiers are not supported (row pruning); put the condition on a sum inside the equation (manual 11.4.11)\n");
+              errmsg("Error: conditions on Equation quantifiers are not supported (row pruning); put the condition on a sum inside the equation (manual 11.4.11)\n");
               fclose(filehandle);
               fclose(fout);
               MPI_Abort(PETSC_COMM_WORLD,1);
@@ -1491,23 +1504,23 @@ int tab_defaults_validate(char *fname) {
     if(strncmp(line,"coefficient",11)==0) {
       if(strcmp(val,"parameter")==0||strcmp(val,"non_parameter")==0)continue;
       if(strncmp(val,"lower_bound",11)==0||strncmp(val,"upper_bound",11)==0)
-        printf("Error: Coefficient (default=%s): bound defaults are not supported\n",val);
-      else printf("Error: unknown Coefficient default '%s'\n",val);
+        errmsg("Error: Coefficient (default=%s): bound defaults are not supported\n",val);
+      else errmsg("Error: unknown Coefficient default '%s'\n",val);
     } else if(strncmp(line,"variable",8)==0) {
       if(strcmp(val,"linear")==0||strcmp(val,"levels")==0||strcmp(val,"change")==0||strcmp(val,"percent_change")==0)continue;
-      printf("Error: unknown Variable default '%s'\n",val);
+      errmsg("Error: unknown Variable default '%s'\n",val);
     } else if(strncmp(line,"formula",7)==0) {
       if(strcmp(val,"initial")==0||strcmp(val,"always")==0)continue;
-      printf("Error: unknown Formula default '%s'\n",val);
+      errmsg("Error: unknown Formula default '%s'\n",val);
     } else if(strncmp(line,"equation",8)==0) {
       if(strcmp(val,"linear")==0||strcmp(val,"not_add_homotopy")==0)continue;
       if(strcmp(val,"levels")==0)
-        printf("Error: Equation (default=levels) is not supported -- the solver handles linearized equations only\n");
+        errmsg("Error: Equation (default=levels) is not supported -- the solver handles linearized equations only\n");
       else if(strncmp(val,"add_homotopy",12)==0)
-        printf("Error: Equation (default=add_homotopy) is not supported\n");
-      else printf("Error: unknown Equation default '%s'\n",val);
+        errmsg("Error: Equation (default=add_homotopy) is not supported\n");
+      else errmsg("Error: unknown Equation default '%s'\n",val);
     } else {
-      printf("Error: Default statements apply only to Coefficient/Variable/Formula/Equation: %s",line);
+      errmsg("Error: Default statements apply only to Coefficient/Variable/Formula/Equation: %s",line);
     }
     bad=1;
   }
@@ -1632,7 +1645,7 @@ int tab_postsim_split(char *newtabfile, char *psfile) {
   fmain=fopen(tmpname,"w");
   fps=fopen(psfile,"w");
   if(fmain==NULL||fps==NULL) {
-    printf("Error: cannot open PostSim split scratch files\n");
+    errmsg("Error: cannot open PostSim split scratch files\n");
     fclose(fin);
     if(fmain!=NULL)fclose(fmain);
     if(fps!=NULL)fclose(fps);
@@ -1669,7 +1682,7 @@ int tab_postsim_split(char *newtabfile, char *psfile) {
         scan[si]='\0';
       }
       for(k=0;k<npsn;k++)if(line_has_ident(scan,psnames[k])) {
-        printf("Error: ordinary statement references PostSim-declared name %s (manual 12.2.1): %s",psnames[k],line);
+        errmsg("Error: ordinary statement references PostSim-declared name %s (manual 12.2.1): %s",psnames[k],line);
         fclose(fin);
         fclose(fmain);
         fclose(fps);
@@ -1689,7 +1702,7 @@ int tab_postsim_split(char *newtabfile, char *psfile) {
       continue;
     }
     if(strncmp(line,"variable ",9)==0||strncmp(line,"equation ",9)==0||strncmp(line,"update ",7)==0||strncmp(line,"transfer ",9)==0||strncmp(line,"omit ",5)==0||strncmp(line,"substitute ",11)==0||strncmp(line,"backsolve ",10)==0||strncmp(line,"complementarity",15)==0||strstr(line,"(default")!=NULL) {
-      printf("Error: statement not allowed in a PostSim section (manual 12.2.1): %s",line);
+      errmsg("Error: statement not allowed in a PostSim section (manual 12.2.1): %s",line);
       fclose(fin);
       fclose(fmain);
       fclose(fps);
@@ -1728,7 +1741,7 @@ int tab_postsim_split(char *newtabfile, char *psfile) {
       nps++;
       continue;
     }
-    printf("Error: unrecognized statement in a PostSim section: %s",line);
+    errmsg("Error: unrecognized statement in a PostSim section: %s",line);
     fclose(fin);
     fclose(fmain);
     fclose(fps);
@@ -1744,7 +1757,7 @@ int tab_postsim_split(char *newtabfile, char *psfile) {
   for(k=0;k<npslog;k++) {
     int k2;
     for(k2=0;k2<nordlog;k2++)if(strcmp(pslogs[k],ordlogs[k2])==0) {
-      printf("Error: file %s is read in both the ordinary and PostSim parts (manual 12.2.3); split the data across two files\n",pslogs[k]);
+      errmsg("Error: file %s is read in both the ordinary and PostSim parts (manual 12.2.3); split the data across two files\n",pslogs[k]);
       free(psnames);
       free(ordlogs);
       free(pslogs);
@@ -1755,7 +1768,7 @@ int tab_postsim_split(char *newtabfile, char *psfile) {
   free(ordlogs);
   free(pslogs);
   if(rename(tmpname,newtabfile)!=0) {
-    printf("Error: cannot finalize the PostSim split\n");
+    errmsg("Error: cannot finalize the PostSim split\n");
     return -1;
   }
   return nps;
@@ -2217,7 +2230,7 @@ int tab_setbuilder_transform(char *fname, cmf_file_entry *iodata, int niodata) {
   char line[TABREADLINE],tmpname[TABREADLINE];
   int any=0,rc=0;
   f=fopen(fname,"r");
-  if (f==NULL) { printf("Error: cannot open %s\n",fname); return -1; }
+  if (f==NULL) { errmsg("Error: cannot open %s\n",fname); return -1; }
   while (fgets(line,TABREADLINE,f)) {
     if (strncmp(line,"set",3)==0&&strstr(line,"(all,")!=NULL&&strchr(line,':')!=NULL&&strchr(line,'=')!=NULL) any=1;
   }
@@ -2229,7 +2242,7 @@ int tab_setbuilder_transform(char *fname, cmf_file_entry *iodata, int niodata) {
   fout=f==NULL?NULL:fopen(tmpname,"w");
   if (f==NULL||fout==NULL) {
     if (f!=NULL) fclose(f);
-    printf("Error: cannot open set-builder scratch file\n");
+    errmsg("Error: cannot open set-builder scratch file\n");
     return -1;
   }
   while (rc==0&&fgets(line,TABREADLINE,f)) {
@@ -2255,7 +2268,7 @@ int tab_setbuilder_transform(char *fname, cmf_file_entry *iodata, int niodata) {
     tl=0;
     while (*q!='\0'&&*q!=':'&&tl<NAMESIZE-1) { if (*q!=' ') src[tl++]=*q; q++; }
     src[tl]='\0';
-    if (*q!=':') { printf("Error: malformed set-builder statement: %s",line); rc=-1; break; }
+    if (*q!=':') { errmsg("Error: malformed set-builder statement: %s",line); rc=-1; break; }
     q++;
     /* condition text up to the builder's closing ')' (depth-aware) */
     {
@@ -2286,7 +2299,7 @@ int tab_setbuilder_transform(char *fname, cmf_file_entry *iodata, int niodata) {
         }
       }
       if (oi<0) {
-        printf("Error: set builder %s: unsupported condition '%s' (supported: COEF(...) <op> const, or a mapping-conditional sum <op> const; manual 10.1.2)\n",name,cond);
+        errmsg("Error: set builder %s: unsupported condition '%s' (supported: COEF(...) <op> const, or a mapping-conditional sum <op> const; manual 10.1.2)\n",name,cond);
         rc=-1;
         break;
       }
@@ -2297,7 +2310,7 @@ int tab_setbuilder_transform(char *fname, cmf_file_entry *iodata, int niodata) {
         cval=strtod(cond+oi+olen,&endp);
         while (endp!=NULL&&*endp==' ') endp++;
         if (endp==cond+oi+olen||endp==NULL||*endp!='\0') {
-          printf("Error: set builder %s: unsupported condition '%s' (a single comparison against a numeric constant; compound conditions are not supported; manual 10.1.2)\n",name,cond);
+          errmsg("Error: set builder %s: unsupported condition '%s' (a single comparison against a numeric constant; compound conditions are not supported; manual 10.1.2)\n",name,cond);
           rc=-1;
           break;
         }
@@ -2319,7 +2332,7 @@ int tab_setbuilder_transform(char *fname, cmf_file_entry *iodata, int niodata) {
         if (srcele==NULL) { rc=-1; break; }
         nsrc=sb_elements(fname,iodata,niodata,src,srcele);
         if (nsrc<=0) {
-          printf("Error: set builder %s: cannot resolve the elements of source set %s (explicit list or read-elements declarations only)\n",name,src);
+          errmsg("Error: set builder %s: cannot resolve the elements of source set %s (explicit list or read-elements declarations only)\n",name,src);
           free(srcele);
           rc=-1;
           break;
@@ -2390,7 +2403,7 @@ int tab_setbuilder_transform(char *fname, cmf_file_entry *iodata, int niodata) {
           free(mlab);
           free(v2);
           if (!ok) {
-            printf("Error: set builder %s: cannot evaluate the mapping-conditional sum '%s' (the mapping must be file-Read and the summed coefficient file-Read or an indicator assigned only constants; manual 10.1.2)\n",name,opnd);
+            errmsg("Error: set builder %s: cannot evaluate the mapping-conditional sum '%s' (the mapping must be file-Read and the summed coefficient file-Read or an indicator assigned only constants; manual 10.1.2)\n",name,opnd);
             free(srcele);
             rc=-1;
             break;
@@ -2430,7 +2443,7 @@ int tab_setbuilder_transform(char *fname, cmf_file_entry *iodata, int niodata) {
               cv=NULL;
               ok=2;
             } else {
-              printf("Error: set builder %s: condition coefficient %s must be Read from an input file or be an indicator assigned only constants (formula-computed operands cannot drive set resolution; manual 10.1.2)\n",name,coef);
+              errmsg("Error: set builder %s: condition coefficient %s must be Read from an input file or be an indicator assigned only constants (formula-computed operands cannot drive set resolution; manual 10.1.2)\n",name,coef);
               free(srcele);
               rc=-1;
               break;
@@ -2471,7 +2484,7 @@ int tab_setbuilder_transform(char *fname, cmf_file_entry *iodata, int niodata) {
             }
             if (ok) {
               if (dsz[loopdim]!=nsrc) {
-                printf("Error: set builder %s: the loop index %s must range over %s's dimension set %s exactly\n",name,idx,coef,dimset[loopdim]);
+                errmsg("Error: set builder %s: the loop index %s must range over %s's dimension set %s exactly\n",name,idx,coef,dimset[loopdim]);
                 ok=0;
               }
             }
@@ -2479,7 +2492,7 @@ int tab_setbuilder_transform(char *fname, cmf_file_entry *iodata, int niodata) {
             free(cv);
           }
           if (!ok&&rc==0) {
-            printf("Error: set builder %s: cannot evaluate condition '%s' (declaration/read/dimension resolution failed; manual 10.1.2)\n",name,cond);
+            errmsg("Error: set builder %s: cannot evaluate condition '%s' (declaration/read/dimension resolution failed; manual 10.1.2)\n",name,cond);
             free(srcele);
             rc=-1;
             break;
@@ -2487,7 +2500,7 @@ int tab_setbuilder_transform(char *fname, cmf_file_entry *iodata, int niodata) {
         }
         for (k=0; k<nsrc; k++) if (keep[k]) nkept++;
         if (nkept==0) {
-          printf("Error: set builder %s selected no elements of %s (an empty set cannot enter the model; manual 10.1.2)\n",name,src);
+          errmsg("Error: set builder %s selected no elements of %s (an empty set cannot enter the model; manual 10.1.2)\n",name,src);
           free(srcele);
           rc=-1;
           break;
@@ -2507,7 +2520,7 @@ int tab_setbuilder_transform(char *fname, cmf_file_entry *iodata, int niodata) {
   fclose(f);
   fclose(fout);
   if (rc==0) {
-    if (rename(tmpname,fname)!=0) { printf("Error: cannot rename %s\n",tmpname); rc=-1; }
+    if (rename(tmpname,fname)!=0) { errmsg("Error: cannot rename %s\n",tmpname); rc=-1; }
   }
   else remove(tmpname);
   return rc;

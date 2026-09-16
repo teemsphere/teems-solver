@@ -122,7 +122,7 @@ static int lv_ncat_b(char *dst, const char *src, int n, size_t cap) {
 }
 
 static int lv_err(lv_ctx *c, const char *msg) {
-  printf("Error: %s in levels statement: %s\n", msg, c->stmt ? c->stmt : "");
+  errmsg("Error: %s in levels statement: %s\n", msg, c->stmt ? c->stmt : "");
   return -1;
 }
 
@@ -657,7 +657,7 @@ static int lv_scan(lv_ctx *c, char *fname, bool *any) {
   lv_head h;
   *any = false;
   f = fopen(fname, "r");
-  if (f == NULL) { printf("Error: cannot open %s\n", fname); return -1; }
+  if (f == NULL) { errmsg("Error: cannot open %s\n", fname); return -1; }
   while (fgets(line, TABREADLINE, f)) {
     if (strncmp(line, "variable", 8) == 0) {
       if (tab_default_value(line, defval)) {
@@ -675,7 +675,7 @@ static int lv_scan(lv_ctx *c, char *fname, bool *any) {
         if (h.has_change) ch = true;
         if (h.has_percent) ch = false;
         if (lv) {
-          if (c->nlv >= LV_MAXLV) { printf("Error: too many levels variables\n"); fclose(f); return -1; }
+          if (c->nlv >= LV_MAXLV) { errmsg("Error: too many levels variables\n"); fclose(f); return -1; }
           {
             int l = h.namelen < NAMESIZE - 1 ? h.namelen : NAMESIZE - 1;
             strncpy(c->lv[c->nlv].name, h.name, l);
@@ -690,7 +690,7 @@ static int lv_scan(lv_ctx *c, char *fname, bool *any) {
                reference column of the same variable (zero corpus
                uses; GMig2's c_* class is linear, section 6). */
             if (l >= 2 && c->lv[c->nlv].name[0] == 'c' && c->lv[c->nlv].name[1] == '_') {
-              printf("Error: levels variable %s: c_-leading names are indistinguishable from change-reference columns after the c_->p_ rewrite; rename the variable\n", c->lv[c->nlv].name);
+              errmsg("Error: levels variable %s: c_-leading names are indistinguishable from change-reference columns after the c_->p_ rewrite; rename the variable\n", c->lv[c->nlv].name);
               fclose(f);
               return -1;
             }
@@ -873,7 +873,7 @@ static int lv_emit_linearized(lv_ctx *c, const char *p, FILE *fout) {
      to the generated line here */
   sum_dedup_indices(out);
   if (strlen(out) >= TABREADLINE - 2) {
-    printf("Error: linearized form of levels equation %.*s exceeds the statement buffer; split the equation\n", namelen, name);
+    errmsg("Error: linearized form of levels equation %.*s exceeds the statement buffer; split the equation\n", namelen, name);
     return -1;
   }
   fprintf(fout, "%s\n", out);
@@ -1103,7 +1103,7 @@ static int cp_fill_decl_sets(lv_ctx *c, char *fname) {
   dim_t k, nargs;
   char argsets[MAXVARDIM][NAMESIZE];
   f = fopen(fname, "r");
-  if (f == NULL) { printf("Error: cannot open %s\n", fname); return -1; }
+  if (f == NULL) { errmsg("Error: cannot open %s\n", fname); return -1; }
   while (fgets(line, TABREADLINE, f)) {
     int iscoef = (strncmp(line, "coefficient", 11) == 0);
     int isvar = (strncmp(line, "variable", 8) == 0);
@@ -1118,7 +1118,7 @@ static int cp_fill_decl_sets(lv_ctx *c, char *fname) {
       if (isvar && (int)strlen(cp->varname) == h.namelen && strncmp(cp->varname, h.name, h.namelen) == 0) {
         if (cp_argsets(c, &h, argsets, &nargs) < 0) { fclose(f); return -1; }
         if (nargs != cp->nquant) {
-          printf("Error: Complementarity %s has %d quantifiers but its variable %s has %d arguments (manual 11.14)\n", cp->name, (int)cp->nquant, cp->varname, (int)nargs);
+          errmsg("Error: Complementarity %s has %d quantifiers but its variable %s has %d arguments (manual 11.14)\n", cp->name, (int)cp->nquant, cp->varname, (int)nargs);
           fclose(f);
           return -1;
         }
@@ -1128,7 +1128,7 @@ static int cp_fill_decl_sets(lv_ctx *c, char *fname) {
           (int)strlen(cp->lower_name) == h.namelen && strncmp(cp->lower_name, h.name, h.namelen) == 0) {
         if (cp_argsets(c, &h, argsets, &nargs) < 0) { fclose(f); return -1; }
         if (nargs != cp->nquant) {
-          printf("Error: Complementarity %s has %d quantifiers but its lower bound %s has %d arguments (manual 11.14)\n", cp->name, (int)cp->nquant, cp->lower_name, (int)nargs);
+          errmsg("Error: Complementarity %s has %d quantifiers but its lower bound %s has %d arguments (manual 11.14)\n", cp->name, (int)cp->nquant, cp->lower_name, (int)nargs);
           fclose(f);
           return -1;
         }
@@ -1138,7 +1138,7 @@ static int cp_fill_decl_sets(lv_ctx *c, char *fname) {
           (int)strlen(cp->upper_name) == h.namelen && strncmp(cp->upper_name, h.name, h.namelen) == 0) {
         if (cp_argsets(c, &h, argsets, &nargs) < 0) { fclose(f); return -1; }
         if (nargs != cp->nquant) {
-          printf("Error: Complementarity %s has %d quantifiers but its upper bound %s has %d arguments (manual 11.14)\n", cp->name, (int)cp->nquant, cp->upper_name, (int)nargs);
+          errmsg("Error: Complementarity %s has %d quantifiers but its upper bound %s has %d arguments (manual 11.14)\n", cp->name, (int)cp->nquant, cp->upper_name, (int)nargs);
           fclose(f);
           return -1;
         }
@@ -1208,20 +1208,20 @@ int tab_complementarity_transform(char *fname) {
   int rc = 0;
   dim_t ncomp = 0, ci = 0;
   f = fopen(fname, "r");
-  if (f == NULL) { printf("Error: cannot open %s\n", fname); return -1; }
+  if (f == NULL) { errmsg("Error: cannot open %s\n", fname); return -1; }
   while (fgets(line, TABREADLINE, f))
     if (strncmp(line, "complementarity", 15) == 0) ncomp++;
   fclose(f);
   if (ncomp == 0) return 0;
   c = (lv_ctx *)calloc(1, sizeof(lv_ctx));
-  if (c == NULL) { printf("Error: out of memory in tab_complementarity_transform\n"); return -1; }
+  if (c == NULL) { errmsg("Error: out of memory in tab_complementarity_transform\n"); return -1; }
   if (lv_scan(c, fname, &anylv) < 0) { free(c); return -1; }
   teems_comps = (comp_def *)calloc(ncomp, sizeof(comp_def));
   exprs = calloc(ncomp, sizeof(*exprs));
-  if (teems_comps == NULL || exprs == NULL) { printf("Error: out of memory in tab_complementarity_transform\n"); free(c); free(exprs); return -1; }
+  if (teems_comps == NULL || exprs == NULL) { errmsg("Error: out of memory in tab_complementarity_transform\n"); free(c); free(exprs); return -1; }
   teems_ncomp = 0;
   f = fopen(fname, "r");
-  if (f == NULL) { printf("Error: cannot open %s\n", fname); free(c); free(exprs); return -1; }
+  if (f == NULL) { errmsg("Error: cannot open %s\n", fname); free(c); free(exprs); return -1; }
   while (fgets(line, TABREADLINE, f)) {
     size_t sl = strlen(line);
     while (sl > 0 && (line[sl - 1] == '\n' || line[sl - 1] == '\r')) line[--sl] = '\0';
@@ -1239,7 +1239,7 @@ int tab_complementarity_transform(char *fname) {
     strcat(tmpname, "_cp");
     fout = f == NULL ? NULL : fopen(tmpname, "w");
     if (f == NULL || fout == NULL) {
-      printf("Error: cannot open %s\n", f == NULL ? fname : tmpname);
+      errmsg("Error: cannot open %s\n", f == NULL ? fname : tmpname);
       if (f != NULL) fclose(f);
       rc = -1;
     } else {
@@ -1258,7 +1258,7 @@ int tab_complementarity_transform(char *fname) {
       fclose(fout);
       if (rc == 0) {
         if (rename(tmpname, fname) != 0) {
-          printf("Error: cannot rename %s\n", tmpname);
+          errmsg("Error: cannot rename %s\n", tmpname);
           rc = -1;
         }
       } else remove(tmpname);
@@ -1280,7 +1280,7 @@ static int cp_ordered_subset(const char *small, const char *big, set_def *sets, 
     if (strcmp(sets[i].setname, big) == 0) bi = i;
   }
   if (si == nset || bi == nset) {
-    printf("Error: Complementarity %s references undeclared set %s\n", compname, si == nset ? small : big);
+    errmsg("Error: Complementarity %s references undeclared set %s\n", compname, si == nset ? small : big);
     return -1;
   }
   if (si == bi) return 0;
@@ -1288,7 +1288,7 @@ static int cp_ordered_subset(const char *small, const char *big, set_def *sets, 
   for (i = 0; i < (dim_t)sets[si].size; i++) {
     while (j < (dim_t)sets[bi].size && strcmp(se[sets[si].offset + i].setele, se[sets[bi].offset + j].setele) != 0) j++;
     if (j == (dim_t)sets[bi].size) {
-      printf("Error: Complementarity %s: quantifier set %s is not an equal or same-ordered subset of %s (%s) (manual 11.14)\n", compname, small, big, ofwhat);
+      errmsg("Error: Complementarity %s: quantifier set %s is not an equal or same-ordered subset of %s (%s) (manual 11.14)\n", compname, small, big, ofwhat);
       return -1;
     }
     j++;
@@ -1352,7 +1352,7 @@ int comp_closure_check(closure_entry *closure_vals, array_def *vars, offset_t nv
     if (strchr(vars[i].cofname, '@') == NULL) continue;
     for (j = 0; j < nele; j++) {
       if (CL_BS(vars[i].offset + j)) {
-        printf("Error: derived complementarity variable %s cannot be backsolved\n", vars[i].cofname);
+        errmsg("Error: derived complementarity variable %s cannot be backsolved\n", vars[i].cofname);
         return -1;
       }
     }
@@ -1374,14 +1374,14 @@ int comp_closure_check(closure_entry *closure_vals, array_def *vars, offset_t nv
     snprintf(dname, sizeof(dname), "%s@d", cp->name);
     for (di = 0; di < nvar; di++) if (strcmp(vars[di].cofname, dname) == 0) break;
     if (xi == nvar || di == nvar) {
-      printf("Error: Complementarity %s: variable %s not found after reading declarations\n", cp->name, xi == nvar ? cp->varname : dname);
+      errmsg("Error: Complementarity %s: variable %s not found after reading declarations\n", cp->name, xi == nvar ? cp->varname : dname);
       return -1;
     }
     for (d = 0; d < vars[di].size; d++) {
       offset_t tsz = sets[vars[di].setid[d]].size;
       pmap[d] = (offset_t *)malloc((tsz > 0 ? tsz : 1) * sizeof(offset_t));
       if (pmap[d] == NULL || cp_pos_map(vars[di].setid[d], vars[xi].setid[d], sets, set_elems, pmap[d]) == -1) {
-        printf("Error: Complementarity %s: cannot map quantifier elements onto %s's declaration sets\n", cp->name, cp->varname);
+        errmsg("Error: Complementarity %s: cannot map quantifier elements onto %s's declaration sets\n", cp->name, cp->varname);
         for (j = 0; (dim_t)j <= d; j++) free(pmap[j]);
         return -1;
       }
@@ -1397,7 +1397,7 @@ int comp_closure_check(closure_entry *closure_vals, array_def *vars, offset_t nv
         l2 = l2 % vars[di].strides[d];
       }
       if (CL_BS(vars[xi].offset + xoff)) {
-        printf("Error: the Complementarity variable %s must not be backsolved (manual 11.14.1)\n", cp->varname);
+        errmsg("Error: the Complementarity variable %s must not be backsolved (manual 11.14.1)\n", cp->varname);
         for (d = 0; d < vars[di].size; d++) free(pmap[d]);
         return -1;
       }
@@ -1499,7 +1499,7 @@ static int cp_rt_init(set_def *sets, dim_t nset, set_element *se, array_def *coe
   offset_t j;
   (void)nset;
   cprt = (comp_rt *)calloc(teems_ncomp, sizeof(comp_rt));
-  if (cprt == NULL) { printf("Error: out of memory in the complementarity state runtime\n"); return -1; }
+  if (cprt == NULL) { errmsg("Error: out of memory in the complementarity state runtime\n"); return -1; }
   for (k = 0; k < teems_ncomp; k++) {
     comp_def *cp = &teems_comps[k];
     comp_rt *rt = &cprt[k];
@@ -1517,7 +1517,7 @@ static int cp_rt_init(set_def *sets, dim_t nset, set_element *se, array_def *coe
     if (rt->wxi < 0 || rt->wei < 0 || rt->wni < 0 || rt->xci < 0 || rt->eci < 0 ||
         (cp->lower_kind == 2 && rt->wli < 0) || (cp->upper_kind == 2 && rt->wui < 0) ||
         (cp->lower_kind >= 2 && rt->lci < 0) || (cp->upper_kind >= 2 && rt->uci < 0)) {
-      printf("Error: Complementarity %s: derived coefficients not found after reading declarations\n", cp->name);
+      errmsg("Error: Complementarity %s: derived coefficients not found after reading declarations\n", cp->name);
       return -1;
     }
     rt->nd = coefs[rt->wxi].size;
@@ -1528,20 +1528,20 @@ static int cp_rt_init(set_def *sets, dim_t nset, set_element *se, array_def *coe
       tsz = sets[rt->tsetid[d]].size;
       rt->xmap[d] = (offset_t *)malloc((tsz > 0 ? tsz : 1) * sizeof(offset_t));
       if (rt->xmap[d] == NULL || cp_pos_map(rt->tsetid[d], coefs[rt->xci].setid[d], sets, se, rt->xmap[d]) == -1) {
-        printf("Error: Complementarity %s: cannot map quantifier elements onto %s's declaration sets\n", cp->name, cp->varname);
+        errmsg("Error: Complementarity %s: cannot map quantifier elements onto %s's declaration sets\n", cp->name, cp->varname);
         return -1;
       }
       if (rt->lci >= 0) {
         rt->lmap[d] = (offset_t *)malloc((tsz > 0 ? tsz : 1) * sizeof(offset_t));
         if (rt->lmap[d] == NULL || cp_pos_map(rt->tsetid[d], coefs[rt->lci].setid[d], sets, se, rt->lmap[d]) == -1) {
-          printf("Error: Complementarity %s: cannot map quantifier elements onto %s's declaration sets\n", cp->name, cp->lower_name);
+          errmsg("Error: Complementarity %s: cannot map quantifier elements onto %s's declaration sets\n", cp->name, cp->lower_name);
           return -1;
         }
       }
       if (rt->uci >= 0) {
         rt->umap[d] = (offset_t *)malloc((tsz > 0 ? tsz : 1) * sizeof(offset_t));
         if (rt->umap[d] == NULL || cp_pos_map(rt->tsetid[d], coefs[rt->uci].setid[d], sets, se, rt->umap[d]) == -1) {
-          printf("Error: Complementarity %s: cannot map quantifier elements onto %s's declaration sets\n", cp->name, cp->upper_name);
+          errmsg("Error: Complementarity %s: cannot map quantifier elements onto %s's declaration sets\n", cp->name, cp->upper_name);
           return -1;
         }
       }
@@ -1553,7 +1553,7 @@ static int cp_rt_init(set_def *sets, dim_t nset, set_element *se, array_def *coe
     rt->l0 = (double *)calloc(rt->ntuple, sizeof(double));
     rt->u0 = (double *)calloc(rt->ntuple, sizeof(double));
     if (rt->state == NULL || rt->prestate == NULL || rt->finstate == NULL || rt->z0 == NULL || rt->l0 == NULL || rt->u0 == NULL) {
-      printf("Error: out of memory in the complementarity state runtime\n");
+      errmsg("Error: out of memory in the complementarity state runtime\n");
       return -1;
     }
     /* pre-simulation states + the 51.7.5 exactness check (warnings
@@ -1769,7 +1769,7 @@ int comp_accurate_closure(closure_entry *closure_vals, array_def *vars, offset_t
       if (uvi == nvar) uvi = -1;
     }
     if (xvi == nvar || dvi == nvar || evi == nvar) {
-      printf("Error: Complementarity %s: derived variables not found for the accurate run (internal)\n", cp->name);
+      errmsg("Error: Complementarity %s: derived variables not found for the accurate run (internal)\n", cp->name);
       return -1;
     }
     for (j = 0; j < rt->ntuple; j++) {
@@ -1799,7 +1799,7 @@ int comp_accurate_closure(closure_entry *closure_vals, array_def *vars, offset_t
         tgt = vars[xvi].offset + xoff;
         if (cp->xpct) {
           if (X == 0) {
-            printf("Error: Complementarity %s: cannot shock the percent-change pair of %s from a zero pre-simulation level\n", cp->name, cp->varname);
+            errmsg("Error: Complementarity %s: cannot shock the percent-change pair of %s from a zero pre-simulation level\n", cp->name, cp->varname);
             return -1;
           }
           shock = 100 * (target / X - 1);
@@ -1842,10 +1842,10 @@ offset_t comp_verify_states(set_def *sets, dim_t nset, set_element *set_elems, a
       tol = 1e-4 * (fabs(X) > 1 ? fabs(X) : 1);
       cp_tuple_name(rt, sets, set_elems, coefs, j, tn, sizeof(tn));
       if (s != rt->finstate[j]) {
-        printf("Error: Complementarity %s%s: post-simulation state %d differs from the approximate run's state %d (manual 51.5.4)\n", cp->name, tn, s, (int)rt->finstate[j]);
+        errmsg("Error: Complementarity %s%s: post-simulation state %d differs from the approximate run's state %d (manual 51.5.4)\n", cp->name, tn, s, (int)rt->finstate[j]);
         nbad++;
       } else if (X < L - tol || X > U + tol) {
-        printf("Error: Complementarity %s%s: the variable value %.6g lies outside the bounds %.6g/%.6g after the accurate run (manual 51.7.5)\n",
+        errmsg("Error: Complementarity %s%s: the variable value %.6g lies outside the bounds %.6g/%.6g after the accurate run (manual 51.7.5)\n",
                cp->name, tn, X, L <= -CP_INF ? -9e99 : L, U >= CP_INF ? 9e99 : U);
         nbad++;
       } else if (cp_exact_state(X, E, L, U) == 0) {
@@ -1866,15 +1866,15 @@ int tab_levels_transform(char *fname) {
   lv_head h;
   int rc = 0;
   c = (lv_ctx *)calloc(1, sizeof(lv_ctx));
-  if (c == NULL) { printf("Error: out of memory in tab_levels_transform\n"); return -1; }
+  if (c == NULL) { errmsg("Error: out of memory in tab_levels_transform\n"); return -1; }
   if (lv_scan(c, fname, &any) < 0) { free(c); return -1; }
   if (!any) { free(c); return 0; }
   f = fopen(fname, "r");
-  if (f == NULL) { printf("Error: cannot open %s\n", fname); free(c); return -1; }
+  if (f == NULL) { errmsg("Error: cannot open %s\n", fname); free(c); return -1; }
   strcpy(tmpname, fname);
   strcat(tmpname, "_lv");
   fout = fopen(tmpname, "w");
-  if (fout == NULL) { printf("Error: cannot open %s\n", tmpname); fclose(f); free(c); return -1; }
+  if (fout == NULL) { errmsg("Error: cannot open %s\n", tmpname); fclose(f); free(c); return -1; }
   while (fgets(line, TABREADLINE, f)) {
     /* keep a pristine copy for messages and verbatim passthrough:
        the head/emit parsers only read, but tab_default_value and the
@@ -1977,7 +1977,7 @@ int tab_levels_transform(char *fname) {
   fclose(fout);
   if (rc == 0) {
     if (rename(tmpname, fname) != 0) {
-      printf("Error: cannot rename %s\n", tmpname);
+      errmsg("Error: cannot rename %s\n", tmpname);
       rc = -1;
     }
   } else remove(tmpname);
@@ -1992,7 +1992,7 @@ int tab_levels_transform(char *fname) {
       strcpy(tmpname, psname);
       strcat(tmpname, "_lv");
       fout = fopen(tmpname, "w");
-      if (fout == NULL) { printf("Error: cannot open %s\n", tmpname); fclose(f); free(c); return -1; }
+      if (fout == NULL) { errmsg("Error: cannot open %s\n", tmpname); fclose(f); free(c); return -1; }
       while (fgets(line, TABREADLINE, f)) {
         c->stmt = line;
         if (lv_rename_line(c, line, sizeof(line)) < 0) { rc = lv_err(c, "statement too long after levels value rename"); break; }
@@ -2002,7 +2002,7 @@ int tab_levels_transform(char *fname) {
       fclose(fout);
       if (rc == 0) {
         if (rename(tmpname, psname) != 0) {
-          printf("Error: cannot rename %s\n", tmpname);
+          errmsg("Error: cannot rename %s\n", tmpname);
           rc = -1;
         }
       } else remove(tmpname);

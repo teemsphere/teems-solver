@@ -14,7 +14,7 @@ offset_t ma48_grow_la(offset_t cur,offset_t suggested,offset_t nnz,const char *k
   if(newla<2*cur)newla=2*cur;
   if(newla>MA48_LA_MAX)newla=MA48_LA_MAX;
   if(newla<=cur) {
-    printf("Error: factorizing %s needs a larger MA48 workspace than the %ld-element limit of the 32-bit HSL build (-%s is already at its %ld%% ceiling); this system is too large for one sequential factorization -- solve it with a bordered matrix_method (\"SBBD\" or \"DBBD\"), condense the model, or reduce its dimensions\n",
+    errmsg("Error: factorizing %s needs a larger MA48 workspace than the %ld-element limit of the 32-bit HSL build (-%s is already at its %ld%% ceiling); this system is too large for one sequential factorization -- solve it with a bordered matrix_method (\"SBBD\" or \"DBBD\"), condense the model, or reduce its dimensions\n",
            probe_onfail_scope_label(),(long)MA48_LA_MAX,knob,
            (long)((100.0*MA48_LA_MAX)/nnz));
     fflush(stdout);
@@ -44,7 +44,7 @@ offset_t ma48_la_from_pct(dim_t pct,offset_t nnz) {
 /* A clamped LA still reaches tens of GB; these report the shortfall
    instead of segfaulting on an unchecked NULL. */
 static void ma48_alloc_fail(offset_t n,size_t sz) {
-  printf("Error: cannot allocate the %.1f GB MA48 workspace this factorization needs (%ld elements); free memory on this machine, use a bordered matrix_method (\"SBBD\" or \"DBBD\") to split the factorization, or condense the model\n",
+  errmsg("Error: cannot allocate the %.1f GB MA48 workspace this factorization needs (%ld elements); free memory on this machine, use a bordered matrix_method (\"SBBD\" or \"DBBD\") to split the factorization, or condense the model\n",
          (n*(double)sz)/1073741824.0,(long)n);
   fflush(stdout);
   MPI_Abort(PETSC_COMM_WORLD,1);
@@ -82,10 +82,10 @@ void jac_mat_prealloc(Mat M,const char *what,PetscBool mpi,int count,PetscInt nr
     for(i=0;i<nrows_local;i++)nnz+=(offset_t)dnnz[i]+((mpi&&onnz!=NULL)?(offset_t)onnz[i]:0);
     if(nnz>(offset_t)PETSC_INT_MAX) {
       if(mpi)
-        printf("Error: assembling the %s for %s needs %ld nonzeros on rank %d, above the %ld-nonzero ceiling of the %d-bit PetscInt build; spread the system over more MPI ranks, condense the model, or reduce its dimensions\n",
+        errmsg("Error: assembling the %s for %s needs %ld nonzeros on rank %d, above the %ld-nonzero ceiling of the %d-bit PetscInt build; spread the system over more MPI ranks, condense the model, or reduce its dimensions\n",
                what,probe_onfail_scope_label(),(long)nnz,rank,(long)PETSC_INT_MAX,(int)(8*sizeof(PetscInt)));
       else
-        printf("Error: assembling the %s for %s needs %ld nonzeros, above the %ld-nonzero ceiling of the %d-bit PetscInt build; every HSL matrix_method (\"LU\", \"SBBD\") keeps the whole system on one rank, so more ranks do not help -- condense the model, reduce its dimensions, or use the distributed matrix_method \"DBBD\"\n",
+        errmsg("Error: assembling the %s for %s needs %ld nonzeros, above the %ld-nonzero ceiling of the %d-bit PetscInt build; every HSL matrix_method (\"LU\", \"SBBD\") keeps the whole system on one rank, so more ranks do not help -- condense the model, reduce its dimensions, or use the distributed matrix_method \"DBBD\"\n",
                what,probe_onfail_scope_label(),(long)nnz,(long)PETSC_INT_MAX,(int)(8*sizeof(PetscInt)));
       fflush(stdout);
       MPI_Abort(PETSC_COMM_WORLD,1);
@@ -94,7 +94,7 @@ void jac_mat_prealloc(Mat M,const char *what,PetscBool mpi,int count,PetscInt nr
   if(mpi)ierr=MatMPIAIJSetPreallocation(M,dnz,dnnz,onz,onnz);
   else ierr=MatSeqAIJSetPreallocation(M,dnz,dnnz);
   if(ierr) {
-    printf("Error: PETSc could not preallocate the %s for %s (PETSc error %d)\n",what,probe_onfail_scope_label(),(int)ierr);
+    errmsg("Error: PETSc could not preallocate the %s for %s (PETSc error %d)\n",what,probe_onfail_scope_label(),(int)ierr);
     fflush(stdout);
     MPI_Abort(PETSC_COMM_WORLD,1);
   }
@@ -180,7 +180,7 @@ void lu_fastrefac_solve(Mat A,PetscInt VecSize,dim_t laA,solve_real *rhs,solve_r
     /* -3 or fast-factorize declined: fresh analyse on current values */
     lu_fastrefac_extract(A,VecSize,laA);
   }
-  printf("Error: the MA48 workspace for %s did not converge after %d growth attempts; raise the initial workspace (laA/laD/laDi) or use a bordered matrix_method (\"SBBD\" or \"DBBD\")\n",probe_onfail_scope_label(),tries);
+  errmsg("Error: the MA48 workspace for %s did not converge after %d growth attempts; raise the initial workspace (laA/laD/laDi) or use a bordered matrix_method (\"SBBD\" or \"DBBD\")\n",probe_onfail_scope_label(),tries);
   MPI_Abort(PETSC_COMM_WORLD,1);
 }
 
@@ -267,7 +267,7 @@ void lu_grow_solve(Mat A,PetscInt VecSize,dim_t laA,solve_real *rhs,solve_real *
     }
     lasize=ma48_grow_la(lasize,insize[5],count,"laA",&teems_laA_used);
   }
-  printf("Error: the MA48 workspace for %s did not converge after %d growth attempts; raise the initial workspace (laA/laD/laDi) or use a bordered matrix_method (\"SBBD\" or \"DBBD\")\n",probe_onfail_scope_label(),tries);
+  errmsg("Error: the MA48 workspace for %s did not converge after %d growth attempts; raise the initial workspace (laA/laD/laDi) or use a bordered matrix_method (\"SBBD\" or \"DBBD\")\n",probe_onfail_scope_label(),tries);
   MPI_Abort(PETSC_COMM_WORLD,1);
 }
 
@@ -485,7 +485,7 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
       strcat(tempfilenam,tempchar);
       strcat(tempfilenam,".bin");
       if ( (tempvar = fopen(tempfilenam, "wb")) == NULL ) {
-        printf("Error: cannot open %s for writing\n",tempfilenam);
+        errmsg("Error: cannot open %s for writing\n",tempfilenam);
       }
       fwrite(closure_vals, sizeof(closure_entry),nvarele, tempvar);
       fclose(tempvar);
@@ -502,7 +502,7 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
       strcat(tempfilenam,tempchar);
       strcat(tempfilenam,".bin");
       if ( (tempvar = fopen(tempfilenam, "wb")) == NULL ) {
-        printf("Error: cannot open %s for writing\n",tempfilenam);
+        errmsg("Error: cannot open %s for writing\n",tempfilenam);
       }
       fwrite(elem_vals, sizeof(elem_value),ncofele+nvarele, tempvar);
       fclose(tempvar);
@@ -716,7 +716,7 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
     if(rank==rank_hsl) {
       if(!inmemory){
       if ((tempvar = fopen(tempfilenam, "rb")) == NULL) {
-        printf("Error: cannot open %s for reading\n",tempfilenam);
+        errmsg("Error: cannot open %s for reading\n",tempfilenam);
       }
       *elem_vals2=(elem_value*)realloc (*elem_vals2,(ncofele+nvarele)*sizeof(elem_value));
       scratch_read(*elem_vals2, sizeof(elem_value),ncofele+nvarele,tempvar,tempfilenam);
@@ -732,7 +732,7 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
       strcat(tempfilenam,tempchar);
       strcat(tempfilenam,".bin");
       if ((tempvar = fopen(tempfilenam, "rb")) == NULL) {
-        printf("Error: cannot open %s for reading\n",tempfilenam);
+        errmsg("Error: cannot open %s for reading\n",tempfilenam);
       }
       *closure_vals2=(closure_entry*)realloc (*closure_vals2,(nvarele)*sizeof(closure_entry));
       scratch_read(*closure_vals2, sizeof(closure_entry),nvarele,tempvar,tempfilenam);
@@ -988,7 +988,7 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
             strcat(tempfilenam,tempchar);
             strcat(tempfilenam,".bin");
             if ( (tempvar = fopen(tempfilenam, "wb")) == NULL ) {
-              printf("Error: cannot open %s for writing\n",tempfilenam);
+              errmsg("Error: cannot open %s for writing\n",tempfilenam);
             }
             fwrite(clag1, sizeof(solve_real),nvarele, tempvar);
             fclose(tempvar);
@@ -1003,7 +1003,7 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
             strcat(tempfilenam,tempchar);
             strcat(tempfilenam,".bin");
             if ( (tempvar = fopen(tempfilenam, "wb")) == NULL ) {
-              printf("Error: cannot open %s for writing\n",tempfilenam);
+              errmsg("Error: cannot open %s for writing\n",tempfilenam);
             }
             fwrite(varchange, sizeof(solve_real),nvarele, tempvar);
             fclose(tempvar);
@@ -1056,7 +1056,7 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
             strcat(tempfilenam,tempchar);
             strcat(tempfilenam,".bin");
             if ( (tempvar = fopen(tempfilenam, "wb")) == NULL ) {
-              printf("Error: cannot open %s for writing\n",tempfilenam);
+              errmsg("Error: cannot open %s for writing\n",tempfilenam);
             }
             fwrite(elem_vals, sizeof(elem_value),ncofele+nvarele, tempvar);
             fclose(tempvar);
@@ -1072,7 +1072,7 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
             strcat(tempfilenam,tempchar);
             strcat(tempfilenam,".bin");
             if ( (tempvar = fopen(tempfilenam, "wb")) == NULL ) {
-              printf("Error: cannot open %s for writing\n",tempfilenam);
+              errmsg("Error: cannot open %s for writing\n",tempfilenam);
             }
             fwrite(closure_vals, sizeof(closure_entry),nvarele, tempvar);
             fclose(tempvar);
@@ -1326,7 +1326,7 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
           if(rank==rank_hsl) {
             if(!inmemory){
             if ((tempvar = fopen(tempfilenam, "rb")) == NULL) {
-              printf("Error: cannot open %s for reading\n",tempfilenam);
+              errmsg("Error: cannot open %s for reading\n",tempfilenam);
             }
             *closure_vals2=(closure_entry*)realloc (*closure_vals2,(nvarele)*sizeof(closure_entry));
             scratch_read(*closure_vals2, sizeof(closure_entry),nvarele,tempvar,tempfilenam);
@@ -1342,7 +1342,7 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
             strcat(tempfilenam,tempchar);
             strcat(tempfilenam,".bin");
             if ((tempvar = fopen(tempfilenam, "rb")) == NULL) {
-              printf("Error: cannot open %s for reading\n",tempfilenam);
+              errmsg("Error: cannot open %s for reading\n",tempfilenam);
             }
             *elem_vals2=(elem_value*)realloc (*elem_vals2,(ncofele+nvarele)*sizeof(elem_value));
             scratch_read(*elem_vals2, sizeof(elem_value),ncofele+nvarele,tempvar,tempfilenam);
@@ -1358,7 +1358,7 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
             strcat(tempfilenam,tempchar);
             strcat(tempfilenam,".bin");
             if ((tempvar = fopen(tempfilenam, "rb")) == NULL) {
-              printf("Error: cannot open %s for reading\n",tempfilenam);
+              errmsg("Error: cannot open %s for reading\n",tempfilenam);
             }
             clag1=realloc (clag1,(nvarele)*sizeof(solve_real));
             scratch_read(clag1, sizeof(solve_real),nvarele,tempvar,tempfilenam);
@@ -1373,7 +1373,7 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
             strcat(tempfilenam,tempchar);
             strcat(tempfilenam,".bin");
             if ((tempvar = fopen(tempfilenam, "rb")) == NULL) {
-              printf("Error: cannot open %s for reading\n",tempfilenam);
+              errmsg("Error: cannot open %s for reading\n",tempfilenam);
             }
             varchange=realloc (varchange,(nvarele)*sizeof(solve_real));
             scratch_read(varchange, sizeof(solve_real),nvarele,tempvar,tempfilenam);
@@ -1604,7 +1604,7 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
           strcat(tempfilenam,tempchar);
           strcat(tempfilenam,".bin");
           if ( (tempvar = fopen(tempfilenam, "wb")) == NULL ) {
-            printf("Error: cannot open %s for writing\n",tempfilenam);
+            errmsg("Error: cannot open %s for writing\n",tempfilenam);
           }
           fwrite(clag1, sizeof(solve_real),nvarele, tempvar);
           fclose(tempvar);
@@ -1619,7 +1619,7 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
           strcat(tempfilenam,tempchar);
           strcat(tempfilenam,".bin");
           if ( (tempvar = fopen(tempfilenam, "wb")) == NULL ) {
-            printf("Error: cannot open %s for writing\n",tempfilenam);
+            errmsg("Error: cannot open %s for writing\n",tempfilenam);
           }
           fwrite(varchange, sizeof(solve_real),nvarele, tempvar);
           fclose(tempvar);
@@ -1673,7 +1673,7 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
           strcat(tempfilenam,tempchar);
           strcat(tempfilenam,".bin");
           if ( (tempvar = fopen(tempfilenam, "wb")) == NULL ) {
-            printf("Error: cannot open %s for writing\n",tempfilenam);
+            errmsg("Error: cannot open %s for writing\n",tempfilenam);
           }
           fwrite(elem_vals, sizeof(elem_value),ncofele+nvarele, tempvar);
           fclose(tempvar);
@@ -1689,7 +1689,7 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
           strcat(tempfilenam,tempchar);
           strcat(tempfilenam,".bin");
           if ( (tempvar = fopen(tempfilenam, "wb")) == NULL ) {
-            printf("Error: cannot open %s for writing\n",tempfilenam);
+            errmsg("Error: cannot open %s for writing\n",tempfilenam);
           }
           fwrite(closure_vals, sizeof(closure_entry),nvarele, tempvar);
           fclose(tempvar);
@@ -1943,7 +1943,7 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
         if(rank==rank_hsl) {
           if(!inmemory){
           if ((tempvar = fopen(tempfilenam, "rb")) == NULL) {
-            printf("Error: cannot open %s for reading\n",tempfilenam);
+            errmsg("Error: cannot open %s for reading\n",tempfilenam);
           }
           *closure_vals2=(closure_entry*)realloc (*closure_vals2,(nvarele)*sizeof(closure_entry));
           scratch_read(*closure_vals2, sizeof(closure_entry),nvarele,tempvar,tempfilenam);
@@ -1959,7 +1959,7 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
           strcat(tempfilenam,tempchar);
           strcat(tempfilenam,".bin");
           if ((tempvar = fopen(tempfilenam, "rb")) == NULL) {
-            printf("Error: cannot open %s for reading\n",tempfilenam);
+            errmsg("Error: cannot open %s for reading\n",tempfilenam);
           }
           *elem_vals2=(elem_value*)realloc (*elem_vals2,(ncofele+nvarele)*sizeof(elem_value));
           scratch_read(*elem_vals2, sizeof(elem_value),ncofele+nvarele,tempvar,tempfilenam);
@@ -1975,7 +1975,7 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
           strcat(tempfilenam,tempchar);
           strcat(tempfilenam,".bin");
           if ((tempvar = fopen(tempfilenam, "rb")) == NULL) {
-            printf("Error: cannot open %s for reading\n",tempfilenam);
+            errmsg("Error: cannot open %s for reading\n",tempfilenam);
           }
           clag1=realloc (clag1,(nvarele)*sizeof(solve_real));
           scratch_read(clag1, sizeof(solve_real),nvarele,tempvar,tempfilenam);
@@ -1990,7 +1990,7 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
           strcat(tempfilenam,tempchar);
           strcat(tempfilenam,".bin");
           if ((tempvar = fopen(tempfilenam, "rb")) == NULL) {
-            printf("Error: cannot open %s for reading\n",tempfilenam);
+            errmsg("Error: cannot open %s for reading\n",tempfilenam);
           }
           varchange=realloc (varchange,(nvarele)*sizeof(solve_real));
           scratch_read(varchange, sizeof(solve_real),nvarele,tempvar,tempfilenam);
@@ -2065,7 +2065,7 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
             strcat(tempfilenam,tempchar);
             strcat(tempfilenam,".bin");
             if ((tempvar = fopen(tempfilenam, "rb")) == NULL) {
-              printf("Error: cannot open %s for reading\n",tempfilenam);
+              errmsg("Error: cannot open %s for reading\n",tempfilenam);
             }
             *xcf2=(solve_real*)realloc (*xcf2,(nvarele)*sizeof(solve_real));
             xcf=*xcf2;
@@ -2081,7 +2081,7 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
             strcat(tempfilenam,tempchar);
             strcat(tempfilenam,".bin");
             if ((tempvar = fopen(tempfilenam, "rb")) == NULL) {
-              printf("Error: cannot open %s for reading\n",tempfilenam);
+              errmsg("Error: cannot open %s for reading\n",tempfilenam);
             }
             xc12=realloc (xc12,(nvarele)*sizeof(solve_real));
             scratch_read(xc12, sizeof(solve_real),nvarele,tempvar,tempfilenam);
@@ -2095,7 +2095,7 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
             strcat(tempfilenam,tempchar);
             strcat(tempfilenam,".bin");
             if ((tempvar = fopen(tempfilenam, "rb")) == NULL) {
-              printf("Error: cannot open %s for reading\n",tempfilenam);
+              errmsg("Error: cannot open %s for reading\n",tempfilenam);
             }
             xc24=realloc (xc24,(nvarele)*sizeof(solve_real));
             scratch_read(xc24, sizeof(solve_real),nvarele,tempvar,tempfilenam);
@@ -2112,7 +2112,7 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
             strcat(tempfilenam,tempchar);
             strcat(tempfilenam,".bin");
             if ((tempvar = fopen(tempfilenam, "rb")) == NULL) {
-              printf("Error: cannot open %s for reading\n",tempfilenam);
+              errmsg("Error: cannot open %s for reading\n",tempfilenam);
             }
             scratch_read(xc0, sizeof(solve_real),nvarele,tempvar,tempfilenam);
             fclose(tempvar);
@@ -2269,7 +2269,7 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
             strcat(tempfilenam,tempchar);
             strcat(tempfilenam,".bin");
             if ( (tempvar = fopen(tempfilenam, "wb")) == NULL ) {
-              printf("Error: cannot open %s for writing\n",tempfilenam);
+              errmsg("Error: cannot open %s for writing\n",tempfilenam);
             }
             fwrite(xcf, sizeof(solve_real),nvarele, tempvar);
             fclose(tempvar);
@@ -2285,7 +2285,7 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
             strcat(tempfilenam,tempchar);
             strcat(tempfilenam,".bin");
             if ( (tempvar = fopen(tempfilenam, "wb")) == NULL ) {
-              printf("Error: cannot open %s for writing\n",tempfilenam);
+              errmsg("Error: cannot open %s for writing\n",tempfilenam);
             }
             fwrite(xc0, sizeof(solve_real),nvarele, tempvar);
             fclose(tempvar);
@@ -2312,7 +2312,7 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
             strcat(tempfilenam,tempchar);
             strcat(tempfilenam,".bin");
             if ((tempvar = fopen(tempfilenam, "rb")) == NULL) {
-              printf("Error: cannot open %s for reading\n",tempfilenam);
+              errmsg("Error: cannot open %s for reading\n",tempfilenam);
             }
             xc124=realloc (xc124,nvarele*sizeof(int));
             scratch_read(xc124, sizeof(int),nvarele,tempvar,tempfilenam);
@@ -2364,7 +2364,7 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
             strcat(tempfilenam,tempchar);
             strcat(tempfilenam,".bin");
             if ( (tempvar = fopen(tempfilenam, "wb")) == NULL ) {
-              printf("Error: cannot open %s for writing\n",tempfilenam);
+              errmsg("Error: cannot open %s for writing\n",tempfilenam);
             }
             fwrite(xc124, sizeof(int),nvarele, tempvar);
             fclose(tempvar);
@@ -2382,7 +2382,7 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
             strcat(tempfilenam,tempchar);
             strcat(tempfilenam,".bin");
             if ( (tempvar = fopen(tempfilenam, "wb")) == NULL ) {
-              printf("Error: cannot open %s for writing\n",tempfilenam);
+              errmsg("Error: cannot open %s for writing\n",tempfilenam);
             }
             fwrite(xc12, sizeof(solve_real),nvarele, tempvar);
             fclose(tempvar);
@@ -2396,7 +2396,7 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
             strcat(tempfilenam,tempchar);
             strcat(tempfilenam,".bin");
             if ( (tempvar = fopen(tempfilenam, "wb")) == NULL ) {
-              printf("Error: cannot open %s for writing\n",tempfilenam);
+              errmsg("Error: cannot open %s for writing\n",tempfilenam);
             }
             fwrite(xc24, sizeof(solve_real),nvarele, tempvar);
             fclose(tempvar);
@@ -2418,7 +2418,7 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
           strcat(solchar,".bin");
           logmsg(2,"solchar %s\n",solchar);
           if ( (solution = fopen(solchar, "wb")) == NULL ) {
-            printf("Error: cannot open %s for writing\n",solchar);
+            errmsg("Error: cannot open %s for writing\n",solchar);
             return 1;
           }
           if(xcf!=NULL)fwrite(xcf, sizeof(solve_real),nvarele, solution);

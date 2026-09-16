@@ -18,7 +18,7 @@ int formula_normalize(char *fomulain) {
   fpart1[p-fomulain] = '\0';
   p1=strrchr(fpart1,'(');
   if (p1==NULL) {
-    printf("Error: unbalanced parentheses in formula: %s\n",fomulain);
+    errmsg("Error: unbalanced parentheses in formula: %s\n",fomulain);
     return -1;
   }
   index=p1-fpart1;//ha_cgerevfind(fpart1,"(");
@@ -494,7 +494,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
 
   filehandle = fopen(fname,"r");
   if(filehandle==NULL){
-    printf("Error: cannot open %s\n",fname);
+    errmsg("Error: cannot open %s\n",fname);
     return -1;
   }
 
@@ -517,7 +517,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
       while (str_replace_all(line,"  "," "));
     }
     if (str_find_ci(line,"from terminal")>-1) {
-      printf("Error: Read ... from terminal is not supported (read from a file instead)\n");
+      errmsg("Error: Read ... from terminal is not supported (read from a file instead)\n");
       return -1;
     }
     k0=str_find_ci(line,"from file ");
@@ -529,7 +529,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
           break;
         }
       if(k0==niodata){
-        printf("Error: cannot open file %s named in the CMF file\n",line1);
+        errmsg("Error: cannot open file %s named in the CMF file\n",line1);
         return -1;
       }
     }
@@ -537,14 +537,14 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
       readitem = strtok(line," ");
       readitem = strtok(NULL," ");
       if (readitem==NULL) {
-        printf("Error: malformed Read statement: %s\n",linecopy);
+        errmsg("Error: malformed Read statement: %s\n",linecopy);
         return -1;
       }
       strcpy(vname,readitem);
       readitem = strtok(NULL,"\"");
       readitem = strtok(NULL,"\"");
       if (readitem==NULL) {
-        printf("Error: Read without a header is not supported (use 'Read X from file <log> header \"H\"'): %s\n",linecopy);
+        errmsg("Error: Read without a header is not supported (use 'Read X from file <log> header \"H\"'): %s\n",linecopy);
         return -1;
       }
       strcpy(header,readitem);
@@ -587,7 +587,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
           }
           filehandle1 = fopen(iodata[k0].filname,"r");
           if(filehandle1==NULL){
-            printf("Error: cannot open data file %s\n",iodata[k0].filname);
+            errmsg("Error: cannot open data file %s\n",iodata[k0].filname);
             return -1;
           }
           while (fgets(line,DATREADLINE,filehandle1)) {
@@ -706,7 +706,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
               fclose(filehandle1);
               break;
             }
-            printf("Error: header \"%s\" not found in the data file\n",header);
+            errmsg("Error: header \"%s\" not found in the data file\n",header);
             return -1;
           }
           fclose(filehandle1);
@@ -732,7 +732,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
           }
           filehandle1 = fopen(iodata[k0].filname,"r");
           if(filehandle1==NULL){
-            printf("Error: cannot open data file %s\n",iodata[k0].filname);
+            errmsg("Error: cannot open data file %s\n",iodata[k0].filname);
             return -1;
           }
           while (fgets(line,DATREADLINE,filehandle1)) {
@@ -860,7 +860,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
               fclose(filehandle1);
               break;
             }
-            printf("Error: header \"%s\" not found in the data file\n",header);
+            errmsg("Error: header \"%s\" not found in the data file\n",header);
             return -1;
           }
           /* satisfied conditional read: formulas assigning this
@@ -871,7 +871,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
         }
       }
       if(count2==0&&i==ncof){
-        printf("Error: %s is not a declared variable, coefficient, or parameter\n",vname);
+        errmsg("Error: %s is not a declared variable, coefficient, or parameter\n",vname);
         return -1;
       }
     } else {
@@ -885,7 +885,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
       str_replace_all(vname," ","");
       readitem = strtok(NULL,")");
       if (readitem==NULL) {
-        printf("Error: malformed partial Read statement in TAB file\n");
+        errmsg("Error: malformed partial Read statement in TAB file\n");
         return -1;
       }
       strcpy(argu,readitem);
@@ -893,7 +893,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
       readitem = strtok(NULL,"\"");
       readitem = strtok(NULL,"\"");
       if (readitem==NULL) {
-        printf("Error: Read without a header is not supported (use 'Read X(...) from file <log> header \"H\"')\n");
+        errmsg("Error: Read without a header is not supported (use 'Read X(...) from file <log> header \"H\"')\n");
         return -1;
       }
       strcpy(header,readitem);
@@ -956,7 +956,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
           }
           filehandle1 = fopen(iodata[k0].filname,"r");
           if(filehandle1==NULL){
-            printf("Error: cannot open data file %s\n",iodata[k0].filname);
+            errmsg("Error: cannot open data file %s\n",iodata[k0].filname);
             return -1;
           }
           while (fgets(line,DATREADLINE,filehandle1)) {
@@ -1084,7 +1084,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
               fclose(filehandle1);
               break;
             }
-            printf("Error: header \"%s\" not found in the data file\n",header);
+            errmsg("Error: header \"%s\" not found in the data file\n",header);
             return -1;
           }
           /* satisfied conditional read: formulas assigning this
@@ -1131,7 +1131,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
           }
           filehandle1 = fopen(iodata[k0].filname,"r");
           if(filehandle1==NULL){
-            printf("Error: cannot open data file %s\n",iodata[k0].filname);
+            errmsg("Error: cannot open data file %s\n",iodata[k0].filname);
             return -1;
           }
           while (fgets(line,DATREADLINE,filehandle1)) {
@@ -1258,7 +1258,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
               fclose(filehandle1);
               break;
             }
-            printf("Error: header \"%s\" not found in the data file\n",header);
+            errmsg("Error: header \"%s\" not found in the data file\n",header);
             return -1;
           }
           fclose(filehandle1);
@@ -1266,7 +1266,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
         }
       }
       if(count2==0&&i==ncof){
-        printf("Error: %s is not a declared variable, coefficient, or parameter\n",vname);
+        errmsg("Error: %s is not a declared variable, coefficient, or parameter\n",vname);
         return -1;
       }
     }
@@ -1315,7 +1315,7 @@ offset_t sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
         }
         if (i>10000) {
           strcat(interchar,"gen_sum");
-          printf("Error: too many sum() terms in one statement\n");
+          errmsg("Error: too many sum() terms in one statement\n");
         }
         strcat(interchar,interchar1);
         strcpy(sum_cof[j].sumname,interchar);
@@ -1464,7 +1464,7 @@ offset_t sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
         }
         if (i>10000) {
           strcat(interchar,"gen_sum");
-          printf("Error: too many sum() terms in one statement\n");
+          errmsg("Error: too many sum() terms in one statement\n");
         }
         strcat(interchar,interchar1);
         strcpy(sum_cof[j].sumname,interchar);
@@ -1648,19 +1648,19 @@ int names_validate(set_def *sets, dim_t nset, array_def *coefs, offset_t ncof, a
            coefficient sharing the name is a genuine clash. */
         if(vars[j].level_par&&
            !((vars[j].cofname[0]=='p'||vars[j].cofname[0]=='c')&&vars[j].cofname[1]=='_'))continue;
-        printf("Error: name %s is declared as both a coefficient and a variable; names are case-insensitive and must be unique (manual 11.2.1)\n",coefs[i].cofname);
+        errmsg("Error: name %s is declared as both a coefficient and a variable; names are case-insensitive and must be unique (manual 11.2.1)\n",coefs[i].cofname);
         return -1;
       }
     for(k=0; k<nset; k++)if(strcmp(coefs[i].cofname,sets[k].setname)==0) {
-        printf("Error: name %s is declared as both a coefficient and a set (manual 11.2.1)\n",coefs[i].cofname);
+        errmsg("Error: name %s is declared as both a coefficient and a set (manual 11.2.1)\n",coefs[i].cofname);
         return -1;
       }
     for(j=i+1; j<ncof; j++)if(strcmp(coefs[i].cofname,coefs[j].cofname)==0) {
-        printf("Error: coefficient %s is declared more than once (manual 11.2.1)\n",coefs[i].cofname);
+        errmsg("Error: coefficient %s is declared more than once (manual 11.2.1)\n",coefs[i].cofname);
         return -1;
       }
     for(r=0; reserved[r]!=NULL; r++)if(strcmp(coefs[i].cofname,reserved[r])==0) {
-        printf("Error: coefficient name %s is a reserved word (manual 11.2.1)\n",coefs[i].cofname);
+        errmsg("Error: coefficient name %s is a reserved word (manual 11.2.1)\n",coefs[i].cofname);
         return -1;
       }
   }
@@ -1670,46 +1670,46 @@ int names_validate(set_def *sets, dim_t nset, array_def *coefs, offset_t ncof, a
        then the reference token p_<bare> is ambiguous */
     if((vars[i].cofname[0]=='p'||vars[i].cofname[0]=='c')&&vars[i].cofname[1]=='_') {
       for(j=0; j<nvar; j++)if(strcmp(vars[j].cofname,vars[i].cofname+2)==0) {
-          printf("Error: variables %s and %s cannot coexist: the reference p_%s is ambiguous (manual 11.2.1)\n",vars[i].cofname,vars[j].cofname,vars[i].cofname+2);
+          errmsg("Error: variables %s and %s cannot coexist: the reference p_%s is ambiguous (manual 11.2.1)\n",vars[i].cofname,vars[j].cofname,vars[i].cofname+2);
           return -1;
         }
     }
     for(k=0; k<nset; k++)if(strcmp(vars[i].cofname,sets[k].setname)==0) {
-        printf("Error: name %s is declared as both a variable and a set (manual 11.2.1)\n",vars[i].cofname);
+        errmsg("Error: name %s is declared as both a variable and a set (manual 11.2.1)\n",vars[i].cofname);
         return -1;
       }
     for(j=i+1; j<nvar; j++)if(strcmp(vars[i].cofname,vars[j].cofname)==0) {
-        printf("Error: variable %s is declared more than once (manual 11.2.1)\n",vars[i].cofname);
+        errmsg("Error: variable %s is declared more than once (manual 11.2.1)\n",vars[i].cofname);
         return -1;
       }
     for(r=0; reserved[r]!=NULL; r++)if(strcmp(vars[i].cofname,reserved[r])==0) {
-        printf("Error: variable name %s is a reserved word (manual 11.2.1)\n",vars[i].cofname);
+        errmsg("Error: variable name %s is a reserved word (manual 11.2.1)\n",vars[i].cofname);
         return -1;
       }
   }
   for(k=0; k<nset; k++)for(r=0; reserved[r]!=NULL; r++)if(strcmp(sets[k].setname,reserved[r])==0) {
-      printf("Error: set name %s is a reserved word (manual 11.2.1)\n",sets[k].setname);
+      errmsg("Error: set name %s is a reserved word (manual 11.2.1)\n",sets[k].setname);
       return -1;
     }
   for(k=0; k<nmap; k++) {
     for(i=0; i<ncof; i++)if(strcmp(maps[k].mapname,coefs[i].cofname)==0) {
-        printf("Error: name %s is declared as both a mapping and a coefficient (manual 11.2.1)\n",maps[k].mapname);
+        errmsg("Error: name %s is declared as both a mapping and a coefficient (manual 11.2.1)\n",maps[k].mapname);
         return -1;
       }
     for(i=0; i<nvar; i++)if(strcmp(maps[k].mapname,vars[i].cofname)==0) {
-        printf("Error: name %s is declared as both a mapping and a variable (manual 11.2.1)\n",maps[k].mapname);
+        errmsg("Error: name %s is declared as both a mapping and a variable (manual 11.2.1)\n",maps[k].mapname);
         return -1;
       }
     for(j=0; j<nset; j++)if(strcmp(maps[k].mapname,sets[j].setname)==0) {
-        printf("Error: name %s is declared as both a mapping and a set (manual 11.2.1)\n",maps[k].mapname);
+        errmsg("Error: name %s is declared as both a mapping and a set (manual 11.2.1)\n",maps[k].mapname);
         return -1;
       }
     for(j=k+1; j<nmap; j++)if(strcmp(maps[k].mapname,maps[j].mapname)==0) {
-        printf("Error: mapping %s is declared more than once (manual 11.2.1)\n",maps[k].mapname);
+        errmsg("Error: mapping %s is declared more than once (manual 11.2.1)\n",maps[k].mapname);
         return -1;
       }
     for(r=0; reserved[r]!=NULL; r++)if(strcmp(maps[k].mapname,reserved[r])==0) {
-        printf("Error: mapping name %s is a reserved word (manual 11.2.1)\n",maps[k].mapname);
+        errmsg("Error: mapping name %s is a reserved word (manual 11.2.1)\n",maps[k].mapname);
         return -1;
       }
   }
@@ -1766,7 +1766,7 @@ offset_t postsim_reads_execute(char *psname, int niodata, cmf_file_entry *iodata
     for(i=0; i<ncof; i++)if(strcmp(coefs[i].cofname,name)==0)break;
     if(i<ncof) {
       if(teems_coef_is_ps==NULL||!teems_coef_is_ps[i]) {
-        printf("Error: PostSim Read into ordinary coefficient %s; targets must be PostSim Coefficients (manual 12.2.3)\n",name);
+        errmsg("Error: PostSim Read into ordinary coefficient %s; targets must be PostSim Coefficients (manual 12.2.3)\n",name);
         fclose(f);
         free(docopy);
         return -1;
@@ -1776,12 +1776,12 @@ offset_t postsim_reads_execute(char *psname, int niodata, cmf_file_entry *iodata
     }
     for(j=0; j<nvar; j++)if(strcmp(vars[j].cofname,name)==0)break;
     if(j<nvar) {
-      printf("Error: PostSim Read into variable %s; simulation results cannot be changed (manual 12.2.3)\n",name);
+      errmsg("Error: PostSim Read into variable %s; simulation results cannot be changed (manual 12.2.3)\n",name);
       fclose(f);
       free(docopy);
       return -1;
     }
-    printf("Error: PostSim Read target %s is not a declared coefficient\n",name);
+    errmsg("Error: PostSim Read target %s is not a declared coefficient\n",name);
     fclose(f);
     free(docopy);
     return -1;
@@ -1840,7 +1840,7 @@ int mappings_read(char *fname, map_def *maps, dim_t nmap, set_def *sets, dim_t n
       readitem = strtok(NULL," ");
     }
     if (readitem==NULL||strlen(readitem)>=NAMESIZE) {
-      printf("Error: malformed Mapping statement in TAB file: %s\n",linecopy);
+      errmsg("Error: malformed Mapping statement in TAB file: %s\n",linecopy);
       fclose(filehandle);
       MPI_Abort(PETSC_COMM_WORLD,1);
       return -1;
@@ -1848,7 +1848,7 @@ int mappings_read(char *fname, map_def *maps, dim_t nmap, set_def *sets, dim_t n
     strcpy(maps[j].mapname,readitem);
     readitem = strtok(NULL," ");
     if (readitem==NULL||strcmp(readitem,"from")!=0) {
-      printf("Error: malformed Mapping statement in TAB file: %s\n",linecopy);
+      errmsg("Error: malformed Mapping statement in TAB file: %s\n",linecopy);
       fclose(filehandle);
       MPI_Abort(PETSC_COMM_WORLD,1);
       return -1;
@@ -1856,7 +1856,7 @@ int mappings_read(char *fname, map_def *maps, dim_t nmap, set_def *sets, dim_t n
     readitem = strtok(NULL," ");
     for (i=0; i<nset; i++) if (readitem!=NULL&&strcmp(readitem,sets[i].setname)==0) break;
     if (readitem==NULL||i==nset) {
-      printf("Error: set %s in Mapping %s is not declared\n",readitem==NULL?"":readitem,maps[j].mapname);
+      errmsg("Error: set %s in Mapping %s is not declared\n",readitem==NULL?"":readitem,maps[j].mapname);
       fclose(filehandle);
       MPI_Abort(PETSC_COMM_WORLD,1);
       return -1;
@@ -1864,7 +1864,7 @@ int mappings_read(char *fname, map_def *maps, dim_t nmap, set_def *sets, dim_t n
     maps[j].fromset=i;
     readitem = strtok(NULL," ");
     if (readitem==NULL||strcmp(readitem,"to")!=0) {
-      printf("Error: malformed Mapping statement in TAB file: %s\n",linecopy);
+      errmsg("Error: malformed Mapping statement in TAB file: %s\n",linecopy);
       fclose(filehandle);
       MPI_Abort(PETSC_COMM_WORLD,1);
       return -1;
@@ -1872,7 +1872,7 @@ int mappings_read(char *fname, map_def *maps, dim_t nmap, set_def *sets, dim_t n
     readitem = strtok(NULL," ;");
     for (i=0; i<nset; i++) if (readitem!=NULL&&strcmp(readitem,sets[i].setname)==0) break;
     if (readitem==NULL||i==nset) {
-      printf("Error: set %s in Mapping %s is not declared\n",readitem==NULL?"":readitem,maps[j].mapname);
+      errmsg("Error: set %s in Mapping %s is not declared\n",readitem==NULL?"":readitem,maps[j].mapname);
       fclose(filehandle);
       MPI_Abort(PETSC_COMM_WORLD,1);
       return -1;
@@ -1886,13 +1886,13 @@ int mappings_read(char *fname, map_def *maps, dim_t nmap, set_def *sets, dim_t n
       set_def *fs=&sets[maps[j].fromset];
       dim_t k,n1,p1=teems_set_prod1[maps[j].fromset],p2=teems_set_prod2[maps[j].fromset];
       if (!teems_set_isprod[maps[j].fromset]) {
-        printf("Error: Mapping (project) %s: set %s is not defined as a set product A x B (manual 10.13.2)\n",maps[j].mapname,fs->setname);
+        errmsg("Error: Mapping (project) %s: set %s is not defined as a set product A x B (manual 10.13.2)\n",maps[j].mapname,fs->setname);
         fclose(filehandle);
         MPI_Abort(PETSC_COMM_WORLD,1);
         return -1;
       }
       if ((dim_t)maps[j].toset!=p1&&(dim_t)maps[j].toset!=p2) {
-        printf("Error: Mapping (project) %s: set %s is not a factor of the product %s (manual 10.13.2)\n",maps[j].mapname,sets[maps[j].toset].setname,fs->setname);
+        errmsg("Error: Mapping (project) %s: set %s is not a factor of the product %s (manual 10.13.2)\n",maps[j].mapname,sets[maps[j].toset].setname,fs->setname);
         fclose(filehandle);
         MPI_Abort(PETSC_COMM_WORLD,1);
         return -1;
@@ -1933,7 +1933,7 @@ int mapping_values_read(char *fname, int niodata, cmf_file_entry *iodata, map_de
     for (j=0; j<nmap; j++) if (strcmp(readitem,maps[j].mapname)==0) break;
     if (j==nmap) {
       if (byele) {
-        printf("Error: Read (by_elements) target %s is not a declared mapping (manual 11.9.1)\n",readitem);
+        errmsg("Error: Read (by_elements) target %s is not a declared mapping (manual 11.9.1)\n",readitem);
         fclose(filehandle);
         MPI_Abort(PETSC_COMM_WORLD,1);
         return -1;
@@ -1941,21 +1941,21 @@ int mapping_values_read(char *fname, int niodata, cmf_file_entry *iodata, map_de
       continue;
     }
     if (!byele) {
-      printf("Error: integer Read of mapping %s is not supported; use Read (by_elements) (manual 11.9.1)\n",maps[j].mapname);
+      errmsg("Error: integer Read of mapping %s is not supported; use Read (by_elements) (manual 11.9.1)\n",maps[j].mapname);
       fclose(filehandle);
       MPI_Abort(PETSC_COMM_WORLD,1);
       return -1;
     }
     k0=str_find_ci(linecopy,"from file ");
     if (k0<0) {
-      printf("Error: Read (by_elements) for mapping %s has no file clause\n",maps[j].mapname);
+      errmsg("Error: Read (by_elements) for mapping %s has no file clause\n",maps[j].mapname);
       fclose(filehandle);
       MPI_Abort(PETSC_COMM_WORLD,1);
       return -1;
     }
     k1=str_find_ci(linecopy+k0+10," ");
     if (k1<0||k1>=(int)sizeof(line1)) {
-      printf("Error: malformed Read (by_elements) statement for mapping %s\n",maps[j].mapname);
+      errmsg("Error: malformed Read (by_elements) statement for mapping %s\n",maps[j].mapname);
       fclose(filehandle);
       MPI_Abort(PETSC_COMM_WORLD,1);
       return -1;
@@ -1964,7 +1964,7 @@ int mapping_values_read(char *fname, int niodata, cmf_file_entry *iodata, map_de
     line1[k1]='\0';
     for (k0=0; k0<niodata; k0++) if (strcmp(line1,iodata[k0].logname)==0) break;
     if (k0==niodata) {
-      printf("Error: cannot open file %s named in the CMF file\n",line1);
+      errmsg("Error: cannot open file %s named in the CMF file\n",line1);
       fclose(filehandle);
       MPI_Abort(PETSC_COMM_WORLD,1);
       return -1;
@@ -1972,14 +1972,14 @@ int mapping_values_read(char *fname, int niodata, cmf_file_entry *iodata, map_de
     readitem = strtok(NULL,"\"");
     readitem = strtok(NULL,"\"");
     if (readitem==NULL||strlen(readitem)>=HEADERSIZE) {
-      printf("Error: Read (by_elements) for mapping %s needs a header (manual 11.9.1)\n",maps[j].mapname);
+      errmsg("Error: Read (by_elements) for mapping %s needs a header (manual 11.9.1)\n",maps[j].mapname);
       fclose(filehandle);
       MPI_Abort(PETSC_COMM_WORLD,1);
       return -1;
     }
     datafile_read_header_info(readitem,iodata[k0].filname,&vsize,longname,&dim1);
     if (dim1!=sets[maps[j].fromset].size) {
-      printf("Error: Read (by_elements) for mapping %s supplies %ld values for the %ld elements of set %s\n",maps[j].mapname,(long)dim1,(long)sets[maps[j].fromset].size,sets[maps[j].fromset].setname);
+      errmsg("Error: Read (by_elements) for mapping %s supplies %ld values for the %ld elements of set %s\n",maps[j].mapname,(long)dim1,(long)sets[maps[j].fromset].size,sets[maps[j].fromset].setname);
       fclose(filehandle);
       MPI_Abort(PETSC_COMM_WORLD,1);
       return -1;
@@ -1996,7 +1996,7 @@ int mapping_values_read(char *fname, int niodata, cmf_file_entry *iodata, map_de
       for (k=0; k<sets[maps[j].toset].size; k++)
         if (strcmp(matvar1[i].ch,set_elems[sets[maps[j].toset].offset+k].setele)==0) break;
       if (k==sets[maps[j].toset].size) {
-        printf("Error: %s in the data for mapping %s is not an element of set %s (manual 11.9.2)\n",matvar1[i].ch,maps[j].mapname,sets[maps[j].toset].setname);
+        errmsg("Error: %s in the data for mapping %s is not an element of set %s (manual 11.9.2)\n",matvar1[i].ch,maps[j].mapname,sets[maps[j].toset].setname);
         free(matvar1);
         fclose(filehandle);
         MPI_Abort(PETSC_COMM_WORLD,1);
@@ -2048,7 +2048,7 @@ int mapping_use_guards(char *fname, map_def *maps, dim_t nmap) {
           for (qm=0; qm<nmap; qm++) {
             sprintf(qfind,"%s(",maps[qm].mapname);
             if (str_find_ci(line+qbeg,qfind)>-1) {
-              printf("Error: mapping equalities in Formula quantifier conditions are not supported; move the condition into a sum (manual 11.4.11)\n");
+              errmsg("Error: mapping equalities in Formula quantifier conditions are not supported; move the condition into a sum (manual 11.4.11)\n");
               fclose(filehandle);
               MPI_Abort(PETSC_COMM_WORLD,1);
               return -1;
@@ -2087,7 +2087,7 @@ int mapping_use_guards(char *fname, map_def *maps, dim_t nmap) {
       sprintf(gfind,"%s(",maps[gm].mapname);
       gpos=str_find_ci(line,gfind);
       if (gpos==0||(gpos>0&&!isalnum((int)line[gpos-1])&&line[gpos-1]!='_')) {
-        printf("Error: a set mapping on the left-hand side of an Update statement is not supported (mapping %s; manual 11.9.9)\n",maps[gm].mapname);
+        errmsg("Error: a set mapping on the left-hand side of an Update statement is not supported (mapping %s; manual 11.9.9)\n",maps[gm].mapname);
         fclose(filehandle);
         MPI_Abort(PETSC_COMM_WORLD,1);
         return -1;
@@ -2102,7 +2102,7 @@ int mapping_use_guards(char *fname, map_def *maps, dim_t nmap) {
     if (readitem!=NULL&&readitem[0]=='(') readitem = strtok(NULL," ");
     if (readitem==NULL) continue;
     for (j=0; j<nmap; j++) if (strcmp(readitem,maps[j].mapname)==0) {
-        printf("Error: writing mapping %s is not supported (manual 11.9.10)\n",maps[j].mapname);
+        errmsg("Error: writing mapping %s is not supported (manual 11.9.10)\n",maps[j].mapname);
         fclose(filehandle);
         MPI_Abort(PETSC_COMM_WORLD,1);
         return -1;
@@ -2137,7 +2137,7 @@ void mapping_lower_calls(char *line) {
         int inner=(line[k2]=='(');
         for (k3=op+1; k3<k2; k3++) if (line[k3]=='@') inner=1;
         if (inner) {
-          printf("Error: composition of set mappings is not supported (mapping %s; manual 11.9.6)\n",teems_maps[m].mapname);
+          errmsg("Error: composition of set mappings is not supported (mapping %s; manual 11.9.6)\n",teems_maps[m].mapname);
           MPI_Abort(PETSC_COMM_WORLD,1);
         }
       }
@@ -2258,12 +2258,12 @@ void sum_cond_parse(char *settok, const char *sumindx, int *cond_mapid, char *co
       if (mp==0) lhs=cond0; /* not a mapping: the coefficient parse below needs the full untruncated condition */
       if (mp>0) {
         if (strcmp(lhs,sumindx)!=0) {
-          printf("Error: the sum condition on mapping %s must test the summed index %s, not %s\n",teems_maps[mp-1].mapname,sumindx,lhs);
+          errmsg("Error: the sum condition on mapping %s must test the summed index %s, not %s\n",teems_maps[mp-1].mapname,sumindx,lhs);
           MPI_Abort(PETSC_COMM_WORLD,1);
           return;
         }
         if (eq[1]=='\0'||strlen(eq+1)>=NAMESIZE) {
-          printf("Error: malformed sum condition RHS for mapping %s\n",teems_maps[mp-1].mapname);
+          errmsg("Error: malformed sum condition RHS for mapping %s\n",teems_maps[mp-1].mapname);
           MPI_Abort(PETSC_COMM_WORLD,1);
           return;
         }
@@ -2288,7 +2288,7 @@ void sum_cond_parse(char *settok, const char *sumindx, int *cond_mapid, char *co
     char *endp=NULL;
     double cval;
     if (sc==NULL) {
-      printf("Error: unsupported sum condition '%s' on a sum containing variables; only a mapping equality MAPPING(index) = value is supported there (manual 11.4.11)\n",lhs);
+      errmsg("Error: unsupported sum condition '%s' on a sum containing variables; only a mapping equality MAPPING(index) = value is supported there (manual 11.4.11)\n",lhs);
       MPI_Abort(PETSC_COMM_WORLD,1);
       return;
     }
@@ -2324,7 +2324,7 @@ void sum_cond_parse(char *settok, const char *sumindx, int *cond_mapid, char *co
     else goto badcond;
     cval=strtod(p+olen,&endp);
     if (endp==p+olen||endp==NULL||*endp!='\0') {
-      printf("Error: unsupported sum condition RHS '%s'; a coefficient condition compares against a NUMERIC constant (COEF(args) <op> const; manual 11.4.11)\n",p+olen);
+      errmsg("Error: unsupported sum condition RHS '%s'; a coefficient condition compares against a NUMERIC constant (COEF(args) <op> const; manual 11.4.11)\n",p+olen);
       MPI_Abort(PETSC_COMM_WORLD,1);
       return;
     }
@@ -2332,7 +2332,7 @@ void sum_cond_parse(char *settok, const char *sumindx, int *cond_mapid, char *co
     sc->cond_cofval=cval;
     return;
 badcond:
-    printf("Error: unsupported sum condition '%s'; supported forms are MAPPING(index) = value and COEF(args) <op> <numeric const> (manual 11.4.11)\n",lhs);
+    errmsg("Error: unsupported sum condition '%s'; supported forms are MAPPING(index) = value and COEF(args) <op> <numeric const> (manual 11.4.11)\n",lhs);
     MPI_Abort(PETSC_COMM_WORLD,1);
     return;
   }
@@ -2349,12 +2349,12 @@ void sum_cond_coef_resolve(sum_def *sc, quantifier *frame, dim_t nframe, set_def
   if (sc->cond_coef[0]=='\0') return;
   for (ci=0; ci<ncof; ci++) if (strcmp(coefs[ci].cofname,sc->cond_coef)==0) break;
   if (ci==ncof) {
-    printf("Error: sum condition coefficient %s is not declared (manual 11.4.11)\n",sc->cond_coef);
+    errmsg("Error: sum condition coefficient %s is not declared (manual 11.4.11)\n",sc->cond_coef);
     MPI_Abort(PETSC_COMM_WORLD,1);
     return;
   }
   if ((dim_t)coefs[ci].size!=sc->cond_cofnargs) {
-    printf("Error: sum condition %s has %d argument(s) but the coefficient has %d dimension(s)\n",sc->cond_coef,(int)sc->cond_cofnargs,(int)coefs[ci].size);
+    errmsg("Error: sum condition %s has %d argument(s) but the coefficient has %d dimension(s)\n",sc->cond_coef,(int)sc->cond_cofnargs,(int)coefs[ci].size);
     MPI_Abort(PETSC_COMM_WORLD,1);
     return;
   }
@@ -2368,7 +2368,7 @@ void sum_cond_coef_resolve(sum_def *sc, quantifier *frame, dim_t nframe, set_def
     out->fix[d]=-1;
     if (strcmp(sc->cond_cofargs[d],sc->sumindx)==0) {
       if (coefs[ci].setid[d]!=sc->sumsetid) {
-        printf("Error: sum condition %s: the summed index %s must range over the coefficient's dimension set %s exactly (manual 11.4.11)\n",sc->cond_coef,sc->sumindx,sets[coefs[ci].setid[d]].setname);
+        errmsg("Error: sum condition %s: the summed index %s must range over the coefficient's dimension set %s exactly (manual 11.4.11)\n",sc->cond_coef,sc->sumindx,sets[coefs[ci].setid[d]].setname);
         MPI_Abort(PETSC_COMM_WORLD,1);
         return;
       }
@@ -2378,7 +2378,7 @@ void sum_cond_coef_resolve(sum_def *sc, quantifier *frame, dim_t nframe, set_def
     for (l=0; l<nframe; l++) if (strcmp(sc->cond_cofargs[d],frame[l].index_name)==0) break;
     if (l<nframe) {
       if (frame[l].setid!=coefs[ci].setid[d]) {
-        printf("Error: sum condition %s: index %s must range over the coefficient's dimension set %s exactly (manual 11.4.11)\n",sc->cond_coef,sc->cond_cofargs[d],sets[coefs[ci].setid[d]].setname);
+        errmsg("Error: sum condition %s: index %s must range over the coefficient's dimension set %s exactly (manual 11.4.11)\n",sc->cond_coef,sc->cond_cofargs[d],sets[coefs[ci].setid[d]].setname);
         MPI_Abort(PETSC_COMM_WORLD,1);
         return;
       }
@@ -2389,7 +2389,7 @@ void sum_cond_coef_resolve(sum_def *sc, quantifier *frame, dim_t nframe, set_def
     for (l=0; l<(dim_t)sets[coefs[ci].setid[d]].size; l++)
       if (strcmp(set_elems[sets[coefs[ci].setid[d]].offset+l].setele,sc->cond_cofargs[d])==0) break;
     if (l==(dim_t)sets[coefs[ci].setid[d]].size) {
-      printf("Error: sum condition %s: argument %s is neither the summed index, a quantifier index nor an element of %s (manual 11.4.11)\n",sc->cond_coef,sc->cond_cofargs[d],sets[coefs[ci].setid[d]].setname);
+      errmsg("Error: sum condition %s: argument %s is neither the summed index, a quantifier index nor an element of %s (manual 11.4.11)\n",sc->cond_coef,sc->cond_cofargs[d],sets[coefs[ci].setid[d]].setname);
       MPI_Abort(PETSC_COMM_WORLD,1);
       return;
     }
@@ -2436,7 +2436,7 @@ void sum_cond_rhs_resolve(int cond_mapid, const char *cond_rhs, quantifier *fram
          at eval (sum_cond_target) */
       ss=set_supset_slot(sets,frame[l].setid,(dim_t)teems_maps[cond_mapid-1].toset);
       if (ss<0) {
-        printf("Error: the RHS index %s of the condition on mapping %s ranges over set %s, which is not the mapping's codomain set %s or a declared subset of it\n",cond_rhs,teems_maps[cond_mapid-1].mapname,sets[frame[l].setid].setname,sets[teems_maps[cond_mapid-1].toset].setname);
+        errmsg("Error: the RHS index %s of the condition on mapping %s ranges over set %s, which is not the mapping's codomain set %s or a declared subset of it\n",cond_rhs,teems_maps[cond_mapid-1].mapname,sets[frame[l].setid].setname,sets[teems_maps[cond_mapid-1].toset].setname);
         MPI_Abort(PETSC_COMM_WORLD,1);
         return;
       }
@@ -2449,7 +2449,7 @@ void sum_cond_rhs_resolve(int cond_mapid, const char *cond_rhs, quantifier *fram
       *condfix=(offset_t)l;
       return;
     }
-  printf("Error: the sum condition RHS %s for mapping %s is neither a quantifier index nor an element of the codomain set %s\n",cond_rhs,teems_maps[cond_mapid-1].mapname,sets[cs].setname);
+  errmsg("Error: the sum condition RHS %s for mapping %s is neither a quantifier index nor an element of the codomain set %s\n",cond_rhs,teems_maps[cond_mapid-1].mapname,sets[cs].setname);
   MPI_Abort(PETSC_COMM_WORLD,1);
 }
 
@@ -2459,7 +2459,7 @@ void sum_cond_rhs_resolve(int cond_mapid, const char *cond_rhs, quantifier *fram
 void sum_cond_domain_check(sum_def *sc, set_def *sets) {
   if (sc->cond_mapid==0) return;
   if ((offset_t)teems_maps[sc->cond_mapid-1].fromset!=sc->sumsetid) {
-    printf("Error: the condition on mapping %s sums over set %s, not the mapping's domain set %s\n",teems_maps[sc->cond_mapid-1].mapname,sets[sc->sumsetid].setname,sets[teems_maps[sc->cond_mapid-1].fromset].setname);
+    errmsg("Error: the condition on mapping %s sums over set %s, not the mapping's domain set %s\n",teems_maps[sc->cond_mapid-1].mapname,sets[sc->sumsetid].setname,sets[teems_maps[sc->cond_mapid-1].fromset].setname);
     MPI_Abort(PETSC_COMM_WORLD,1);
   }
 }
@@ -2477,7 +2477,7 @@ dim_t sum_cond_carry_rhs(sum_def *sc, quantifier *arSet, dim_t fdim, dim_t l3, c
   for (l5=0; l5<fdim-1; l5++) if (strcmp(sc->cond_rhs,arSet[l5].index_name)==0) break;
   if (l5>=fdim-1) return l3; /* not a quantifier (scalar statements have fdim 0): codomain element, resolved at eval */
   if (set_supset_slot(sets,arSet[l5].setid,(dim_t)teems_maps[sc->cond_mapid-1].toset)<0) {
-    printf("Error: the RHS quantifier %s of the condition on mapping %s ranges over set %s, which is not the mapping's codomain set %s or a declared subset of it\n",sc->cond_rhs,teems_maps[sc->cond_mapid-1].mapname,sets[arSet[l5].setid].setname,sets[teems_maps[sc->cond_mapid-1].toset].setname);
+    errmsg("Error: the RHS quantifier %s of the condition on mapping %s ranges over set %s, which is not the mapping's codomain set %s or a declared subset of it\n",sc->cond_rhs,teems_maps[sc->cond_mapid-1].mapname,sets[arSet[l5].setid].setname,sets[teems_maps[sc->cond_mapid-1].toset].setname);
     MPI_Abort(PETSC_COMM_WORLD,1);
     return l3;
   }
@@ -2499,7 +2499,7 @@ void mapping_reject_in(char *line, const char *what) {
     sprintf(find,"%s(",teems_maps[m].mapname);
     k=str_find_ci(line,find);
     if (k==0||(k>0&&!isalnum((int)line[k-1])&&line[k-1]!='_')) {
-      printf("Error: mapping-valued indices in %s statements are not supported yet (mapping %s)\n",what,teems_maps[m].mapname);
+      errmsg("Error: mapping-valued indices in %s statements are not supported yet (mapping %s)\n",what,teems_maps[m].mapname);
       MPI_Abort(PETSC_COMM_WORLD,1);
     }
   }
@@ -2520,7 +2520,7 @@ void mapping_reject_lhs(char *line, const char *what) {
     sprintf(find,"%s(",teems_maps[m].mapname);
     k=str_find_ci(line,find);
     if (k==0||(k>0&&!isalnum((int)line[k-1])&&line[k-1]!='_')) {
-      printf("Error: a set mapping on the left-hand side of an %s statement is not supported (mapping %s; manual 11.9.9)\n",what,teems_maps[m].mapname);
+      errmsg("Error: a set mapping on the left-hand side of an %s statement is not supported (mapping %s; manual 11.9.9)\n",what,teems_maps[m].mapname);
       MPI_Abort(PETSC_COMM_WORLD,1);
     }
   }
@@ -2559,7 +2559,7 @@ int mapping_check_onto(map_def *maps, dim_t j, set_def *sets, set_element *set_e
   bool *hit= (bool *) calloc (tosize>0?tosize:1,sizeof(bool));
   for (i=0; i<sets[maps[j].fromset].size; i++) hit[maps[j].values[i]]=true;
   for (i=0; i<tosize; i++) if (!hit[i]) {
-      printf("Error: mapping %s is not onto: element %s of set %s is not mapped to (manual 11.9.3)\n",maps[j].mapname,set_elems[sets[maps[j].toset].offset+i].setele,sets[maps[j].toset].setname);
+      errmsg("Error: mapping %s is not onto: element %s of set %s is not mapped to (manual 11.9.3)\n",maps[j].mapname,set_elems[sets[maps[j].toset].offset+i].setele,sets[maps[j].toset].setname);
       free(hit);
       return -1;
     }
@@ -2578,7 +2578,7 @@ int mappings_validate(map_def *maps, dim_t nmap, set_def *sets, set_element *set
   for (j=0; j<nmap; j++) {
     if (!maps[j].has_values) {
       if (maps[j].formula_assigned) continue;
-      printf("Error: mapping %s is never given values (manual 11.9.1)\n",maps[j].mapname);
+      errmsg("Error: mapping %s is never given values (manual 11.9.1)\n",maps[j].mapname);
       MPI_Abort(PETSC_COMM_WORLD,1);
       return -1;
     }
@@ -2587,7 +2587,7 @@ int mappings_validate(map_def *maps, dim_t nmap, set_def *sets, set_element *set
       bool *hit= (bool *) calloc (tosize>0?tosize:1,sizeof(bool));
       for (i=0; i<sets[maps[j].fromset].size; i++) hit[maps[j].values[i]]=true;
       for (i=0; i<tosize; i++) if (!hit[i]) {
-          printf("Error: mapping %s is not onto: element %s of set %s is not mapped to (manual 11.9.3)\n",maps[j].mapname,set_elems[sets[maps[j].toset].offset+i].setele,sets[maps[j].toset].setname);
+          errmsg("Error: mapping %s is not onto: element %s of set %s is not mapped to (manual 11.9.3)\n",maps[j].mapname,set_elems[sets[maps[j].toset].offset+i].setele,sets[maps[j].toset].setname);
           free(hit);
           MPI_Abort(PETSC_COMM_WORLD,1);
           return -1;
@@ -2609,7 +2609,7 @@ static offset_t closure_var_find(char *vname, array_def *vars, offset_t nvar) {
      mention any of [them] in your Command file"); '@' is illegal in
      user names, so any '@' here is such a mention */
   if (strchr(vname,'@')!=NULL) {
-    printf("Error: %s is a solver-managed derived complementarity variable and cannot appear in closure or shock files (manual 51.7.2)\n",vname);
+    errmsg("Error: %s is a solver-managed derived complementarity variable and cannot appear in closure or shock files (manual 51.7.2)\n",vname);
     MPI_Abort(PETSC_COMM_WORLD,1);
   }
   for (j=0; j<nvar; j++) if (strcmp(vname,vars[j].cofname)==0) return j;
@@ -2627,7 +2627,7 @@ offset_t closure_read(char *fname, char *commsyntax,closure_entry *closure_vals,
   bool check;
   filehandle = fopen(fname,"r");
   if (filehandle==NULL) {
-    printf("Error: cannot open closure file %s\n",fname);
+    errmsg("Error: cannot open closure file %s\n",fname);
     MPI_Abort(PETSC_COMM_WORLD,1);
     return -1;
   }
@@ -2682,7 +2682,7 @@ offset_t closure_read(char *fname, char *commsyntax,closure_entry *closure_vals,
             break;
           }
           if(j==nvar&&vname[0]!=';') {
-            printf("Error: variable %s is not declared (closure file)\n",vname);
+            errmsg("Error: variable %s is not declared (closure file)\n",vname);
             fclose(filehandle);
             MPI_Abort(PETSC_COMM_WORLD,1);
             return -1;
@@ -2699,7 +2699,7 @@ offset_t closure_read(char *fname, char *commsyntax,closure_entry *closure_vals,
             case 1:
               p = strtok(NULL,")");//p = strtok(vname,")");
               if (p==NULL) {
-                printf("Error: malformed entry for variable %s (closure file)\n",vars[j].cofname);
+                errmsg("Error: malformed entry for variable %s (closure file)\n",vars[j].cofname);
                 free(arSet);
                 free(exoantidim);
                 fclose(filehandle);
@@ -2720,7 +2720,7 @@ offset_t closure_read(char *fname, char *commsyntax,closure_entry *closure_vals,
                     break;
                   } }
                   if(l1==sets[vars[j].setid[0]].size) {
-                    printf("Error: element %s is not in set %s (in %s)\n",p,sets[vars[j].setid[0]].setname,vars[j].cofname);
+                    errmsg("Error: element %s is not in set %s (in %s)\n",p,sets[vars[j].setid[0]].setname,vars[j].cofname);
                     free(arSet);
                     free(exoantidim);
                     fclose(filehandle);
@@ -2742,7 +2742,7 @@ offset_t closure_read(char *fname, char *commsyntax,closure_entry *closure_vals,
                       break;
                     }
                     if(l1==nset) {
-                      printf("Error: set %s is not declared (in %s)\n",p,vars[j].cofname);
+                      errmsg("Error: set %s is not declared (in %s)\n",p,vars[j].cofname);
                       free(arSet);
                       free(exoantidim);
                       fclose(filehandle);
@@ -2755,7 +2755,7 @@ offset_t closure_read(char *fname, char *commsyntax,closure_entry *closure_vals,
             default:
               p = strtok(NULL,")");
               if (p==NULL) {
-                printf("Error: malformed entry for variable %s (closure file)\n",vars[j].cofname);
+                errmsg("Error: malformed entry for variable %s (closure file)\n",vars[j].cofname);
                 free(arSet);
                 free(exoantidim);
                 fclose(filehandle);
@@ -2770,7 +2770,7 @@ offset_t closure_read(char *fname, char *commsyntax,closure_entry *closure_vals,
                   p = strtok(NULL,",");
                 }
                 if (p==NULL) {
-                  printf("Error: wrong number of arguments for variable %s (closure file)\n",vars[j].cofname);
+                  errmsg("Error: wrong number of arguments for variable %s (closure file)\n",vars[j].cofname);
                   free(arSet);
                   free(exoantidim);
                   fclose(filehandle);
@@ -2786,7 +2786,7 @@ offset_t closure_read(char *fname, char *commsyntax,closure_entry *closure_vals,
                       break;
                     }
                     if(l1==sets[vars[j].setid[l]].size) {
-                      printf("Error: element %s is not in set %s (in %s)\n",argu,sets[vars[j].setid[l]].setname,vars[j].cofname);
+                      errmsg("Error: element %s is not in set %s (in %s)\n",argu,sets[vars[j].setid[l]].setname,vars[j].cofname);
                       free(arSet);
                       free(exoantidim);
                       fclose(filehandle);
@@ -2805,7 +2805,7 @@ offset_t closure_read(char *fname, char *commsyntax,closure_entry *closure_vals,
                         break;
                       }
                       if(l1==nset) {
-                        printf("Error: set %s is not declared (in %s)\n",p,vars[j].cofname);
+                        errmsg("Error: set %s is not declared (in %s)\n",p,vars[j].cofname);
                         free(arSet);
                         free(exoantidim);
                         fclose(filehandle);
@@ -2843,7 +2843,7 @@ offset_t closure_read(char *fname, char *commsyntax,closure_entry *closure_vals,
             break;
           }
           if(j==nvar) {
-            printf("Error: variable %s is not declared (closure file)\n",p);
+            errmsg("Error: variable %s is not declared (closure file)\n",p);
             fclose(filehandle);
             MPI_Abort(PETSC_COMM_WORLD,1);
             return -1;
@@ -2867,7 +2867,7 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
   offset_t j,l=0,dims,n1,l1,l2,dcount,supsetid[MAXSUPSET],sup;
   solve_real val;
       if ( (filehandle = fopen(fname,"r")) == NULL ) {
-        printf("Error: cannot open shock file %s\n",fname);
+        errmsg("Error: cannot open shock file %s\n",fname);
         MPI_Abort(PETSC_COMM_WORLD,1);
         return -1;
       }
@@ -2881,7 +2881,7 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
       k1++;
     }
     if(k1>=DATREADLINE){
-      printf("Error: shock statement exceeds the line buffer; increase DATREADLINE\n");
+      errmsg("Error: shock statement exceeds the line buffer; increase DATREADLINE\n");
       fclose(filehandle);
       MPI_Abort(PETSC_COMM_WORLD,1);
       return -1;
@@ -2908,7 +2908,7 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
     if (varnset==0) {
       readitem = strtok(NULL,"=");
       if (readitem==NULL) {
-        printf("Error: malformed shock statement (shock file)\n");
+        errmsg("Error: malformed shock statement (shock file)\n");
         fclose(filehandle);
         MPI_Abort(PETSC_COMM_WORLD,1);
         return -1;
@@ -2917,7 +2917,7 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
       for (j=0; j<nvar; j++) if (strcmp(readitem,vars[j].cofname)==0) {
           readitem = strtok(NULL,";");
           if (readitem==NULL) {
-            printf("Error: shock statement for variable %s has no value (shock file)\n",vars[j].cofname);
+            errmsg("Error: shock statement for variable %s has no value (shock file)\n",vars[j].cofname);
             fclose(filehandle);
             MPI_Abort(PETSC_COMM_WORLD,1);
             return -1;
@@ -2934,7 +2934,7 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
       /* previously fell through in silence: the shock never landed and
          the run solved an unshocked model */
       if (j==nvar&&readitem[0]!=';') {
-        printf("Error: %s in the shock file is not a declared variable\n",readitem);
+        errmsg("Error: %s in the shock file is not a declared variable\n",readitem);
         fclose(filehandle);
         MPI_Abort(PETSC_COMM_WORLD,1);
         return -1;
@@ -2947,7 +2947,7 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
           dims=1;
           readitem = strtok(NULL,")");
           if (readitem==NULL) {
-            printf("Error: malformed shock statement for variable %s (shock file)\n",vars[j].cofname);
+            errmsg("Error: malformed shock statement for variable %s (shock file)\n",vars[j].cofname);
             fclose(filehandle);
             MPI_Abort(PETSC_COMM_WORLD,1);
             return -1;
@@ -2956,7 +2956,7 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
           readitem = strtok(NULL,"=");
           readitem = strtok(NULL,";");
           if (readitem==NULL) {
-            printf("Error: shock statement for variable %s has no value (shock file)\n",vars[j].cofname);
+            errmsg("Error: shock statement for variable %s has no value (shock file)\n",vars[j].cofname);
             fclose(filehandle);
             MPI_Abort(PETSC_COMM_WORLD,1);
             return -1;
@@ -2979,7 +2979,7 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
               p=strtok(NULL,",");
             }
             if (p==NULL) {
-              printf("Error: wrong number of arguments for variable %s (shock file)\n",vars[j].cofname);
+              errmsg("Error: wrong number of arguments for variable %s (shock file)\n",vars[j].cofname);
               fclose(filehandle);
               MPI_Abort(PETSC_COMM_WORLD,1);
               return -1;
@@ -3000,14 +3000,14 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
                         break;
                       }
                     if(sup==MAXSUPSET){
-                      printf("Error: %s is not a valid set at that position of variable %s (shock file)\n",p,vars[j].cofname);
+                      errmsg("Error: %s is not a valid set at that position of variable %s (shock file)\n",p,vars[j].cofname);
                       MPI_Abort(PETSC_COMM_WORLD,1);
                       return -1;
                     }
                     break;
                   }
                   if(k1==nset){
-                    printf("Error: %s in variable %s (shock file) is not a set\n",p,vars[j].cofname);
+                    errmsg("Error: %s in variable %s (shock file) is not a set\n",p,vars[j].cofname);
                     MPI_Abort(PETSC_COMM_WORLD,1);
                     return -1;
                   }
@@ -3024,7 +3024,7 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
                   break;
                 }
               if(k1==sets[vars[j].setid[n1]].size){
-                printf("Error: %s in variable %s (shock file) is not a set element\n",p,vars[j].cofname);
+                errmsg("Error: %s in variable %s (shock file) is not a set element\n",p,vars[j].cofname);
                 MPI_Abort(PETSC_COMM_WORLD,1);
                 return -1;
               }
@@ -3074,7 +3074,7 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
                 readitem=strtok(NULL," ");
               }
               if (readitem==NULL) {
-                printf("Error: shock statement for variable %s supplies fewer values than elements (%ld expected) (shock file)\n",vars[j].cofname,(long)dims);
+                errmsg("Error: shock statement for variable %s supplies fewer values than elements (%ld expected) (shock file)\n",vars[j].cofname,(long)dims);
                 fclose(filehandle);
                 MPI_Abort(PETSC_COMM_WORLD,1);
                 return -1;
@@ -3108,7 +3108,7 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
         }
       }
       if(j==nvar){
-        printf("Error: %s in the shock file is not a declared variable\n",readitem);
+        errmsg("Error: %s in the shock file is not a declared variable\n",readitem);
         MPI_Abort(PETSC_COMM_WORLD,1);
         return -1;
       }
@@ -3172,7 +3172,7 @@ static int tab_qualifiers_parse(char *line, offset_t ncommsyntax, array_def *rec
     if(strncmp(p+1,"all,",4)==0||strncmp(p+1,"all ",4)==0)break;
     q=strchr(p,')');
     if(q==NULL) {
-      printf("Error: unbalanced parentheses in %s qualifier list: %s\n",is_variable?"variable":"coefficient",line);
+      errmsg("Error: unbalanced parentheses in %s qualifier list: %s\n",is_variable?"variable":"coefficient",line);
       return -1;
     }
     len=q-p-1;
@@ -3188,7 +3188,7 @@ static int tab_qualifiers_parse(char *line, offset_t ncommsyntax, array_def *rec
       for(s=t; *s!='\0'; s++)if(*s!=' ')tok[k++]=*s;
       tok[k]='\0';
       if(k==0) {
-        printf("Error: empty qualifier in %s declaration\n",is_variable?"variable":"coefficient");
+        errmsg("Error: empty qualifier in %s declaration\n",is_variable?"variable":"coefficient");
         return -1;
       }
       if(is_variable) {
@@ -3213,11 +3213,11 @@ static int tab_qualifiers_parse(char *line, offset_t ncommsyntax, array_def *rec
         /* homogeneity-test metadata only (ch.57): no solution impact */
         if(strncmp(tok,"vpqtype=",8)==0)continue;
         if(strcmp(tok,"no_split")==0) {
-          printf("Error: variable qualifier NO_SPLIT (full shock at every step) is not supported\n");
+          errmsg("Error: variable qualifier NO_SPLIT (full shock at every step) is not supported\n");
           return -1;
         }
         if(strncmp(tok,"linear_name=",12)==0||strncmp(tok,"linear_var=",11)==0) {
-          printf("Error: variable qualifier LINEAR_NAME=/LINEAR_VAR= is not supported yet; use the default p_/c_ linear name\n");
+          errmsg("Error: variable qualifier LINEAR_NAME=/LINEAR_VAR= is not supported yet; use the default p_/c_ linear name\n");
           return -1;
         }
       } else {
@@ -3243,7 +3243,7 @@ static int tab_qualifiers_parse(char *line, offset_t ncommsyntax, array_def *rec
       if(nbtype>0&&(isdigit((int)tok[2])||tok[2]=='-'||tok[2]=='+'||tok[2]=='.')) {
         if(rec->gltype>0) {
           if((rec->gltype==BT_GE||rec->gltype==BT_GT)==(nbtype==BT_GE||nbtype==BT_GT)) {
-            printf("Error: duplicate %s bound on a %s declaration (one lower GE/GT and one upper LE/LT allowed)\n",(nbtype==BT_GE||nbtype==BT_GT)?"lower":"upper",is_variable?"variable":"coefficient");
+            errmsg("Error: duplicate %s bound on a %s declaration (one lower GE/GT and one upper LE/LT allowed)\n",(nbtype==BT_GE||nbtype==BT_GT)?"lower":"upper",is_variable?"variable":"coefficient");
             return -1;
           }
           *gltype2=nbtype;
@@ -3254,7 +3254,7 @@ static int tab_qualifiers_parse(char *line, offset_t ncommsyntax, array_def *rec
         }
         continue;
       }
-      printf("Error: unknown %s qualifier '%s'\n",is_variable?"variable":"coefficient",tok);
+      errmsg("Error: unknown %s qualifier '%s'\n",is_variable?"variable":"coefficient",tok);
       return -1;
     }
     while(*p==' ')p++;
@@ -3313,7 +3313,7 @@ offset_t variables_read(char *fname, char *commsyntax, array_def *record, offset
           }
           readitem = strtok(NULL,",");
           if (readitem==NULL||strlen(readitem)+3>sizeof(finditem)) {
-            printf("Error: malformed %s declaration in TAB file: %s\n",commsyntax,linecopy);
+            errmsg("Error: malformed %s declaration in TAB file: %s\n",commsyntax,linecopy);
             return -1;
           }
           finditem[0]='(';
@@ -3332,7 +3332,7 @@ offset_t variables_read(char *fname, char *commsyntax, array_def *record, offset
           strcat(finditem3,")");
           readitem = strtok(NULL,")");
           if (readitem==NULL||strlen(readitem)+3>sizeof(setname)) {
-            printf("Error: malformed %s declaration in TAB file: %s\n",commsyntax,linecopy);
+            errmsg("Error: malformed %s declaration in TAB file: %s\n",commsyntax,linecopy);
             return -1;
           }
           setname[0]='(';
@@ -3353,7 +3353,7 @@ offset_t variables_read(char *fname, char *commsyntax, array_def *record, offset
               str_subst_all_bounded(linecopy, finditem1, setname1, sizeof(linecopy)) ||
               str_subst_all_bounded(linecopy, finditem2, setname2, sizeof(linecopy)) ||
               str_subst_all_bounded(linecopy, finditem3, setname3, sizeof(linecopy))) {
-            printf("Error: malformed %s declaration in TAB file: %s\n",commsyntax,linecopy);
+            errmsg("Error: malformed %s declaration in TAB file: %s\n",commsyntax,linecopy);
             return -1;
           }
         }
@@ -3367,20 +3367,20 @@ offset_t variables_read(char *fname, char *commsyntax, array_def *record, offset
         readitem = strtok(NULL,";");
         if (readitem!=NULL) readitem = strtok(readitem,"(");
         if (readitem==NULL||strlen(readitem)>=sizeof(record[j].cofname)) {
-          printf("Error: malformed %s declaration in TAB file\n",commsyntax);
+          errmsg("Error: malformed %s declaration in TAB file\n",commsyntax);
           return -1;
         }
         strcpy(record[j].cofname,readitem);
         readitem = strtok(NULL,")");
         if (readitem==NULL||strlen(readitem)+2>sizeof(vname)) {
-          printf("Error: malformed %s declaration in TAB file\n",commsyntax);
+          errmsg("Error: malformed %s declaration in TAB file\n",commsyntax);
           return -1;
         }
         strcpy(vname,readitem);
         strcat(vname,",");
         dcount=str_count_char(vname,',');
         if (dcount>MAXVARDIM) {
-          printf("Error: %s declaration with %d dimensions; at most %d are supported\n",commsyntax,(int)dcount,(int)MAXVARDIM);
+          errmsg("Error: %s declaration with %d dimensions; at most %d are supported\n",commsyntax,(int)dcount,(int)MAXVARDIM);
           return -1;
         }
         add=1;
@@ -3391,7 +3391,7 @@ offset_t variables_read(char *fname, char *commsyntax, array_def *record, offset
             readitem = strtok(NULL,",");
           }
           if (readitem==NULL) {
-            printf("Error: malformed %s declaration in TAB file\n",commsyntax);
+            errmsg("Error: malformed %s declaration in TAB file\n",commsyntax);
             return -1;
           }
           for (l=0; l<nset; l++) {
@@ -3412,17 +3412,17 @@ offset_t variables_read(char *fname, char *commsyntax, array_def *record, offset
         addi=addi+add;
       } else {
         if (n==1) {
-          printf("Error: unbalanced parentheses in statement\n");
+          errmsg("Error: unbalanced parentheses in statement\n");
         } else {
           if (strlen(line+ncommsyntax)>=sizeof(setname)) {
-            printf("Error: malformed %s declaration in TAB file (name longer than %d characters)\n",commsyntax,(int)sizeof(setname)-1);
+            errmsg("Error: malformed %s declaration in TAB file (name longer than %d characters)\n",commsyntax,(int)sizeof(setname)-1);
             return -1;
           }
           strcpy(setname,line+ncommsyntax);
           str_replace_all(setname,";", "");
           str_replace_all(setname,"\n", "");
           if (strlen(setname)>=sizeof(record[j].cofname)) {
-            printf("Error: malformed %s declaration in TAB file\n",commsyntax);
+            errmsg("Error: malformed %s declaration in TAB file\n",commsyntax);
             return -1;
           }
           strcpy(record[j].cofname,setname);
@@ -3518,7 +3518,7 @@ offset_t coefficients_read(char *fname, char *commsyntax, array_def *record, off
           }
           readitem = strtok(NULL,",");
           if (readitem==NULL||strlen(readitem)+3>sizeof(finditem)) {
-            printf("Error: malformed %s declaration in TAB file: %s\n",commsyntax,linecopy);
+            errmsg("Error: malformed %s declaration in TAB file: %s\n",commsyntax,linecopy);
             return -1;
           }
           finditem[0]='(';
@@ -3537,7 +3537,7 @@ offset_t coefficients_read(char *fname, char *commsyntax, array_def *record, off
           strcat(finditem3,")");
           readitem = strtok(NULL,")");
           if (readitem==NULL||strlen(readitem)+3>sizeof(setname)) {
-            printf("Error: malformed %s declaration in TAB file: %s\n",commsyntax,linecopy);
+            errmsg("Error: malformed %s declaration in TAB file: %s\n",commsyntax,linecopy);
             return -1;
           }
           setname[0]='(';
@@ -3558,7 +3558,7 @@ offset_t coefficients_read(char *fname, char *commsyntax, array_def *record, off
               str_subst_all_bounded(linecopy, finditem1, setname1, sizeof(linecopy)) ||
               str_subst_all_bounded(linecopy, finditem2, setname2, sizeof(linecopy)) ||
               str_subst_all_bounded(linecopy, finditem3, setname3, sizeof(linecopy))) {
-            printf("Error: malformed %s declaration in TAB file: %s\n",commsyntax,linecopy);
+            errmsg("Error: malformed %s declaration in TAB file: %s\n",commsyntax,linecopy);
             return -1;
           }
         }
@@ -3572,24 +3572,24 @@ offset_t coefficients_read(char *fname, char *commsyntax, array_def *record, off
         readitem = strtok(NULL,";");
         if (readitem!=NULL) readitem = strtok(readitem,"(");
         if (readitem==NULL||strlen(readitem)>=sizeof(record[j].cofname)) {
-          printf("Error: malformed %s declaration in TAB file\n",commsyntax);
+          errmsg("Error: malformed %s declaration in TAB file\n",commsyntax);
           return -1;
         }
         strcpy(record[j].cofname,readitem);
         if(record[j].cofname[0]=='c'&&record[j].cofname[1]=='_'){
-          printf("Error: the c_/C_ prefix is reserved for change variables; rename coefficient %s\n",record[j].cofname);
+          errmsg("Error: the c_/C_ prefix is reserved for change variables; rename coefficient %s\n",record[j].cofname);
           return -1;
         }
         readitem = strtok(NULL,")");
         if (readitem==NULL||strlen(readitem)+2>sizeof(vname)) {
-          printf("Error: malformed %s declaration in TAB file\n",commsyntax);
+          errmsg("Error: malformed %s declaration in TAB file\n",commsyntax);
           return -1;
         }
         strcpy(vname,readitem);
         strcat(vname,",");
         dcount=str_count_char(vname,',');
         if (dcount>MAXVARDIM) {
-          printf("Error: %s declaration with %d dimensions; at most %d are supported\n",commsyntax,(int)dcount,(int)MAXVARDIM);
+          errmsg("Error: %s declaration with %d dimensions; at most %d are supported\n",commsyntax,(int)dcount,(int)MAXVARDIM);
           return -1;
         }
         add=1;
@@ -3600,7 +3600,7 @@ offset_t coefficients_read(char *fname, char *commsyntax, array_def *record, off
             readitem = strtok(NULL,",");
           }
           if (readitem==NULL) {
-            printf("Error: malformed %s declaration in TAB file\n",commsyntax);
+            errmsg("Error: malformed %s declaration in TAB file\n",commsyntax);
             return -1;
           }
           for (l=0; l<nset; l++) {
@@ -3621,17 +3621,17 @@ offset_t coefficients_read(char *fname, char *commsyntax, array_def *record, off
         addi=addi+add;
       } else {
         if (n==1) {
-          printf("Error: unbalanced parentheses in statement: %s\n",line);
+          errmsg("Error: unbalanced parentheses in statement: %s\n",line);
         } else {
           if (strlen(line+ncommsyntax)>=sizeof(setname)) {
-            printf("Error: malformed %s declaration in TAB file (name longer than %d characters)\n",commsyntax,(int)sizeof(setname)-1);
+            errmsg("Error: malformed %s declaration in TAB file (name longer than %d characters)\n",commsyntax,(int)sizeof(setname)-1);
             return -1;
           }
           strcpy(setname,line+ncommsyntax);
           str_replace_all(setname,";", "");
           str_replace_all(setname,"\n", "");
           if (strlen(setname)>=sizeof(record[j].cofname)) {
-            printf("Error: malformed %s declaration in TAB file\n",commsyntax);
+            errmsg("Error: malformed %s declaration in TAB file\n",commsyntax);
             return -1;
           }
           strcpy(record[j].cofname,setname);
@@ -3720,7 +3720,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
         readitem = strtok(line,",");
         readitem = strtok(NULL,"\0");
         if(readitem==NULL) {
-          printf("Error: malformed intertemporal set declaration in TAB file\n");
+          errmsg("Error: malformed intertemporal set declaration in TAB file\n");
           return -1;
         }
         if(strchr(readitem,'+')!=NULL||strchr(readitem,'-')!=NULL) {
@@ -3731,14 +3731,14 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
           }
           readitem = strtok(readitem,"-+");
           if(readitem==NULL) {
-            printf("Error: malformed intertemporal set declaration in TAB file\n");
+            errmsg("Error: malformed intertemporal set declaration in TAB file\n");
             return -1;
           }
           if(readitem[0]>='0'&&readitem[0]<='9') {
             intindx[0]=atoi(readitem);
           } else {
             if (strlen(readitem)>=sizeof(varname)) {
-              printf("Error: malformed intertemporal set declaration in TAB file\n");
+              errmsg("Error: malformed intertemporal set declaration in TAB file\n");
               return -1;
             }
             strcpy(varname,readitem);
@@ -3746,7 +3746,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
             strcat(commsyntax,readitem);
             filehandle = fopen(fname,"r");
             if (filehandle==NULL) {
-              printf("Error: cannot open TAB file %s: %s\n",fname,strerror(errno));
+              errmsg("Error: cannot open TAB file %s: %s\n",fname,strerror(errno));
               return -1;
             }
             while (tab_next_statement(commsyntax,filehandle,line,TABREADLINE)) {
@@ -3756,7 +3756,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               readitem = strtok(NULL," ");
               readitem = strtok(NULL," ");
               if (readitem==NULL||strlen(readitem)>=sizeof(floginame)) {
-                printf("Error: malformed intertemporal set declaration in TAB file\n");
+                errmsg("Error: malformed intertemporal set declaration in TAB file\n");
                 fclose(filehandle);
                 return -1;
               }
@@ -3764,7 +3764,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               readitem = strtok(NULL,"\"");
               readitem = strtok(NULL,"\"");
               if (readitem==NULL||strlen(readitem)>=sizeof(header)) {
-                printf("Error: malformed intertemporal set declaration in TAB file\n");
+                errmsg("Error: malformed intertemporal set declaration in TAB file\n");
                 fclose(filehandle);
                 return -1;
               }
@@ -3776,12 +3776,12 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
             }
             fclose(filehandle);
             if (k1>=niodata) {
-              printf("Error: intertemporal set declaration reads elements from logical file %s, which the command file does not declare\n",floginame);
+              errmsg("Error: intertemporal set declaration reads elements from logical file %s, which the command file does not declare\n",floginame);
               return -1;
             }
             filehandle = fopen(iodata[k1].filname,"r");
             if (filehandle==NULL) {
-              printf("Error: cannot open %s (logical file %s) for the intertemporal set elements: %s\n",iodata[k1].filname,floginame,strerror(errno));
+              errmsg("Error: cannot open %s (logical file %s) for the intertemporal set elements: %s\n",iodata[k1].filname,floginame,strerror(errno));
               return -1;
             }
             while (fgets(line,TABREADLINE,filehandle)) {
@@ -3805,14 +3805,14 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
           readitem = strtok(NULL,"-+");
           readitem = strtok(NULL,"\0");
           if(readitem==NULL) {
-            printf("Error: malformed intertemporal set declaration in TAB file\n");
+            errmsg("Error: malformed intertemporal set declaration in TAB file\n");
             return -1;
           }
           if(readitem[0]>='0'&&readitem[0]<='9') {
             intindx[1]=atoi(readitem);
           } else {
             if (strlen(readitem)>=sizeof(varname)) {
-              printf("Error: malformed intertemporal set declaration in TAB file\n");
+              errmsg("Error: malformed intertemporal set declaration in TAB file\n");
               return -1;
             }
             strcpy(varname,readitem);
@@ -3820,7 +3820,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
             strcat(commsyntax,readitem);
             filehandle = fopen(fname,"r");
             if (filehandle==NULL) {
-              printf("Error: cannot open TAB file %s: %s\n",fname,strerror(errno));
+              errmsg("Error: cannot open TAB file %s: %s\n",fname,strerror(errno));
               return -1;
             }
             while (tab_next_statement(commsyntax,filehandle,line,TABREADLINE)) {
@@ -3830,7 +3830,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               readitem = strtok(NULL," ");
               readitem = strtok(NULL," ");
               if (readitem==NULL||strlen(readitem)>=sizeof(floginame)) {
-                printf("Error: malformed intertemporal set declaration in TAB file\n");
+                errmsg("Error: malformed intertemporal set declaration in TAB file\n");
                 fclose(filehandle);
                 return -1;
               }
@@ -3838,7 +3838,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               readitem = strtok(NULL,"\"");
               readitem = strtok(NULL,"\"");
               if (readitem==NULL||strlen(readitem)>=sizeof(header)) {
-                printf("Error: malformed intertemporal set declaration in TAB file\n");
+                errmsg("Error: malformed intertemporal set declaration in TAB file\n");
                 fclose(filehandle);
                 return -1;
               }
@@ -3850,12 +3850,12 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
             }
             fclose(filehandle);
             if (k1>=niodata) {
-              printf("Error: intertemporal set declaration reads elements from logical file %s, which the command file does not declare\n",floginame);
+              errmsg("Error: intertemporal set declaration reads elements from logical file %s, which the command file does not declare\n",floginame);
               return -1;
             }
             filehandle = fopen(iodata[k1].filname,"r");
             if (filehandle==NULL) {
-              printf("Error: cannot open %s (logical file %s) for the intertemporal set elements: %s\n",iodata[k1].filname,floginame,strerror(errno));
+              errmsg("Error: cannot open %s (logical file %s) for the intertemporal set elements: %s\n",iodata[k1].filname,floginame,strerror(errno));
               return -1;
             }
             while (fgets(line,TABREADLINE,filehandle)) {
@@ -3876,14 +3876,14 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
           }
         } else {
           if(readitem==NULL) {
-            printf("Error: malformed intertemporal set declaration in TAB file\n");
+            errmsg("Error: malformed intertemporal set declaration in TAB file\n");
             return -1;
           }
           if(readitem[0]>='0'&&readitem[0]<='9') {
             intindx[0]=atoi(readitem);
           } else {
             if (strlen(readitem)>=sizeof(varname)) {
-              printf("Error: malformed intertemporal set declaration in TAB file\n");
+              errmsg("Error: malformed intertemporal set declaration in TAB file\n");
               return -1;
             }
             strcpy(varname,readitem);
@@ -3891,7 +3891,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
             strcat(commsyntax,readitem);
             filehandle = fopen(fname,"r");
             if (filehandle==NULL) {
-              printf("Error: cannot open TAB file %s: %s\n",fname,strerror(errno));
+              errmsg("Error: cannot open TAB file %s: %s\n",fname,strerror(errno));
               return -1;
             }
             while (tab_next_statement(commsyntax,filehandle,line,TABREADLINE)) {
@@ -3901,7 +3901,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               readitem = strtok(NULL," ");
               readitem = strtok(NULL," ");
               if (readitem==NULL||strlen(readitem)>=sizeof(floginame)) {
-                printf("Error: malformed intertemporal set declaration in TAB file\n");
+                errmsg("Error: malformed intertemporal set declaration in TAB file\n");
                 fclose(filehandle);
                 return -1;
               }
@@ -3909,7 +3909,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               readitem = strtok(NULL,"\"");
               readitem = strtok(NULL,"\"");
               if (readitem==NULL||strlen(readitem)>=sizeof(header)) {
-                printf("Error: malformed intertemporal set declaration in TAB file\n");
+                errmsg("Error: malformed intertemporal set declaration in TAB file\n");
                 fclose(filehandle);
                 return -1;
               }
@@ -3921,12 +3921,12 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
             }
             fclose(filehandle);
             if (k1>=niodata) {
-              printf("Error: intertemporal set declaration reads elements from logical file %s, which the command file does not declare\n",floginame);
+              errmsg("Error: intertemporal set declaration reads elements from logical file %s, which the command file does not declare\n",floginame);
               return -1;
             }
             filehandle = fopen(iodata[k1].filname,"r");
             if (filehandle==NULL) {
-              printf("Error: cannot open %s (logical file %s) for the intertemporal set elements: %s\n",iodata[k1].filname,floginame,strerror(errno));
+              errmsg("Error: cannot open %s (logical file %s) for the intertemporal set elements: %s\n",iodata[k1].filname,floginame,strerror(errno));
               return -1;
             }
             while (fgets(line,TABREADLINE,filehandle)) {
@@ -3963,7 +3963,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
         readitem = strtok(line,",");
         readitem = strtok(NULL,",");
         if(readitem==NULL) {
-          printf("Error: malformed intertemporal set declaration in TAB file\n");
+          errmsg("Error: malformed intertemporal set declaration in TAB file\n");
           return -1;
         }
         if(strchr(readitem,'+')!=NULL||strchr(readitem,'-')!=NULL) {
@@ -3974,14 +3974,14 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
           }
           readitem = strtok(readitem,"-+");
           if(readitem==NULL) {
-            printf("Error: malformed intertemporal set declaration in TAB file\n");
+            errmsg("Error: malformed intertemporal set declaration in TAB file\n");
             return -1;
           }
           if(readitem[0]>='0'&&readitem[0]<='9') {
             intindx[0]=atoi(readitem);
           } else {
             if (strlen(readitem)>=sizeof(varname)) {
-              printf("Error: malformed intertemporal set declaration in TAB file\n");
+              errmsg("Error: malformed intertemporal set declaration in TAB file\n");
               return -1;
             }
             strcpy(varname,readitem);
@@ -3989,7 +3989,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
             strcat(commsyntax,readitem);
             filehandle = fopen(fname,"r");
             if (filehandle==NULL) {
-              printf("Error: cannot open TAB file %s: %s\n",fname,strerror(errno));
+              errmsg("Error: cannot open TAB file %s: %s\n",fname,strerror(errno));
               return -1;
             }
             while (tab_next_statement(commsyntax,filehandle,line,TABREADLINE)) {
@@ -3999,7 +3999,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               readitem = strtok(NULL," ");
               readitem = strtok(NULL," ");
               if (readitem==NULL||strlen(readitem)>=sizeof(floginame)) {
-                printf("Error: malformed intertemporal set declaration in TAB file\n");
+                errmsg("Error: malformed intertemporal set declaration in TAB file\n");
                 fclose(filehandle);
                 return -1;
               }
@@ -4007,7 +4007,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               readitem = strtok(NULL,"\"");
               readitem = strtok(NULL,"\"");
               if (readitem==NULL||strlen(readitem)>=sizeof(header)) {
-                printf("Error: malformed intertemporal set declaration in TAB file\n");
+                errmsg("Error: malformed intertemporal set declaration in TAB file\n");
                 fclose(filehandle);
                 return -1;
               }
@@ -4019,12 +4019,12 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
             }
             fclose(filehandle);
             if (k1>=niodata) {
-              printf("Error: intertemporal set declaration reads elements from logical file %s, which the command file does not declare\n",floginame);
+              errmsg("Error: intertemporal set declaration reads elements from logical file %s, which the command file does not declare\n",floginame);
               return -1;
             }
             filehandle = fopen(iodata[k1].filname,"r");
             if (filehandle==NULL) {
-              printf("Error: cannot open %s (logical file %s) for the intertemporal set elements: %s\n",iodata[k1].filname,floginame,strerror(errno));
+              errmsg("Error: cannot open %s (logical file %s) for the intertemporal set elements: %s\n",iodata[k1].filname,floginame,strerror(errno));
               return -1;
             }
             while (fgets(line,TABREADLINE,filehandle)) {
@@ -4048,14 +4048,14 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
           readitem = strtok(NULL,"-+");
           readitem = strtok(NULL,",");
           if(readitem==NULL) {
-            printf("Error: malformed intertemporal set declaration in TAB file\n");
+            errmsg("Error: malformed intertemporal set declaration in TAB file\n");
             return -1;
           }
           if(readitem[0]>='0'&&readitem[0]<='9') {
             intindx[1]=atoi(readitem);
           } else {
             if (strlen(readitem)>=sizeof(varname)) {
-              printf("Error: malformed intertemporal set declaration in TAB file\n");
+              errmsg("Error: malformed intertemporal set declaration in TAB file\n");
               return -1;
             }
             strcpy(varname,readitem);
@@ -4063,7 +4063,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
             strcat(commsyntax,readitem);
             filehandle = fopen(fname,"r");
             if (filehandle==NULL) {
-              printf("Error: cannot open TAB file %s: %s\n",fname,strerror(errno));
+              errmsg("Error: cannot open TAB file %s: %s\n",fname,strerror(errno));
               return -1;
             }
             while (tab_next_statement(commsyntax,filehandle,line,TABREADLINE)) {
@@ -4073,7 +4073,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               readitem = strtok(NULL," ");
               readitem = strtok(NULL," ");
               if (readitem==NULL||strlen(readitem)>=sizeof(floginame)) {
-                printf("Error: malformed intertemporal set declaration in TAB file\n");
+                errmsg("Error: malformed intertemporal set declaration in TAB file\n");
                 fclose(filehandle);
                 return -1;
               }
@@ -4081,7 +4081,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               readitem = strtok(NULL,"\"");
               readitem = strtok(NULL,"\"");
               if (readitem==NULL||strlen(readitem)>=sizeof(header)) {
-                printf("Error: malformed intertemporal set declaration in TAB file\n");
+                errmsg("Error: malformed intertemporal set declaration in TAB file\n");
                 fclose(filehandle);
                 return -1;
               }
@@ -4093,12 +4093,12 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
             }
             fclose(filehandle);
             if (k1>=niodata) {
-              printf("Error: intertemporal set declaration reads elements from logical file %s, which the command file does not declare\n",floginame);
+              errmsg("Error: intertemporal set declaration reads elements from logical file %s, which the command file does not declare\n",floginame);
               return -1;
             }
             filehandle = fopen(iodata[k1].filname,"r");
             if (filehandle==NULL) {
-              printf("Error: cannot open %s (logical file %s) for the intertemporal set elements: %s\n",iodata[k1].filname,floginame,strerror(errno));
+              errmsg("Error: cannot open %s (logical file %s) for the intertemporal set elements: %s\n",iodata[k1].filname,floginame,strerror(errno));
               return -1;
             }
             while (fgets(line,TABREADLINE,filehandle)) {
@@ -4119,14 +4119,14 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
           }
         } else {
           if(readitem==NULL) {
-            printf("Error: malformed intertemporal set declaration in TAB file\n");
+            errmsg("Error: malformed intertemporal set declaration in TAB file\n");
             return -1;
           }
           if(readitem[0]>='0'&&readitem[0]<='9') {
             intindx[0]=atoi(readitem);
           } else {
             if (strlen(readitem)>=sizeof(varname)) {
-              printf("Error: malformed intertemporal set declaration in TAB file\n");
+              errmsg("Error: malformed intertemporal set declaration in TAB file\n");
               return -1;
             }
             strcpy(varname,readitem);
@@ -4134,7 +4134,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
             strcat(commsyntax,readitem);
             filehandle = fopen(fname,"r");
             if (filehandle==NULL) {
-              printf("Error: cannot open TAB file %s: %s\n",fname,strerror(errno));
+              errmsg("Error: cannot open TAB file %s: %s\n",fname,strerror(errno));
               return -1;
             }
             while (tab_next_statement(commsyntax,filehandle,line,TABREADLINE)) {
@@ -4144,7 +4144,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               readitem = strtok(NULL," ");
               readitem = strtok(NULL," ");
               if (readitem==NULL||strlen(readitem)>=sizeof(floginame)) {
-                printf("Error: malformed intertemporal set declaration in TAB file\n");
+                errmsg("Error: malformed intertemporal set declaration in TAB file\n");
                 fclose(filehandle);
                 return -1;
               }
@@ -4152,7 +4152,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               readitem = strtok(NULL,"\"");
               readitem = strtok(NULL,"\"");
               if (readitem==NULL||strlen(readitem)>=sizeof(header)) {
-                printf("Error: malformed intertemporal set declaration in TAB file\n");
+                errmsg("Error: malformed intertemporal set declaration in TAB file\n");
                 fclose(filehandle);
                 return -1;
               }
@@ -4164,12 +4164,12 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
             }
             fclose(filehandle);
             if (k1>=niodata) {
-              printf("Error: intertemporal set declaration reads elements from logical file %s, which the command file does not declare\n",floginame);
+              errmsg("Error: intertemporal set declaration reads elements from logical file %s, which the command file does not declare\n",floginame);
               return -1;
             }
             filehandle = fopen(iodata[k1].filname,"r");
             if (filehandle==NULL) {
-              printf("Error: cannot open %s (logical file %s) for the intertemporal set elements: %s\n",iodata[k1].filname,floginame,strerror(errno));
+              errmsg("Error: cannot open %s (logical file %s) for the intertemporal set elements: %s\n",iodata[k1].filname,floginame,strerror(errno));
               return -1;
             }
             while (fgets(line,TABREADLINE,filehandle)) {
@@ -4203,7 +4203,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
         readitem = strtok(NULL,",");
         readitem = strtok(NULL,"\0");
         if(readitem==NULL) {
-          printf("Error: malformed intertemporal set declaration in TAB file\n");
+          errmsg("Error: malformed intertemporal set declaration in TAB file\n");
           return -1;
         }
         if(strchr(readitem,'+')!=NULL||strchr(readitem,'-')!=NULL) {
@@ -4214,14 +4214,14 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
           }
           readitem = strtok(readitem,"-+");
           if(readitem==NULL) {
-            printf("Error: malformed intertemporal set declaration in TAB file\n");
+            errmsg("Error: malformed intertemporal set declaration in TAB file\n");
             return -1;
           }
           if(readitem[0]>='0'&&readitem[0]<='9') {
             intindx[2]=atoi(readitem);
           } else {
             if (strlen(readitem)>=sizeof(varname)) {
-              printf("Error: malformed intertemporal set declaration in TAB file\n");
+              errmsg("Error: malformed intertemporal set declaration in TAB file\n");
               return -1;
             }
             strcpy(varname,readitem);
@@ -4229,7 +4229,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
             strcat(commsyntax,readitem);
             filehandle = fopen(fname,"r");
             if (filehandle==NULL) {
-              printf("Error: cannot open TAB file %s: %s\n",fname,strerror(errno));
+              errmsg("Error: cannot open TAB file %s: %s\n",fname,strerror(errno));
               return -1;
             }
             while (tab_next_statement(commsyntax,filehandle,line,TABREADLINE)) {
@@ -4239,7 +4239,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               readitem = strtok(NULL," ");
               readitem = strtok(NULL," ");
               if (readitem==NULL||strlen(readitem)>=sizeof(floginame)) {
-                printf("Error: malformed intertemporal set declaration in TAB file\n");
+                errmsg("Error: malformed intertemporal set declaration in TAB file\n");
                 fclose(filehandle);
                 return -1;
               }
@@ -4247,7 +4247,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               readitem = strtok(NULL,"\"");
               readitem = strtok(NULL,"\"");
               if (readitem==NULL||strlen(readitem)>=sizeof(header)) {
-                printf("Error: malformed intertemporal set declaration in TAB file\n");
+                errmsg("Error: malformed intertemporal set declaration in TAB file\n");
                 fclose(filehandle);
                 return -1;
               }
@@ -4259,12 +4259,12 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
             }
             fclose(filehandle);
             if (k1>=niodata) {
-              printf("Error: intertemporal set declaration reads elements from logical file %s, which the command file does not declare\n",floginame);
+              errmsg("Error: intertemporal set declaration reads elements from logical file %s, which the command file does not declare\n",floginame);
               return -1;
             }
             filehandle = fopen(iodata[k1].filname,"r");
             if (filehandle==NULL) {
-              printf("Error: cannot open %s (logical file %s) for the intertemporal set elements: %s\n",iodata[k1].filname,floginame,strerror(errno));
+              errmsg("Error: cannot open %s (logical file %s) for the intertemporal set elements: %s\n",iodata[k1].filname,floginame,strerror(errno));
               return -1;
             }
             while (fgets(line,TABREADLINE,filehandle)) {
@@ -4289,14 +4289,14 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
           readitem = strtok(NULL,"-+");
           readitem = strtok(NULL,"\0");
           if(readitem==NULL) {
-            printf("Error: malformed intertemporal set declaration in TAB file\n");
+            errmsg("Error: malformed intertemporal set declaration in TAB file\n");
             return -1;
           }
           if(readitem[0]>='0'&&readitem[0]<='9') {
             intindx[3]=atoi(readitem);
           } else {
             if (strlen(readitem)>=sizeof(varname)) {
-              printf("Error: malformed intertemporal set declaration in TAB file\n");
+              errmsg("Error: malformed intertemporal set declaration in TAB file\n");
               return -1;
             }
             strcpy(varname,readitem);
@@ -4304,7 +4304,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
             strcat(commsyntax,readitem);
             filehandle = fopen(fname,"r");
             if (filehandle==NULL) {
-              printf("Error: cannot open TAB file %s: %s\n",fname,strerror(errno));
+              errmsg("Error: cannot open TAB file %s: %s\n",fname,strerror(errno));
               return -1;
             }
             while (tab_next_statement(commsyntax,filehandle,line,TABREADLINE)) {
@@ -4314,7 +4314,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               readitem = strtok(NULL," ");
               readitem = strtok(NULL," ");
               if (readitem==NULL||strlen(readitem)>=sizeof(floginame)) {
-                printf("Error: malformed intertemporal set declaration in TAB file\n");
+                errmsg("Error: malformed intertemporal set declaration in TAB file\n");
                 fclose(filehandle);
                 return -1;
               }
@@ -4322,7 +4322,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               readitem = strtok(NULL,"\"");
               readitem = strtok(NULL,"\"");
               if (readitem==NULL||strlen(readitem)>=sizeof(header)) {
-                printf("Error: malformed intertemporal set declaration in TAB file\n");
+                errmsg("Error: malformed intertemporal set declaration in TAB file\n");
                 fclose(filehandle);
                 return -1;
               }
@@ -4334,12 +4334,12 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
             }
             fclose(filehandle);
             if (k1>=niodata) {
-              printf("Error: intertemporal set declaration reads elements from logical file %s, which the command file does not declare\n",floginame);
+              errmsg("Error: intertemporal set declaration reads elements from logical file %s, which the command file does not declare\n",floginame);
               return -1;
             }
             filehandle = fopen(iodata[k1].filname,"r");
             if (filehandle==NULL) {
-              printf("Error: cannot open %s (logical file %s) for the intertemporal set elements: %s\n",iodata[k1].filname,floginame,strerror(errno));
+              errmsg("Error: cannot open %s (logical file %s) for the intertemporal set elements: %s\n",iodata[k1].filname,floginame,strerror(errno));
               return -1;
             }
             while (fgets(line,TABREADLINE,filehandle)) {
@@ -4360,14 +4360,14 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
           }
         } else {
           if(readitem==NULL) {
-            printf("Error: malformed intertemporal set declaration in TAB file\n");
+            errmsg("Error: malformed intertemporal set declaration in TAB file\n");
             return -1;
           }
           if(readitem[0]>='0'&&readitem[0]<='9') {
             intindx[2]=atoi(readitem);
           } else {
             if (strlen(readitem)>=sizeof(varname)) {
-              printf("Error: malformed intertemporal set declaration in TAB file\n");
+              errmsg("Error: malformed intertemporal set declaration in TAB file\n");
               return -1;
             }
             strcpy(varname,readitem);
@@ -4375,7 +4375,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
             strcat(commsyntax,readitem);
             filehandle = fopen(fname,"r");
             if (filehandle==NULL) {
-              printf("Error: cannot open TAB file %s: %s\n",fname,strerror(errno));
+              errmsg("Error: cannot open TAB file %s: %s\n",fname,strerror(errno));
               return -1;
             }
             while (tab_next_statement(commsyntax,filehandle,line,TABREADLINE)) {
@@ -4385,7 +4385,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               readitem = strtok(NULL," ");
               readitem = strtok(NULL," ");
               if (readitem==NULL||strlen(readitem)>=sizeof(floginame)) {
-                printf("Error: malformed intertemporal set declaration in TAB file\n");
+                errmsg("Error: malformed intertemporal set declaration in TAB file\n");
                 fclose(filehandle);
                 return -1;
               }
@@ -4393,7 +4393,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               readitem = strtok(NULL,"\"");
               readitem = strtok(NULL,"\"");
               if (readitem==NULL||strlen(readitem)>=sizeof(header)) {
-                printf("Error: malformed intertemporal set declaration in TAB file\n");
+                errmsg("Error: malformed intertemporal set declaration in TAB file\n");
                 fclose(filehandle);
                 return -1;
               }
@@ -4405,12 +4405,12 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
             }
             fclose(filehandle);
             if (k1>=niodata) {
-              printf("Error: intertemporal set declaration reads elements from logical file %s, which the command file does not declare\n",floginame);
+              errmsg("Error: intertemporal set declaration reads elements from logical file %s, which the command file does not declare\n",floginame);
               return -1;
             }
             filehandle = fopen(iodata[k1].filname,"r");
             if (filehandle==NULL) {
-              printf("Error: cannot open %s (logical file %s) for the intertemporal set elements: %s\n",iodata[k1].filname,floginame,strerror(errno));
+              errmsg("Error: cannot open %s (logical file %s) for the intertemporal set elements: %s\n",iodata[k1].filname,floginame,strerror(errno));
               return -1;
             }
             while (fgets(line,TABREADLINE,filehandle)) {
@@ -4439,14 +4439,14 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
           intvar[1]=intindx[2];
         }
         if (intvar[1]+1-intvar[0]<=0) {
-          printf("Error: intertemporal set has an empty or inverted time range in TAB file\n");
+          errmsg("Error: intertemporal set has an empty or inverted time range in TAB file\n");
           return -1;
         }
         record[j].readele[0]='\0';
         for (i=intvar[0]; i<intvar[1]+1; i++) {
           sprintf(line, "%d",i);
           if (strlen(record[j].readele)+strlen(line)+2>=sizeof(record[j].readele)) {
-            printf("Error: intertemporal set time range is too large in TAB file\n");
+            errmsg("Error: intertemporal set time range is too large in TAB file\n");
             return -1;
           }
           strcat(record[j].readele,line);
@@ -4482,7 +4482,7 @@ int sets_read(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,
       readitem = strtok(line+k2," ");
       readitem = strtok(NULL," ");
       if (readitem==NULL||strlen(readitem)>=sizeof(record[j].setname)) {
-        printf("Error: malformed set declaration in TAB file\n");
+        errmsg("Error: malformed set declaration in TAB file\n");
         return -1;
       }
       strcpy(record[j].setname,readitem);
@@ -4490,7 +4490,7 @@ int sets_read(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,
       readitem = strtok(NULL,"[");
       readitem = strtok(NULL,"]");
       if (readitem==NULL) {
-        printf("Error: malformed set declaration in TAB file\n");
+        errmsg("Error: malformed set declaration in TAB file\n");
         return -1;
       }
       strcat(line1,readitem);
@@ -4500,7 +4500,7 @@ int sets_read(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,
         readitem = strtok(readitem,"[");
         readitem = strtok(NULL,"]");
         if (readitem==NULL) {
-          printf("Error: malformed set declaration in TAB file\n");
+          errmsg("Error: malformed set declaration in TAB file\n");
           return -1;
         }
         strcat(line1,readitem);
@@ -4626,7 +4626,7 @@ int sets_read(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,
           line1[1]=',';
           line1[2]='\0';
           readitem = strtok(NULL,"-");
-          if (readitem==NULL) { printf("Error: malformed set declaration in TAB file\n"); return -1; }
+          if (readitem==NULL) { errmsg("Error: malformed set declaration in TAB file\n"); return -1; }
           for (i=0; i<nset; i++) {
             if (strcmp(readitem,record[i].setname)==0) {
               dim1=record[i].size;
@@ -4636,7 +4636,7 @@ int sets_read(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,
             }
           }
           readitem = strtok(NULL,";");
-          if (readitem==NULL) { printf("Error: malformed set declaration in TAB file\n"); return -1; }
+          if (readitem==NULL) { errmsg("Error: malformed set declaration in TAB file\n"); return -1; }
           for (i=0; i<nset; i++) {
             if (strcmp(readitem,record[i].setname)==0) {
               record[j].size=dim1-record[i].size;
@@ -4645,7 +4645,7 @@ int sets_read(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,
             }
           }
           if (record[j].size<0) {
-            printf("Error: set difference subtracts a larger set in TAB file\n");
+            errmsg("Error: set difference subtracts a larger set in TAB file\n");
             return -1;
           }
           strcpy(record[j].readele,line1);
@@ -4655,7 +4655,7 @@ int sets_read(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,
             line1[1]=',';
             line1[2]='\0';
             readitem = strtok(NULL,"+");
-            if (readitem==NULL) { printf("Error: malformed set declaration in TAB file\n"); return -1; }
+            if (readitem==NULL) { errmsg("Error: malformed set declaration in TAB file\n"); return -1; }
             for (i=0; i<nset; i++) {
               if (strcmp(readitem,record[i].setname)==0) {
                 dim1=record[i].size;
@@ -4665,7 +4665,7 @@ int sets_read(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,
               }
             }
             readitem = strtok(NULL,";");
-            if (readitem==NULL) { printf("Error: malformed set declaration in TAB file\n"); return -1; }
+            if (readitem==NULL) { errmsg("Error: malformed set declaration in TAB file\n"); return -1; }
             for (i=0; i<nset; i++) {
               if (strcmp(readitem,record[i].setname)==0) {
                 record[j].size=dim1+record[i].size;
@@ -4680,7 +4680,7 @@ int sets_read(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,
               line1[1]=',';
               line1[2]='\0';
               readitem = strtok(NULL,"^");
-              if (readitem==NULL) { printf("Error: malformed set declaration in TAB file\n"); return -1; }
+              if (readitem==NULL) { errmsg("Error: malformed set declaration in TAB file\n"); return -1; }
               for (i=0; i<nset; i++) {
                 if (strcmp(readitem,record[i].setname)==0) {
                   dim1=record[i].size;
@@ -4690,7 +4690,7 @@ int sets_read(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,
                 }
               }
               readitem = strtok(NULL,";");
-              if (readitem==NULL) { printf("Error: malformed set declaration in TAB file\n"); return -1; }
+              if (readitem==NULL) { errmsg("Error: malformed set declaration in TAB file\n"); return -1; }
               for (i=0; i<nset; i++) {
                 if (strcmp(readitem,record[i].setname)==0) {
                   record[j].size=dim1+record[i].size;
@@ -4703,11 +4703,11 @@ int sets_read(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,
               line1[0]='=';
               line1[1]='\0';
               readitem = strtok(NULL,";");
-              if (readitem==NULL) { printf("Error: malformed set declaration in TAB file\n"); return -1; }
+              if (readitem==NULL) { errmsg("Error: malformed set declaration in TAB file\n"); return -1; }
               for (i=0; i<nset; i++) {
                 if (strcmp(readitem,record[i].setname)==0) {
                   if (i==j) {
-                    printf("Error: set %s is defined as equal to itself in TAB file\n",record[j].setname);
+                    errmsg("Error: set %s is defined as equal to itself in TAB file\n",record[j].setname);
                     return -1;
                   }
                   record[j].size=record[i].size;
@@ -4722,7 +4722,7 @@ int sets_read(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,
                 }
               }
               if (i>=nset) {
-                printf("Error: the right-hand side of 'Set %s = %s' is not a declared set (set products 'A x B' and data-dependent sets are not supported)\n",record[j].setname,readitem);
+                errmsg("Error: the right-hand side of 'Set %s = %s' is not a declared set (set products 'A x B' and data-dependent sets are not supported)\n",record[j].setname,readitem);
                 return -1;
               }
               strcpy(record[j].readele,line1);
@@ -4734,7 +4734,7 @@ int sets_read(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,
         if(k0>-1) {
           k1=str_find_ci(line+k0+24," ");
           if (k1<0||k1>=(int)sizeof(line1)) {
-            printf("Error: malformed 'read elements from file' clause in set declaration in TAB file\n");
+            errmsg("Error: malformed 'read elements from file' clause in set declaration in TAB file\n");
             return -1;
           }
           strncpy(line1,line+k0+24,k1);
@@ -4747,7 +4747,7 @@ int sets_read(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,
         readitem = strtok(line," ");
         readitem = strtok(NULL," ");
         if (readitem==NULL||strlen(readitem)>=sizeof(record[j].setname)) {
-          printf("Error: malformed set declaration in TAB file\n");
+          errmsg("Error: malformed set declaration in TAB file\n");
           return -1;
         }
         strcpy(record[j].setname,readitem);
@@ -4755,7 +4755,7 @@ int sets_read(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,
         readitem = strtok(NULL,"\"");
         if (readitem!=NULL) {
           if (strlen(readitem)>=sizeof(record[j].header)) {
-            printf("Error: header too long in set declaration in TAB file: %s\n",readitem);
+            errmsg("Error: header too long in set declaration in TAB file: %s\n",readitem);
             return -1;
           }
           strcpy(record[j].header,readitem);
@@ -4767,11 +4767,11 @@ int sets_read(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,
           readitem = strtok(linecopy,"(");
           if (readitem!=NULL) readitem = strtok(NULL,")");
           if (readitem==NULL) {
-            printf("Error: malformed set declaration in TAB file\n");
+            errmsg("Error: malformed set declaration in TAB file\n");
             return -1;
           }
           if (strchr(readitem,'-')!=NULL) {
-            printf("Error: element range abbreviation '(first - last)' in set %s is not supported; list the elements explicitly\n",record[j].setname);
+            errmsg("Error: element range abbreviation '(first - last)' in set %s is not supported; list the elements explicitly\n",record[j].setname);
             return -1;
           }
           strcpy(record[j].readele,readitem);
@@ -4804,11 +4804,11 @@ dim_t set_union_named(set_element *set_elems, set_def *sets,dim_t nset,dim_t i) 
       break;
     }
   }
-  if(sup1>=MAXSUPSET){printf("Error: superset size exceeded; increase MAXSUPSET in teems_solver.h\n");return 0;}
-  if (dim1>0&&l==i) {printf("Error: set %s references itself in a set expression\n",sets[i].setname);return 0;}
+  if(sup1>=MAXSUPSET){errmsg("Error: superset size exceeded; increase MAXSUPSET in teems_solver.h\n");return 0;}
+  if (dim1>0&&l==i) {errmsg("Error: set %s references itself in a set expression\n",sets[i].setname);return 0;}
   m=0;
   for (n=0; n<dim1; n++) {
-    if (m>=bound) {printf("Error: set expression produces more elements than declared for set %s\n",sets[i].setname);return 0;}
+    if (m>=bound) {errmsg("Error: set expression produces more elements than declared for set %s\n",sets[i].setname);return 0;}
     if(sets[i].offset+m!=sets[l].offset+n)strcpy(set_elems[sets[i].offset+m].setele,set_elems[sets[l].offset+n].setele);
     set_elems[sets[i].offset+m].superset_pos[0]=n;
     set_elems[sets[l].offset+m].superset_pos[sup1]=n;
@@ -4826,12 +4826,12 @@ dim_t set_union_named(set_element *set_elems, set_def *sets,dim_t nset,dim_t i) 
       break;
     }
   }
-  if(sup2>=MAXSUPSET){printf("Error: superset size exceeded; increase MAXSUPSET in teems_solver.h\n");return 0;}
-  if (dim2>0&&j==i) {printf("Error: set %s references itself in a set expression\n",sets[i].setname);return 0;}
+  if(sup2>=MAXSUPSET){errmsg("Error: superset size exceeded; increase MAXSUPSET in teems_solver.h\n");return 0;}
+  if (dim2>0&&j==i) {errmsg("Error: set %s references itself in a set expression\n",sets[i].setname);return 0;}
   for (n=0; n<dim2; n++) {
     for (j1=0; j1<dim1; j1++) if(strcmp(set_elems[sets[l].offset+j1].setele,set_elems[sets[j].offset+n].setele)==0) break;
     if(j1==dim1) {
-      if (m>=bound) {printf("Error: set expression produces more elements than declared for set %s\n",sets[i].setname);return 0;}
+      if (m>=bound) {errmsg("Error: set expression produces more elements than declared for set %s\n",sets[i].setname);return 0;}
       if(sets[i].offset+m!=sets[j].offset+n)strcpy(set_elems[sets[i].offset+m].setele,set_elems[sets[j].offset+n].setele);
       set_elems[sets[i].offset+m].superset_pos[0]=m;
       set_elems[sets[j].offset+n].superset_pos[sup2]=m;
@@ -4861,11 +4861,11 @@ dim_t set_union_op(set_element *set_elems, set_def *sets,dim_t nset,dim_t i) {
       break;
     }
   }
-  if(sup1>=MAXSUPSET){printf("Error: superset size exceeded; increase MAXSUPSET in teems_solver.h\n");return 0;}
-  if (dim1>0&&l==i) {printf("Error: set %s references itself in a set expression\n",sets[i].setname);return 0;}
+  if(sup1>=MAXSUPSET){errmsg("Error: superset size exceeded; increase MAXSUPSET in teems_solver.h\n");return 0;}
+  if (dim1>0&&l==i) {errmsg("Error: set %s references itself in a set expression\n",sets[i].setname);return 0;}
   m=0;
   for (n=0; n<dim1; n++) {
-    if (m>=bound) {printf("Error: set expression produces more elements than declared for set %s\n",sets[i].setname);return 0;}
+    if (m>=bound) {errmsg("Error: set expression produces more elements than declared for set %s\n",sets[i].setname);return 0;}
     if(sets[i].offset+m!=sets[l].offset+n)strcpy(set_elems[sets[i].offset+m].setele,set_elems[sets[l].offset+n].setele);
     set_elems[sets[i].offset+m].superset_pos[0]=n;
     set_elems[sets[l].offset+m].superset_pos[sup1]=n;
@@ -4883,10 +4883,10 @@ dim_t set_union_op(set_element *set_elems, set_def *sets,dim_t nset,dim_t i) {
       break;
     }
   }
-  if(sup2>=MAXSUPSET){printf("Error: superset size exceeded; increase MAXSUPSET in teems_solver.h\n");return 0;}
-  if (dim2>0&&j==i) {printf("Error: set %s references itself in a set expression\n",sets[i].setname);return 0;}
+  if(sup2>=MAXSUPSET){errmsg("Error: superset size exceeded; increase MAXSUPSET in teems_solver.h\n");return 0;}
+  if (dim2>0&&j==i) {errmsg("Error: set %s references itself in a set expression\n",sets[i].setname);return 0;}
   for (n=0; n<dim2; n++) {
-    if (m>=bound) {printf("Error: set expression produces more elements than declared for set %s\n",sets[i].setname);return 0;}
+    if (m>=bound) {errmsg("Error: set expression produces more elements than declared for set %s\n",sets[i].setname);return 0;}
     if(sets[i].offset+m!=sets[j].offset+n)strcpy(set_elems[sets[i].offset+m].setele,set_elems[sets[j].offset+n].setele);
     set_elems[sets[i].offset+m].superset_pos[0]=m;
     set_elems[sets[j].offset+n].superset_pos[sup2]=m;
@@ -4913,8 +4913,8 @@ dim_t set_difference(set_element *set_elems, set_def *sets,dim_t nset,dim_t i) {
       break;
     }
   }
-  if(dim1>0&&sup1>=MAXSUPSET){printf("Error: superset size exceeded; increase MAXSUPSET in teems_solver.h\n");return 0;}
-  if (dim1>0&&l==i) {printf("Error: set %s references itself in a set expression\n",sets[i].setname);return 0;}
+  if(dim1>0&&sup1>=MAXSUPSET){errmsg("Error: superset size exceeded; increase MAXSUPSET in teems_solver.h\n");return 0;}
+  if (dim1>0&&l==i) {errmsg("Error: set %s references itself in a set expression\n",sets[i].setname);return 0;}
   readitem = strtok(NULL,",");
   if (readitem==NULL) return 0;
   for (j=0; j<nset; j++) {
@@ -4923,7 +4923,7 @@ dim_t set_difference(set_element *set_elems, set_def *sets,dim_t nset,dim_t i) {
       break;
     }
   }
-  if (dim2>0&&j==i) {printf("Error: set %s references itself in a set expression\n",sets[i].setname);return 0;}
+  if (dim2>0&&j==i) {errmsg("Error: set %s references itself in a set expression\n",sets[i].setname);return 0;}
   m=0;
   for (n=0; n<dim1; n++) {
     indi=0;
@@ -4934,7 +4934,7 @@ dim_t set_difference(set_element *set_elems, set_def *sets,dim_t nset,dim_t i) {
       }
     }
     if(indi==0) {
-      if (m>=bound) {printf("Error: set expression produces more elements than declared for set %s\n",sets[i].setname);return 0;}
+      if (m>=bound) {errmsg("Error: set expression produces more elements than declared for set %s\n",sets[i].setname);return 0;}
       if(sets[i].offset+m!=sets[l].offset+n)strcpy(set_elems[sets[i].offset+m].setele,set_elems[sets[l].offset+n].setele);
       set_elems[sets[i].offset+m].superset_pos[sup1]=n;
       set_elems[sets[i].offset+m].superset_pos[0]=m;
@@ -5006,8 +5006,8 @@ void tab_wordops_normalize(char *line) {
    input file class for the message ("closure file"), NULL for TAB. */
 void set_supset_fatal(const char *idx, const char *symname, const char *where, set_def *sets, dim_t sub, dim_t sup) {
   const char *wo=(where!=NULL)?" (":"",*ww=(where!=NULL)?where:"",*wc=(where!=NULL)?")":"";
-  if (idx!=NULL) printf("Error: index %s of %s ranges over set %s, which is not %s (the declared set at that argument position) or a declared subset of it; add 'Subset %s is subset of %s;' (manual 10.1.2)%s%s%s\n",idx,symname,sets[sub].setname,sets[sup].setname,sets[sub].setname,sets[sup].setname,wo,ww,wc);
-  else printf("Error: %s is qualified by set %s at an argument position declared over %s, and %s is not a declared subset of %s; add 'Subset %s is subset of %s;' (manual 10.1.2)%s%s%s\n",symname,sets[sub].setname,sets[sup].setname,sets[sub].setname,sets[sup].setname,sets[sub].setname,sets[sup].setname,wo,ww,wc);
+  if (idx!=NULL) errmsg("Error: index %s of %s ranges over set %s, which is not %s (the declared set at that argument position) or a declared subset of it; add 'Subset %s is subset of %s;' (manual 10.1.2)%s%s%s\n",idx,symname,sets[sub].setname,sets[sup].setname,sets[sub].setname,sets[sup].setname,wo,ww,wc);
+  else errmsg("Error: %s is qualified by set %s at an argument position declared over %s, and %s is not a declared subset of %s; add 'Subset %s is subset of %s;' (manual 10.1.2)%s%s%s\n",symname,sets[sub].setname,sets[sup].setname,sets[sub].setname,sets[sup].setname,sets[sub].setname,sets[sup].setname,wo,ww,wc);
   MPI_Abort(PETSC_COMM_WORLD,1);
 }
 
@@ -5019,7 +5019,7 @@ static void set_register_subset(set_element *se, set_def *sets, dim_t sub, dim_t
     if (sets[sub].subsetid[s]==-1) break;
   }
   if (s==MAXSUPSET) {
-    printf("Error: superset count exceeds MAXSUPSET; increase MAXSUPSET in teems_solver.h\n");
+    errmsg("Error: superset count exceeds MAXSUPSET; increase MAXSUPSET in teems_solver.h\n");
     return;
   }
   sets[sub].subsetid[s]=sup;
@@ -5064,7 +5064,7 @@ dim_t set_expr_bound(char **pp, set_def *record, dim_t nset, const char *owner, 
     if (!first) {
       op=*p;
       if (op!='+'&&op!='-'&&op!='^'&&op!='&'&&op!='*') {
-        printf("Error: malformed set expression in the definition of %s\n",owner);
+        errmsg("Error: malformed set expression in the definition of %s\n",owner);
         *err=1;
         return 0;
       }
@@ -5088,7 +5088,7 @@ dim_t set_expr_bound(char **pp, set_def *record, dim_t nset, const char *owner, 
       nm[k]='\0';
       for (i=0; i<nset; i++) if (strcmp(nm,record[i].setname)==0) break;
       if (i==nset) {
-        printf("Error: set %s in the definition of %s is not declared before use\n",nm,owner);
+        errmsg("Error: set %s in the definition of %s is not declared before use\n",nm,owner);
         *err=1;
         return 0;
       }
@@ -5143,19 +5143,19 @@ static int set_product_names(char (*a)[NAMESIZE], dim_t n1, const char *nm1,
       } else strcpy(e1,a[i]);
       k=j*n1+i;
       if (k>=cap) {
-        printf("Error: set product in the definition of %s produces more elements than its declared size\n",owner);
+        errmsg("Error: set product in the definition of %s produces more elements than its declared size\n",owner);
         return 0;
       }
       { size_t l1=strlen(e1),l2=strlen(e2);
         if (l1+l2+1>=NAMESIZE) {
-          printf("Error: set product element %s_%s in the definition of %s exceeds %d characters\n",e1,e2,owner,NAMESIZE-1);
+          errmsg("Error: set product element %s_%s in the definition of %s exceeds %d characters\n",e1,e2,owner,NAMESIZE-1);
           return 0;
         }
         memcpy(out[k],e1,l1); out[k][l1]='_'; memcpy(out[k]+l1+1,e2,l2+1); }
     }
   }
   for (k=1; k<n1*n2; k++) for (i=0; i<k; i++) if (strcmp(out[i],out[k])==0) {
-      printf("Error: set product in the definition of %s produces the duplicate element name %s (manual 11.7.11); rename the factor elements\n",owner,out[k]);
+      errmsg("Error: set product in the definition of %s produces the duplicate element name %s (manual 11.7.11); rename the factor elements\n",owner,out[k]);
       return 0;
     }
   return 1;
@@ -5172,7 +5172,7 @@ static dim_t set_expr_term(char **pp, set_element *se, set_def *sets, dim_t nset
     *pp=p;
     n=set_expr_eval(pp,se,sets,nset,out,cap,owner);
     if (**pp==')') (*pp)++;
-    else printf("Error: unbalanced '(' in the definition of %s\n",owner);
+    else errmsg("Error: unbalanced '(' in the definition of %s\n",owner);
     return n;
   }
   if (*p=='"') {
@@ -5182,7 +5182,7 @@ static dim_t set_expr_term(char **pp, set_element *se, set_def *sets, dim_t nset
     while (*p!='"'&&*p!='\0'&&k<NAMESIZE-1) out[0][k++]=tolower((int)*p++);
     out[0][k]='\0';
     if (*p=='"') p++;
-    else printf("Error: unterminated quote in the definition of %s\n",owner);
+    else errmsg("Error: unterminated quote in the definition of %s\n",owner);
     *pp=p;
     return 1;
   }
@@ -5194,12 +5194,12 @@ static dim_t set_expr_term(char **pp, set_element *se, set_def *sets, dim_t nset
     *pp=p;
     for (l=0; l<nset; l++) if (strcmp(nm,sets[l].setname)==0) break;
     if (l==nset) {
-      printf("Error: set %s in the definition of %s is not declared before use\n",nm,owner);
+      errmsg("Error: set %s in the definition of %s is not declared before use\n",nm,owner);
       return 0;
     }
     strcpy(set_expr_termname,nm);
     for (k=0; (dim_t)k<sets[l].size&&(dim_t)k<cap; k++) strcpy(out[k],se[sets[l].offset+k].setele);
-    if ((dim_t)k<sets[l].size) printf("Error: set %s has more elements than the declared size of %s\n",sets[l].setname,owner);
+    if ((dim_t)k<sets[l].size) errmsg("Error: set %s has more elements than the declared size of %s\n",sets[l].setname,owner);
     return k;
   }
 }
@@ -5239,7 +5239,7 @@ static dim_t set_expr_eval(char **pp, set_element *se, set_def *sets, dim_t nset
     if (op=='+') {
       for (b=0; b<m; b++) {
         for (a=0; a<n; a++) if (strcmp(out[a],tmp[b])==0) break;
-        if (a<n) printf("Error: '+' operands in the definition of %s are not disjoint (element %s); use UNION for overlapping sets\n",owner,tmp[b]);
+        if (a<n) errmsg("Error: '+' operands in the definition of %s are not disjoint (element %s); use UNION for overlapping sets\n",owner,tmp[b]);
         else if (n<cap) strcpy(out[n++],tmp[b]);
       }
     } else if (op=='^') {
@@ -5250,7 +5250,7 @@ static dim_t set_expr_eval(char **pp, set_element *se, set_def *sets, dim_t nset
     } else if (op=='-') {
       for (b=0; b<m; b++) {
         for (a=0; a<n; a++) if (strcmp(out[a],tmp[b])==0) break;
-        if (a==n) printf("Error: '-' in the definition of %s removes element %s, which is not present\n",owner,tmp[b]);
+        if (a==n) errmsg("Error: '-' in the definition of %s removes element %s, which is not present\n",owner,tmp[b]);
         else {
           for (w=a; w<n-1; w++) strcpy(out[w],out[w+1]);
           n--;
@@ -5299,7 +5299,7 @@ dim_t set_expr_build(set_element *se, set_def *sets, dim_t nset, dim_t i) {
   out=malloc((size_t)cap*NAMESIZE);
   cursor=expr;
   m=set_expr_eval(&cursor,se,sets,nset,out,cap,i<nset?sets[i].setname:"?");
-  if (*cursor!='\0') printf("Error: trailing characters in the definition of %s: %s\n",sets[i].setname,cursor);
+  if (*cursor!='\0') errmsg("Error: trailing characters in the definition of %s: %s\n",sets[i].setname,cursor);
   for (n=0; n<m; n++) {
     strcpy(se[sets[i].offset+n].setele,out[n]);
     se[sets[i].offset+n].superset_pos[0]=n;
@@ -5387,7 +5387,7 @@ void set_equality_build(set_element *se, set_def *sets, dim_t i) {
   sets[i].size=sets[j1].size;
   for (j=0; j<sets[i].size; j++) {
     if (j>=bound) {
-      printf("Error: set equality produces more elements than declared for set %s\n",sets[i].setname);
+      errmsg("Error: set equality produces more elements than declared for set %s\n",sets[i].setname);
       sets[i].size=j;
       return;
     }
@@ -5415,7 +5415,7 @@ offset_t subsets_read(char *fname, set_element *set_elems, set_def *sets,dim_t n
     readitem = strtok(line," ");
     readitem = strtok(NULL," ");
     if (readitem==NULL||strlen(readitem)>=sizeof(subset)) {
-      printf("Error: malformed %s statement in TAB file\n",commsyntax);
+      errmsg("Error: malformed %s statement in TAB file\n",commsyntax);
       fclose(filehandle);
       return -1;
     }
@@ -5425,7 +5425,7 @@ offset_t subsets_read(char *fname, set_element *set_elems, set_def *sets,dim_t n
     readitem = strtok(NULL," ");
     readitem = strtok(NULL,";");
     if (readitem==NULL||strlen(readitem)>=sizeof(set)) {
-      printf("Error: malformed %s statement in TAB file\n",commsyntax);
+      errmsg("Error: malformed %s statement in TAB file\n",commsyntax);
       fclose(filehandle);
       return -1;
     }
@@ -5440,7 +5440,7 @@ offset_t subsets_read(char *fname, set_element *set_elems, set_def *sets,dim_t n
                 break;
               }
             if(sup1==MAXSUPSET) {
-              printf("Error: superset count exceeds MAXSUPSET; increase MAXSUPSET in teems_solver.h\n");
+              errmsg("Error: superset count exceeds MAXSUPSET; increase MAXSUPSET in teems_solver.h\n");
               fclose(filehandle);
               return -1;
             }
@@ -5456,13 +5456,13 @@ offset_t subsets_read(char *fname, set_element *set_elems, set_def *sets,dim_t n
             break;
           }
         }
-        if(j==nset)printf("Error: set %s is not declared\n",set);
+        if(j==nset)errmsg("Error: set %s is not declared\n",set);
         break;
       }
       j++;
     }
-    if(i==nset)printf("Error: set %s is not declared\n",subset);
-    else if(succ-sets[i].size!=0)printf("Error: some elements of set %s are not in set %s\n",subset,set);
+    if(i==nset)errmsg("Error: set %s is not declared\n",subset);
+    else if(succ-sets[i].size!=0)errmsg("Error: some elements of set %s are not in set %s\n",subset,set);
   }
   fclose(filehandle);
   return j;
@@ -5504,7 +5504,7 @@ dim_t subset_map_build(set_element *set_elems, set_def *sets,dim_t nset,offset_t
           if(sets[i].subsetid[sup1]==-1)break;
         }
         if(sup1==MAXSUPSET){
-          printf("Error: superset size exceeded; increase MAXSUPSET in teems_solver.h\n");
+          errmsg("Error: superset size exceeded; increase MAXSUPSET in teems_solver.h\n");
           *contin=0;
           return 0;
         }
@@ -5553,7 +5553,7 @@ dim_t subset_map_build(set_element *set_elems, set_def *sets,dim_t nset,offset_t
           if(sets[i].subsetid[sup1]==-1)break;
         }
         if(sup1==MAXSUPSET){
-          printf("Error: superset size exceeded; increase MAXSUPSET in teems_solver.h\n");
+          errmsg("Error: superset size exceeded; increase MAXSUPSET in teems_solver.h\n");
           *contin=0;
           return 0;
         }
@@ -5828,7 +5828,7 @@ offset_t backsolve_read(char *fname, array_def *vars, offset_t nvar, closure_ent
   strcpy(commsyntax,"backsolve");
   filehandle=fopen(fname,"r");
   if (filehandle==NULL) {
-    printf("Error: cannot open %s\n",fname);
+    errmsg("Error: cannot open %s\n",fname);
     return -1;
   }
   while (tab_next_statement_raw(commsyntax,filehandle,line,TABREADLINE)) {
@@ -5841,7 +5841,7 @@ offset_t backsolve_read(char *fname, array_def *vars, offset_t nvar, closure_ent
     eqname=strtok(NULL," ;");
     term=strtok(NULL," ;");
     if (vname==NULL||using==NULL||eqname==NULL||strcmp(using,"using")!=0||(term!=NULL&&term[0]!='\0')) {
-      printf("Error: malformed backsolve statement \"%s\"; expected \"backsolve <variable> using <equation> ;\"\n",line);
+      errmsg("Error: malformed backsolve statement \"%s\"; expected \"backsolve <variable> using <equation> ;\"\n",line);
       fclose(filehandle);
       return -1;
     }
@@ -5862,25 +5862,25 @@ offset_t backsolve_read(char *fname, array_def *vars, offset_t nvar, closure_ent
       }
     }
     if (j==-1) {
-      printf("Error: backsolve names variable %s but no such variable is declared\n",vname);
+      errmsg("Error: backsolve names variable %s but no such variable is declared\n",vname);
       fclose(filehandle);
       return -1;
     }
     for (i=0; i<nbacksolve; i++) {
       if (backsolves[i].varindx==j) {
-        printf("Error: variable %s is backsolved more than once\n",vars[j].cofname);
+        errmsg("Error: variable %s is backsolved more than once\n",vars[j].cofname);
         fclose(filehandle);
         return -1;
       }
       if (strcmp(backsolves[i].eqname,eqname)==0) {
-        printf("Error: equation %s is nominated by more than one backsolve statement\n",eqname);
+        errmsg("Error: equation %s is nominated by more than one backsolve statement\n",eqname);
         fclose(filehandle);
         return -1;
       }
     }
     for (l=vars[j].offset; l<vars[j].offset+vars[j].nelem; l++) {
       if (CL_EXO(l)) {
-        printf("Error: backsolved variable %s is exogenous in the closure; a backsolved variable must be endogenous (GEMPACK manual 14.1.3)\n",vars[j].cofname);
+        errmsg("Error: backsolved variable %s is exogenous in the closure; a backsolved variable must be endogenous (GEMPACK manual 14.1.3)\n",vars[j].cofname);
         fclose(filehandle);
         return -1;
       }
@@ -5901,7 +5901,7 @@ offset_t backsolve_read(char *fname, array_def *vars, offset_t nvar, closure_ent
   strcpy(commsyntax,"omit");
   filehandle=fopen(fname,"r");
   if (tab_next_statement_raw(commsyntax,filehandle,line,TABREADLINE)!=NULL) {
-    printf("Error: the TAB file contains an omit statement; omission is resolved during model preparation (ems_model(omit=)) and must not reach the solver\n");
+    errmsg("Error: the TAB file contains an omit statement; omission is resolved during model preparation (ems_model(omit=)) and must not reach the solver\n");
     fclose(filehandle);
     return -1;
   }
@@ -5909,7 +5909,7 @@ offset_t backsolve_read(char *fname, array_def *vars, offset_t nvar, closure_ent
   strcpy(commsyntax,"substitute");
   filehandle=fopen(fname,"r");
   if (tab_next_statement_raw(commsyntax,filehandle,line,TABREADLINE)!=NULL) {
-    printf("Error: the TAB file contains a substitute statement; substitution is resolved during model preparation (ems_model(backsolve=)) and must not reach the solver\n");
+    errmsg("Error: the TAB file contains a substitute statement; substitution is resolved during model preparation (ems_model(backsolve=)) and must not reach the solver\n");
     fclose(filehandle);
     return -1;
   }
@@ -5935,7 +5935,7 @@ int backsolve_validate_refs(char *fname, array_def *vars) {
   strcpy(commsyntax,"equation");
   filehandle=fopen(fname,"r");
   if (filehandle==NULL) {
-    printf("Error: cannot open %s\n",fname);
+    errmsg("Error: cannot open %s\n",fname);
     free(eqfound);
     return -1;
   }
@@ -5967,7 +5967,7 @@ int backsolve_validate_refs(char *fname, array_def *vars) {
         if (q>line&&(isalnum((int)q[-1])||q[-1]=='_')) continue;
         for (r2=q+strlen(ref); *r2!='\0'&&*r2!=')'; r2++) if (*r2=='@') break;
         if (*r2=='@') {
-          printf("Error: backsolved variable %s is referenced through a set mapping in its defining equation %s; the row-to-element recovery would not be one-to-one\n",vars[backsolves[hit].varindx].cofname,eqname);
+          errmsg("Error: backsolved variable %s is referenced through a set mapping in its defining equation %s; the row-to-element recovery would not be one-to-one\n",vars[backsolves[hit].varindx].cofname,eqname);
           fclose(filehandle);
           free(eqfound);
           MPI_Abort(PETSC_COMM_WORLD,1);
@@ -5993,17 +5993,17 @@ int backsolve_validate_refs(char *fname, array_def *vars) {
       if (k>-1) {
         if (hit==i) continue;                     /* its own defining equation */
         if (hit>=0) {
-          printf("Error: defining equation %s (backsolves %s) also references backsolved variable %s; each retained defining equation may reference only surviving variables and its own backsolved variable\n",eqname,vars[backsolves[hit].varindx].cofname,vars[backsolves[i].varindx].cofname);
+          errmsg("Error: defining equation %s (backsolves %s) also references backsolved variable %s; each retained defining equation may reference only surviving variables and its own backsolved variable\n",eqname,vars[backsolves[hit].varindx].cofname,vars[backsolves[i].varindx].cofname);
         }
         else {
-          printf("Error: equation %s references backsolved variable %s; a backsolved variable must be eliminated from every retained equation (redeploy the model so the condensation rewrites this equation)\n",eqname,vars[backsolves[i].varindx].cofname);
+          errmsg("Error: equation %s references backsolved variable %s; a backsolved variable must be eliminated from every retained equation (redeploy the model so the condensation rewrites this equation)\n",eqname,vars[backsolves[i].varindx].cofname);
         }
         fclose(filehandle);
         free(eqfound);
         return -1;
       }
       if (hit==i) {
-        printf("Error: defining equation %s does not reference its backsolved variable %s\n",eqname,vars[backsolves[i].varindx].cofname);
+        errmsg("Error: defining equation %s does not reference its backsolved variable %s\n",eqname,vars[backsolves[i].varindx].cofname);
         fclose(filehandle);
         free(eqfound);
         return -1;
@@ -6013,7 +6013,7 @@ int backsolve_validate_refs(char *fname, array_def *vars) {
   fclose(filehandle);
   for (i=0; i<nbacksolve; i++) {
     if (!eqfound[i]) {
-      printf("Error: backsolve for %s nominates equation %s but no such equation is declared\n",vars[backsolves[i].varindx].cofname,backsolves[i].eqname);
+      errmsg("Error: backsolve for %s nominates equation %s but no such equation is declared\n",vars[backsolves[i].varindx].cofname,backsolves[i].eqname);
       free(eqfound);
       return -1;
     }

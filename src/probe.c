@@ -694,6 +694,7 @@ int probe_structural(PetscInt VecSize,offset_t nvarele,offset_t ncofele,PetscInt
   else {
     fprintf(fp,"{\n");
     fprintf(fp,"  \"version\": 2,\n");
+    fprintf(fp,"  \"solver_version\": \"%s\",\n",TEEMS_SOLVER_VERSION);
     fprintf(fp,"  \"vecsize\": %ld,\n",(long)VecSize);
   }
 

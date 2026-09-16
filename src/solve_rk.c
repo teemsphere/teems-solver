@@ -781,7 +781,7 @@ bool solve_rk(PetscBool nohsl,PetscInt VecSize,PetscInt dnz,PetscInt* dnnz,Petsc
         if(q<0.5)q=0.5;
         h*=q;
         if(h<1e-8) {
-          if(rank==0)printf("Error: adaptive step size collapsed below 1e-8 without meeting epsTolerance %.3g (worst error metric %.3g); the problem may be too stiff for %s\n",epstol,metric,scheme.name);
+          if(rank==0)errmsg("Error: adaptive step size collapsed below 1e-8 without meeting epsTolerance %.3g (worst error metric %.3g); the problem may be too stiff for %s\n",epstol,metric,scheme.name);
           MPI_Abort(PETSC_COMM_WORLD,1);
         }
         if(rank==0)logmsg(1,"Step %d rejected (accuracy metric %.3g > %.3g, worst element %s[%ld]), retrying with step size %.4g\n",stepno+1,metric,epstol,rk_elem_var(vars,nvar,worst_t),(long)worst_t,h);
@@ -841,7 +841,7 @@ bool solve_rk(PetscBool nohsl,PetscInt VecSize,PetscInt dnz,PetscInt* dnnz,Petsc
                     (failcode==RK_FAIL_RANGE&&teems_range_test_updated==2)||
                     (failcode==RK_FAIL_ASSERT&&teems_assertions_mode==2));
         if(fatal) {
-          if(rank==0)printf("Error: %s and %d retries at reduced step size did not clear it; the simulation cannot continue (try more steps or a smaller shock)\n",rk_fail_name(failcode),maxretries);
+          if(rank==0)errmsg("Error: %s and %d retries at reduced step size did not clear it; the simulation cannot continue (try more steps or a smaller shock)\n",rk_fail_name(failcode),maxretries);
           MPI_Abort(PETSC_COMM_WORLD,1);
         }
         /* warn-level range/assertion violations: the retries are
@@ -1061,7 +1061,7 @@ bool solve_comp_approx(PetscBool nohsl,PetscInt VecSize,PetscInt dnz,PetscInt* d
       break;
     }
   if(deloff<0&&rank==rank_hsl) {
-    printf("Error: complementarity approximate run without a del_comp@ variable (internal)\n");
+    errmsg("Error: complementarity approximate run without a del_comp@ variable (internal)\n");
     MPI_Abort(PETSC_COMM_WORLD,1);
   }
 

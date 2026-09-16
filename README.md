@@ -212,7 +212,7 @@ ls -l hsl/
 If you encounter issues not covered here:
 
 1. Check [existing issues](https://github.com/matthewcantele/teems-solver/issues)
-2. [Open a new issue](https://github.com/matthewcantele/teems-solver/issues/new) with system information (`uname -a`, `docker --version`) and the complete error message
+2. [Open a new issue](https://github.com/matthewcantele/teems-solver/issues/new) with system information (`uname -a`, `docker --version`, the solver version from `docker run --rm teems:<tag> /opt/teems-solver/solver/teems-solver -version`) and the complete error message
 
 ## License
 
