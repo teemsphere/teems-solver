@@ -2087,7 +2087,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
         readitem = strtok(readitem,";");
         while (formula_normalize(readitem)==1);
         leadlag_encode(readitem);
-        npar=str_count_char(readitem, '(')+str_count_char(readitem, ',');/* comma slack: multi-arg intrinsics emit per-arg loads + folds (plan 3.1) */
+        npar=str_count_char(readitem,'(')+str_count_char(readitem,',')+str_count_ci(readitem,"$pos");/* comma slack: multi-arg intrinsics emit per-arg loads + folds (plan 3.1); $POS calls: one position op each, their index lists ride in {} after normalize (fuzz batch 13) */
         strcpy(sumsyntax,"sum(");
         totalsum=sum_count(readitem,sumsyntax);
         sum_def *sum_cof= (sum_def *) calloc (totalsum,sizeof(sum_def));
@@ -2565,7 +2565,7 @@ offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_el
 
     while (formula_normalize(readitem)==1);
     leadlag_encode(readitem);
-    npar=str_count_char(readitem, '(')+str_count_char(readitem, ',');/* comma slack: multi-arg intrinsics emit per-arg loads + folds (plan 3.1) */
+    npar=str_count_char(readitem,'(')+str_count_char(readitem,',')+str_count_ci(readitem,"$pos");/* comma slack: multi-arg intrinsics emit per-arg loads + folds (plan 3.1); $POS calls: one position op each, their index lists ride in {} after normalize (fuzz batch 13) */
     strcpy(sumsyntax,"sum(");
     totalsum=sum_count(readitem,sumsyntax);
     sum_def *sum_cof= (sum_def *) calloc (totalsum,sizeof(sum_def));
@@ -2862,7 +2862,7 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
 
     while (formula_normalize(readitem)==1);
     leadlag_encode(readitem);
-    npar=str_count_char(readitem, '(')+str_count_char(readitem, ',');/* comma slack: multi-arg intrinsics emit per-arg loads + folds (plan 3.1) */
+    npar=str_count_char(readitem,'(')+str_count_char(readitem,',')+str_count_ci(readitem,"$pos");/* comma slack: multi-arg intrinsics emit per-arg loads + folds (plan 3.1); $POS calls: one position op each, their index lists ride in {} after normalize (fuzz batch 13) */
     strcpy(sumsyntax,"sum(");
     totalsum=sum_count(readitem,sumsyntax);
     sum_def *sum_cof= (sum_def *) calloc (totalsum,sizeof(sum_def));
@@ -3456,7 +3456,7 @@ offset_t assertions_execute(char *fname,set_def *sets,dim_t nset,set_element *se
     npow=str_count_char(resid,'^');
     nmul=str_count_char(resid,'*')+str_count_char(resid,'/');
     nplu=str_count_char(resid,'+')+str_count_char(resid,'-');
-    npar=str_count_char(resid,'(')+str_count_char(resid,',');/* comma slack for multi-arg intrinsics (plan 3.1) */
+    npar=str_count_char(resid,'(')+str_count_char(resid,',')+str_count_ci(resid,"$pos");/* comma slack for multi-arg intrinsics (plan 3.1); $POS calls: one position op each, their index lists ride in {} after normalize (fuzz batch 13) */
     totalsum=sum_count(resid,sumsyntax);
     sum_def *sum_cof= (sum_def *) calloc (totalsum+1,sizeof(sum_def));
     sumcount=0;
