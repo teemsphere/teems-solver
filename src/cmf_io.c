@@ -729,6 +729,16 @@ static int tab_preprocess_run(char *filename, char *newtabfile) {
       while (str_replace_all(readline," ,", ","));
       while (str_replace_all(readline,"( ", "("));
       while (str_replace_all(readline," )", ")"));
+      /* the keyword/set spacing below inserts at most 14 characters
+         ("set(" and "(" once each, ten "keyword(" forms) with the
+         unbounded str_replace_* helpers: a statement within that of
+         the buffer overflowed it (fuzz batch 13) */
+      if (strlen(readline)+16>=sizeof(readline)) {
+        errmsg("Error: TAB statement too long (exceeds %d chars)\n",TABREADLINE);
+        fclose(filehandle);
+        fclose(fout);
+        return -1;
+      }
       k1=0;
       k2=0;
       while (readline[k1]!= '\0') {
@@ -861,6 +871,16 @@ static int tab_preprocess_run(char *filename, char *newtabfile) {
         sprintf(am2," #%s# ;",assertmsg);
       }
       if (strchr(readline,';')!=NULL) {
+        /* every later pass reads this file a line at a time into
+           TABREADLINE buffers: a statement whose keyword prefix pushes
+           it past that was split mid-statement and the pieces
+           re-joined past the reader's buffer (fuzz batch 13) */
+        if (strlen(commsyntax)+strlen(readline)+3>TABREADLINE) {
+          errmsg("Error: TAB statement too long (exceeds %d chars)\n",TABREADLINE);
+          fclose(filehandle);
+          fclose(fout);
+          return -1;
+        }
         if (check==1) {
           if (readline[0]==' ') fprintf(fout,"%s\n",readline+1);
           else fprintf(fout,"%s\n",readline);
@@ -1310,6 +1330,7 @@ int tab_write_variables(char *filename, char *newtabfile,array_def *vars,offset_
         if(p==NULL) break;
         line[p-line+1]='\n';
         line[p-line+2]='\0';
+        linelght=strlen(line);
         n=str_count_ci(line,vars[i].cofname);
         lvar=strlen(vars[i].cofname);
         l=0;
@@ -1319,7 +1340,17 @@ int tab_write_variables(char *filename, char *newtabfile,array_def *vars,offset_
           l=l+l1;
           /* a scalar variable closing a group, "... - pxwwld)", was not prefixed: the term was bound as a value (its column dropped) -- ')' and '}' close the follower set (2026-09-06) */
           if(strncmp(vars[i].cofname,"p_",2)!=0&&vars[i].level_par==false) if(line[l+lvar]==')'||line[l+lvar]=='}'||line[l+lvar]==' '||line[l+lvar]=='('||line[l+lvar]=='+'||line[l+lvar]=='-'||line[l+lvar]=='*'||line[l+lvar]=='/'||line[l+lvar]=='^'||line[l+lvar]==']'||line[l+lvar]==','||line[l+lvar]==';'||line[l+lvar]=='=')if(l==0||line[l-1]==' '||line[l-1]=='+'||line[l-1]=='-'||line[l-1]=='*'||line[l-1]=='/'||line[l-1]=='^'||line[l-1]=='['||line[l-1]=='('||line[l-1]==','||line[l-1]=='=') {
-                memmove(&line[l+2],&line[l],linelght-l);
+                /* each p_ prefix grows the statement by 2 and nothing
+                   bounded the growth (fuzz batch 13 stack overflow);
+                   the move carries the terminator along */
+                if(linelght+3>TABREADLINE) {
+                  errmsg("Error: equation too long after prefixing its variables (exceeds %d chars)\n",TABREADLINE);
+                  fclose(filehandle);
+                  fclose(fout);
+                  MPI_Abort(PETSC_COMM_WORLD,1);
+                  return -1;
+                }
+                memmove(&line[l+2],&line[l],linelght-l+1);
                 line[l]='p';
                 line[l+1]='_';
                 l=l+2;

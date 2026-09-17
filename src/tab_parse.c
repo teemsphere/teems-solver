@@ -5615,6 +5615,12 @@ char *closure_next_statement(char *commsyntax, FILE *filehandle, char *readline)
           p=strpbrk(line,"!");
         }
         n=strstr(line,finditem);//ha_cgefendofc
+        /* the continuation join had no bound on readline (fuzz batch 13) */
+        if (strlen(readline)+strlen(line)>=(size_t)TABREADLINE) {
+          errmsg("Error: %s statement too long (exceeds %ld chars)\n",commsyntax,(long)TABREADLINE);
+          MPI_Abort(PETSC_COMM_WORLD,1);
+          return NULL;
+        }
         if (n==NULL) {
           strcat(readline, line);
         } else {
@@ -5705,6 +5711,12 @@ static char *tab_next_statement_raw(char *commsyntax, FILE *filehandle, char *re
       }
       while (fgets(line,TABLINESIZE,filehandle)) {
         n=strstr(line,finditem);//ha_cgefendofc
+        /* the continuation join had no bound on readline (fuzz batch 13) */
+        if (strlen(readline)+strlen(line)>=(size_t)rlinesize) {
+          errmsg("Error: %s statement too long (exceeds %ld chars)\n",commsyntax,(long)rlinesize);
+          MPI_Abort(PETSC_COMM_WORLD,1);
+          return NULL;
+        }
         if (n==NULL) {
           strcat(readline, line);
         } else {
@@ -5752,6 +5764,12 @@ static char *tab_next_statement_resolved_raw(char *commsyntax, FILE *filehandle,
       }
       while (fgets(line,TABLINESIZE,filehandle)) {
         n=strstr(line,finditem);//ha_cgefendofc
+        /* the continuation join had no bound on readline (fuzz batch 13) */
+        if (strlen(readline)+strlen(line)>=(size_t)rlinesize) {
+          errmsg("Error: %s statement too long (exceeds %ld chars)\n",commsyntax,(long)rlinesize);
+          MPI_Abort(PETSC_COMM_WORLD,1);
+          return NULL;
+        }
         if (n==NULL) {
           strcat(readline, line);
         } else {
