@@ -323,6 +323,12 @@ int sum_extract(char *formula) {
       break;
     }
   }
+  if (formula[i]=='\0') { /* no matching ')': the scan ran to the end of the
+       statement and the cut below wrote one past it (fuzz batch 13 overflow
+       when the statement fills the buffer) */
+    errmsg("Error: unbalanced parentheses in sum: %s\n",formula);
+    MPI_Abort(PETSC_COMM_WORLD,1);
+  }
   formula[i+1]='\0';
   return 1;
 }
@@ -5287,7 +5293,7 @@ static dim_t set_expr_eval(char **pp, set_element *se, set_def *sets, dim_t nset
 dim_t set_expr_build(set_element *se, set_def *sets, dim_t nset, dim_t i) {
   char expr[TABREADLINE],*p,*cursor;
   char (*out)[NAMESIZE];
-  dim_t cap=sets[i].size,m,n,l;
+  dim_t cap=sets[i].size,bound=sets[i].size,m,n,l;
   int depth=0,inq=0,allplusun=1,allint=1,anyop=0,allminus_top=1,seen_top_op=0;
   char lastop=0;
   char lastterm[NAMESIZE],firstterm[NAMESIZE];
@@ -5300,6 +5306,12 @@ dim_t set_expr_build(set_element *se, set_def *sets, dim_t nset, dim_t i) {
   cursor=expr;
   m=set_expr_eval(&cursor,se,sets,nset,out,cap,i<nset?sets[i].setname:"?");
   if (*cursor!='\0') errmsg("Error: trailing characters in the definition of %s: %s\n",sets[i].setname,cursor);
+  if (m>bound) { /* the cap bump above sizes the scratch buffer so a 0-size set
+       still parses; the element array has only `bound` slots for this set, and
+       writing past them ran off the end of it (fuzz batch 13 overflow) */
+    errmsg("Error: set expression produces more elements than declared for set %s\n",sets[i].setname);
+    m=bound;
+  }
   for (n=0; n<m; n++) {
     strcpy(se[sets[i].offset+n].setele,out[n]);
     se[sets[i].offset+n].superset_pos[0]=n;

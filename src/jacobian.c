@@ -412,7 +412,7 @@ static void stmt_prog_execute(stmt_prog *st, offset_t matrow, PetscInt *eq_addr,
 /* resolve a LinVar name token (the text after the p_ prefix) to a
    declared variable: bare TEEMS convention first, then declared
    p_-/c_-leading names -- the GEMPACK hand-linearized pair idiom (GTAP-AEZ
-   p_YIELD) and c_-named linear variables (GMig2 c_shiftlf), whose
+   p_YIELD) and c_-named linear variables (e.g. c_shiftlf), whose
    references reach the scans as p_<token> via the preprocess c_->p_
    rewrite (design doc section 6). Returns -1 when nothing matches. */
 offset_t linvar_resolve(char *vname, array_def *vars, offset_t nvar) {
@@ -426,6 +426,17 @@ offset_t linvar_resolve(char *vname, array_def *vars, offset_t nvar) {
     for (l=0; l<nvar; l++) if (strcmp(vars[l].cofname,full)==0) return l;
   }
   return -1;
+}
+
+/* The p_ token's name span is cut out of a TABREADLINE statement, but the
+   eq_var_ref field that holds it is NAMESIZE: a longer span ran past the end
+   of the LinVars array (fuzz batch 13 overflow on a run-on equation). */
+static void linvar_name_set(eq_var_ref *ref, const char *vname) {
+  if (strlen(vname)>=sizeof(ref->LinVarName)) {
+    errmsg("Error: equation references a variable name longer than %d characters: %.60s...\n",(int)sizeof(ref->LinVarName)-1,vname);
+    MPI_Abort(PETSC_COMM_WORLD,1);
+  }
+  strcpy(ref->LinVarName,vname);
 }
 
 static void linvar_dim_read(char *p, char *linecopy, offset_t lvar,
@@ -878,7 +889,7 @@ static void stmt_prog_build_one(char *line, stmt_prog *stp, char *commsyntax,
         if(p!=NULL) {
           strncpy(vname,readitem,p-readitem);
           vname[p-readitem]='\0';
-          strcpy(LinVars[i3].LinVarName,vname);
+          linvar_name_set(&LinVars[i3],vname);
           {
             offset_t lr=linvar_resolve(vname,vars,nvar);
             if (lr<0) {
@@ -918,7 +929,7 @@ static void stmt_prog_build_one(char *line, stmt_prog *stp, char *commsyntax,
         }
         else {
           strcpy(vname,readitem);
-          strcpy(LinVars[i3].LinVarName,vname);
+          linvar_name_set(&LinVars[i3],vname);
           {
             offset_t lr=linvar_resolve(vname,vars,nvar);
             if (lr<0) {
@@ -2281,7 +2292,7 @@ int equation_order_read(char *fname, char *commsyntax,set_def *sets,dim_t nset,s
         if(p!=NULL) {
           strncpy(vname,readitem,p-readitem);
           vname[p-readitem]='\0';
-          strcpy(LinVars[i3].LinVarName,vname);
+          linvar_name_set(&LinVars[i3],vname);
           {
             offset_t lr=linvar_resolve(vname,vars,nvar);
             if (lr<0) {
@@ -2321,7 +2332,7 @@ int equation_order_read(char *fname, char *commsyntax,set_def *sets,dim_t nset,s
         }
         else {
           strcpy(vname,readitem);
-          strcpy(LinVars[i3].LinVarName,vname);
+          linvar_name_set(&LinVars[i3],vname);
           {
             offset_t lr=linvar_resolve(vname,vars,nvar);
             if (lr<0) {
@@ -2633,7 +2644,7 @@ int equation_order_read_nested(char *fname, char *commsyntax,set_def *sets,dim_t
         if(p!=NULL) {
           strncpy(vname,readitem,p-readitem);
           vname[p-readitem]='\0';
-          strcpy(LinVars[i3].LinVarName,vname);
+          linvar_name_set(&LinVars[i3],vname);
           {
             offset_t lr=linvar_resolve(vname,vars,nvar);
             if (lr<0) {
@@ -2673,7 +2684,7 @@ int equation_order_read_nested(char *fname, char *commsyntax,set_def *sets,dim_t
         }
         else {
           strcpy(vname,readitem);
-          strcpy(LinVars[i3].LinVarName,vname);
+          linvar_name_set(&LinVars[i3],vname);
           {
             offset_t lr=linvar_resolve(vname,vars,nvar);
             if (lr<0) {
@@ -2954,7 +2965,7 @@ int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,
         if(p!=NULL) {
           strncpy(vname,readitem,p-readitem);
           vname[p-readitem]='\0';
-          strcpy(LinVars[i3].LinVarName,vname);
+          linvar_name_set(&LinVars[i3],vname);
           {
             offset_t lr=linvar_resolve(vname,vars,nvar);
             if (lr<0) {
@@ -2994,7 +3005,7 @@ int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,
         }
         else {
           strcpy(vname,readitem);
-          strcpy(LinVars[i3].LinVarName,vname);
+          linvar_name_set(&LinVars[i3],vname);
           {
             offset_t lr=linvar_resolve(vname,vars,nvar);
             if (lr<0) {
