@@ -35,10 +35,11 @@
    deferred (SQRT/EXP/LOGE/LOG10 are the only legal ones, zero corpus
    uses).
 
-   Levels variable names starting p_/c_ (GMig2 P_L; design doc
-   section 7, C1a): the pair coefficient cannot share the declared
-   name -- a bare value token would be indistinguishable from the
-   p_-prefixed column text the equation scanners key on -- so it gets
+   Levels variable names starting p_/c_ (a p_-leading levels variable,
+   e.g. P_L; design doc section 7, C1a): the pair coefficient cannot
+   share the declared name -- a bare value token would be
+   indistinguishable from the p_-prefixed column text the equation
+   scanners key on -- so it gets
    a generated name gen_lvN (no p_/c_ substring) and every bare
    value-reference token of the declared name is rewritten to gen_lvN
    across the statement stream (whole-token match, double-quoted
@@ -688,7 +689,7 @@ static int lv_scan(lv_ctx *c, char *fname, bool *any) {
                value references on equation/update lines into p_<tail>
                BEFORE this pass, indistinguishable from a change-
                reference column of the same variable (zero corpus
-               uses; GMig2's c_* class is linear, section 6). */
+               uses; a declared c_* class is linear, section 6). */
             if (l >= 2 && c->lv[c->nlv].name[0] == 'c' && c->lv[c->nlv].name[1] == '_') {
               errmsg("Error: levels variable %s: c_-leading names are indistinguishable from change-reference columns after the c_->p_ rewrite; rename the variable\n", c->lv[c->nlv].name);
               fclose(f);
