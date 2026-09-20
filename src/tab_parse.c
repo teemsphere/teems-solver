@@ -5037,7 +5037,7 @@ static void set_register_subset(set_element *se, set_def *sets, dim_t sub, dim_t
 }
 
 static dim_t set_expr_eval(char **pp, set_element *se, set_def *sets, dim_t nset,
-                           char (*out)[NAMESIZE], dim_t cap, const char *owner);
+                           char (*out)[NAMESIZE], dim_t cap, const char *owner, int depth);
 
 /* set name of the most recent named term (set_expr_term), "" for a
    quoted element or a parenthesized subexpression: the product naming
@@ -5061,11 +5061,16 @@ void set_expr_mark_product(char *buf) {
    operands contribute their (possibly bounded) size, a quoted element
    one; '+'/'^' add, '-'/'&' keep the left bound, '*' multiplies. An
    undeclared set name is reported and *err set. */
-dim_t set_expr_bound(char **pp, set_def *record, dim_t nset, const char *owner, int *err) {
+static dim_t set_expr_bound_depth(char **pp, set_def *record, dim_t nset, const char *owner, int *err, int depth) {
   char *p=*pp;
   dim_t acc=0,rhs,mx=0;
   char op=0;
   int first=1;
+  if (depth>SETEXPRMAXDEPTH) {
+    errmsg("Error: set expression in the definition of %s nests more than %d levels of parentheses\n",owner,SETEXPRMAXDEPTH);
+    *err=1;
+    return 0;
+  }
   while (*p!='\0'&&*p!=';'&&*p!=')') {
     if (!first) {
       op=*p;
@@ -5078,7 +5083,7 @@ dim_t set_expr_bound(char **pp, set_def *record, dim_t nset, const char *owner, 
     }
     if (*p=='(') {
       p++;
-      rhs=set_expr_bound(&p,record,nset,owner,err);
+      rhs=set_expr_bound_depth(&p,record,nset,owner,err,depth+1);
       if (*err) return 0;
       if (*p==')') p++;
     } else if (*p=='"') {
@@ -5112,6 +5117,10 @@ dim_t set_expr_bound(char **pp, set_def *record, dim_t nset, const char *owner, 
      (set_expr_term), so it must cover the largest operand as well as
      the result ("ele" & BIG has one element but reads all of BIG) */
   return acc>mx?acc:mx;
+}
+
+dim_t set_expr_bound(char **pp, set_def *record, dim_t nset, const char *owner, int *err) {
+  return set_expr_bound_depth(pp,record,nset,owner,err,0);
 }
 
 /* Element names of SET3 = SET1 x SET2 (manual 11.7.11): xx_yyy with the
@@ -5169,14 +5178,14 @@ static int set_product_names(char (*a)[NAMESIZE], dim_t n1, const char *nm1,
 
 /* one term into out; returns element count */
 static dim_t set_expr_term(char **pp, set_element *se, set_def *sets, dim_t nset,
-                           char (*out)[NAMESIZE], dim_t cap, const char *owner) {
+                           char (*out)[NAMESIZE], dim_t cap, const char *owner, int depth) {
   char *p=*pp;
   dim_t n=0,l,k;
   set_expr_termname[0]='\0';
   if (*p=='(') {
     p++;
     *pp=p;
-    n=set_expr_eval(pp,se,sets,nset,out,cap,owner);
+    n=set_expr_eval(pp,se,sets,nset,out,cap,owner,depth+1);
     if (**pp==')') (*pp)++;
     else errmsg("Error: unbalanced '(' in the definition of %s\n",owner);
     return n;
@@ -5211,18 +5220,25 @@ static dim_t set_expr_term(char **pp, set_element *se, set_def *sets, dim_t nset
 }
 
 static dim_t set_expr_eval(char **pp, set_element *se, set_def *sets, dim_t nset,
-                           char (*out)[NAMESIZE], dim_t cap, const char *owner) {
+                           char (*out)[NAMESIZE], dim_t cap, const char *owner, int depth) {
   dim_t n,m,a,b,w;
   char op;
   char (*tmp)[NAMESIZE];
   char accname[NAMESIZE],rhsname[NAMESIZE];
-  n=set_expr_term(pp,se,sets,nset,out,cap,owner);
+  /* set_expr_bound rejects over-deep nesting before the build runs, but
+     this descent is capped on its own account: a run of '(' would
+     otherwise exhaust the stack here too (fuzz batch 13) */
+  if (depth>SETEXPRMAXDEPTH) {
+    errmsg("Error: set expression in the definition of %s nests more than %d levels of parentheses\n",owner,SETEXPRMAXDEPTH);
+    return 0;
+  }
+  n=set_expr_term(pp,se,sets,nset,out,cap,owner,depth);
   strcpy(accname,set_expr_termname);
   while (**pp=='+'||**pp=='-'||**pp=='^'||**pp=='&'||**pp=='*') {
     op=**pp;
     (*pp)++;
     tmp=malloc((size_t)cap*NAMESIZE);
-    m=set_expr_term(pp,se,sets,nset,tmp,cap,owner);
+    m=set_expr_term(pp,se,sets,nset,tmp,cap,owner,depth);
     strcpy(rhsname,set_expr_termname);
     if (op=='*') {
       /* set product (manual 10.1.6/11.7.11): first factor fastest */
@@ -5304,7 +5320,7 @@ dim_t set_expr_build(set_element *se, set_def *sets, dim_t nset, dim_t i) {
   if (cap<1) cap=1;
   out=malloc((size_t)cap*NAMESIZE);
   cursor=expr;
-  m=set_expr_eval(&cursor,se,sets,nset,out,cap,i<nset?sets[i].setname:"?");
+  m=set_expr_eval(&cursor,se,sets,nset,out,cap,i<nset?sets[i].setname:"?",0);
   if (*cursor!='\0') errmsg("Error: trailing characters in the definition of %s: %s\n",sets[i].setname,cursor);
   if (m>bound) { /* the cap bump above sizes the scratch buffer so a 0-size set
        still parses; the element array has only `bound` slots for this set, and
@@ -6105,7 +6121,7 @@ void str_delete_char(char *s, char c) {
 char *str_replace_all(char *line, char *finditem, char *replitem) {
   char buffer[DATREADLINE];
   char *p;
-  size_t count2 = 0,index; /* was unsigned short: an offset past 65535 in a TABREADLINE (150000) line wrapped and re-inserted the pattern forever */
+  size_t count2 = 0,index; /* was unsigned short: an offset past 65535 in a DATREADLINE (150000) line wrapped and re-inserted the pattern forever */
   if (line==NULL) return NULL;
   while (finditem[count2] != '\0') {
     count2++;
@@ -6144,6 +6160,30 @@ int str_subst_all_bounded(char *line, const char *finditem, const char *replitem
     start = p + rlen; /* resume past the replacement so a replitem containing
                          finditem cannot re-match and loop forever */
   }
+  return 0;
+}
+
+/* Replace the first occurrence of finditem with replitem in `line`
+   (buffer capacity `linesz`), in place, and report rather than
+   overflow when the result would not fit. `str_replace_all` -- which
+   despite its name replaces one occurrence -- builds the result in a
+   DATREADLINE buffer and writes it back with an unbounded strcpy, so
+   it overruns a TABREADLINE caller whenever replitem is longer than
+   finditem and the statement is near capacity (fuzz batch 13, the
+   tab_preprocess element substitution at cmf_io.c). Note
+   str_replace_first_bounded bounds only its own buffer and has the
+   same unbounded write-back, so it is not a substitute. Match is
+   case-sensitive, like str_replace_all. Returns 0 on success or when
+   finditem is absent, -1 if the result would not fit. */
+int str_subst_first_bounded(char *line, const char *finditem, const char *replitem, size_t linesz) {
+  size_t flen = strlen(finditem), rlen = strlen(replitem), taillen;
+  char *p;
+  if (flen == 0) return 0;
+  if ((p = strstr(line, finditem)) == NULL) return 0;
+  taillen = strlen(p + flen);
+  if (strlen(line) - flen + rlen + 1 > linesz) return -1;
+  memmove(p + rlen, p + flen, taillen + 1);
+  memcpy(p, replitem, rlen);
   return 0;
 }
 

@@ -1065,7 +1065,14 @@ static int tab_preprocess_run(char *filename, char *newtabfile) {
             errmsg("Error: TAB statement too complex in tab_preprocess: %s\n",line);
             return -1;
           }
-          str_replace_all(line,indx1,indx);
+          /* the index name replacing the quoted element can be longer
+             than it (a short element with a multi-digit index), so this
+             substitution grows the statement: bounded, or a near-full
+             statement overruns `line` (fuzz batch 13) */
+          if (str_subst_first_bounded(line,indx1,indx,sizeof(line))) {
+            errmsg("Error: TAB statement too complex in tab_preprocess: %s\n",line);
+            return -1;
+          }
           readitem1=strtok(line," ");
           if (readitem1==NULL||
               cmf_strcpy_bounded(line2,readitem1,sizeof(line2)) ||

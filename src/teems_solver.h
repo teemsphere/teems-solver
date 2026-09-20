@@ -27,6 +27,11 @@
 #define NOPERTINSUM 5
 #define MAXVARDIM 10 //maximum variable dimension
 #define MAXSUPSET 12 //original
+#define SETEXPRMAXDEPTH 32 /* parenthesis nesting limit for a set expression:
+                              set_expr_bound and set_expr_eval/set_expr_term
+                              are recursive descents, and without a cap a run
+                              of '(' exhausts the stack (fuzz batch 13). Real
+                              set expressions nest a handful of levels. */
 #define SORD 1 /* 1 = double solve precision; to switch to single change
                   solve_real/store_real and FSORD in hsl_kernels.f90 */
 #define MAXSSIZE 187500000//1500000000/8
@@ -565,6 +570,7 @@ offset_t backsolve_read(char *fname, array_def *vars, offset_t nvar, closure_ent
 int backsolve_validate_refs(char *fname, array_def *vars);
 int tab_equation_name(char *stmt, char *eqname);
 int str_subst_all_bounded(char *line, const char *finditem, const char *replitem, size_t linesz);
+int str_subst_first_bounded(char *line, const char *finditem, const char *replitem, size_t linesz); /* bounded first-occurrence replace; -1 if the result would not fit */
 void str_delete_char(char *s, char c); /* remove every occurrence of c in place, one pass */ /* forward-scanning replace-all within a buffer of linesz; -1 if the result would not fit */
 
 /* one (all,index,SET) quantifier with its current position */
