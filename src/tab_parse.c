@@ -5003,7 +5003,7 @@ dim_t set_union_named(set_element *set_elems, set_def *sets,dim_t nset,dim_t i) 
   return m;
 }
 dim_t set_union_op(set_element *set_elems, set_def *sets,dim_t nset,dim_t i) {
-  dim_t j,l,n,m,dim1=0,dim2=0,sup1=MAXSUPSET,sup2=MAXSUPSET;
+  dim_t j,j1,l,n,m,dim1=0,dim2=0,sup1=MAXSUPSET,sup2=MAXSUPSET;
   char line[TABREADLINE],*readitem;
   dim_t bound=sets[i].size; /* parse-time upper bound = allocated element slots */
   strcpy(line,sets[i].readele);
@@ -5045,6 +5045,14 @@ dim_t set_union_op(set_element *set_elems, set_def *sets,dim_t nset,dim_t i) {
   if(sup2>=MAXSUPSET){errmsg("Error: superset size exceeded; increase MAXSUPSET in teems_solver.h\n");MPI_Abort(PETSC_COMM_WORLD,1);return 0;}
   if (dim2>0&&j==i) {errmsg("Error: set %s references itself in a set expression\n",sets[i].setname);MPI_Abort(PETSC_COMM_WORLD,1);return 0;}
   for (n=0; n<dim2; n++) {
+    /* '+' is the disjoint union (manual 10.1.1.1): an element in both
+       operands is an error, as it is on the expression route; UNION
+       (set_union_named) is the form for overlapping sets */
+    for (j1=0; j1<dim1; j1++) if (strcmp(set_elems[sets[l].offset+j1].setele,set_elems[sets[j].offset+n].setele)==0) {
+        errmsg("Error: '+' operands in the definition of %s are not disjoint (element %s); use UNION for overlapping sets\n",sets[i].setname,set_elems[sets[j].offset+n].setele);
+        MPI_Abort(PETSC_COMM_WORLD,1);
+        return 0;
+      }
     if (m>=bound) {errmsg("Error: set expression produces more elements than declared for set %s\n",sets[i].setname);MPI_Abort(PETSC_COMM_WORLD,1);return 0;}
     if(sets[i].offset+m!=sets[j].offset+n)strcpy(set_elems[sets[i].offset+m].setele,set_elems[sets[j].offset+n].setele);
     set_elems[sets[i].offset+m].superset_pos[0]=m;
@@ -5083,6 +5091,17 @@ dim_t set_difference(set_element *set_elems, set_def *sets,dim_t nset,dim_t i) {
     }
   }
   if (dim2>0&&j==i) {errmsg("Error: set %s references itself in a set expression\n",sets[i].setname);MPI_Abort(PETSC_COMM_WORLD,1);return 0;}
+  /* '-' removes elements that are present (manual 10.1.1.1), as on the
+     expression route: the parse-time size is size(A)-size(B), so an
+     element of B outside A would otherwise surface as an overflow */
+  for (v=0; v<dim2; v++) {
+    for (n=0; n<dim1; n++) if (strcmp(set_elems[sets[l].offset+n].setele,set_elems[sets[j].offset+v].setele)==0) break;
+    if (n==dim1) {
+      errmsg("Error: '-' in the definition of %s removes element %s, which is not present\n",sets[i].setname,set_elems[sets[j].offset+v].setele);
+      MPI_Abort(PETSC_COMM_WORLD,1);
+      return 0;
+    }
+  }
   m=0;
   for (n=0; n<dim1; n++) {
     indi=0;
