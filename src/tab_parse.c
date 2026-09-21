@@ -488,6 +488,74 @@ int eq_zero_linvar(char *formulain,int linindx) {
   return 1;
 }
 
+/* strtod with the checks atof does not make: the token must convert
+   whole (trailing blanks aside) and the result must be finite. Every
+   data value and shock went through bare atof, so "abc" silently became
+   0, "nan" became NaN and "1e999" became inf -- the first two reached
+   the factorization as an HSL error naming neither the file nor the
+   value, and inf reached the SOLUTION with no message at all (fuzz
+   batch 13 shock/data probes). `what` names the kind of value and
+   `name` the variable/header it belongs to, so the abort points at the
+   input rather than at the linear algebra. */
+double teems_value_checked(const char *tok, const char *what, const char *name) {
+  const char *q=tok;
+  char *end;
+  double v;
+  size_t len,k;
+  int erange,nonfinite=0;
+  if (tok==NULL) {
+    errmsg("Error: %s for %s is missing\n",what,name);
+    MPI_Abort(PETSC_COMM_WORLD,1);
+    return 0.0;
+  }
+  while (*q==' '||*q=='\t') q++;
+  if (*q=='\0') {
+    errmsg("Error: %s for %s is empty\n",what,name);
+    MPI_Abort(PETSC_COMM_WORLD,1);
+    return 0.0;
+  }
+  errno=0;
+  v=strtod(q,&end);
+  erange=(errno==ERANGE);
+  if (end==q) {
+    errmsg("Error: %s for %s is not a number: %s\n",what,name,tok);
+    MPI_Abort(PETSC_COMM_WORLD,1);
+    return 0.0;
+  }
+  /* the shock reader hands this the tail of its statement, so the value
+     may be followed by blanks and the statement terminator */
+  while (*end==' '||*end=='\t'||*end=='\n'||*end=='\r') end++;
+  if (*end==';') end++;
+  while (*end==' '||*end=='\t'||*end=='\n'||*end=='\r') end++;
+  if (*end!='\0') {
+    errmsg("Error: %s for %s is not a number: %s\n",what,name,tok);
+    MPI_Abort(PETSC_COMM_WORLD,1);
+    return 0.0;
+  }
+  if (erange) {
+    errmsg("Error: %s for %s is out of range: %s\n",what,name,tok);
+    MPI_Abort(PETSC_COMM_WORLD,1);
+    return 0.0;
+  }
+  /* The build is -Ofast, which implies -ffast-math, so isfinite() and
+     v!=v fold to "false": the compiler is told NaN/Inf cannot occur.
+     Detect them from the token instead. strtod yields a non-finite
+     result only from these spellings or from an out-of-range exponent,
+     and the latter set ERANGE above. Indexing stops at len-2 so the
+     scan never reads past the terminator. */
+  len=strlen(q);
+  for (k=0; len>=3&&k+2<len; k++) {
+    if ((q[k]=='n'||q[k]=='N')&&(q[k+1]=='a'||q[k+1]=='A')&&(q[k+2]=='n'||q[k+2]=='N')) { nonfinite=1; break; }
+    if ((q[k]=='i'||q[k]=='I')&&(q[k+1]=='n'||q[k+1]=='N')&&(q[k+2]=='f'||q[k+2]=='F')) { nonfinite=1; break; }
+  }
+  if (nonfinite) {
+    errmsg("Error: %s for %s is not a finite number: %s\n",what,name,tok);
+    MPI_Abort(PETSC_COMM_WORLD,1);
+    return 0.0;
+  }
+  return v;
+}
+
 offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char *commsyntax,set_def *sets,dim_t nset, set_element *set_elems,array_def *coefs,offset_t ncof, elem_store *coef_store,offset_t ncofele,array_def *vars,offset_t nvar, elem_store *var_store,offset_t nvarele) {
   FILE * filehandle, * filehandle1;
   char line[DATREADLINE]="\0",linecopy[DATREADLINE],line1[TABREADLINE],*p,*p1;//,line1[DATREADLINE]
@@ -619,7 +687,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
                     n=str_count_char(line,',');
                     if (n==0) {
                       readitem = strtok(line,"\n");
-                      val=atof(readitem);//sscanf(readitem, "%lf", &val);
+                      val=teems_value_checked(readitem,"data value",vars[i].cofname);
                       l1=recount;
                       if(vars[i].size>1) {
                         for (n1=vars[i].size-1; n1>1; n1--) {
@@ -649,7 +717,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
                         } else {
                           readitem = strtok(NULL,",");
                         }
-                        val=atof(readitem);//sscanf(readitem, "%lf", &val);
+                        val=teems_value_checked(readitem,"data value",vars[i].cofname);
                         l1=recount;
                         if(vars[i].size>1) {
                           for (n1=vars[i].size-1; n1>1; n1--) {
@@ -671,7 +739,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
                         recount++;
                       }
                       readitem = strtok(NULL,"\n");
-                      val=atof(readitem);//sscanf(readitem, "%lf", &val);
+                      val=teems_value_checked(readitem,"data value",vars[i].cofname);
                       l1=recount;
                       if(vars[i].size>1) {
                         for (n1=vars[i].size-1; n1>1; n1--) {
@@ -773,7 +841,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
                     n=str_count_char(line,',');
                     if (n==0) {
                       readitem = strtok(line,"\n");
-                      val=atof(readitem);//sscanf(readitem, "%lf", &val);
+                      val=teems_value_checked(readitem,"data value",coefs[i].cofname);
                       l1=recount;
                       if(coefs[i].size>1) {
                         for (n1=coefs[i].size-1; n1>1; n1--) {
@@ -803,7 +871,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
                         } else {
                           readitem = strtok(NULL,",");
                         }
-                        val=atof(readitem);//sscanf(readitem, "%lf", &val);
+                        val=teems_value_checked(readitem,"data value",coefs[i].cofname);
                         l1=recount;
                         if(coefs[i].size>1) {
                           for (n1=coefs[i].size-1; n1>1; n1--) {
@@ -825,7 +893,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
                         recount++;
                       }
                       readitem = strtok(NULL,"\n");
-                      val=atof(readitem);//sscanf(readitem, "%lf", &val);
+                      val=teems_value_checked(readitem,"data value",coefs[i].cofname);
                       l1=recount;
                       if(coefs[i].size>1) {
                         for (n1=coefs[i].size-1; n1>1; n1--) {
@@ -998,7 +1066,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
                     n=str_count_char(line,',');
                     if (n==0) {
                       readitem = strtok(line,"\n");
-                      val=atof(readitem);//sscanf(readitem, "%lf", &val);
+                      val=teems_value_checked(readitem,"data value",coefs[i].cofname);
                       l1=recount;
                       if (coefs[i].size>1) {
                         for (n1=coefs[i].size-1; n1>1; n1--) {
@@ -1028,7 +1096,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
                         } else {
                           readitem = strtok(NULL,",");
                         }
-                        val=atof(readitem);//sscanf(readitem, "%lf", &val);
+                        val=teems_value_checked(readitem,"data value",coefs[i].cofname);
                         l1=recount;
                         if (coefs[i].size>1) {
                           for (n1=coefs[i].size-1; n1>1; n1--) {
@@ -1050,7 +1118,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
                         recount++;
                       }
                       readitem = strtok(NULL,"\n");
-                      val=atof(readitem);//sscanf(readitem, "%lf", &val);
+                      val=teems_value_checked(readitem,"data value",coefs[i].cofname);
                       l1=recount;
                       if (coefs[i].size>1) {
                         for (n1=coefs[i].size-1; n1>1; n1--) {
@@ -1172,7 +1240,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
                     n=str_count_char(line,',');
                     if (n==0) {
                       readitem = strtok(line,"\n");
-                      val=atof(readitem);//sscanf(readitem, "%lf", &val);
+                      val=teems_value_checked(readitem,"data value",vars[i].cofname);
                       l1=recount;
                       if (vars[i].size>1) {
                         for (n1=vars[i].size-1; n1>1; n1--) {
@@ -1202,7 +1270,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
                         } else {
                           readitem = strtok(NULL,",");
                         }
-                        val=atof(readitem);//sscanf(readitem, "%lf", &val);
+                        val=teems_value_checked(readitem,"data value",vars[i].cofname);
                         l1=recount;
                         if (vars[i].size>1) {
                           for (n1=vars[i].size-1; n1>1; n1--) {
@@ -1224,7 +1292,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
                         recount++;
                       }
                       readitem = strtok(NULL,"\n");
-                      val=atof(readitem);//sscanf(readitem, "%lf", &val);
+                      val=teems_value_checked(readitem,"data value",vars[i].cofname);
                       l1=recount;
                       if (vars[i].size>1) {
                         for (n1=vars[i].size-1; n1>1; n1--) {
@@ -2930,9 +2998,9 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
           }
           k1=str_rfind_ci(readitem,"uniform");
           if(k1!=-1){
-            CL_SHOCK(vars[j].offset)=atof(readitem+k1+1)/subints;
+            CL_SHOCK(vars[j].offset)=teems_value_checked(readitem+k1+1,"shock value",vars[j].cofname)/subints;
           }else{
-            CL_SHOCK(vars[j].offset)=atof(readitem)/subints;
+            CL_SHOCK(vars[j].offset)=teems_value_checked(readitem,"shock value",vars[j].cofname)/subints;
           }
           l=l+1;
           break;
@@ -3044,7 +3112,7 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
           }
           k1=str_rfind_ci(linecopy,"uniform");
           if(k1>-1) {
-            val=atof(linecopy+k1+1);//sscanf(readitem, "%lf", &val);
+            val=teems_value_checked(linecopy+k1+1,"shock value",vars[j].cofname);
             for (n1=0; n1<dims; n1++) {
               l2=n1;
               if(vars[j].size>1) {
@@ -3085,7 +3153,7 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
                 MPI_Abort(PETSC_COMM_WORLD,1);
                 return -1;
               }
-              val=atof(readitem);
+              val=teems_value_checked(readitem,"shock value",vars[j].cofname);
               l2=n1;
               if(vars[j].size>1) {
                 for (dcount=vars[j].size-1; dcount>=0; dcount--) {

@@ -1531,6 +1531,15 @@ int main(int argc,char **args) {
     MPI_Bcast(&nsetspace,sizeof(offset_t), MPI_BYTE,0, PETSC_COMM_WORLD);
   }
   set_element *set_elems= (set_element *) calloc (nsetspace,sizeof(set_element));
+  /* set sizes come from the data-file headers (sets_read), so a header
+     declaring an absurd count makes nsetspace absurd and this calloc
+     fail -- the loop below then wrote through NULL (fuzz batch 13
+     data-file probe: a count of 2147483647 segfaulted). Only size<0 was
+     checked above. */
+  if (nsetspace>0&&set_elems==NULL) {
+    errmsg("Error: cannot allocate %ld set elements; check the element counts the data-file headers declare\n",(long)nsetspace);
+    MPI_Abort(PETSC_COMM_WORLD,1);
+  }
   teems_sets=sets;
   teems_nset=nset;
   teems_set_elems=set_elems;
@@ -1545,7 +1554,22 @@ int main(int argc,char **args) {
       }
       if (nlength>0) {
         datafile_read_header_info(vname,iodata[sets[i].fileid].filname,&vsize,longname,&dim1);
+        /* dim1 is the element count the DATA FILE declares; set_elems has
+           only sets[i].size slots at this set's offset (allocated above
+           from the TAB's declared sizes), so a larger count wrote past
+           the array -- a header count of 9999 against a 3-element set
+           segfaulted (fuzz batch 13 data-file probe). The TAB's size is
+           authoritative, as the element-list path below assumes. */
+        if (dim1<0||dim1>sets[i].size) {
+          errmsg("Error: header \"%s\" in %s supplies %ld elements but set %s is declared with %ld in the TAB file\n",
+                 vname,iodata[sets[i].fileid].filname,(long)dim1,sets[i].setname,(long)sets[i].size);
+          MPI_Abort(PETSC_COMM_WORLD,1);
+        }
         datafile_labels *matvar1= (datafile_labels *) calloc (dim1,sizeof(datafile_labels));
+        if (dim1>0&&matvar1==NULL) {
+          errmsg("Error: out of memory reading the elements of set %s\n",sets[i].setname);
+          MPI_Abort(PETSC_COMM_WORLD,1);
+        }
         datafile_read_labels(vname,iodata[sets[i].fileid].filname,dim1,matvar1);
         for (j=0; j<dim1; j++) {
           nj=0;

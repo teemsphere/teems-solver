@@ -570,7 +570,8 @@ offset_t backsolve_read(char *fname, array_def *vars, offset_t nvar, closure_ent
 int backsolve_validate_refs(char *fname, array_def *vars);
 int tab_equation_name(char *stmt, char *eqname);
 int str_subst_all_bounded(char *line, const char *finditem, const char *replitem, size_t linesz);
-int str_subst_first_bounded(char *line, const char *finditem, const char *replitem, size_t linesz); /* bounded first-occurrence replace; -1 if the result would not fit */
+int str_subst_first_bounded(char *line, const char *finditem, const char *replitem, size_t linesz);
+double teems_value_checked(const char *tok, const char *what, const char *name); /* strtod + whole-token and finiteness checks; named abort on failure */ /* bounded first-occurrence replace; -1 if the result would not fit */
 void str_delete_char(char *s, char c); /* remove every occurrence of c in place, one pass */ /* forward-scanning replace-all within a buffer of linesz; -1 if the result would not fit */
 
 /* one (all,index,SET) quantifier with its current position */
