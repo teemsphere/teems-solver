@@ -1858,6 +1858,25 @@ static void mapping_assign_formula(dim_t mm, char *vname, char *rhs, int byele, 
   }
 }
 
+/* The statement's top-level '=' , or a named abort. str_rfind_toplevel
+   returns NULL when no '=' has balanced parentheses to its right: a
+   statement with no '=' at all, or -- the case that reached users --
+   an unclosed '(' in the right-hand side, as in
+   `Formula (all,r,REG) Z(r) = sum(c,COMM, 1.0;`. All three callers
+   below dereferenced the result unchecked, so such a statement faulted
+   inside formulas_execute instead of being reported (fuzz batch 13; the
+   sum_extract guard does not cover this path). teems-R's
+   .chk_tab_parens rejects it before the solver runs, so this names it
+   for the standalone solver. */
+static char *formula_toplevel_eq(char *line, const char *commsyntax) {
+  char *p=str_rfind_toplevel(line,'=');
+  if (p==NULL) {
+    errmsg("Error: %s statement has no top-level '=' (a missing '=' or unbalanced parentheses): %s\n",commsyntax,line);
+    MPI_Abort(PETSC_COMM_WORLD,1);
+  }
+  return p;
+}
+
 offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset, set_element *set_elems, array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar, elem_value *elem_vals,offset_t ncofvar,offset_t ncofele,bool IsIni) {
   FILE * filehandle;
   char line[TABREADLINE],line1[TABREADLINE],line2[TABREADLINE],linecopy[TABREADLINE],condvar[MAXVARDIM][NAMESIZE];
@@ -1946,7 +1965,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
         nplu=nplu+nmin;
 
         strcpy(line,linecopy);
-        readitem =str_rfind_toplevel(line,'=');//readitem =strrchr(line,'=');
+        readitem =formula_toplevel_eq(line,commsyntax);
         line[readitem-line]='\0';
         fdim=str_count_char(line, '(');
         /* unquantified mapping assignment MAP("dom") = "cod" | <pos>
@@ -1965,7 +1984,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
                sequence, whose final state is already in the table */
             if (!teems_maps[mm].used) {
               strcpy(line,linecopy);
-              rhs=str_rfind_toplevel(line,'=');
+              rhs=formula_toplevel_eq(line,commsyntax);
               *rhs='\0';
               rhs++;
               mapping_assign_literal(mm,line,rhs,sets,set_elems,byele);
@@ -2082,7 +2101,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
         }
         strcpy(vname,readitem);
         strcpy(line,linecopy);
-        readitem =str_rfind_toplevel(line,'=');
+        readitem =formula_toplevel_eq(line,commsyntax);
         readitem++;
         readitem = strtok(readitem,";");
         while (formula_normalize(readitem)==1);
