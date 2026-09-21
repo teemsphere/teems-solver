@@ -1772,6 +1772,19 @@ int main(int argc,char **args) {
   elem_value *elem_vals= (elem_value *) calloc ((ncofele+nvarele),sizeof(elem_value));
   elem_store *coef_store= (elem_store *) calloc (ncofele,sizeof(elem_store));
   elem_store *var_store= (elem_store *) calloc (nvarele,sizeof(elem_store));
+  /* element counts are products of the set sizes, and set sizes come from
+     the data-file headers, so an oversized header count makes these
+     allocations fail; coef_resolve_sets and data_read_files then wrote
+     through NULL (fuzz batch 14 data-file driver: a REG count of 99999
+     segfaulted in data_read_files). */
+  if ((ncofele+nvarele)>0&&elem_vals==NULL) {
+    errmsg("Error: cannot allocate %ld coefficient and variable elements; check the element counts the data-file headers declare\n",(long)(ncofele+nvarele));
+    MPI_Abort(PETSC_COMM_WORLD,1);
+  }
+  if ((ncofele>0&&coef_store==NULL)||(nvarele>0&&var_store==NULL)) {
+    errmsg("Error: cannot allocate the coefficient (%ld) and variable (%ld) value stores; check the element counts the data-file headers declare\n",(long)ncofele,(long)nvarele);
+    MPI_Abort(PETSC_COMM_WORLD,1);
+  }
   logmsg(2,"rankasd %d nvar %ld\n",rank,nvar);
   if(rank==0) {
     coef_resolve_sets(coefs,ncof,sets,nset,coef_store);
