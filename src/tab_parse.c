@@ -650,6 +650,16 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
               antidim[n1]=antidim[n1-1]*sets[vars[i].setid[n1-1]].size;
             }
           }
+          /* antidim divides the running offset at every value read; a
+             zero entry means the array is declared over a set with no
+             elements, and 36 division sites then took SIGFPE (fuzz
+             batch 14 data-file driver). Checked once here, where it is
+             built, rather than at each division. */
+          if (vars[i].size>1) for (n1=0; n1<vars[i].size; n1++) if (antidim[n1]<=0) {
+            errmsg("Error: %s is declared over a set with no elements; its values cannot be read from %s\n",vars[i].cofname,fname);
+            MPI_Abort(PETSC_COMM_WORLD,1);
+            return -1;
+          }
           strcpy(vname,readitem);
           n1=0;
           while (vname[n1]!='\0'){
@@ -803,6 +813,16 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
             for (n1=3; n1<coefs[i].size; n1++) {
               antidim[n1]=antidim[n1-1]*sets[coefs[i].setid[n1-1]].size;
             }
+          }
+          /* antidim divides the running offset at every value read; a
+             zero entry means the array is declared over a set with no
+             elements, and 36 division sites then took SIGFPE (fuzz
+             batch 14 data-file driver). Checked once here, where it is
+             built, rather than at each division. */
+          if (coefs[i].size>1) for (n1=0; n1<coefs[i].size; n1++) if (antidim[n1]<=0) {
+            errmsg("Error: %s is declared over a set with no elements; its values cannot be read from %s\n",coefs[i].cofname,fname);
+            MPI_Abort(PETSC_COMM_WORLD,1);
+            return -1;
           }
           filehandle1 = fopen(iodata[k0].filname,"r");
           if(filehandle1==NULL){
@@ -1028,6 +1048,16 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
               antidim[n1]=antidim[n1-1]*dim[n1-1];
             }
           }
+          /* antidim divides the running offset at every value read; a
+             zero entry means the array is declared over a set with no
+             elements, and 36 division sites then took SIGFPE (fuzz
+             batch 14 data-file driver). Checked once here, where it is
+             built, rather than at each division. */
+          if (coefs[i].size>1) for (n1=0; n1<coefs[i].size; n1++) if (antidim[n1]<=0) {
+            errmsg("Error: %s is declared over a set with no elements; its values cannot be read from %s\n",coefs[i].cofname,fname);
+            MPI_Abort(PETSC_COMM_WORLD,1);
+            return -1;
+          }
           filehandle1 = fopen(iodata[k0].filname,"r");
           if(filehandle1==NULL){
             errmsg("Error: cannot open data file %s\n",iodata[k0].filname);
@@ -1202,6 +1232,16 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
             for (n1=3; n1<vars[i].size; n1++) {
               antidim[n1]=antidim[n1-1]*dim[n1-1];
             }
+          }
+          /* antidim divides the running offset at every value read; a
+             zero entry means the array is declared over a set with no
+             elements, and 36 division sites then took SIGFPE (fuzz
+             batch 14 data-file driver). Checked once here, where it is
+             built, rather than at each division. */
+          if (vars[i].size>1) for (n1=0; n1<vars[i].size; n1++) if (antidim[n1]<=0) {
+            errmsg("Error: %s is declared over a set with no elements; its values cannot be read from %s\n",vars[i].cofname,fname);
+            MPI_Abort(PETSC_COMM_WORLD,1);
+            return -1;
           }
           filehandle1 = fopen(iodata[k0].filname,"r");
           if(filehandle1==NULL){
@@ -2678,6 +2718,9 @@ int mappings_validate(map_def *maps, dim_t nmap, set_def *sets, set_element *set
    qgdp; backsolve_read has used this shape since 10.16 support) */
 static offset_t closure_var_find(char *vname, array_def *vars, offset_t nvar) {
   offset_t j;
+  /* callers pass a strtok result, which is NULL on a malformed
+     statement; the '@' scan below then read through NULL (fuzz batch 14) */
+  if (vname==NULL) return -1;
   /* derived complementarity variables (comp@e/@d/@l/@u, del_comp@;
      design doc section 7) are solver-managed (51.7.2: "you must not
      mention any of [them] in your Command file"); '@' is illegal in
@@ -3015,6 +3058,15 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
       }
     } else {
       readitem = strtok(NULL,"(");
+      /* the sibling branch above checks this; here the NULL reached the
+         strcmp below (fuzz batch 14). closure_var_find now returns -1
+         on NULL, so without this the NULL simply flowed one line on. */
+      if (readitem==NULL) {
+        errmsg("Error: malformed shock statement (shock file)\n");
+        fclose(filehandle);
+        MPI_Abort(PETSC_COMM_WORLD,1);
+        return -1;
+      }
       { offset_t jf=closure_var_find(readitem,vars,nvar); if(jf>=0) readitem=vars[jf].cofname; }
       for (j=0; j<nvar; j++) {
         if (strcmp(readitem,vars[j].cofname)==0) {
@@ -3022,6 +3074,14 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
           readitem = strtok(NULL,")");
           if (readitem==NULL) {
             errmsg("Error: malformed shock statement for variable %s (shock file)\n",vars[j].cofname);
+            fclose(filehandle);
+            MPI_Abort(PETSC_COMM_WORLD,1);
+            return -1;
+          }
+          /* readitem is cut from line[DATREADLINE]; argu is TABREADLINE,
+             so a long index list overran it (fuzz batch 14) */
+          if (strlen(readitem)>=sizeof(argu)) {
+            errmsg("Error: shock statement for variable %s is too long (exceeds %d chars)\n",vars[j].cofname,TABREADLINE);
             fclose(filehandle);
             MPI_Abort(PETSC_COMM_WORLD,1);
             return -1;
@@ -5394,7 +5454,9 @@ dim_t set_expr_build(set_element *se, set_def *sets, dim_t nset, dim_t i) {
        still parses; the element array has only `bound` slots for this set, and
        writing past them ran off the end of it (fuzz batch 13 overflow) */
     errmsg("Error: set expression produces more elements than declared for set %s\n",sets[i].setname);
-    m=bound;
+    free(out);
+    MPI_Abort(PETSC_COMM_WORLD,1);
+    return 0;
   }
   for (n=0; n<m; n++) {
     strcpy(se[sets[i].offset+n].setele,out[n]);
@@ -5698,6 +5760,13 @@ char *closure_next_statement(char *commsyntax, FILE *filehandle, char *readline)
       }
       check1=1;
       n=strstr(line,finditem);//ha_cgefendofc
+      /* same held-back character as the continuation join below: a
+         statement filling one whole line left closure_read no room */
+      if (strlen(line)+1>=(size_t)TABREADLINE) {
+        errmsg("Error: %s statement too long (exceeds %ld chars)\n",commsyntax,(long)TABREADLINE);
+        MPI_Abort(PETSC_COMM_WORLD,1);
+        return NULL;
+      }
       if (n==NULL) {
         strcpy(readline,line);
       } else {
@@ -5711,8 +5780,10 @@ char *closure_next_statement(char *commsyntax, FILE *filehandle, char *readline)
           p=strpbrk(line,"!");
         }
         n=strstr(line,finditem);//ha_cgefendofc
-        /* the continuation join had no bound on readline (fuzz batch 13) */
-        if (strlen(readline)+strlen(line)>=(size_t)TABREADLINE) {
+        /* the continuation join had no bound on readline (fuzz batch 13);
+           one character is held back for closure_read, which spaces the
+           terminator (";" -> " ;") in the same buffer */
+        if (strlen(readline)+strlen(line)+1>=(size_t)TABREADLINE) {
           errmsg("Error: %s statement too long (exceeds %ld chars)\n",commsyntax,(long)TABREADLINE);
           MPI_Abort(PETSC_COMM_WORLD,1);
           return NULL;

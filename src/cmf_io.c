@@ -161,7 +161,11 @@ int datafile_read_labels(char *varname, char *filename,dim_t d1, datafile_labels
     readitem = strtok(line,"\"");
     readitem = strtok(NULL,"\"");
     if (readitem != NULL) {
-      strcpy(header,readitem);
+      /* readitem is a quoted token out of a DATREADLINE line; header is
+         NAMESIZE, and a long one overran it into the neighbouring
+         buffers (fuzz batch 14). A header that cannot fit cannot match
+         the name being looked up, so skipping the line is correct. */
+      if (cmf_strcpy_bounded(header,readitem,sizeof(header))) continue;
       str_delete_char(header,' ');
       nhead=0;
       while (header[nhead] != '\0') nhead++;
@@ -175,7 +179,14 @@ int datafile_read_labels(char *varname, char *filename,dim_t d1, datafile_labels
             readitem = strtok(line,"\n");
             if (readitem != NULL) {
               record[reccount].dim1=reccount;
-              strcpy(record[reccount].ch,readitem);
+              /* element labels are NAMESIZE; a long data line overran
+                 the record array (fuzz batch 14) */
+              if (cmf_strcpy_bounded(record[reccount].ch,readitem,sizeof(record[reccount].ch))) {
+                errmsg("Error: element label for header %s exceeds %d characters in %s\n",varname,NAMESIZE-1,filename);
+                fclose(dfile);
+                MPI_Abort(PETSC_COMM_WORLD,1);
+                return -1;
+              }
               reccount++;
               if (reccount>=d1) break;
             }

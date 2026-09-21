@@ -31,7 +31,10 @@ int str_rfind_ci(char *line, char *finditem)
   char *t1,*t2;
   while (line[count1] != '\0') count1++;
   while (finditem[l] != '\0') l++;
-  for (i=count1-1; i>-1; i--)
+  /* the match walks BACKWARDS from line[i], so starting below l-1 runs
+     t1 off the front of the buffer (fuzz batch 14: a shock statement
+     whose tail is shorter than the keyword read before line[0]) */
+  for (i=count1-1; i>=l-1; i--)
   {
     t1 = &line[i];
     t2=finditem+l-1;

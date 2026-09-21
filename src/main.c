@@ -1522,6 +1522,10 @@ int main(int argc,char **args) {
         errmsg("Error: set %s has a negative size in TAB file\n",sets[i].setname);
         MPI_Abort(PETSC_COMM_WORLD,1);
       }
+      if(sets[i].size>MAXSETSIZE){
+        errmsg("Error: set %s declares %ld elements, above the %d limit; check the element count in its data-file header\n",sets[i].setname,(long)sets[i].size,MAXSETSIZE);
+        MPI_Abort(PETSC_COMM_WORLD,1);
+      }
       sets[i].offset=nsetspace;
       nsetspace=nsetspace+sets[i].size;
     }

@@ -27,6 +27,12 @@
 #define NOPERTINSUM 5
 #define MAXVARDIM 10 //maximum variable dimension
 #define MAXSUPSET 12 //original
+#define MAXSETSIZE 1000000 /* sanity ceiling on a declared set size. Sizes come
+                              from the data-file headers, so a corrupted count is
+                              accepted as a plausible model: "21474836t7" parsed
+                              as 21,474,836 regions and cost 25 GB and 13 s before
+                              failing (fuzz batch 14). Four orders of magnitude
+                              above any real aggregation. */
 #define SETEXPRMAXDEPTH 32 /* parenthesis nesting limit for a set expression:
                               set_expr_bound and set_expr_eval/set_expr_term
                               are recursive descents, and without a cap a run
