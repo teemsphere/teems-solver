@@ -4788,6 +4788,7 @@ int sets_read(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,
               break;
             }
           }
+          if (i>=nset) { errmsg("Error: set %s in the definition of %s is not declared before use\n",readitem,record[j].setname); return -1; }
           readitem = strtok(NULL,";");
           if (readitem==NULL) { errmsg("Error: malformed set declaration in TAB file\n"); return -1; }
           for (i=0; i<nset; i++) {
@@ -4797,6 +4798,7 @@ int sets_read(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,
               break;
             }
           }
+          if (i>=nset) { errmsg("Error: set %s in the definition of %s is not declared before use\n",readitem,record[j].setname); return -1; }
           if (record[j].size<0) {
             errmsg("Error: set difference subtracts a larger set in TAB file\n");
             return -1;
@@ -4817,6 +4819,7 @@ int sets_read(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,
                 break;
               }
             }
+            if (i>=nset) { errmsg("Error: set %s in the definition of %s is not declared before use\n",readitem,record[j].setname); return -1; }
             readitem = strtok(NULL,";");
             if (readitem==NULL) { errmsg("Error: malformed set declaration in TAB file\n"); return -1; }
             for (i=0; i<nset; i++) {
@@ -4826,6 +4829,7 @@ int sets_read(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,
                 break;
               }
             }
+            if (i>=nset) { errmsg("Error: set %s in the definition of %s is not declared before use\n",readitem,record[j].setname); return -1; }
             strcpy(record[j].readele,line1);
           } else {
             if(strchr(line,'^')!=NULL) {
@@ -4842,6 +4846,7 @@ int sets_read(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,
                   break;
                 }
               }
+              if (i>=nset) { errmsg("Error: set %s in the definition of %s is not declared before use\n",readitem,record[j].setname); return -1; }
               readitem = strtok(NULL,";");
               if (readitem==NULL) { errmsg("Error: malformed set declaration in TAB file\n"); return -1; }
               for (i=0; i<nset; i++) {
@@ -4851,6 +4856,7 @@ int sets_read(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,
                   break;
                 }
               }
+              if (i>=nset) { errmsg("Error: set %s in the definition of %s is not declared before use\n",readitem,record[j].setname); return -1; }
               strcpy(record[j].readele,line1);
             } else {
               line1[0]='=';
@@ -4946,7 +4952,7 @@ dim_t set_union_named(set_element *set_elems, set_def *sets,dim_t nset,dim_t i) 
   strcpy(line,sets[i].readele);
   readitem = strtok(line,",");
   readitem = strtok(NULL,",");
-  if (readitem==NULL) return 0;
+  if (readitem==NULL) {errmsg("Error: set %s is defined over a set that is not declared\n",sets[i].setname);MPI_Abort(PETSC_COMM_WORLD,1);return 0;}
   for (l=0; l<nset; l++) {
     if (strcmp(readitem,sets[l].setname)==0) {
       dim1=sets[l].size;
@@ -4957,18 +4963,18 @@ dim_t set_union_named(set_element *set_elems, set_def *sets,dim_t nset,dim_t i) 
       break;
     }
   }
-  if(sup1>=MAXSUPSET){errmsg("Error: superset size exceeded; increase MAXSUPSET in teems_solver.h\n");return 0;}
-  if (dim1>0&&l==i) {errmsg("Error: set %s references itself in a set expression\n",sets[i].setname);return 0;}
+  if(sup1>=MAXSUPSET){errmsg("Error: superset size exceeded; increase MAXSUPSET in teems_solver.h\n");MPI_Abort(PETSC_COMM_WORLD,1);return 0;}
+  if (dim1>0&&l==i) {errmsg("Error: set %s references itself in a set expression\n",sets[i].setname);MPI_Abort(PETSC_COMM_WORLD,1);return 0;}
   m=0;
   for (n=0; n<dim1; n++) {
-    if (m>=bound) {errmsg("Error: set expression produces more elements than declared for set %s\n",sets[i].setname);return 0;}
+    if (m>=bound) {errmsg("Error: set expression produces more elements than declared for set %s\n",sets[i].setname);MPI_Abort(PETSC_COMM_WORLD,1);return 0;}
     if(sets[i].offset+m!=sets[l].offset+n)strcpy(set_elems[sets[i].offset+m].setele,set_elems[sets[l].offset+n].setele);
     set_elems[sets[i].offset+m].superset_pos[0]=n;
     set_elems[sets[l].offset+m].superset_pos[sup1]=n;
     m++;
   }
   readitem = strtok(NULL,",");
-  if (readitem==NULL) return 0;
+  if (readitem==NULL) {errmsg("Error: set %s is defined over a set that is not declared\n",sets[i].setname);MPI_Abort(PETSC_COMM_WORLD,1);return 0;}
   for (j=0; j<nset; j++) {
     if (strcmp(readitem,sets[j].setname)==0) {
       dim2=sets[j].size;
@@ -4979,12 +4985,12 @@ dim_t set_union_named(set_element *set_elems, set_def *sets,dim_t nset,dim_t i) 
       break;
     }
   }
-  if(sup2>=MAXSUPSET){errmsg("Error: superset size exceeded; increase MAXSUPSET in teems_solver.h\n");return 0;}
-  if (dim2>0&&j==i) {errmsg("Error: set %s references itself in a set expression\n",sets[i].setname);return 0;}
+  if(sup2>=MAXSUPSET){errmsg("Error: superset size exceeded; increase MAXSUPSET in teems_solver.h\n");MPI_Abort(PETSC_COMM_WORLD,1);return 0;}
+  if (dim2>0&&j==i) {errmsg("Error: set %s references itself in a set expression\n",sets[i].setname);MPI_Abort(PETSC_COMM_WORLD,1);return 0;}
   for (n=0; n<dim2; n++) {
     for (j1=0; j1<dim1; j1++) if(strcmp(set_elems[sets[l].offset+j1].setele,set_elems[sets[j].offset+n].setele)==0) break;
     if(j1==dim1) {
-      if (m>=bound) {errmsg("Error: set expression produces more elements than declared for set %s\n",sets[i].setname);return 0;}
+      if (m>=bound) {errmsg("Error: set expression produces more elements than declared for set %s\n",sets[i].setname);MPI_Abort(PETSC_COMM_WORLD,1);return 0;}
       if(sets[i].offset+m!=sets[j].offset+n)strcpy(set_elems[sets[i].offset+m].setele,set_elems[sets[j].offset+n].setele);
       set_elems[sets[i].offset+m].superset_pos[0]=m;
       set_elems[sets[j].offset+n].superset_pos[sup2]=m;
@@ -5003,7 +5009,7 @@ dim_t set_union_op(set_element *set_elems, set_def *sets,dim_t nset,dim_t i) {
   strcpy(line,sets[i].readele);
   readitem = strtok(line,",");
   readitem = strtok(NULL,",");
-  if (readitem==NULL) return 0;
+  if (readitem==NULL) {errmsg("Error: set %s is defined over a set that is not declared\n",sets[i].setname);MPI_Abort(PETSC_COMM_WORLD,1);return 0;}
   for (l=0; l<nset; l++) {
     if (strcmp(readitem,sets[l].setname)==0) {
       dim1=sets[l].size;
@@ -5014,18 +5020,18 @@ dim_t set_union_op(set_element *set_elems, set_def *sets,dim_t nset,dim_t i) {
       break;
     }
   }
-  if(sup1>=MAXSUPSET){errmsg("Error: superset size exceeded; increase MAXSUPSET in teems_solver.h\n");return 0;}
-  if (dim1>0&&l==i) {errmsg("Error: set %s references itself in a set expression\n",sets[i].setname);return 0;}
+  if(sup1>=MAXSUPSET){errmsg("Error: superset size exceeded; increase MAXSUPSET in teems_solver.h\n");MPI_Abort(PETSC_COMM_WORLD,1);return 0;}
+  if (dim1>0&&l==i) {errmsg("Error: set %s references itself in a set expression\n",sets[i].setname);MPI_Abort(PETSC_COMM_WORLD,1);return 0;}
   m=0;
   for (n=0; n<dim1; n++) {
-    if (m>=bound) {errmsg("Error: set expression produces more elements than declared for set %s\n",sets[i].setname);return 0;}
+    if (m>=bound) {errmsg("Error: set expression produces more elements than declared for set %s\n",sets[i].setname);MPI_Abort(PETSC_COMM_WORLD,1);return 0;}
     if(sets[i].offset+m!=sets[l].offset+n)strcpy(set_elems[sets[i].offset+m].setele,set_elems[sets[l].offset+n].setele);
     set_elems[sets[i].offset+m].superset_pos[0]=n;
     set_elems[sets[l].offset+m].superset_pos[sup1]=n;
     m++;
   }
   readitem = strtok(NULL,",");
-  if (readitem==NULL) return 0;
+  if (readitem==NULL) {errmsg("Error: set %s is defined over a set that is not declared\n",sets[i].setname);MPI_Abort(PETSC_COMM_WORLD,1);return 0;}
   for (j=0; j<nset; j++) {
     if (strcmp(readitem,sets[j].setname)==0) {
       dim2=sets[j].size;
@@ -5036,10 +5042,10 @@ dim_t set_union_op(set_element *set_elems, set_def *sets,dim_t nset,dim_t i) {
       break;
     }
   }
-  if(sup2>=MAXSUPSET){errmsg("Error: superset size exceeded; increase MAXSUPSET in teems_solver.h\n");return 0;}
-  if (dim2>0&&j==i) {errmsg("Error: set %s references itself in a set expression\n",sets[i].setname);return 0;}
+  if(sup2>=MAXSUPSET){errmsg("Error: superset size exceeded; increase MAXSUPSET in teems_solver.h\n");MPI_Abort(PETSC_COMM_WORLD,1);return 0;}
+  if (dim2>0&&j==i) {errmsg("Error: set %s references itself in a set expression\n",sets[i].setname);MPI_Abort(PETSC_COMM_WORLD,1);return 0;}
   for (n=0; n<dim2; n++) {
-    if (m>=bound) {errmsg("Error: set expression produces more elements than declared for set %s\n",sets[i].setname);return 0;}
+    if (m>=bound) {errmsg("Error: set expression produces more elements than declared for set %s\n",sets[i].setname);MPI_Abort(PETSC_COMM_WORLD,1);return 0;}
     if(sets[i].offset+m!=sets[j].offset+n)strcpy(set_elems[sets[i].offset+m].setele,set_elems[sets[j].offset+n].setele);
     set_elems[sets[i].offset+m].superset_pos[0]=m;
     set_elems[sets[j].offset+n].superset_pos[sup2]=m;
@@ -5055,7 +5061,7 @@ dim_t set_difference(set_element *set_elems, set_def *sets,dim_t nset,dim_t i) {
   strcpy(line,sets[i].readele);
   readitem = strtok(line,",");
   readitem = strtok(NULL,",");
-  if (readitem==NULL) return 0;
+  if (readitem==NULL) {errmsg("Error: set %s is defined over a set that is not declared\n",sets[i].setname);MPI_Abort(PETSC_COMM_WORLD,1);return 0;}
   for (l=0; l<nset; l++) {
     if (strcmp(readitem,sets[l].setname)==0) {
       dim1=sets[l].size;
@@ -5066,17 +5072,17 @@ dim_t set_difference(set_element *set_elems, set_def *sets,dim_t nset,dim_t i) {
       break;
     }
   }
-  if(dim1>0&&sup1>=MAXSUPSET){errmsg("Error: superset size exceeded; increase MAXSUPSET in teems_solver.h\n");return 0;}
-  if (dim1>0&&l==i) {errmsg("Error: set %s references itself in a set expression\n",sets[i].setname);return 0;}
+  if(dim1>0&&sup1>=MAXSUPSET){errmsg("Error: superset size exceeded; increase MAXSUPSET in teems_solver.h\n");MPI_Abort(PETSC_COMM_WORLD,1);return 0;}
+  if (dim1>0&&l==i) {errmsg("Error: set %s references itself in a set expression\n",sets[i].setname);MPI_Abort(PETSC_COMM_WORLD,1);return 0;}
   readitem = strtok(NULL,",");
-  if (readitem==NULL) return 0;
+  if (readitem==NULL) {errmsg("Error: set %s is defined over a set that is not declared\n",sets[i].setname);MPI_Abort(PETSC_COMM_WORLD,1);return 0;}
   for (j=0; j<nset; j++) {
     if (strcmp(readitem,sets[j].setname)==0) {
       dim2=sets[j].size;
       break;
     }
   }
-  if (dim2>0&&j==i) {errmsg("Error: set %s references itself in a set expression\n",sets[i].setname);return 0;}
+  if (dim2>0&&j==i) {errmsg("Error: set %s references itself in a set expression\n",sets[i].setname);MPI_Abort(PETSC_COMM_WORLD,1);return 0;}
   m=0;
   for (n=0; n<dim1; n++) {
     indi=0;
@@ -5087,7 +5093,7 @@ dim_t set_difference(set_element *set_elems, set_def *sets,dim_t nset,dim_t i) {
       }
     }
     if(indi==0) {
-      if (m>=bound) {errmsg("Error: set expression produces more elements than declared for set %s\n",sets[i].setname);return 0;}
+      if (m>=bound) {errmsg("Error: set expression produces more elements than declared for set %s\n",sets[i].setname);MPI_Abort(PETSC_COMM_WORLD,1);return 0;}
       if(sets[i].offset+m!=sets[l].offset+n)strcpy(set_elems[sets[i].offset+m].setele,set_elems[sets[l].offset+n].setele);
       set_elems[sets[i].offset+m].superset_pos[sup1]=n;
       set_elems[sets[i].offset+m].superset_pos[0]=m;
@@ -5467,8 +5473,16 @@ dim_t set_expr_build(set_element *se, set_def *sets, dim_t nset, dim_t i) {
   if (cap<1) cap=1;
   out=malloc((size_t)cap*NAMESIZE);
   cursor=expr;
+  int errs_before=teems_error_count;
   m=set_expr_eval(&cursor,se,sets,nset,out,cap,i<nset?sets[i].setname:"?",0);
   if (*cursor!='\0') errmsg("Error: trailing characters in the definition of %s: %s\n",sets[i].setname,cursor);
+  if (teems_error_count>errs_before) { /* the evaluator names the defect and
+       returns what it has; a set built from that is not the set the TAB
+       defines, so the run stops here rather than at the exit-status backstop */
+    free(out);
+    MPI_Abort(PETSC_COMM_WORLD,1);
+    return 0;
+  }
   if (m>bound) { /* the cap bump above sizes the scratch buffer so a 0-size set
        still parses; the element array has only `bound` slots for this set, and
        writing past them ran off the end of it (fuzz batch 13 overflow) */
@@ -5565,7 +5579,7 @@ void set_equality_build(set_element *se, set_def *sets, dim_t i) {
   for (j=0; j<sets[i].size; j++) {
     if (j>=bound) {
       errmsg("Error: set equality produces more elements than declared for set %s\n",sets[i].setname);
-      sets[i].size=j;
+      MPI_Abort(PETSC_COMM_WORLD,1);
       return;
     }
     strcpy(se[sets[i].offset+j].setele,se[sets[j1].offset+j].setele);
