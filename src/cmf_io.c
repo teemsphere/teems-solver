@@ -152,10 +152,22 @@ int datafile_read_labels(char *varname, char *filename,dim_t d1, datafile_labels
   char line[DATREADLINE],header[NAMESIZE],varnamecpy[NAMESIZE];
   dim_t nlength=0,nhead=0,reccount = 0,count1=0;
   char *readitem=NULL;
-  strcpy(varnamecpy,varname);
+  /* callers pass a TAB token here (tab_parse.c mapping reader), not only
+     a short set header, so this copy needs the same bound as the rest */
+  if (cmf_strcpy_bounded(varnamecpy,varname,sizeof(varnamecpy))) {
+    errmsg("Error: header name %s exceeds %d characters\n",varname,NAMESIZE-1);
+    return -1;
+  }
   str_delete_char(varnamecpy,' ');
   while (varnamecpy[nlength] != '\0') nlength++;
+  /* nothing to fill: `record` is calloc'd from d1, so d1 0 leaves a
+     zero-size allocation the label loop below wrote into (fuzz batch 14) */
+  if (d1<=0) return 0;
   dfile = fopen(filename,"r");
+  if (dfile==NULL) {
+    errmsg("Error: cannot open %s\n",filename);
+    return -1;
+  }
 
   while (fgets(line,DATREADLINE,dfile)) {
     readitem = strtok(line,"\"");
@@ -178,6 +190,10 @@ int datafile_read_labels(char *varname, char *filename,dim_t d1, datafile_labels
           if (count1!=1) {
             readitem = strtok(line,"\n");
             if (readitem != NULL) {
+              /* the bound was checked only AFTER the write below, so a
+                 second block matching the same header re-entered with
+                 reccount already at d1 (fuzz batch 14) */
+              if (reccount>=d1) break;
               record[reccount].dim1=reccount;
               /* element labels are NAMESIZE; a long data line overran
                  the record array (fuzz batch 14) */

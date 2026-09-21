@@ -3080,7 +3080,10 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
           }
           /* readitem is cut from line[DATREADLINE]; argu is TABREADLINE,
              so a long index list overran it (fuzz batch 14) */
-          if (strlen(readitem)>=sizeof(argu)) {
+          /* +2: a "," is appended below, so an index list of exactly
+             sizeof(argu)-1 passed this check and then overran by one
+             (fuzz batch 14 cycle 10 left the strcat unaccounted) */
+          if (strlen(readitem)+2>sizeof(argu)) {
             errmsg("Error: shock statement for variable %s is too long (exceeds %d chars)\n",vars[j].cofname,TABREADLINE);
             fclose(filehandle);
             MPI_Abort(PETSC_COMM_WORLD,1);
@@ -3091,6 +3094,13 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
           readitem = strtok(NULL,";");
           if (readitem==NULL) {
             errmsg("Error: shock statement for variable %s has no value (shock file)\n",vars[j].cofname);
+            fclose(filehandle);
+            MPI_Abort(PETSC_COMM_WORLD,1);
+            return -1;
+          }
+          /* same shape as argu above: a " " follows the copy */
+          if (strlen(readitem)+2>sizeof(linecopy)) {
+            errmsg("Error: shock statement for variable %s is too long (exceeds %d chars)\n",vars[j].cofname,DATREADLINE);
             fclose(filehandle);
             MPI_Abort(PETSC_COMM_WORLD,1);
             return -1;
@@ -3150,6 +3160,15 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
               k2=0;
               while (p[k2] != '\0') {
                 k2++;
+              }
+              /* the element compare below strips a leading and trailing
+                 quote via k2-2; a token shorter than that underflowed to
+                 SIZE_MAX in strncmp and indexed setele[-1] (fuzz batch 14) */
+              if (k2<2) {
+                errmsg("Error: %s in variable %s (shock file) is not a quoted set element\n",p,vars[j].cofname);
+                fclose(filehandle);
+                MPI_Abort(PETSC_COMM_WORLD,1);
+                return -1;
               }
               for (k1=0; k1<sets[vars[j].setid[n1]].size; k1++)if (strncmp(set_elems[sets[vars[j].setid[n1]].offset+k1].setele,p+1,k2-2)==0&&set_elems[sets[vars[j].setid[n1]].offset+k1].setele[k2-2]=='\0') {
                   dimindx[n1]=set_elems[sets[vars[j].setid[n1]].offset+k1].superset_pos[0];
