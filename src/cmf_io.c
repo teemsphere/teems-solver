@@ -987,6 +987,24 @@ static int tab_preprocess_run(char *filename, char *newtabfile) {
               }
             }
           }
+          if (n1==NULL&&l2==0&&strstr(line,"(by_elements)")!=NULL) {
+            /* a quoted element outside every call: the codomain element
+               a Formula (by_elements) assigns to a mapping (manual
+               10.13.1), `M(u) = "ele"`. It has no owner to take a set
+               from -- masked for the executor like the literals below,
+               where it used to stop at the guard that follows */
+            char *q2=strchr(n+1,'\"');
+            if (q2==NULL) {
+              errmsg("Error: unterminated element literal in TAB file: %s\n",line);
+              return -1;
+            }
+            *n='\001';
+            *q2='\001';
+            strcpy(line,line1);
+            strcpy(line2,line1);
+            n=strchr(line1,'\"');
+            continue;
+          }
           if (n1==NULL) {
             errmsg("Error: malformed indexed expression in TAB file: %s\n",line);
             return -1;
