@@ -110,3 +110,16 @@ char* str_rfind_toplevel(char *line, int finditem)
   }
   return NULL;
 }
+
+/* Copy src into dst[cap] or refuse: a token cut from a DATREADLINE-sized
+   line can be far longer than the NAMESIZE / TABREADLINE field it is
+   headed for (fuzz batch 14: a 271-character quoted header name in a
+   data file overran data_read_files' vname). Returns 0 on success,
+   -1 when it does not fit; dst is untouched then. */
+int str_copy_bounded(char *dst, const char *src, size_t cap) {
+  size_t sl = strlen(src);
+  if (sl + 1 > cap) return -1;
+  memcpy(dst, src, sl + 1);
+  return 0;
+}
+

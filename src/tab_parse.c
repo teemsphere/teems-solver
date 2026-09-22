@@ -614,14 +614,22 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
         errmsg("Error: malformed Read statement: %s\n",linecopy);
         return -1;
       }
-      strcpy(vname,readitem);
+      if (str_copy_bounded(vname,readitem,NAMESIZE)) {
+        errmsg("Error: variable name in Read statement exceeds %d characters: %.60s...\n",NAMESIZE-1,readitem);
+        MPI_Abort(PETSC_COMM_WORLD,1);
+        return -1;
+      }
       readitem = strtok(NULL,"\"");
       readitem = strtok(NULL,"\"");
       if (readitem==NULL) {
         errmsg("Error: Read without a header is not supported (use 'Read X from file <log> header \"H\"'): %s\n",linecopy);
         return -1;
       }
-      strcpy(header,readitem);
+      if (str_copy_bounded(header,readitem,NAMESIZE)) {
+        errmsg("Error: header name in Read statement exceeds %d characters: %.60s...\n",NAMESIZE-1,readitem);
+        MPI_Abort(PETSC_COMM_WORLD,1);
+        return -1;
+      }
       n1=0;
       while (header[n1]!='\0'){
         if(header[n1]==' '){
@@ -660,7 +668,11 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
             MPI_Abort(PETSC_COMM_WORLD,1);
             return -1;
           }
-          strcpy(vname,readitem);
+          if (str_copy_bounded(vname,readitem,NAMESIZE)) {
+            errmsg("Error: header name in data file exceeds %d characters: %.60s...\n",NAMESIZE-1,readitem);
+            MPI_Abort(PETSC_COMM_WORLD,1);
+            return -1;
+          }
           n1=0;
           while (vname[n1]!='\0'){
             if(vname[n1]==' '){
@@ -833,7 +845,11 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
             readitem = strtok(line,"\"");
             readitem = strtok(NULL,"\"");
             if (readitem != NULL) {
-              strcpy(vname,readitem);
+              if (str_copy_bounded(vname,readitem,NAMESIZE)) {
+                errmsg("Error: header name in data file exceeds %d characters: %.60s...\n",NAMESIZE-1,readitem);
+                MPI_Abort(PETSC_COMM_WORLD,1);
+                return -1;
+              }
               n1=0;
               while (vname[n1]!='\0'){
                 if(vname[n1]==' '){
@@ -975,14 +991,22 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
         readitem = strtok(NULL,")");
       }
       readitem = strtok(NULL,"(");
-      strcpy(vname,readitem);
+      if (str_copy_bounded(vname,readitem,NAMESIZE)) {
+        errmsg("Error: variable name in Read statement exceeds %d characters: %.60s...\n",NAMESIZE-1,readitem);
+        MPI_Abort(PETSC_COMM_WORLD,1);
+        return -1;
+      }
       str_replace_all(vname," ","");
       readitem = strtok(NULL,")");
       if (readitem==NULL) {
         errmsg("Error: malformed partial Read statement in TAB file\n");
         return -1;
       }
-      strcpy(argu,readitem);
+      if (str_copy_bounded(argu,readitem,TABREADLINE)) {
+        errmsg("Error: argument list in Read statement exceeds %d characters: %.60s...\n",TABREADLINE-1,readitem);
+        MPI_Abort(PETSC_COMM_WORLD,1);
+        return -1;
+      }
       strcat(argu,",");
       readitem = strtok(NULL,"\"");
       readitem = strtok(NULL,"\"");
@@ -990,7 +1014,11 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
         errmsg("Error: Read without a header is not supported (use 'Read X(...) from file <log> header \"H\"')\n");
         return -1;
       }
-      strcpy(header,readitem);
+      if (str_copy_bounded(header,readitem,NAMESIZE)) {
+        errmsg("Error: header name in Read statement exceeds %d characters: %.60s...\n",NAMESIZE-1,readitem);
+        MPI_Abort(PETSC_COMM_WORLD,1);
+        return -1;
+      }
       n1=0;
       while (header[n1]!='\0'){
         if(header[n1]==' '){
