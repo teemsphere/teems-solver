@@ -3234,7 +3234,12 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
                   }
                 }
               } else {
-                arSet[0]=l2;
+                /* one index: the element position must go through the same
+                   fixed-element / superset mapping as the multi-index path;
+                   `arSet[0]=l2` shocked position 0.. of the full set
+                   whatever the quoted element or subset named (2026-09-24) */
+                if(supsetid[0]>-2)arSet[0]=set_elems[dimbegadd[0]+l2].superset_pos[supsetid[0]];
+                else arSet[0]=dimindx[0];
               }
               l2=0;
               for (dcount=0; dcount<vars[j].size; dcount++) {
