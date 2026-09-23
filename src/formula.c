@@ -947,15 +947,19 @@ int formula_compile(char *fomulain, set_def *sets,array_def *coefs, offset_t nco
    25.4/11.6.7): prints per the CMF mode (Warning/Error) on the first
    violating element; returns 1 on violation. Called once per bound
    slot -- one lower + one upper per declaration (audit A9). */
-static int coef_range_check(array_def *coefs,offset_t index,offset_t offset,offset_t varsize,elem_value *elem_vals,int glmode,int gltype,store_real glval) {
+static int coef_range_check(array_def *coefs,offset_t index,offset_t offset,offset_t varsize,elem_value *elem_vals,int glmode,int gltype,store_real glval,int updated) {
   offset_t l;
   int glviol=0;
   const char *msg="";
+  /* "updated value" marks a post-update check so the front end can tell
+     a step overshoot (violations, then a singular LU) from a
+     structurally deficient closure (singular at the first LU) */
+  const char *phase=updated?"an updated value":"a value";
   if(gltype==BT_GE)msg="below its declared lower bound";
   if(gltype==BT_GT)msg="at or below its declared strict lower bound";
   if(gltype==BT_LE)msg="above its declared upper bound";
   if(gltype==BT_LT)msg="at or above its declared strict upper bound";
-  #pragma omp parallel for private(l) shared(elem_vals,coefs,offset,index,glviol,gltype,glval,glmode,msg,varsize)
+  #pragma omp parallel for private(l) shared(elem_vals,coefs,offset,index,glviol,gltype,glval,glmode,msg,phase,varsize)
   for (l=0; l<varsize; l++) {
     int bad=0;
     if(gltype==BT_GE&&elem_vals[offset+l].value<glval)bad=1;
@@ -963,7 +967,7 @@ static int coef_range_check(array_def *coefs,offset_t index,offset_t offset,offs
     if(gltype==BT_LE&&elem_vals[offset+l].value>glval)bad=1;
     if(gltype==BT_LT&&elem_vals[offset+l].value>=glval)bad=1;
     if(bad&&!glviol) {
-      printf("%s: coefficient %s has a value %s %f\n",glmode==2?"Error":"Warning",coefs[index].cofname,msg,(double)glval);
+      printf("%s: coefficient %s has %s %s %f\n",glmode==2?"Error":"Warning",coefs[index].cofname,phase,msg,(double)glval);
       glviol=1;
     }
   }
@@ -2443,8 +2447,8 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
         if(teems_rk_stage_checks&&glmode==2)glmode=1;   /* RK stage state: warn and let the driver retry */
         if(glmode>0){
           int glviol=0;
-          if(coefs[index].gltype>0)glviol|=coef_range_check(coefs,index,offset,varsize,elem_vals,glmode,coefs[index].gltype,coefs[index].glval);
-          if(teems_coef_gltype2!=NULL&&teems_coef_gltype2[index]>0)glviol|=coef_range_check(coefs,index,offset,varsize,elem_vals,glmode,teems_coef_gltype2[index],teems_coef_glval2[index]);
+          if(coefs[index].gltype>0)glviol|=coef_range_check(coefs,index,offset,varsize,elem_vals,glmode,coefs[index].gltype,coefs[index].glval,!IsIni);
+          if(teems_coef_gltype2!=NULL&&teems_coef_gltype2[index]>0)glviol|=coef_range_check(coefs,index,offset,varsize,elem_vals,glmode,teems_coef_gltype2[index],teems_coef_glval2[index],!IsIni);
           /* fatal only when requested (-range_test_* 2; manual
              25.4.4); the GEMPACK default is warn */
           if(glviol) {
@@ -2752,8 +2756,8 @@ offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_el
         if(teems_rk_stage_checks&&glmode==2)glmode=1;   /* RK stage state: warn and let the driver retry */
         if(glmode>0){
           int glviol=0;
-          if(coefs[index].gltype>0)glviol|=coef_range_check(coefs,index,offset,varsize,elem_vals,glmode,coefs[index].gltype,coefs[index].glval);
-          if(teems_coef_gltype2!=NULL&&teems_coef_gltype2[index]>0)glviol|=coef_range_check(coefs,index,offset,varsize,elem_vals,glmode,teems_coef_gltype2[index],teems_coef_glval2[index]);
+          if(coefs[index].gltype>0)glviol|=coef_range_check(coefs,index,offset,varsize,elem_vals,glmode,coefs[index].gltype,coefs[index].glval,1);
+          if(teems_coef_gltype2!=NULL&&teems_coef_gltype2[index]>0)glviol|=coef_range_check(coefs,index,offset,varsize,elem_vals,glmode,teems_coef_gltype2[index],teems_coef_glval2[index],1);
           /* fatal only when requested (-range_test_* 2; manual
              25.4.4); the GEMPACK default is warn */
           if(glviol) {
@@ -3041,8 +3045,8 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
         if(teems_rk_stage_checks&&glmode==2)glmode=1;   /* RK stage state: warn and let the driver retry */
         if(glmode>0){
           int glviol=0;
-          if(coefs[index].gltype>0)glviol|=coef_range_check(coefs,index,offset,varsize,elem_vals,glmode,coefs[index].gltype,coefs[index].glval);
-          if(teems_coef_gltype2!=NULL&&teems_coef_gltype2[index]>0)glviol|=coef_range_check(coefs,index,offset,varsize,elem_vals,glmode,teems_coef_gltype2[index],teems_coef_glval2[index]);
+          if(coefs[index].gltype>0)glviol|=coef_range_check(coefs,index,offset,varsize,elem_vals,glmode,coefs[index].gltype,coefs[index].glval,1);
+          if(teems_coef_gltype2!=NULL&&teems_coef_gltype2[index]>0)glviol|=coef_range_check(coefs,index,offset,varsize,elem_vals,glmode,teems_coef_gltype2[index],teems_coef_glval2[index],1);
           /* fatal only when requested (-range_test_* 2; manual
              25.4.4); the GEMPACK default is warn */
           if(glviol) {

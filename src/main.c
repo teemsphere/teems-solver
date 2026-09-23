@@ -2845,15 +2845,30 @@ comp_accurate_reentry:
     if(i==niodata+noutdata+nsoldata) {
       strcpy(tempchar,"solution");
     }
-    strcpy(solchar,tempchar);
-    strcat(solchar,".bin");
-    logmsg(2,"solchar %s\n",solchar);
-    if ( (solution = fopen(solchar, "wb")) == NULL ) {
-      errmsg("Error: cannot open %s for writing\n",solchar);
-      return 1;
+    /* probe runs have no solution: leave a previous run's sol.bin (and
+       its .est) alone rather than truncating them */
+    if(xcf!=NULL) {
+      strcpy(solchar,tempchar);
+      strcat(solchar,".bin");
+      logmsg(2,"solchar %s\n",solchar);
+      if ( (solution = fopen(solchar, "wb")) == NULL ) {
+        errmsg("Error: cannot open %s for writing\n",solchar);
+        return 1;
+      }
+      fwrite(xcf, sizeof(solve_real),nvarele, solution);
+      fclose(solution);
     }
-    if(xcf!=NULL)fwrite(xcf, sizeof(solve_real),nvarele, solution); /* probe runs have no solution; sol.bin stays empty */
-    fclose(solution);
+    if(xcf!=NULL&&accmetric==NULL) {
+      /* a non-embedded run after an embedded one in the same directory:
+         drop the stale estimate so it cannot be read against this
+         run's solution (teems-R attaches <sol>.est when present) */
+      strcpy(solchar,tempchar);
+      strcat(solchar,".est");
+      remove(solchar);
+      strcpy(solchar,tempchar);
+      strcat(solchar,".acc");
+      remove(solchar);
+    }
     if(accmetric!=NULL) {
       /* embedded-RK estimated error metrics, one double per variable
          element in .bin order (the accumulated per-step embedded
