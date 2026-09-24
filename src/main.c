@@ -2797,7 +2797,7 @@ comp_accurate_reentry:
      -comp_sberr_warn 1 */
   if(comp_acc_phase==1) {
     offset_t comp_nbad=0;
-    if(rank==rank_hsl)comp_nbad=comp_verify_states(sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals);
+    if(rank==rank_hsl)comp_nbad=comp_verify_states(sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,comp_sberr_warn);
     if(rank==rank_hsl&&comp_nbad>0) {
       if(comp_sberr_warn)printf("Warning: %ld complementarity state/bound error(s) after the accurate run (treated as warnings per -comp_sberr_warn; check the log carefully, manual 51.6)\n",(long)comp_nbad);
       else {

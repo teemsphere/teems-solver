@@ -1828,9 +1828,9 @@ int comp_accurate_closure(closure_entry *closure_vals, array_def *vars, offset_t
 /* 51.5.4/51.7.5 checks after the accurate run: each component must be
    in its approximate-run final state (to tolerance) and the
    complementarity variable within its bounds. Returns the violation
-   count; the caller decides warn vs fatal (CMF `complementarity
-   state/bound_error`). */
-offset_t comp_verify_states(set_def *sets, dim_t nset, set_element *set_elems, array_def *coefs, offset_t ncof, array_def *vars, offset_t nvar, elem_value *elem_vals) {
+   count; under -comp_sberr_warn (warn_only) each violation is a
+   Warning line, since errmsg lines make the exit status nonzero. */
+offset_t comp_verify_states(set_def *sets, dim_t nset, set_element *set_elems, array_def *coefs, offset_t ncof, array_def *vars, offset_t nvar, elem_value *elem_vals, int warn_only) {
   dim_t k;
   offset_t j, nbad = 0;
   (void)nset; (void)ncof; (void)vars; (void)nvar;
@@ -1847,10 +1847,13 @@ offset_t comp_verify_states(set_def *sets, dim_t nset, set_element *set_elems, a
       tol = 1e-4 * (fabs(X) > 1 ? fabs(X) : 1);
       cp_tuple_name(rt, sets, set_elems, coefs, j, tn, sizeof(tn));
       if (s != rt->finstate[j]) {
-        errmsg("Error: Complementarity %s%s: post-simulation state %d differs from the approximate run's state %d (manual 51.5.4)\n", cp->name, tn, s, (int)rt->finstate[j]);
+        if (warn_only) printf("Warning: Complementarity %s%s: post-simulation state %d differs from the approximate run's state %d (manual 51.5.4)\n", cp->name, tn, s, (int)rt->finstate[j]);
+        else errmsg("Error: Complementarity %s%s: post-simulation state %d differs from the approximate run's state %d (manual 51.5.4)\n", cp->name, tn, s, (int)rt->finstate[j]);
         nbad++;
       } else if (X < L - tol || X > U + tol) {
-        errmsg("Error: Complementarity %s%s: the variable value %.6g lies outside the bounds %.6g/%.6g after the accurate run (manual 51.7.5)\n",
+        if (warn_only) printf("Warning: Complementarity %s%s: the variable value %.6g lies outside the bounds %.6g/%.6g after the accurate run (manual 51.7.5)\n",
+               cp->name, tn, X, L <= -CP_INF ? -9e99 : L, U >= CP_INF ? 9e99 : U);
+        else errmsg("Error: Complementarity %s%s: the variable value %.6g lies outside the bounds %.6g/%.6g after the accurate run (manual 51.7.5)\n",
                cp->name, tn, X, L <= -CP_INF ? -9e99 : L, U >= CP_INF ? 9e99 : U);
         nbad++;
       } else if (cp_exact_state(X, E, L, U) == 0) {

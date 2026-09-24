@@ -564,7 +564,7 @@ void comp_states_free(void);
    checks; returns the violation count (caller maps warn/fatal). */
 int comp_accurate_prepare(set_def *sets, dim_t nset, set_element *set_elems, array_def *coefs, offset_t ncof, array_def *vars, offset_t nvar, elem_value *elem_vals);
 int comp_accurate_closure(closure_entry *closure_vals, array_def *vars, offset_t nvar, array_def *coefs, offset_t ncof, set_def *sets, dim_t nset, set_element *set_elems, elem_value *elem_vals);
-offset_t comp_verify_states(set_def *sets, dim_t nset, set_element *set_elems, array_def *coefs, offset_t ncof, array_def *vars, offset_t nvar, elem_value *elem_vals);
+offset_t comp_verify_states(set_def *sets, dim_t nset, set_element *set_elems, array_def *coefs, offset_t ncof, array_def *vars, offset_t nvar, elem_value *elem_vals, int warn_only);
 /* the 51.6 run controls arrive as command-line flags (-comp_steps,
    -comp_redo, -comp_redo_min_frac, -comp_do_approx, -comp_do_acc,
    -comp_sberr_warn), passed by teems-R's ems_complementarity();
