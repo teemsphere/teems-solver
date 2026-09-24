@@ -358,6 +358,55 @@ static void dedup_subst_back(char *line, const char *a, const char *b, size_t ca
   memcpy(p,b,blen);
 }
 
+/* a quoted element inside a "# label #" is label text, not an element
+   argument (manual 11.2.3): literal lowering scanned it and synthesized
+   a subset from it (TERM "# Check HOUPUR_H = PUR_S("Hou") #" became
+   S(hou) subset of COM). Mask those quotes with the \001 marker the
+   lowering already restores on output. */
+static void label_quotes_mask(char *s) {
+  int in_label=0;
+  for (; *s!='\0'; s++) {
+    if (*s=='#') in_label=!in_label;
+    else if (in_label&&*s=='\"') *s='\001';
+  }
+}
+
+/* the delimiter pairs above miss a bare index beside an operator, which
+   is how a sum condition reads it (sum(r,reg: r<>d, ...)): the index
+   was renamed everywhere but there, so the condition tested an unbound
+   name (TERM E_pdelimp). Rename every remaining whole-identifier
+   occurrence in the sum span, case-insensitively, outside quoted
+   element literals. */
+static int ident_char(char c) {
+  return isalnum((unsigned char)c)||c=='_'||c=='@'||c=='?';
+}
+
+static void dedup_ident_rename(char *span, const char *a, const char *b, size_t cap) {
+  size_t alen=strlen(a),blen=strlen(b);
+  char *p=span;
+  int in_quote=0;
+  if (alen==0) return;
+  while (*p!='\0') {
+    if (*p=='\"') {
+      in_quote=!in_quote;
+      p++;
+      continue;
+    }
+    if (!in_quote&&strncasecmp(p,a,alen)==0&&(p==span||!ident_char(p[-1]))&&!ident_char(p[alen])) {
+      size_t len=strlen(span);
+      if (len-alen+blen>=cap) {
+        errmsg("Error: renaming sum index %s does not fit the statement buffer (%d characters)\n",a,(int)TABREADLINE);
+        MPI_Abort(PETSC_COMM_WORLD,1);
+      }
+      memmove(p+blen,p+alen,strlen(p+alen)+1);
+      memcpy(p,b,blen);
+      p+=blen;
+      continue;
+    }
+    p++;
+  }
+}
+
 int sum_dedup_indices(char *formulain) {
   char line[TABREADLINE],finditem[TABREADLINE],replitem[TABREADLINE],newreplitem[TABREADLINE],temp[TABREADLINE],replitem1[TABREADLINE],newreplitem1[TABREADLINE];
   char*readitem,*line1;
@@ -645,6 +694,8 @@ int sum_dedup_indices(char *formulain) {
       strcat(newreplitem1,newreplitem);
       strcat(newreplitem1," ");
       dedup_subst(line1,replitem1,newreplitem1,(size_t)TABREADLINE-(size_t)(line1-line));
+
+      dedup_ident_rename(line1,replitem,newreplitem,(size_t)TABREADLINE-(size_t)(line1-line));
 
       if (strcmp(temp,line1)==0) {
         errmsg("Error: cannot rename the repeated sum index %s in: %s\n",replitem,temp);
@@ -986,6 +1037,7 @@ static int tab_preprocess_run(char *filename, char *newtabfile) {
          element as an index and rewrites it into a singleton subset
          (the former M3 deferral) */
       cond_segment_normalize(line);
+      label_quotes_mask(line);
       strcpy(line1,line);
       n=strchr(line1,'\"');
       if (n!=NULL) {
@@ -1296,7 +1348,10 @@ static int tab_preprocess_run(char *filename, char *newtabfile) {
         str_replace_char_all(readline1,'\001','\"');
         str_replace_char_all(line2,'\001','\"');
         fprintf(fout,"%s%s%s",readline,readline1,line2);
-      } else fprintf(fout,"%s",line);
+      } else {
+        str_replace_char_all(line,'\001','\"');
+        fprintf(fout,"%s",line);
+      }
     } else fprintf(fout,"%s",line);
   }
   fclose(filehandle);
