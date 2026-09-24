@@ -5,10 +5,9 @@
 static char *novalue_warned[2]={NULL,NULL};   /* [0] coefficients, [1] variables */
 static offset_t novalue_warned_n[2]={0,0};
 static void warn_no_values(const char *name, offset_t idx, int which) {
-  /* '@' names are solver-derived (levels pairs, complementarity
-     machinery): their values are supplied by C passes, not by
-     reads/formulas, and the namespace is closed to users */
-  if(strchr(name,'@')!=NULL) return;
+  /* complementarity-derived names (name_is_comp_derived) take their
+     values from C passes, not from reads/formulas */
+  if(name_is_comp_derived(name)) return;
   if(idx>=novalue_warned_n[which]) {
     novalue_warned[which]=realloc(novalue_warned[which],idx+1);
     memset(novalue_warned[which]+novalue_warned_n[which],0,idx+1-novalue_warned_n[which]);
@@ -41,7 +40,7 @@ solve_real formula_subst_scalar(char *var2, elem_value *record, array_def *coefs
 }
 
 
-/* split a lowered mapping token "map@idx" (mapping_lower_calls):
+/* split a lowered mapping token "map~idx" (mapping_lower_calls):
    returns the index part and sets *mp to mapping id + 1, or returns
    the token unchanged with *mp = 0.  Shared with the jacobian-side
    linear-variable index walk (design doc M2b). */
@@ -50,9 +49,9 @@ char *mapping_token_split(char *p, int *mp) {
   dim_t m;
   *mp=0;
   if (p==NULL) return p;
-  at=strchr(p,'@');
+  at=strchr(p,MAPMARK);
   if (at==NULL) return p;
-  if (strchr(at+1,'@')!=NULL) {
+  if (strchr(at+1,MAPMARK)!=NULL) {
     errmsg("Error: composition of set mappings is not supported (manual 11.9.6)\n");
     MPI_Abort(PETSC_COMM_WORLD,1);
   }
@@ -92,14 +91,14 @@ static void map_dim_bind(dim_addr *Dm, int mp, dim_t frame_setid, offset_t arg_s
 }
 
 /* $POS(...) (manual 11.5.6) inside a formula text (spaces stripped,
-   lowercased, mapping calls already lowered to map@idx): each call is
+   lowercased, mapping calls already lowered to map~idx): each call is
    compiled to an OP_LOAD/OT_POS op emitted ahead of the expression and
    replaced in the text by that op's temp name, which the operand binder
    resolves like any other generated temp.  Forms:
      $pos(i)        position of quantifier index i in the set it ranges over
      $pos(i,S)      its position in S, a superset of that set
-     $pos(map@i)    position of the mapped element in the codomain (11.9.5)
-     $pos(map@i,S)  ... lifted into a superset S of the codomain
+     $pos(map~i)    position of the mapped element in the codomain (11.9.5)
+     $pos(map~i,S)  ... lifted into a superset S of the codomain
      $pos("el",S)   a constant: the position of the element in S
    Returns 0 (with a message) on a malformed or unresolvable call. */
 static int pos_lower(char *f, set_def *sets, quantifier *arSet, dim_t fdim, formula_op *ops, dim_t *nops) {
@@ -150,7 +149,7 @@ static int pos_lower(char *f, set_def *sets, quantifier *arSet, dim_t fdim, form
       if (e==teems_sets[setS].size) { errmsg("Error: $POS: %s is not an element of set %s (manual 11.5.6)\n",el,arg2); return 0; }
       snprintf(repl,NAMESIZE,"%d",(int)e+1);
     } else {
-      char *at=strchr(arg1,'@'),*idx=arg1;
+      char *at=strchr(arg1,MAPMARK),*idx=arg1;
       int mp=0;
       dim_t l,base,sup=0;
       if (at!=NULL) {
@@ -1750,8 +1749,8 @@ static void mapping_assign_literal(dim_t mm, char *lhs, char *rhs, set_def *sets
   char *p=strchr(lhs,'('),*q;
   int k=0;
   dim_t dom,cod;
-  /* mapping_lower_calls has rewritten map("el") to map@"el" */
-  if (p==NULL) p=strchr(lhs,'@');
+  /* mapping_lower_calls has rewritten map("el") to map~"el" */
+  if (p==NULL) p=strchr(lhs,MAPMARK);
   if (p==NULL||p[1]!='"') {
     errmsg("Error: unquantified Formula for mapping %s must name a domain element in quotes, e.g. %s(\"food\") (manual 10.13.1)\n",md->mapname,md->mapname);
     MPI_Abort(PETSC_COMM_WORLD,1);
@@ -1796,8 +1795,8 @@ static void mapping_assign_formula(dim_t mm, char *vname, char *rhs, int byele, 
   dim_t l=-1,dom=-1,codlit=-1,nops=0;
   offset_t t,i4,i3;
   dim_t dcount;
-  /* mapping_lower_calls has rewritten map(i) to map@i */
-  if (p==NULL) p=strchr(vname,'@');
+  /* mapping_lower_calls has rewritten map(i) to map~i */
+  if (p==NULL) p=strchr(vname,MAPMARK);
   if (p==NULL) {
     errmsg("Error: Formula for mapping %s has no argument (manual 10.13.1)\n",md->mapname);
     MPI_Abort(PETSC_COMM_WORLD,1);
@@ -1911,7 +1910,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
      pass its fresh initial state (manual 12.2.4) */
   zdiv_scan_reset();
   while (tab_next_statement_resolved(commsyntax,filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
-    /* mapping calls lower to flat map@idx tokens before any brace
+    /* mapping calls lower to flat map~idx tokens before any brace
        tokenizer runs (manual 11.9.4; design doc M2); sum carried-dim
        discovery identifies them by their domain index (M2c) */
     if (teems_nmap>0) mapping_lower_calls(line);
@@ -1983,11 +1982,11 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
         fdim=str_count_char(line, '(');
         /* unquantified mapping assignment MAP("dom") = "cod" | <pos>
            (manual 10.13.1): no tuple machinery involved */
-        if (teems_nmap>0&&strstr(line,"(all,")==NULL&&(strchr(line,'(')!=NULL||strchr(line,'@')!=NULL)) {
+        if (teems_nmap>0&&strstr(line,"(all,")==NULL&&(strchr(line,'(')!=NULL||strchr(line,MAPMARK)!=NULL)) {
           char mname[NAMESIZE];
           dim_t mm;
           int mk=0;
-          for (p=line; *p!='\0'&&*p!='('&&*p!='@'&&mk<NAMESIZE-1; p++) mname[mk++]=*p;
+          for (p=line; *p!='\0'&&*p!='('&&*p!=MAPMARK&&mk<NAMESIZE-1; p++) mname[mk++]=*p;
           mname[mk]='\0';
           for (mm=0; mm<teems_nmap; mm++) if (strcmp(mname,teems_maps[mm].mapname)==0) break;
           if (mm<teems_nmap) {
@@ -2030,7 +2029,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
               /* quantifier conditions support numeric comparisons only:
                  a mapping equality here would atof its RHS to 0 and
                  filter silently wrong (M3) */
-              if (strchr(p,'@')!=NULL) {
+              if (strchr(p,MAPMARK)!=NULL) {
                 errmsg("Error: mapping equalities in Formula quantifier conditions are not supported; move the condition into a sum (manual 11.4.11)\n");
                 MPI_Abort(PETSC_COMM_WORLD,1);
               }
@@ -2170,7 +2169,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
           char mname[NAMESIZE];
           dim_t mm;
           int mk=0;
-          for (p=vname; *p!='\0'&&*p!='('&&*p!='@'&&mk<NAMESIZE-1; p++) mname[mk++]=*p;
+          for (p=vname; *p!='\0'&&*p!='('&&*p!=MAPMARK&&mk<NAMESIZE-1; p++) mname[mk++]=*p;
           mname[mk]='\0';
           for (mm=0; mm<teems_nmap; mm++) if (strcmp(mname,teems_maps[mm].mapname)==0) break;
           if (mm<teems_nmap) {
@@ -2522,7 +2521,7 @@ offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_el
   zdiv_disable();
   filehandle = fopen(fname,"r");
   while (tab_next_statement_resolved(commsyntax,filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
-    /* a mapped argument on the RHS lowers to map@idx and binds through
+    /* a mapped argument on the RHS lowers to map~idx and binds through
        the formula operand binder like any expression (manual 11.9.4;
        GTAP-E NCTAXLEV(r) = del_nctaxb(REGTOBLOC(r))); on the LHS it
        stays a named fatal (11.9.9) */
@@ -2818,7 +2817,7 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
   zdiv_disable();
   filehandle = fopen(fname,"r");
   while (tab_next_statement_resolved(commsyntax,filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
-    /* a mapped argument on the RHS lowers to map@idx and binds through
+    /* a mapped argument on the RHS lowers to map~idx and binds through
        the formula operand binder like any expression (manual 11.9.4;
        GTAP-E NCTAXLEV(r) = del_nctaxb(REGTOBLOC(r))); on the LHS it
        stays a named fatal (11.9.9) */

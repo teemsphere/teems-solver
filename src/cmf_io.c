@@ -31,7 +31,7 @@ static int cmf_strcpy_bounded(char *dst, const char *src, size_t cap) {
    depth; brace and paren sum forms both count. In-place (the result
    never grows). */
 static int cond_is_namec(char ch) {
-  return (ch>='a'&&ch<='z')||(ch>='A'&&ch<='Z')||(ch>='0'&&ch<='9')||ch=='_'||ch=='@';
+  return (ch>='a'&&ch<='z')||(ch>='A'&&ch<='Z')||(ch>='0'&&ch<='9')||ch=='_'||ch=='@'||ch==MAPMARK;
 }
 static void cond_segment_normalize(char *line) {
   char buf[TABREADLINE];
@@ -378,7 +378,7 @@ static void label_quotes_mask(char *s) {
    occurrence in the sum span, case-insensitively, outside quoted
    element literals. */
 static int ident_char(char c) {
-  return isalnum((unsigned char)c)||c=='_'||c=='@'||c=='?';
+  return isalnum((unsigned char)c)||c=='_'||c=='@'||c==MAPMARK||c=='?';
 }
 
 static void dedup_ident_rename(char *span, const char *a, const char *b, size_t cap) {
@@ -1580,7 +1580,7 @@ int tab_write_variables(char *filename, char *newtabfile,array_def *vars,offset_
          (design doc M2b): every downstream equation consumer -- the
          ordering scans, preallocation, the statement builder, the
          backsolve validator -- reads this rewritten file, so the
-         nested MAP(i) index form is rewritten to the flat map@i token
+         nested MAP(i) index form is rewritten to the flat map~i token
          exactly once, here.  Updates keep their named fatal
          (mapping_use_guards). */
       if((eqpos==0||eqpos==1)&&teems_nmap>0) mapping_lower_calls(line);
@@ -1790,7 +1790,7 @@ static void ps_decl_name(char *line, int kwlen, char *out) {
     while(*p!=')'&&*p!='\0')p++;
     if(*p==')')p++;
   }
-  while((isalnum((int)*p)||*p=='_'||*p=='@')&&k<NAMESIZE-1)out[k++]=*p++;
+  while((isalnum((int)*p)||*p=='_'||*p=='@'||*p==MAPMARK)&&k<NAMESIZE-1)out[k++]=*p++;
   out[k]='\0';
 }
 

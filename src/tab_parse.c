@@ -2254,7 +2254,7 @@ int mapping_use_guards(char *fname, map_def *maps, dim_t nmap) {
   return 0;
 }
 
-/* pre-lower mapping calls "map(i)" to the flat token "map@i" so the
+/* pre-lower mapping calls "map(i)" to the flat token "map~i" so the
    brace tokenizers never meet a nested index list (design doc M2);
    composition map1(map2(i)) stays a named fatal (11.9.6 deferred) */
 void mapping_lower_calls(char *line) {
@@ -2272,12 +2272,12 @@ void mapping_lower_calls(char *line) {
       }
       int op=k+(int)strlen(find)-1;
       for (k2=op+1; line[k2]!='\0'&&line[k2]!=')'&&line[k2]!='('; k2++) {}
-      /* a '(' before the ')' is an unlowered inner call; an '@' in the
+      /* a '(' before the ')' is an unlowered inner call; a MAPMARK in the
          span is an already-lowered one -- both are composition */
       {
         int k3;
         int inner=(line[k2]=='(');
-        for (k3=op+1; k3<k2; k3++) if (line[k3]=='@') inner=1;
+        for (k3=op+1; k3<k2; k3++) if (line[k3]==MAPMARK) inner=1;
         if (inner) {
           errmsg("Error: composition of set mappings is not supported (mapping %s; manual 11.9.6)\n",teems_maps[m].mapname);
           MPI_Abort(PETSC_COMM_WORLD,1);
@@ -2287,7 +2287,7 @@ void mapping_lower_calls(char *line) {
         from=k+1;
         continue;
       }
-      line[op]='@';
+      line[op]=MAPMARK;
       memmove(line+k2,line+k2+1,strlen(line+k2+1)+1);
       from=k+1;
     }
@@ -2295,20 +2295,20 @@ void mapping_lower_calls(char *line) {
 }
 
 /* Identity of an index token for sum carried-dim discovery (design
-   doc M2c): a lowered mapping token map@idx is summed or carried by
+   doc M2c): a lowered mapping token map~idx is summed or carried by
    its domain index idx -- the mapping routes the OPERAND's dimension,
    not the loop dimension -- so the summed-index test, carried-dim
    dedupe, set resolution and the generated-sum replacement token all
-   work on the part after the '@'. */
+   work on the part after the MAPMARK. */
 char *sum_dim_identity(char *p) {
-  char *at=strchr(p,'@');
+  char *at=strchr(p,MAPMARK);
   return at==NULL?p:at+1;
 }
 
 /* Parse the ":<condition>" tail of a sum's set token (manual 11.4.11;
    design doc M3).  The one supported form is a mapping equality on
    the summed index -- MAP(idx) = rhs, arriving lowered as
-   map@idx=rhs -- and every other condition is a named fatal: before
+   map~idx=rhs -- and every other condition is a named fatal: before
    M3 a ':' in the set token made the set lookup miss and the sum
    silently expanded over sets[0].  The set part is truncated in
    place for the caller to resolve; the RHS token is kept raw and
@@ -2435,7 +2435,7 @@ void sum_cond_parse(char *settok, const char *sumindx, int *cond_mapid, char *co
       return;
     }
     /* a scalar coefficient has no argument list: "SC > 1" */
-    for (tl=0; isalnum((int)p[tl])||p[tl]=='_'||p[tl]=='@'; tl++);
+    for (tl=0; isalnum((int)p[tl])||p[tl]=='_'||p[tl]=='@'||p[tl]==MAPMARK; tl++);
     q=(p[tl]=='('||p[tl]=='{'||p[tl]=='[')?p+tl:NULL;
     if (tl<=0||tl>=NAMESIZE) goto badcond;
     strncpy(sc->cond_coef,p,tl);
@@ -2756,13 +2756,13 @@ int mappings_validate(map_def *maps, dim_t nmap, set_def *sets, set_element *set
 static offset_t closure_var_find(char *vname, array_def *vars, offset_t nvar) {
   offset_t j;
   /* callers pass a strtok result, which is NULL on a malformed
-     statement; the '@' scan below then read through NULL (fuzz batch 14) */
+     statement; the name test below then read through NULL (fuzz batch 14) */
   if (vname==NULL) return -1;
   /* derived complementarity variables (comp@e/@d/@l/@u, del_comp@;
      design doc section 7) are solver-managed (51.7.2: "you must not
-     mention any of [them] in your Command file"); '@' is illegal in
-     user names, so any '@' here is such a mention */
-  if (strchr(vname,'@')!=NULL) {
+     mention any of [them] in your Command file"); '@' is legal in user
+     names (11.2.1), so only the exact derived forms are rejected */
+  if (name_is_comp_derived(vname)) {
     errmsg("Error: %s is a solver-managed derived complementarity variable and cannot appear in closure or shock files (manual 51.7.2)\n",vname);
     MPI_Abort(PETSC_COMM_WORLD,1);
   }
@@ -6307,9 +6307,9 @@ int backsolve_validate_refs(char *fname, array_def *vars) {
        ordinary column (the recovery program routes its element through
        the mapping table, as the Jacobian fill does); only the
        backsolved variable's own occurrence carrying a lowered mapping
-       token (p_x(map@i): rows to elements many-to-one) breaks the
+       token (p_x(map~i): rows to elements many-to-one) breaks the
        bijection, and is rejected up front with its own message */
-    if (hit>=0&&strchr(line,'@')!=NULL) {
+    if (hit>=0&&strchr(line,MAPMARK)!=NULL) {
       char *q;
       strcpy(ref,"p_");
       strcat(ref,vars[backsolves[hit].varindx].cofname);
@@ -6317,8 +6317,8 @@ int backsolve_validate_refs(char *fname, array_def *vars) {
       for (q=line; (q=strstr(q,ref))!=NULL; q+=strlen(ref)) {
         char *r2;
         if (q>line&&(isalnum((int)q[-1])||q[-1]=='_')) continue;
-        for (r2=q+strlen(ref); *r2!='\0'&&*r2!=')'; r2++) if (*r2=='@') break;
-        if (*r2=='@') {
+        for (r2=q+strlen(ref); *r2!='\0'&&*r2!=')'; r2++) if (*r2==MAPMARK) break;
+        if (*r2==MAPMARK) {
           errmsg("Error: backsolved variable %s is referenced through a set mapping in its defining equation %s; the row-to-element recovery would not be one-to-one\n",vars[backsolves[hit].varindx].cofname,eqname);
           fclose(filehandle);
           free(eqfound);

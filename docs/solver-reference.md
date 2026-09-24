@@ -86,6 +86,16 @@ teems-R and must not be re-ordered or resized casually.
 
 The solver reads a GEMPACK-style TAB subset (statement syntax per [GM]):
 
+- names — coefficients, variables, sets, elements, indices, equations
+  and logical files may contain `@` ([GM] 11.2.1, e.g. `X3@Y2`). The
+  preprocess lowers a mapping call `MAP(i)` to the flat token `MAP~i`
+  (`MAPMARK`, a character no GEMPACK name can contain), and the
+  complementarity machinery's own names are recognised by their exact
+  forms (`name_is_comp_derived`: `C@e/@d/@l/@u`, the `C@w*` weights,
+  `e_C@…` equations for a declared complementarity `C`, and
+  `del_comp@`), so a user `@` name is an ordinary name in closures,
+  shocks, formulas and index positions. Text inside `# labels #` is
+  opaque: a quoted element there is not lowered.
 - `set` / `subset` — explicit lists, `read elements` from a data
   file, the full set-expression grammar of [GM] 10.1.1 (`+`, `-`, `\`,
   `UNION`, `INTERSECT`, quoted single elements, parentheses; `+`

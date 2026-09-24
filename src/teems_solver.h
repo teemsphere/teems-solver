@@ -530,6 +530,10 @@ typedef struct
 } comp_def ;
 extern comp_def *teems_comps;
 extern dim_t teems_ncomp;
+/* a lowered mapping call MAP(i) is the flat token MAP~i: '~' cannot occur
+   in a GEMPACK name, while '@' can (manual 11.2.1) */
+#define MAPMARK '~'
+int name_is_comp_derived(const char *name);
 /* count of complementarity-variable components left ENDOGENOUS by the
    closure = components solved by the C2 approximate-run state
    machinery (exogenous components stay inert: their dummy comp@d is

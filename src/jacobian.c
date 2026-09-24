@@ -398,7 +398,7 @@ static void stmt_prog_execute(stmt_prog *st, offset_t matrow, PetscInt *eq_addr,
    (all,idx,SET) quantifier when idx is quantified, else from the
    textually nearest enclosing sum(idx,SET,...) before the reference
    (lvar = the reference's offset in the statement text, the original
-   occurrence disambiguation).  A lowered mapping token map@idx
+   occurrence disambiguation).  A lowered mapping token map~idx
    (design doc M2b) splits instead of searching: in split mode -- the
    builder/preallocation, whose loops iterate the DOMAIN and route the
    column offset through the mapping's value table -- dimnames gets
@@ -451,7 +451,7 @@ static void linvar_dim_read(char *p, char *linecopy, offset_t lvar,
   ref->dimmapid[d]=0;
   ref->dimcondmap[d]=0;
   ref->dimcondrhs[d][0]='\0';
-  if(strchr(p,'@')!=NULL) {
+  if(strchr(p,MAPMARK)!=NULL) {
     char *idx=mapping_token_split(p,&mp);
     if(split_mapped) {
       /* the loop set is whatever the domain index ranges over -- fall
@@ -463,7 +463,7 @@ static void linvar_dim_read(char *p, char *linecopy, offset_t lvar,
       p=idx;
     }
     else {
-      *(idx-1)='@';
+      *(idx-1)=MAPMARK;
       ref->dimmapid[d]=mp;
       strcpy(ref->dimnames[d],p);
       strcpy(ref->dimsetnames[d],sets[teems_maps[mp-1].toset].setname);
@@ -600,7 +600,7 @@ typedef struct {
 static const char *lin_intrinsics[]={"sqrt","exp","loge","log10","abs","max","min","id01","id0v","round","trunc0","truncb","random","normal","cumnormal","lognormal","cumlognormal","gperf","gperfc","maxs","mins","prod",NULL};
 
 static int lin_isnamec(char ch) {
-  return isalnum((unsigned char)ch)||ch=='_'||ch=='@';
+  return isalnum((unsigned char)ch)||ch=='_'||ch=='@'||ch==MAPMARK;
 }
 
 static void lin_fatal(lin_ctx *c, const char *what) {

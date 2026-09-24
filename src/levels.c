@@ -128,7 +128,7 @@ static int lv_err(lv_ctx *c, const char *msg) {
 }
 
 static bool lv_isnamec(char ch) {
-  return (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '_' || ch == '@' || (ch >= 'A' && ch <= 'Z');
+  return (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '_' || ch == '@' || ch == MAPMARK || (ch >= 'A' && ch <= 'Z');
 }
 
 /* expression tokens arrive post-rename: match the VALUE name */
@@ -1155,6 +1155,38 @@ static int cp_fill_decl_sets(lv_ctx *c, char *fname) {
   return 0;
 }
 
+/* the names cp_emit_derived writes for a declared complementarity C --
+   C@e C@d C@l C@u (variables), C@wx C@we C@wl C@wu C@wn (weights),
+   e_C@ e_C@e e_C@l e_C@u (equations) -- and del_comp@. GEMPACK allows
+   '@' in user names (manual 11.2.1), so "contains '@'" does not mark a
+   derived name; the exact forms do. */
+int name_is_comp_derived(const char *name) {
+  static const char *sfx[] = {"e", "d", "l", "u", "wx", "we", "wl", "wu", "wn", ""};
+  const char *at, *base;
+  dim_t k;
+  size_t blen, i;
+  if (name == NULL) return 0;
+  if (strcasecmp(name, "del_comp@") == 0) return 1;
+  at = strrchr(name, '@');
+  if (at == NULL || teems_ncomp == 0) return 0;
+  base = name;
+  if (strncasecmp(base, "e_", 2) == 0) {
+    for (k = 0; k < teems_ncomp; k++) {
+      blen = strlen(teems_comps[k].name);
+      if ((size_t)(at - base - 2) == blen && strncasecmp(base + 2, teems_comps[k].name, blen) == 0) {
+        for (i = 0; i < 4; i++) if (strcasecmp(at + 1, sfx[i]) == 0) return 1;
+        if (at[1] == '\0') return 1;
+      }
+    }
+  }
+  for (k = 0; k < teems_ncomp; k++) {
+    blen = strlen(teems_comps[k].name);
+    if ((size_t)(at - base) != blen || strncasecmp(base, teems_comps[k].name, blen) != 0) continue;
+    for (i = 0; i < sizeof(sfx) / sizeof(sfx[0]) - 1; i++) if (strcasecmp(at + 1, sfx[i]) == 0) return 1;
+  }
+  return 0;
+}
+
 /* emit the derived statements for one complementarity */
 static int cp_emit_derived(FILE *fout, comp_def *cp, const char *expr) {
   char quants[TABREADLINE], idxs[TABREADLINE];
@@ -1354,7 +1386,7 @@ int comp_closure_check(closure_entry *closure_vals, array_def *vars, offset_t nv
   if (teems_ncomp == 0) return 0;
   for (i = 0; i < nvar; i++) {
     offset_t nele = vars[i].nelem; /* scalars carry nelem 1 (size 0) */
-    if (strchr(vars[i].cofname, '@') == NULL) continue;
+    if (!name_is_comp_derived(vars[i].cofname)) continue;
     for (j = 0; j < nele; j++) {
       if (CL_BS(vars[i].offset + j)) {
         errmsg("Error: derived complementarity variable %s cannot be backsolved\n", vars[i].cofname);
