@@ -3348,10 +3348,68 @@ int tab_default_value(char *line, char *out) {
    10.19.1; audit A9): the first goes to rec->gltype/glval, the
    opposite-direction second to gltype2/glval2; a same-direction
    duplicate is fatal. Returns 1 on success, -1 on error. */
+/* A qualifier group written AFTER the quantifier list,
+   "Variable (all,c,COM) (change) x(c)" (ORANI-G 2013, accepted by
+   TABLO), is relocated to the front so the leading-group walk in
+   tab_qualifiers_parse sees it; only a group whose first token is a
+   qualifier word moves, an index list "(c)" or an element list stays. */
+static void tab_qualifiers_relocate(char *line, offset_t ncommsyntax) {
+  static const char *qwords[]={"change","percent_change","linear","levels","parameter","non_parameter","real","integer","orig_level=","vpqtype=","ge","gt","le","lt","default",NULL};
+  char *p=line+ncommsyntax,*q,*g,*e;
+  char head[TABREADLINE],word[NAMESIZE];
+  int depth,k,w,isq;
+  while(*p==' ')p++;
+  while(*p=='('&&strncmp(p+1,"all,",4)!=0&&strncmp(p+1,"all ",4)!=0) {
+    q=strchr(p,')');
+    if(q==NULL)return;
+    p=q+1;
+    while(*p==' ')p++;
+  }
+  if(*p!='('||strncmp(p+1,"all",3)!=0)return;
+  g=p;
+  while(*g!='\0') {
+    while(*g==' ')g++;
+    if(*g!='(')break;
+    if(strncmp(g+1,"all,",4)==0||strncmp(g+1,"all ",4)==0) {
+      depth=0;
+      for(e=g; *e!='\0'; e++) { if(*e=='(')depth++; else if(*e==')'&&--depth==0)break; }
+      if(*e=='\0')return;
+      g=e+1;
+      continue;
+    }
+    q=g+1;
+    while(*q==' ')q++;
+    k=0;
+    while(k<NAMESIZE-1&&(isalnum((int)q[k])||q[k]=='_'||q[k]=='='))k++;
+    strncpy(word,q,k);
+    word[k]='\0';
+    for(w=0; word[w]!='\0'; w++)word[w]=tolower((int)word[w]);
+    isq=0;
+    for(w=0; qwords[w]!=NULL; w++) {
+      size_t ql=strlen(qwords[w]);
+      if(strncmp(word,qwords[w],ql)==0&&(word[ql]=='\0'||qwords[w][ql-1]=='=')) { isq=1; break; }
+    }
+    if(!isq)break;
+    e=strchr(g,')');
+    if(e==NULL)return;
+    if((size_t)(e-g+1)+strlen(line)+2>=sizeof(head))return;
+    strncpy(head,g,e-g+1);
+    head[e-g+1]='\0';
+    memmove(g,e+1,strlen(e+1)+1);
+    p=line+ncommsyntax;
+    while(*p==' ')p++;
+    memmove(p+strlen(head)+1,p,strlen(p)+1);
+    memcpy(p,head,strlen(head));
+    p[strlen(head)]=' ';
+    g=g+strlen(head)+1;
+  }
+}
+
 static int tab_qualifiers_parse(char *line, offset_t ncommsyntax, array_def *rec, int *explicit_param, bool *isint_out, int *gltype2, store_real *glval2, int is_variable) {
   char group[TABREADLINE],tok[TABREADLINE],*p,*q,*t,*s;
   offset_t len;
   int k,nbtype;
+  tab_qualifiers_relocate(line,ncommsyntax);
   p=line+ncommsyntax;
   while(*p==' ')p++;
   while(*p=='(') {

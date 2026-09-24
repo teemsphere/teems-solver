@@ -660,8 +660,32 @@ int tab_preprocess(char *filename, char *newtabfile) {
   return r;
 }
 
+/* a Formula whose target is a scalar coefficient: no quantifier list and
+   no argument list on the left of '=' (qualifier groups aside) */
+static int formula_lhs_scalar(const char *line) {
+  const char *eq=strchr(line,'='),*p=line;
+  if (eq==NULL) return 0;
+  if (str_find_ci((char *)line,"formula")==0) p+=7;
+  while (p<eq) {
+    if (*p=='(') {
+      if (strncmp(p,"(initial)",9)==0||strncmp(p,"(always)",8)==0) {
+        p=strchr(p,')');
+        if (p==NULL) return 0;
+        p++;
+        continue;
+      }
+      return 0;
+    }
+    p++;
+  }
+  return 1;
+}
+
+#define MAXLITDEDUP 64
 static int tab_preprocess_run(char *filename, char *newtabfile) {
   FILE * filehandle,*fout;
+  char dedup_set[MAXLITDEDUP][NAMESIZE],dedup_ele[MAXLITDEDUP][NAMESIZE],dedup_idx[MAXLITDEDUP][NAMESIZE];
+  int ndedup=0;
   char line[TABREADLINE]="\0",line1[TABREADLINE],line2[TABREADLINE],indx[NAMESIZE],indx1[NAMESIZE],indx2[NAMESIZE],*readitem,*readitem1,commsyntax[NAMESIZE],readline[TABREADLINE],readline1[TABREADLINE],*n,newtabfile1[TABREADLINE];
   char setname[NAMESIZE],newset[NAMESIZE],varname[NAMESIZE],*n1,setelement[TABREADLINE];//,*ne,*np;//,*n2;
   char assertmsg[TABREADLINE],*am1,*am2;
@@ -958,6 +982,7 @@ static int tab_preprocess_run(char *filename, char *newtabfile) {
       if (n!=NULL) {
         readline[0]='\0';
         readline1[0]='\0';
+        ndedup=0;
         while (n!=NULL) {
           strncpy(line2,line1,n-line1);
           line2[n-line1]='\0';
@@ -1097,6 +1122,34 @@ static int tab_preprocess_run(char *filename, char *newtabfile) {
             errmsg("Error: TAB statement too complex in tab_preprocess: %s\n",line);
             return -1;
           }
+          /* one synthesized set per (owning set, element) PER STATEMENT:
+             a literal repeated in a statement used to get a fresh set
+             and quantifier each time, and E_regx0_A of ORANI-G (ten
+             "dom" arguments, thirty-six after condensation) overran the
+             statement frame so a sum index bound to the wrong set
+             (2026-09-24). A repeat reuses the earlier index name. */
+          {
+            int dk,dhit=-1;
+            for (dk=0; dk<ndedup; dk++)
+              if (strcmp(dedup_set[dk],setname)==0&&strcmp(dedup_ele[dk],setelement)==0) { dhit=dk; break; }
+            if (dhit>=0) {
+              if (str_subst_first_bounded(line,indx1,dedup_idx[dhit],sizeof(line))) {
+                errmsg("Error: TAB statement too complex in tab_preprocess: %s\n",line);
+                return -1;
+              }
+              strcpy(line2,line);
+              strcpy(line1,line);
+              n=strchr(line1,'\"');
+              if (l3==0&&str_count_ci(line1,"\"")<3) n=NULL;
+              continue;
+            }
+            if (ndedup<MAXLITDEDUP) {
+              strcpy(dedup_set[ndedup],setname);
+              strcpy(dedup_ele[ndedup],setelement);
+              strcpy(dedup_idx[ndedup],indx);
+              ndedup++;
+            }
+          }
           if (cmf_strcat_bounded(readline,"set ",sizeof(readline)) ||
               cmf_strcat_bounded(readline,newset,sizeof(readline)) ||
               cmf_strcat_bounded(readline," (",sizeof(readline)) ||
@@ -1117,6 +1170,29 @@ static int tab_preprocess_run(char *filename, char *newtabfile) {
           if (str_subst_first_bounded(line,indx1,indx,sizeof(line))) {
             errmsg("Error: TAB statement too complex in tab_preprocess: %s\n",line);
             return -1;
+          }
+          /* a scalar-target Formula, "X = sum{r,REG, V("ele",r)}": a
+             leading quantifier over the singleton set gave the formula a
+             frame its scalar target does not have and the executor bound
+             the literal's index to the wrong set. The literal is bound
+             by wrapping the right-hand side in a sum over the singleton
+             instead (a one-element sum is the term itself), 2026-09-24 */
+          if (l2==0&&str_find_ci(line,"(all,")==-1&&formula_lhs_scalar(line)) {
+            char *eq=strchr(line,'='),*sc=strrchr(line,';');
+            if (eq!=NULL&&sc!=NULL&&sc>eq) {
+              *eq='\0';
+              *sc='\0';
+              if (snprintf(line2,sizeof(line2),"%s= sum(%s,%s, %s);\n",line,indx,newset,eq+1)>=(int)sizeof(line2)) {
+                errmsg("Error: TAB statement too complex in tab_preprocess: %s\n",line);
+                return -1;
+              }
+              strcpy(line,line2);
+              strcpy(line1,line);
+              n=strchr(line1,'\"');
+              if (l3==0&&str_count_ci(line1,"\"")<3) n=NULL;
+              i++;
+              continue;
+            }
           }
           readitem1=strtok(line," ");
           if (readitem1==NULL||
@@ -1145,11 +1221,15 @@ static int tab_preprocess_run(char *filename, char *newtabfile) {
                 return -1;
               }
             }
+            /* the quantifier used to be glued to the body, so a
+               body-leading variable "(all,i5,sub_i5)contbot" was
+               never prefixed by tab_write_variables (ORANI-G,
+               2026-09-24): a space separates them */
             if (cmf_strcat_bounded(line2," (all,",sizeof(line2)) ||
                 cmf_strcat_bounded(line2,indx,sizeof(line2)) ||
                 cmf_strcat_bounded(line2,",",sizeof(line2)) ||
                 cmf_strcat_bounded(line2,newset,sizeof(line2)) ||
-                cmf_strcat_bounded(line2,")",sizeof(line2)) ||
+                cmf_strcat_bounded(line2,") ",sizeof(line2)) ||
                 cmf_strcat_bounded(line2,readitem1,sizeof(line2)) ||
                 cmf_strcat_bounded(line2," ",sizeof(line2))) {
               errmsg("Error: TAB statement too complex in tab_preprocess: %s\n",line);
@@ -1391,7 +1471,7 @@ int tab_write_variables(char *filename, char *newtabfile,array_def *vars,offset_
           if(l1<0) break;
           l=l+l1;
           /* a scalar variable closing a group, "... - pxwwld)", was not prefixed: the term was bound as a value (its column dropped) -- ')' and '}' close the follower set (2026-09-06) */
-          if(strncmp(vars[i].cofname,"p_",2)!=0&&vars[i].level_par==false) if(line[l+lvar]==')'||line[l+lvar]=='}'||line[l+lvar]==' '||line[l+lvar]=='('||line[l+lvar]=='+'||line[l+lvar]=='-'||line[l+lvar]=='*'||line[l+lvar]=='/'||line[l+lvar]=='^'||line[l+lvar]==']'||line[l+lvar]==','||line[l+lvar]==';'||line[l+lvar]=='=')if(l==0||line[l-1]==' '||line[l-1]=='+'||line[l-1]=='-'||line[l-1]=='*'||line[l-1]=='/'||line[l-1]=='^'||line[l-1]=='['||line[l-1]=='('||line[l-1]==','||line[l-1]=='=') {
+          if(strncmp(vars[i].cofname,"p_",2)!=0&&vars[i].level_par==false) if(line[l+lvar]==')'||line[l+lvar]=='}'||line[l+lvar]==' '||line[l+lvar]=='('||line[l+lvar]=='+'||line[l+lvar]=='-'||line[l+lvar]=='*'||line[l+lvar]=='/'||line[l+lvar]=='^'||line[l+lvar]==']'||line[l+lvar]==','||line[l+lvar]==';'||line[l+lvar]=='=')if(l==0||line[l-1]==' '||line[l-1]=='+'||line[l-1]=='-'||line[l-1]=='*'||line[l-1]=='/'||line[l-1]=='^'||line[l-1]=='['||line[l-1]=='('||line[l-1]==')'||line[l-1]==','||line[l-1]=='=') { /* ')' : a quantifier written flush against the body, "(all,c,com)p(c)" (2026-09-24) */
                 /* each p_ prefix grows the statement by 2 and nothing
                    bounded the growth (fuzz batch 13 stack overflow);
                    the move carries the terminator along */

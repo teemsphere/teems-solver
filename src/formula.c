@@ -3322,6 +3322,15 @@ offset_t assertions_execute(char *fname,set_def *sets,dim_t nset,set_element *se
   offset_t nsumele;
   solve_real zerodivide=0,r;
   bool IsAssIni,ok,skip;
+  /* conditional quantifiers "(all,i,S: expr RELOP expr)" (manual
+     10.14 / 11.4.11): each condition is compiled as the residual
+     lhs-(rhs) through the formula engine, like the assertion itself,
+     and evaluated per tuple; a false condition excludes the tuple
+     (ORANI-G's zero-flow margin and tax checks, 2026-09-24) */
+  formula_op *cond_ops[4*MAXVARDIM];
+  dim_t cond_nops[4*MAXVARDIM];
+  int cond_relop[4*MAXVARDIM],ncond;
+  char condtxt[TABREADLINE];
   if(mode==0)return 0;
   /* count cached per file buffer: the PostSim pass runs this on the
      _ps companion with its own count */
@@ -3383,6 +3392,7 @@ offset_t assertions_execute(char *fname,set_def *sets,dim_t nset,set_element *se
     nq=0;
     nloops=1;
     skip=false;
+    ncond=0;
     p=linecopy;
     while(strncmp(p,"(all,",5)==0&&nq<4*MAXVARDIM) {
       p+=5;
@@ -3396,8 +3406,11 @@ offset_t assertions_execute(char *fname,set_def *sets,dim_t nset,set_element *se
       strncpy(arSet[nq].index_name,p,len);
       arSet[nq].index_name[len]='\0';
       p=q+1;
-      q=strchr(p,')');
-      if(q==NULL) {
+      /* the quantifier's own ')' : a condition may carry argument
+         lists, "(all,i,IND:V1BAS(c,s,i)=0)" */
+      depth=1;
+      for(q=p; *q!='\0'; q++) { if(*q=='(')depth++; else if(*q==')'&&--depth==0)break; }
+      if(*q=='\0') {
         skip=true;
         break;
       }
@@ -3405,10 +3418,59 @@ offset_t assertions_execute(char *fname,set_def *sets,dim_t nset,set_element *se
       if(len>=NAMESIZE)len=NAMESIZE-1;
       strncpy(tempset,p,len);
       tempset[len]='\0';
+      cond_ops[nq]=NULL;
       if(strchr(tempset,':')!=NULL) {
-        printf("Warning: conditional quantifiers in assertions are not supported -- assertion skipped: %s\n",linecopy);
-        skip=true;
-        break;
+        char *c=strchr(tempset,':');
+        *c='\0';
+        c++;
+        if(strlen(c)+1>=sizeof(condtxt)||strstr(c,"sum(")!=NULL||strstr(c,"$pos")!=NULL) {
+          printf("Warning: assertion quantifier condition not supported (sums and $POS) -- assertion skipped: %s\n",linecopy);
+          skip=true;
+          break;
+        }
+        strcpy(condtxt,c);
+        /* top-level comparison operator of the condition */
+        {
+          char *cq,*cright;
+          int cdepth=0,crel=0;
+          for(cq=condtxt; *cq!='\0'; cq++) {
+            if(*cq=='(')cdepth++;
+            else if(*cq==')')cdepth--;
+            else if(cdepth==0) {
+              if(*cq=='<'&&*(cq+1)=='>') { crel=2; break; }
+              if(*cq=='>'&&*(cq+1)=='=') { crel=3; break; }
+              if(*cq=='<'&&*(cq+1)=='=') { crel=4; break; }
+              if(*cq=='>') { crel=5; break; }
+              if(*cq=='<') { crel=6; break; }
+              if(*cq=='=') { crel=1; break; }
+            }
+          }
+          if(crel==0) {
+            printf("Warning: assertion quantifier condition has no comparison operator -- assertion skipped: %s\n",linecopy);
+            skip=true;
+            break;
+          }
+          cright=cq+((crel==1||crel==5||crel==6)?1:2);
+          *cq='\0';
+          if(snprintf(resid,TABREADLINE,"%s-(%s)",condtxt,cright)>=TABREADLINE-1) {
+            printf("Warning: assertion quantifier condition too long -- skipped\n");
+            skip=true;
+            break;
+          }
+          while (formula_normalize(resid)==1);
+          leadlag_encode(resid);
+          {
+            int cnpow=str_count_char(resid,'^'),cnmul=str_count_char(resid,'*')+str_count_char(resid,'/');
+            int cnplu=str_count_char(resid,'+')+str_count_char(resid,'-'),cnpar=str_count_char(resid,'(')+str_count_char(resid,',');
+            cond_ops[nq]=(formula_op *) calloc (cnpow+cnmul+cnplu+2*(cnpar+2),sizeof(formula_op));
+          }
+          cond_nops[nq]=0;
+          cond_relop[nq]=crel;
+          /* the condition may only use quantifiers declared so far
+             (this one included): compile against the frame after this
+             quantifier's set is resolved, below */
+          ncond++;
+        }
       }
       for(i=0; i<nset; i++)if(strcmp(sets[i].setname,tempset)==0)break;
       if(i>=nset) {
@@ -3419,9 +3481,18 @@ offset_t assertions_execute(char *fname,set_def *sets,dim_t nset,set_element *se
       arSet[nq].setid=i;
       nloops=nloops*sets[i].size;
       nq++;
+      if(cond_ops[nq-1]!=NULL) {
+        if(!formula_compile(resid,sets,coefs,ncof,vars,nvar,ncofele,NULL,0,cond_ops[nq-1],&cond_nops[nq-1],arSet,nq)) {
+          printf("Warning: assertion quantifier condition could not be compiled -- assertion skipped: %s\n",linecopy);
+          skip=true;
+          break;
+        }
+      }
       p=q+1;
     }
     if(skip) {
+      for(dcount=0; dcount<nq; dcount++)if(cond_ops[dcount]!=NULL)free(cond_ops[dcount]);
+      if(nq<4*MAXVARDIM&&cond_ops[nq]!=NULL)free(cond_ops[nq]);
       free(arSet);
       continue;
     }
@@ -3514,6 +3585,7 @@ offset_t assertions_execute(char *fname,set_def *sets,dim_t nset,set_element *se
     nops=0;
     if(!formula_compile(p,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,&nops,arSet,nq)) {
       printf("Warning: assertion condition could not be compiled -- assertion skipped: %s\n",linecopy);
+      for(dcount=0; dcount<nq; dcount++)if(cond_ops[dcount]!=NULL)free(cond_ops[dcount]);
       free(arSet);
       free(sum_cof);
       free(sum_vals);
@@ -3532,6 +3604,21 @@ offset_t assertions_execute(char *fname,set_def *sets,dim_t nset,set_element *se
         i3=(offset_t) i4/dcountdim1[dcount];
         arSet[dcount].indx=i3;
         i4=i4-i3*dcountdim1[dcount];
+      }
+      if(ncond>0) {
+        bool cond_ok=true;
+        for(dcount=0; dcount<nq&&cond_ok; dcount++) {
+          solve_real cr;
+          if(cond_ops[dcount]==NULL)continue;
+          cr=formula_eval(elem_vals,sets,set_elems,NULL,cond_ops[dcount],cond_nops[dcount],arSet,dcount+1,zerodivide);
+          if(cond_relop[dcount]==1)cond_ok=(cr==0);
+          if(cond_relop[dcount]==2)cond_ok=(cr!=0);
+          if(cond_relop[dcount]==3)cond_ok=(cr>=0);
+          if(cond_relop[dcount]==4)cond_ok=(cr<=0);
+          if(cond_relop[dcount]==5)cond_ok=(cr>0);
+          if(cond_relop[dcount]==6)cond_ok=(cr<0);
+        }
+        if(!cond_ok)continue;
       }
       r=formula_eval(elem_vals,sets,set_elems,sum_vals,ops,nops,arSet,nq,zerodivide);
       ok=true;
@@ -3564,6 +3651,7 @@ offset_t assertions_execute(char *fname,set_def *sets,dim_t nset,set_element *se
         MPI_Abort(PETSC_COMM_WORLD,1);
       }
     }
+    for(dcount=0; dcount<nq; dcount++)if(cond_ops[dcount]!=NULL)free(cond_ops[dcount]);
     free(arSet);
     free(sum_cof);
     free(sum_vals);

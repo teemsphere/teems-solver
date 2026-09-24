@@ -127,6 +127,13 @@ The solver reads a GEMPACK-style TAB subset (statement syntax per [GM]):
   range tests (`-range_test_*`).
 - `read` — from the CMF-bound data files, including `(IfHeaderExists)`
   (absent header skipped) and `(by_elements)` mapping reads.
+- quoted element arguments, `V(c,"dom",i)` — lowered by the preprocess
+  to a singleton subset and an index bound to it: one synthesized set
+  per (owning set, element) per statement, so a literal repeated in a
+  statement shares one quantifier (E_regx0_A of ORANI-G carries ten
+  `"dom"` arguments); an Equation or indexed Formula gets a leading
+  `(all,iN,sub_iN)` quantifier, a scalar-target Formula has its
+  right-hand side wrapped in `sum(iN,sub_iN, …)` instead.
 - `formula` — `(initial)` / `(always)` semantics as in [GM]; conditional
   quantifiers `(all,i,S: COEF(i) op c)` and general conditional sums;
   `zerodivide` defaults honored by `tab_next_statement_resolved()`
@@ -139,7 +146,10 @@ The solver reads a GEMPACK-style TAB subset (statement syntax per [GM]):
   the R front end into these forms; value-comparison `if(a op b, x)`
   compiles directly, with the comparison spelled either way
   (`< <= = <> > >=` or `lt le eq ne gt ge`).
-- `assertion` (`-assertions` off/warn/fatal), `zerodivide` statements,
+- `assertion` (`-assertions` off/warn/fatal; conditional quantifiers
+  `(all,i,S: C(i) > 0)` evaluate per tuple, each condition compiled as
+  a residual through the formula engine — sums and `$POS` inside a
+  condition still skip the assertion with a warning), `zerodivide` statements,
   `Default` statements ([GM] 10.19), `PostSim (Begin/End)` sections
   ([GM] ch. 12; `-postsim`, split by the preprocess and executed after
   the simulation), `write` (opt-in coefficient CSVs).
