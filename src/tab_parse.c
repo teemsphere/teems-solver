@@ -2426,7 +2426,7 @@ void sum_cond_parse(char *settok, const char *sumindx, int *cond_mapid, char *co
      word operators sit glued after the closing bracket. */
   {
     char *p=lhs,*q;
-    int tl,opc=0,olen=0;
+    int tl,opc=0,olen=0,scalar=0;
     char *endp=NULL;
     double cval;
     if (sc==NULL) {
@@ -2434,23 +2434,31 @@ void sum_cond_parse(char *settok, const char *sumindx, int *cond_mapid, char *co
       MPI_Abort(PETSC_COMM_WORLD,1);
       return;
     }
-    q=strpbrk(p,"({[");
-    if (q==NULL) goto badcond;
-    tl=(int)(q-p);
+    /* a scalar coefficient has no argument list: "SC > 1" */
+    for (tl=0; isalnum((int)p[tl])||p[tl]=='_'||p[tl]=='@'; tl++);
+    q=(p[tl]=='('||p[tl]=='{'||p[tl]=='[')?p+tl:NULL;
     if (tl<=0||tl>=NAMESIZE) goto badcond;
     strncpy(sc->cond_coef,p,tl);
     sc->cond_coef[tl]='\0';
-    p=q+1;
-    while (*p!='\0'&&*p!=')'&&*p!='}'&&*p!=']'&&sc->cond_cofnargs<MAXVARDIM) {
-      tl=0;
-      if (*p=='\"') { p++; while (*p!='\0'&&*p!='\"'&&tl<NAMESIZE-1) sc->cond_cofargs[sc->cond_cofnargs][tl++]=(char)tolower((int)*p++); if (*p=='\"') p++; }
-      else while (*p!='\0'&&*p!=','&&*p!=')'&&*p!='}'&&*p!=']'&&tl<NAMESIZE-1) sc->cond_cofargs[sc->cond_cofnargs][tl++]=*p++;
-      sc->cond_cofargs[sc->cond_cofnargs][tl]='\0';
-      sc->cond_cofnargs++;
-      if (*p==',') p++;
+    if (q==NULL) {
+      /* an index compared with an element ("r=chn") is not a scalar
+         coefficient: the general message names the supported forms */
+      if (strcmp(sc->cond_coef,sumindx)==0) goto badcond;
+      scalar=1;
+      p+=tl;
+    } else {
+      p=q+1;
+      while (*p!='\0'&&*p!=')'&&*p!='}'&&*p!=']'&&sc->cond_cofnargs<MAXVARDIM) {
+        tl=0;
+        if (*p=='\"') { p++; while (*p!='\0'&&*p!='\"'&&tl<NAMESIZE-1) sc->cond_cofargs[sc->cond_cofnargs][tl++]=(char)tolower((int)*p++); if (*p=='\"') p++; }
+        else while (*p!='\0'&&*p!=','&&*p!=')'&&*p!='}'&&*p!=']'&&tl<NAMESIZE-1) sc->cond_cofargs[sc->cond_cofnargs][tl++]=*p++;
+        sc->cond_cofargs[sc->cond_cofnargs][tl]='\0';
+        sc->cond_cofnargs++;
+        if (*p==',') p++;
+      }
+      if (*p!=')'&&*p!='}'&&*p!=']') goto badcond;
+      p++;
     }
-    if (*p!=')'&&*p!='}'&&*p!=']') goto badcond;
-    p++;
     if (strncmp(p,"<>",2)==0) { opc=2; olen=2; }
     else if (strncmp(p,">=",2)==0) { opc=5; olen=2; }
     else if (strncmp(p,"<=",2)==0) { opc=6; olen=2; }
@@ -2466,6 +2474,7 @@ void sum_cond_parse(char *settok, const char *sumindx, int *cond_mapid, char *co
     else goto badcond;
     cval=strtod(p+olen,&endp);
     if (endp==p+olen||endp==NULL||*endp!='\0') {
+      if (scalar) goto badcond;
       errmsg("Error: unsupported sum condition RHS '%s'; a coefficient condition compares against a NUMERIC constant (COEF(args) <op> const; manual 11.4.11)\n",p+olen);
       MPI_Abort(PETSC_COMM_WORLD,1);
       return;
@@ -2474,7 +2483,7 @@ void sum_cond_parse(char *settok, const char *sumindx, int *cond_mapid, char *co
     sc->cond_cofval=cval;
     return;
 badcond:
-    errmsg("Error: unsupported sum condition '%s'; supported forms are MAPPING(index) = value and COEF(args) <op> <numeric const> (manual 11.4.11)\n",lhs);
+    errmsg("Error: unsupported sum condition '%s'; supported forms are MAPPING(index) = value and COEF[(args)] <op> <numeric const> (manual 11.4.11)\n",lhs);
     MPI_Abort(PETSC_COMM_WORLD,1);
     return;
   }
@@ -2815,11 +2824,11 @@ offset_t closure_read(char *fname, char *commsyntax,closure_entry *closure_vals,
       if (strchr(vname,'(')==NULL) {
         { offset_t jf=closure_var_find(vname,vars,nvar); if(jf>=0) strcpy(vname,vars[jf].cofname); }
         for (j=0; j<nvar; j++) if (strcmp(vname,vars[j].cofname)==0) {
+            /* scalars carry nelem 1; nelem 0 is a variable over an
+               empty set (manual 11.7.9), which has nothing to mark --
+               its offset is the NEXT variable's first element */
             dims=vars[j].nelem;
-            if (dims==0) {
-              CL_SET_EXO(vars[j].offset,true);
-              n=n+1;
-            } else for (l=0; l<dims; l++) {
+            for (l=0; l<dims; l++) {
                 CL_SET_EXO(vars[j].offset+l,true);
                 n=n+1;
               }
@@ -5014,6 +5023,21 @@ int sets_read(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,
           record[j].size=dim1;
         } else {
           record[j].header[0]='\0';
+          /* an empty element list "()" is a legal empty set (manual
+             11.7.9); strtok skipped the empty span and read the text
+             after ')' as one element */
+          {
+            char *lp=strchr(linecopy,'('),*rp=(lp!=NULL)?strchr(lp,')'):NULL,*sp;
+            if (lp!=NULL&&rp!=NULL) {
+              for (sp=lp+1; sp<rp&&*sp==' '; sp++);
+              if (sp==rp) {
+                record[j].readele[0]='\0';
+                record[j].size=0;
+                j++;
+                continue;
+              }
+            }
+          }
           readitem = strtok(linecopy,"(");
           if (readitem!=NULL) readitem = strtok(NULL,")");
           if (readitem==NULL) {

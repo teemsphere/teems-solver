@@ -1691,6 +1691,15 @@ int formula_compile_if(char *fomulain, set_def *sets,int nif,int ipar,array_def 
   return 1;
 }
 
+/* argument count of a condition reference's "a,b," list (the caller
+   appends the trailing comma; a scalar reference leaves just ",") */
+static int cond_arg_count(const char *argu) {
+  int n=0;
+  if(strcmp(argu,",")==0)return 0;
+  for(; *argu!='\0'; argu++) if(*argu==',') n++;
+  return n;
+}
+
 /* numeric constant of a quantifier condition: the text after the
    comparison operator ("<=-1.5" -> -1.5). atof on the full token stops
    at the operator and would yield 0 for any constant. */
@@ -2263,9 +2272,16 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
                 logivarindx[i1]=index;
                 logivartype[i1]=0;
                 b++;
+                /* a scalar condition coefficient has no argument list:
+                   strtok returns NULL and the copy used to SEGV */
                 if(p!=NULL)p=strtok(NULL,")");
-                strcpy(argu,p);
+                if(p!=NULL)strcpy(argu,p);
+                else argu[0]='\0';
                 strcat(argu,",");
+                if(cond_arg_count(argu)!=(int)coefs[index].size) {
+                  errmsg("Error: quantifier condition %s carries %d argument(s); %s is declared with %d (manual 11.4.11)\n",coefs[index].cofname,cond_arg_count(argu),coefs[index].cofname,(int)coefs[index].size);
+                  MPI_Abort(PETSC_COMM_WORLD,1);
+                }
                 for(i=0; i<coefs[index].size; i++) {
                   if(i==0)p=strtok(argu,",");
                   else p=strtok(NULL,",");
@@ -2288,9 +2304,15 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
                 if(!vars[index].suplval)warn_no_values(vars[index].cofname,index,1);
                   logivarindx[i1]=index;
                   logivartype[i1]=1;
+                  b++;
                   if(p!=NULL)p=strtok(NULL,")");
-                  strcpy(argu,p);
+                  if(p!=NULL)strcpy(argu,p);
+                  else argu[0]='\0';
                   strcat(argu,",");
+                  if(cond_arg_count(argu)!=(int)vars[index].size) {
+                    errmsg("Error: quantifier condition %s carries %d argument(s); %s is declared with %d (manual 11.4.11)\n",vars[index].cofname,cond_arg_count(argu),vars[index].cofname,(int)vars[index].size);
+                    MPI_Abort(PETSC_COMM_WORLD,1);
+                  }
                   for(i=0; i<vars[index].size; i++) {
                     if(i==0)p=strtok(argu,",");
                     else p=strtok(NULL,",");
@@ -2305,6 +2327,10 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
                   break;
                 }
               } while (index--);
+            }
+            if(b==0) {
+              errmsg("Error: quantifier condition refers to %s, which is not a declared coefficient or variable (manual 11.4.11)\n",condvar[i1]);
+              MPI_Abort(PETSC_COMM_WORLD,1);
             }
           }
         /* i: inner condition loop's counter — was shared-by-omission,

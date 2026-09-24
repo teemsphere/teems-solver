@@ -21,8 +21,10 @@ static int cmf_strcpy_bounded(char *dst, const char *src, size_t cap) {
 }
 
 /* Normalize the `:`-condition segments of a statement line (manual
-   11.4.11) ahead of the singleton-subset transform: the GEMPACK `EQ`
-   comparison spelling becomes `=`, and a quoted element RHS
+   11.4.11) ahead of the singleton-subset transform: the GEMPACK word
+   comparisons EQ/NE/GT/LT/GE/LE become = <> > < >= <= (while blanks
+   still delimit them: space-stripped, "SC GT 1" is indistinguishable
+   from a name), and a quoted element RHS
    immediately after `=` is unquoted and lowercased (quoted strings
    elsewhere stay verbatim for the transform). A segment runs from a
    ':' inside brackets to the next ',' or closing bracket at the same
@@ -59,13 +61,20 @@ static void cond_segment_normalize(char *line) {
       buf[bi++]=ch;
       continue;
     }
-    if ((ch=='e'||ch=='E')&&(line[i+1]=='q'||line[i+1]=='Q')&&
-        !cond_is_namec(line[i+2])&&i>0&&!cond_is_namec(line[i-1])) {
-      buf[bi++]='=';
-      lastns='=';
-      i++;
-      changed=1;
-      continue;
+    if (i>0&&!cond_is_namec(line[i-1])&&line[i+1]!='\0'&&!cond_is_namec(line[i+2])&&
+        line[i+2]!='('&&line[i+2]!='['&&line[i+2]!='{') {
+      static const char *wops[6][2]={{"eq","="},{"ne","<>"},{"gt",">"},{"lt","<"},{"ge",">="},{"le","<="}};
+      int w;
+      for (w=0; w<6; w++)
+        if (tolower((int)ch)==wops[w][0][0]&&tolower((int)line[i+1])==wops[w][0][1]) break;
+      if (w<6) {
+        const char *s=wops[w][1];
+        while (*s!='\0') buf[bi++]=*s++;
+        lastns=wops[w][1][strlen(wops[w][1])-1];
+        i++;
+        changed=1;
+        continue;
+      }
     }
     if (ch=='\"'&&lastns=='=') {
       for (i++; line[i]!='\0'&&line[i]!='\"'&&bi+1<sizeof(buf); i++)
@@ -1209,7 +1218,28 @@ static int tab_preprocess_run(char *filename, char *newtabfile) {
           strcpy(indx2,indx);
           strcat(indx2,",");
           if(strstr(readitem1,indx2)==NULL) {
-            if(l1==0){//if(l1==0&&strchr(line2,'(')!=NULL) {
+            /* a qualifier group after the keyword, "equation (levels)
+               e_x ...", "formula (initial) ...", rides with the keyword:
+               the synthesized quantifier used to land between it and
+               the name, and the levels transform found no name (GTAP-W
+               E_TAXBAS*, 2026-09-24) */
+            int fe=(l2==0&&(strstr(line1,"&equation")!=NULL||strstr(line1,"& equation")!=NULL));
+            if(l1==0||l2==0||l4==0) {
+              while ((readitem1[0]=='('&&strncmp(readitem1,"(all,",5)!=0)||
+                     (fe&&(strcmp(readitem1,"&")==0||strcmp(readitem1,"&equation")==0||strcmp(readitem1,"equation")==0))) {
+                if (cmf_strcat_bounded(line2,readitem1,sizeof(line2)) ||
+                    cmf_strcat_bounded(line2," ",sizeof(line2))) {
+                  errmsg("Error: TAB statement too complex in tab_preprocess: %s\n",line);
+                  return -1;
+                }
+                readitem1=strtok(NULL," ");
+                if (readitem1==NULL) {
+                  errmsg("Error: malformed indexed expression in TAB file: %s\n",line);
+                  return -1;
+                }
+              }
+            }
+            if(l1==0||fe){//if(l1==0&&strchr(line2,'(')!=NULL) {
               if (cmf_strcat_bounded(line2,readitem1,sizeof(line2)) ||
                   cmf_strcat_bounded(line2," ",sizeof(line2))) {
                 errmsg("Error: TAB statement too complex in tab_preprocess: %s\n",line);
@@ -1650,9 +1680,10 @@ int tab_read_set_name(char *filename, char *varname, int indx, char *setname) {
    one scan of the preprocessed TAB (one statement per line,
    lowercased). Supported -- applied positionally by the readers:
    Coefficient parameter/non_parameter, Variable linear/levels/change/
-   percent_change, Formula initial/always. Accepted no-ops: Equation
-   linear/not_add_homotopy (the solver's only equation kind). Fatal:
-   Equation levels/add_homotopy (unsupported semantics), Coefficient
+   percent_change, Formula initial/always, Equation linear/levels (the
+   levels transform qualifies unqualified equations positionally).
+   Accepted no-op: Equation not_add_homotopy. Fatal: Equation
+   add_homotopy (unsupported semantics), Coefficient
    lower_bound/upper_bound defaults (single bound slot, audit A9), and
    any unknown keyword or value. Returns 0 ok, -1 fatal. */
 int tab_defaults_validate(char *fname) {
@@ -1676,10 +1707,8 @@ int tab_defaults_validate(char *fname) {
       if(strcmp(val,"initial")==0||strcmp(val,"always")==0)continue;
       errmsg("Error: unknown Formula default '%s'\n",val);
     } else if(strncmp(line,"equation",8)==0) {
-      if(strcmp(val,"linear")==0||strcmp(val,"not_add_homotopy")==0)continue;
-      if(strcmp(val,"levels")==0)
-        errmsg("Error: Equation (default=levels) is not supported -- the solver handles linearized equations only\n");
-      else if(strncmp(val,"add_homotopy",12)==0)
+      if(strcmp(val,"linear")==0||strcmp(val,"levels")==0||strcmp(val,"not_add_homotopy")==0)continue;
+      if(strncmp(val,"add_homotopy",12)==0)
         errmsg("Error: Equation (default=add_homotopy) is not supported\n");
       else errmsg("Error: unknown Equation default '%s'\n",val);
     } else {
@@ -2662,12 +2691,8 @@ int tab_setbuilder_transform(char *fname, cmf_file_entry *iodata, int niodata) {
           }
         }
         for (k=0; k<nsrc; k++) if (keep[k]) nkept++;
-        if (nkept==0) {
-          errmsg("Error: set builder %s selected no elements of %s (an empty set cannot enter the model; manual 10.1.2)\n",name,src);
-          free(srcele);
-          rc=-1;
-          break;
-        }
+        /* an empty selection is a legal empty set (manual 11.7.9):
+           statements over it have no tuples, sums over it are zero */
         fprintf(fout,"set %s (",name);
         {
           int first=1,k2;

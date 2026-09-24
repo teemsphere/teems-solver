@@ -729,6 +729,10 @@ static int lv_scan(lv_ctx *c, char *fname, bool *any) {
     } else if (strncmp(line, "equation", 8) == 0) {
       const char *p = line + 8;
       while (*p == ' ') p++;
+      if (tab_default_value(line, defval)) {
+        if (strcmp(defval, "levels") == 0) *any = true;
+        continue;
+      }
       if (strncmp(p, "(levels", 7) == 0) *any = true;
     }
   }
@@ -1863,7 +1867,7 @@ int tab_levels_transform(char *fname) {
   lv_ctx *c;
   FILE *f, *fout;
   char line[TABREADLINE], stmt[TABREADLINE], tmpname[TABREADLINE], defval[NAMESIZE];
-  bool any = false;
+  bool any = false, eq_default_levels = false;
   lv_head h;
   int rc = 0;
   c = (lv_ctx *)calloc(1, sizeof(lv_ctx));
@@ -1965,9 +1969,31 @@ int tab_levels_transform(char *fname) {
     if (strncmp(stmt, "equation", 8) == 0) {
       const char *q = stmt + 8;
       while (*q == ' ') q++;
+      /* Equation (default=levels|linear) (manual 10.19): positional;
+         an equation written without a qualifier group takes the
+         current default, the statement itself is consumed here */
+      if (tab_default_value(stmt, defval)) {
+        if (strcmp(defval, "levels") == 0) eq_default_levels = true;
+        else if (strcmp(defval, "linear") == 0) eq_default_levels = false;
+        continue;
+      }
       if (strncmp(q, "(levels", 7) == 0) {
         if (lv_emit_linearized(c, stmt + 8, fout) < 0) { rc = -1; break; }
         continue;
+      }
+      if (eq_default_levels && *q != '(') {
+        char eqline[TABREADLINE];
+        if (snprintf(eqline, sizeof(eqline), "equation (levels) %s", q) >= (int)sizeof(eqline)) {
+          rc = lv_err(c, "statement too long under Equation (default=levels)");
+          break;
+        }
+        c->stmt = eqline;
+        if (lv_emit_linearized(c, eqline + 8, fout) < 0) { rc = -1; break; }
+        continue;
+      }
+      if (eq_default_levels && strncmp(q, "(linear)", 8) != 0) {
+        rc = lv_err(c, "only (linear) or (levels) may qualify an equation under Equation (default=levels)");
+        break;
       }
       fprintf(fout, "%s\n", stmt);
       continue;

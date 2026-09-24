@@ -100,7 +100,10 @@ The solver reads a GEMPACK-style TAB subset (statement syntax per [GM]):
   which mark the time dimension used by the bordered orderings, and
   set products `Set P = A x B` ([GM] 10.1.6; elements `a_b`, first
   factor fastest, the 11.7.11 compromise names when a pair would exceed
-  12 characters, duplicates fatal).
+  12 characters, duplicates fatal). A set may be empty ([GM] 11.7.9) —
+  an explicit `()`, a builder that selects nothing, a difference or
+  intersection with nothing left: statements quantified over it have no
+  tuples, sums over it are zero and variables over it have no elements.
 - `mapping` ([GM] 11.9) — declared mappings between sets, values from
   `Read (by_elements)`, from `Mapping (project)` onto a factor of a
   set product ([GM] 10.13.2), or from Formulas ([GM] 10.13.1: a
@@ -133,9 +136,17 @@ The solver reads a GEMPACK-style TAB subset (statement syntax per [GM]):
   statement shares one quantifier (E_regx0_A of ORANI-G carries ten
   `"dom"` arguments); an Equation or indexed Formula gets a leading
   `(all,iN,sub_iN)` quantifier, a scalar-target Formula has its
-  right-hand side wrapped in `sum(iN,sub_iN, …)` instead.
+  right-hand side wrapped in `sum(iN,sub_iN, …)` instead. A qualifier
+  group after the keyword (`equation (levels) NAME`, `formula
+  (initial)`, `update (change)`, `formula & equation`) stays ahead of
+  the synthesized quantifier, and an equation's name ahead of it too.
 - `formula` — `(initial)` / `(always)` semantics as in [GM]; conditional
-  quantifiers `(all,i,S: COEF(i) op c)` and general conditional sums;
+  quantifiers `(all,i,S: COEF(i) op c)` and general conditional sums,
+  where the condition coefficient may also be a scalar (`(all,i,S: SC >
+  1)`, `sum(i,S: SC > 1, …)`) and the word comparisons `EQ NE GT LT GE
+  LE` are normalized to symbols while the condition is read; an
+  undeclared condition name or a reference with the wrong argument
+  count is a named fatal;
   `zerodivide` defaults honored by `tab_next_statement_resolved()`
   (both GEMPACK zerodivide classes with `-gpzerodivide`); the [GM] 11.5
   intrinsics (ABS/MAX/MIN/SQRT/EXP/LOGE/LOG10/ID01/ID0V/ROUND/TRUNC0/
@@ -150,7 +161,10 @@ The solver reads a GEMPACK-style TAB subset (statement syntax per [GM]):
   `(all,i,S: C(i) > 0)` evaluate per tuple, each condition compiled as
   a residual through the formula engine — sums and `$POS` inside a
   condition still skip the assertion with a warning), `zerodivide` statements,
-  `Default` statements ([GM] 10.19), `PostSim (Begin/End)` sections
+  `Default` statements ([GM] 10.19; `Equation (default=levels)` makes
+  each following equation written without a qualifier a levels equation,
+  applied by the levels transform until `Equation (default=linear)`),
+  `PostSim (Begin/End)` sections
   ([GM] ch. 12; `-postsim`, split by the preprocess and executed after
   the simulation), `write` (opt-in coefficient CSVs).
 - `complementarity` ([GM] ch. 51) — approximate and accurate runs
