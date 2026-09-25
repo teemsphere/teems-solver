@@ -141,7 +141,13 @@ The solver reads a GEMPACK-style TAB subset (statement syntax per [GM]):
 - `read` — from the CMF-bound data files, including `(IfHeaderExists)`
   (absent header skipped) and `(by_elements)` mapping reads.
 - quoted element arguments, `V(c,"dom",i)` — lowered by the preprocess
-  to a singleton subset and an index bound to it: one synthesized set
+  to a singleton subset and an index bound to it. The owning name is
+  the identifier immediately before the enclosing `(`, whatever
+  precedes it (`*[p(c,"dom")…]`, `{p(c,"dom")…}`, a name glued to its
+  quantifier `(all,c,MAR)SALES(c,"dom")`); an equation argument that
+  is neither a quantifier index, a sum index nor a lowered literal is a
+  named fatal (it used to take its set from arbitrary statement text —
+  a dropped or garbled term, or a SEGV). One synthesized set
   per (owning set, element) per statement, so a literal repeated in a
   statement shares one quantifier (E_regx0_A of ORANI-G carries ten
   `"dom"` arguments); an Equation or indexed Formula gets a leading

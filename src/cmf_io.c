@@ -755,7 +755,7 @@ static int tab_preprocess_run(char *filename, char *newtabfile) {
     errmsg("Error: cannot open %s\n",filename);
     return -1;
   }
-  int check,i1,i2,i,setindx,varindx,l1,l2,l3,l4,k1,k2,j1,j2,l5;//,necheck,npcheck;//,j;,check1
+  int check,i1,i2,i,setindx,l1,l2,l3,l4,k1,k2,l5;//,necheck,npcheck;//,j;,check1
   strcpy(newtabfile1,newtabfile);
   str_replace_all(newtabfile1,".","1.");
   fout = fopen(newtabfile1,"w");
@@ -1095,52 +1095,25 @@ static int tab_preprocess_run(char *filename, char *newtabfile) {
             errmsg("Error: malformed indexed expression in TAB file: %s\n",line);
             return -1;
           }
-          varindx=n1-line2+1;
-          line2[varindx]='\0';
-          n1=strrchr(line2,' ');
-          if (n1!=NULL) varindx=n1-line2;
-          n1=strrchr(line2,',');
-          if (n1!=NULL&&(n1-line2)>varindx) varindx=n1-line2;
-          n1=strrchr(line2,'*');
-          if (n1!=NULL&&(n1-line2)>varindx) varindx=n1-line2;
-          n1=strrchr(line2,'/');
-          if (n1!=NULL&&(n1-line2)>varindx) varindx=n1-line2;
-          n1=strrchr(line2,'+');
-          if (n1!=NULL&&(n1-line2)>varindx) varindx=n1-line2;
-          n1=strrchr(line2,'-');
-          if (n1!=NULL&&(n1-line2)>varindx) varindx=n1-line2;
-          n1=strrchr(line2,'^');
-          if (n1!=NULL&&(n1-line2)>varindx) varindx=n1-line2;
-          n1=strrchr(line2,'=');
-          if (n1!=NULL&&(n1-line2)>varindx) varindx=n1-line2;
-          if (cmf_strcpy_bounded(varname,&line2[varindx+1],sizeof(varname))) {
-            errmsg("Error: TAB statement too complex in tab_preprocess: %s\n",line);
-            return -1;
+          /* the owner is the identifier run immediately before that
+             '(' -- scanning back to the last blank or operator missed
+             an owner after a bracket or glued to a quantifier,
+             "*(p(c,"dom")" and "(all,c,mar)sales(c,"dom")", and the
+             literal passed through unlowered (potential-models vetting
+             SW1, 2026-09-25). A '$' prefix stays with the name so a
+             $POS call never resolves to a declaration. */
+          {
+            int oe=(int)(n1-line2),os=oe;
+            while (os>0&&cond_is_namec(line2[os-1])) os--;
+            if (os>0&&line2[os-1]=='$') os--;
+            if (oe-os+2>(int)sizeof(varname)) {
+              errmsg("Error: TAB statement too complex in tab_preprocess: %s\n",line);
+              return -1;
+            }
+            memcpy(varname,&line2[os],oe-os+1);
+            varname[oe-os+1]='\0';
           }
-          n1=strrchr(varname,'(');
-          if (n1==NULL) {
-            errmsg("Error: malformed indexed expression in TAB file: %s\n",line);
-            return -1;
-          }
-          varname[n1-varname+1]='\0';
-           j1=0;
-           j2=0;
-           while (varname[j1]!= '\0'){
-             if(varname[j1]!= '(')j2++;
-             j1++;
-           }
-           n1=varname;
-           if(j2>1){
-             j2=0;
-             while (j1>-1){
-             if(varname[j1]== '(')j2++;
-             if(j2==2){
-               n1=varname+j1+1;
-               break;
-             }
-             j1--;
-             }
-           }
+          n1=varname;
           if (tab_read_set_name(newtabfile1,n1,setindx,setname)==-1) {
             /* the quoted element is not an argument of a declared
                coefficient or variable -- a $POS("el",S) literal or a

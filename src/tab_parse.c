@@ -1510,8 +1510,10 @@ offset_t sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
                   strcpy(line3,formulain);
                   line3[readitem-formulain]='\0';
                   l7=str_rfind_ci(line3,interchar1);
+                  if (l7<0) sum_carried_fatal(sum_dim_identity(p),formulain);
                   p1=&line3[l7+2];
                   p1 = strtok(p1,",");
+                  if (p1==NULL) sum_carried_fatal(sum_dim_identity(p),formulain);
                   for (l7=0; l7<nset; l7++) if(strcmp(p1,sets[l7].setname)==0) {
                       sum_cof[j].setid[l3]=l7;
                       break;
@@ -1549,8 +1551,10 @@ offset_t sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
                     strcpy(line3,formulain);
                     line3[readitem-formulain]='\0';
                     l7=str_rfind_ci(line3,interchar1);
+                    if (l7<0) sum_carried_fatal(sum_dim_identity(p),formulain);
                     p1=&line3[l7+2];
                     p2=strchr(p1,',');
+                    if (p2==NULL||p2-p1>=NAMESIZE) sum_carried_fatal(sum_dim_identity(p),formulain);
                     strncpy(tempname,p1,p2-p1);
                     tempname[p2-p1]='\0';
                     for (l7=0; l7<nset; l7++) if(strcmp(tempname,sets[l7].setname)==0) {
@@ -1659,8 +1663,10 @@ offset_t sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
                   strcpy(line3,formulain);
                   line3[readitem-formulain]='\0';
                   l7=str_rfind_ci(line3,interchar1);
+                  if (l7<0) sum_carried_fatal(sum_dim_identity(p),formulain);
                   p1=&line3[l7+2];
                   p1 = strtok(p1,",");
+                  if (p1==NULL) sum_carried_fatal(sum_dim_identity(p),formulain);
                   for (l7=0; l7<nset; l7++) if(strcmp(p1,sets[l7].setname)==0) {
                       sum_cof[j].setid[l3]=l7;
                       break;
@@ -1698,8 +1704,10 @@ offset_t sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
                     strcpy(line3,formulain);
                     line3[readitem-formulain]='\0';
                     l7=str_rfind_ci(line3,interchar1);
+                    if (l7<0) sum_carried_fatal(sum_dim_identity(p),formulain);
                     p1=&line3[l7+2];
                     p2=strchr(p1,',');
+                    if (p2==NULL||p2-p1>=NAMESIZE) sum_carried_fatal(sum_dim_identity(p),formulain);
                     strncpy(tempname,p1,p2-p1);
                     tempname[p2-p1]='\0';
                     for (l7=0; l7<nset; l7++) if(strcmp(tempname,sets[l7].setname)==0) {
@@ -2300,6 +2308,17 @@ void mapping_lower_calls(char *line) {
    not the loop dimension -- so the summed-index test, carried-dim
    dedupe, set resolution and the generated-sum replacement token all
    work on the part after the MAPMARK. */
+/* a sum body reference whose index is neither the sum's own index nor
+   a statement quantifier is taken as the index of an ENCLOSING sum and
+   its set is read from the "sum(<idx>," text before the reference. A
+   miss -- an element literal the preprocessor did not lower, or a
+   stray name -- used to run strncpy off a NULL comma (SIMPLE tpmh0103
+   SEGV, potential-models vetting SW1): named fatal instead */
+void sum_carried_fatal(const char *idx, const char *stmt) {
+  errmsg("Error: index %s in a sum is neither a quantifier index nor the index of an enclosing sum (an unlowered element literal or an undeclared name?): %s\n",idx,stmt);
+  MPI_Abort(PETSC_COMM_WORLD,1);
+}
+
 char *sum_dim_identity(char *p) {
   char *at=strchr(p,MAPMARK);
   return at==NULL?p:at+1;

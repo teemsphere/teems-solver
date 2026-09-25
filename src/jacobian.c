@@ -498,6 +498,15 @@ static void linvar_dim_read(char *p, char *linecopy, offset_t lvar,
       strcpy(ref->dimsetnames[d],sets[teems_maps[mp-1].fromset].setname);
       return;
     }
+    if (lvar3==-1) {
+      /* neither a quantifier index nor a sum index -- an element
+         literal the preprocessor did not lower, or a stray name. The
+         set name used to be read from whatever preceded the first
+         comma of the statement: the term was dropped or garbled, or
+         jacobian_fill crashed (potential-models vetting SW1) */
+      errmsg("Error: argument %s of variable %s in an equation is neither a quantifier index, a sum index nor an element of the variable's set at that position: %s\n",p,ref->LinVarName,linecopy);
+      MPI_Abort(PETSC_COMM_WORLD,1);
+    }
     if (lvar1>1) for(lvar2=0; lvar2<lvar1; lvar2++) {
         lvar4=str_find_token_ci(linecopy,&linecopy[lvar3+4],lintmp);
         if (lvar4>-1&&lvar4<lvar) {
@@ -1633,8 +1642,10 @@ int eq_sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifier 
                     strcpy(line3,formulain);
                     line3[readitem-formulain]='\0';
                     l7=str_rfind_ci(line3,interchar1);
+                    if (l7<0) sum_carried_fatal(sum_dim_identity(p),formulain);
                     p1=&line3[l7+2];
                     p1 = strtok(p1,",");
+                    if (p1==NULL) sum_carried_fatal(sum_dim_identity(p),formulain);
                     for (l7=0; l7<nset; l7++) if(strcmp(p1,sets[l7].setname)==0) {
                         sum_cof[j].setid[l3]=l7;
                         break;
@@ -1674,8 +1685,10 @@ int eq_sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifier 
                       strcpy(line3,formulain);
                       line3[readitem-formulain]='\0';
                       l7=str_rfind_ci(line3,interchar1);
+                      if (l7<0) sum_carried_fatal(sum_dim_identity(p),formulain);
                       p1=&line3[l7+2];
                       p2=strchr(p1,',');
+                      if (p2==NULL||p2-p1>=NAMESIZE) sum_carried_fatal(sum_dim_identity(p),formulain);
                       strncpy(tempname,p1,p2-p1);
                       tempname[p2-p1]='\0';
                       for (l7=0; l7<nset; l7++) if(strcmp(tempname,sets[l7].setname)==0) {
@@ -1795,8 +1808,10 @@ int eq_sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifier 
                     strcpy(line3,formulain);
                     line3[readitem-formulain]='\0';
                     l7=str_rfind_ci(line3,interchar1);
+                    if (l7<0) sum_carried_fatal(sum_dim_identity(p),formulain);
                     p1=&line3[l7+2];
                     p1 = strtok(p1,",");
+                    if (p1==NULL) sum_carried_fatal(sum_dim_identity(p),formulain);
                     for (l7=0; l7<nset; l7++) if(strcmp(p1,sets[l7].setname)==0) {
                         sum_cof[j].setid[l3]=l7;
                         break;
@@ -1836,8 +1851,10 @@ int eq_sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifier 
                       strcpy(line3,formulain);
                       line3[readitem-formulain]='\0';
                       l7=str_rfind_ci(line3,interchar1);
+                      if (l7<0) sum_carried_fatal(sum_dim_identity(p),formulain);
                       p1=&line3[l7+2];
                       p2=strchr(p1,',');
+                      if (p2==NULL||p2-p1>=NAMESIZE) sum_carried_fatal(sum_dim_identity(p),formulain);
                       strncpy(tempname,p1,p2-p1);
                       tempname[p2-p1]='\0';
                       for (l7=0; l7<nset; l7++) if(strcmp(tempname,sets[l7].setname)==0) {

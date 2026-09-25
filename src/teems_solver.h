@@ -676,6 +676,7 @@ void mapping_reject_in(char *line, const char *what);
 void mapping_reject_lhs(char *line, const char *what);
 char *mapping_token_split(char *p, int *mp);
 char *sum_dim_identity(char *p);
+void sum_carried_fatal(const char *idx, const char *stmt);
 char *sum_settok_extract(const char *sumtext);
 char *sum_body_extract(const char *sumtext);
 void sum_cond_parse(char *settok, const char *sumindx, int *cond_mapid, char *cond_rhs, sum_def *sc);
