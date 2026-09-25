@@ -143,3 +143,31 @@ int str_ncmp_ci(const char *a, const char *b, size_t n) {
   }
   return 0;
 }
+
+/* Checked file open. Every work, scratch and output file goes through
+   here: an open that fails is a named fatal naming the path, the
+   access wanted and the system reason. The image runs as uid 1000
+   ("teems"); a leftover file owned by another user in the run
+   directory (a root-owned _temp_tab_file0000.tab from a root
+   container) or a directory it cannot write used to hand a NULL
+   stream to fgets/fprintf and SEGV at startup. */
+static void fopen_fatal(const char *path, const char *mode, int err) {
+  const char *what=(mode[0]=='r'&&strchr(mode,'+')==NULL)?"reading":"writing";
+  errmsg("Error: cannot open %s for %s: %s (the solver runs as uid %d; remove or re-own files another user left in the run directory, or make it writable)\n",path,what,strerror(err),(int)getuid());
+  fflush(stdout);
+  MPI_Abort(PETSC_COMM_WORLD,1);
+}
+
+FILE *teems_fopen(const char *path, const char *mode) {
+  FILE *f=fopen(path,mode);
+  if (f==NULL) fopen_fatal(path,mode,errno);
+  return f;
+}
+
+/* for files that may legitimately be absent (an optional side file):
+   NULL only when the file does not exist, fatal for any other reason */
+FILE *teems_fopen_opt(const char *path, const char *mode) {
+  FILE *f=fopen(path,mode);
+  if (f==NULL&&errno!=ENOENT) fopen_fatal(path,mode,errno);
+  return f;
+}

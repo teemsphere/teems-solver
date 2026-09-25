@@ -652,7 +652,7 @@ int probe_structural(PetscInt VecSize,offset_t nvarele,offset_t ncofele,PetscInt
       if(pidx<niodata+noutdata+nsoldata)strcpy(patpath,iodata[pidx].filname);
       else strcpy(patpath,"solution");
       strcat(patpath,".probe.pattern");
-      FILE *pf=fopen(patpath,"w");
+      FILE *pf=teems_fopen(patpath,"w");
       if(pf==NULL)printf("Warning: cannot write probe pattern %s\n",patpath);
       else {
         PetscInt ncols,c;
@@ -689,7 +689,7 @@ int probe_structural(PetscInt VecSize,offset_t nvarele,offset_t ncofele,PetscInt
   if(fidx<niodata+noutdata+nsoldata)strcpy(probepath,iodata[fidx].filname);
   else strcpy(probepath,"solution");
   strcat(probepath,".probe.json");
-  FILE *fp=fopen(probepath,"w");
+  FILE *fp=teems_fopen(probepath,"w");
   if(fp==NULL)printf("Warning: cannot write probe report %s\n",probepath);
   else {
     fprintf(fp,"{\n");

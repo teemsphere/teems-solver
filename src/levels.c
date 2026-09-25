@@ -714,7 +714,7 @@ static int lv_scan(lv_ctx *c, char *fname, bool *any) {
   bool sticky_level = false, sticky_change = false, sticky_param = false;
   lv_head h;
   *any = false;
-  f = fopen(fname, "r");
+  f = teems_fopen(fname, "r");
   if (f == NULL) { errmsg("Error: cannot open %s\n", fname); return -1; }
   while (fgets(line, TABREADLINE, f)) {
     if (strncmp(line, "variable", 8) == 0) {
@@ -1164,7 +1164,7 @@ static int cp_fill_decl_sets(lv_ctx *c, char *fname) {
   lv_head h;
   dim_t k, nargs;
   char argsets[MAXVARDIM][NAMESIZE];
-  f = fopen(fname, "r");
+  f = teems_fopen(fname, "r");
   if (f == NULL) { errmsg("Error: cannot open %s\n", fname); return -1; }
   while (fgets(line, TABREADLINE, f)) {
     int iscoef = (strncmp(line, "coefficient", 11) == 0);
@@ -1301,7 +1301,7 @@ int tab_complementarity_transform(char *fname) {
   bool anylv = false;
   int rc = 0;
   dim_t ncomp = 0, ci = 0;
-  f = fopen(fname, "r");
+  f = teems_fopen(fname, "r");
   if (f == NULL) { errmsg("Error: cannot open %s\n", fname); return -1; }
   while (fgets(line, TABREADLINE, f))
     if (strncmp(line, "complementarity", 15) == 0) ncomp++;
@@ -1314,7 +1314,7 @@ int tab_complementarity_transform(char *fname) {
   exprs = calloc(ncomp, sizeof(*exprs));
   if (teems_comps == NULL || exprs == NULL) { errmsg("Error: out of memory in tab_complementarity_transform\n"); free(c); free(exprs); return -1; }
   teems_ncomp = 0;
-  f = fopen(fname, "r");
+  f = teems_fopen(fname, "r");
   if (f == NULL) { errmsg("Error: cannot open %s\n", fname); free(c); free(exprs); return -1; }
   while (fgets(line, TABREADLINE, f)) {
     size_t sl = strlen(line);
@@ -1328,10 +1328,10 @@ int tab_complementarity_transform(char *fname) {
   if (rc == 0) {
     /* rewrite: consume complementarity statements, emit the derived
        statements in their place (del_comp@ once, before the first) */
-    f = fopen(fname, "r");
+    f = teems_fopen(fname, "r");
     strcpy(tmpname, fname);
     strcat(tmpname, "_cp");
-    fout = f == NULL ? NULL : fopen(tmpname, "w");
+    fout = f == NULL ? NULL : teems_fopen(tmpname, "w");
     if (f == NULL || fout == NULL) {
       errmsg("Error: cannot open %s\n", f == NULL ? fname : tmpname);
       if (f != NULL) fclose(f);
@@ -1966,11 +1966,11 @@ int tab_levels_transform(char *fname) {
   if (c == NULL) { errmsg("Error: out of memory in tab_levels_transform\n"); return -1; }
   if (lv_scan(c, fname, &any) < 0) { free(c); return -1; }
   if (!any) { free(c); return 0; }
-  f = fopen(fname, "r");
+  f = teems_fopen(fname, "r");
   if (f == NULL) { errmsg("Error: cannot open %s\n", fname); free(c); return -1; }
   strcpy(tmpname, fname);
   strcat(tmpname, "_lv");
-  fout = fopen(tmpname, "w");
+  fout = teems_fopen(tmpname, "w");
   if (fout == NULL) { errmsg("Error: cannot open %s\n", tmpname); fclose(f); free(c); return -1; }
   while (fgets(line, TABREADLINE, f)) {
     /* keep a pristine copy for messages and verbatim passthrough:
@@ -2106,11 +2106,11 @@ int tab_levels_transform(char *fname) {
     char psname[TABREADLINE];
     strcpy(psname, fname);
     strcat(psname, "_ps");
-    f = fopen(psname, "r");
+    f = teems_fopen_opt(psname, "r");
     if (f != NULL) {
       strcpy(tmpname, psname);
       strcat(tmpname, "_lv");
-      fout = fopen(tmpname, "w");
+      fout = teems_fopen(tmpname, "w");
       if (fout == NULL) { errmsg("Error: cannot open %s\n", tmpname); fclose(f); free(c); return -1; }
       while (fgets(line, TABREADLINE, f)) {
         c->stmt = line;

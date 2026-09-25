@@ -178,6 +178,10 @@ The solver reads a GEMPACK-style TAB subset (statement syntax per [GM]):
   second address), in formulas, equations (coefficients and variables,
   inside sums too) and updates. A repeated sum index is one loop, not
   one per position.
+- file opens — every work, scratch and output file open is checked:
+  a failure is a named fatal with the path, the access and the system
+  reason (a leftover file owned by another uid in the run directory
+  used to SEGV at startup); `stats.json` reads tolerate an absent file.
 - names `C_*` — a coefficient may start with `c_` unless a variable of
   the tail name exists (then `c_NAME` is that variable's change
   column: named fatal); `c_` tokens that name a declared coefficient

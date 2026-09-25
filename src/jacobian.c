@@ -1296,7 +1296,7 @@ int jacobian_fill(char *fname, char *commsyntax,set_def *sets,offset_t nset, set
   MPI_Comm_size(PETSC_COMM_WORLD,&mpisize1);
   CHKERRQ(ierr);
 
-  filehandle = fopen(fname,"r");
+  filehandle = teems_fopen(fname,"r");
   matrow=0;
 
   if (stmt_cache_built&&(Istart1!=stmt_cache_Istart||Iend1!=stmt_cache_Iend)) jacobian_cache_free();
@@ -1529,7 +1529,7 @@ int backsolve_recover(char *fname, char *commsyntax,set_def *sets,offset_t nset,
   bs_prog *bp=NULL;
   if (nbacksolve==0) return 0;
   backsolve_scan_mode=BS_SCAN_ONLY;
-  filehandle=fopen(fname,"r");
+  filehandle=teems_fopen(fname,"r");
   if (bs_cache_built) {
     /* refresh zerodivide defaults, as in the jacobian_fill fast path */
     while (tab_next_statement_resolved(commsyntax,filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
@@ -2279,7 +2279,7 @@ int equation_order_read(char *fname, char *commsyntax,set_def *sets,dim_t nset,s
   int i,i3,nlinvars,lvar,lvar4,varindx1,varindx2,tempint;
   solve_real dimmat[4*MAXVARDIM];
 
-  filehandle = fopen(fname,"r");
+  filehandle = teems_fopen(fname,"r");
   if (filehandle==NULL) return 0;
 
   while (tab_next_statement_resolved(commsyntax,filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
@@ -2635,7 +2635,7 @@ int equation_order_read_nested(char *fname, char *commsyntax,set_def *sets,dim_t
   offset_t i,i3,i4,nlinvars,lvar,lvar4,varindx1,varindx2;
   solve_real dimmat[4*MAXVARDIM];
 
-  filehandle = fopen(fname,"r");
+  filehandle = teems_fopen(fname,"r");
   if (filehandle==NULL) return 0;
 
   while (tab_next_statement_resolved(commsyntax,filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
@@ -2991,7 +2991,7 @@ int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,
   int nlinvars,lvar,dcount,fdimlin=0,varindx1,varindx2;
   offset_t *counteq1= (offset_t *) calloc (ndblock,sizeof(offset_t));
   for(i=0; i<ndblock; i++)counteq1[i]=counteq[i];
-  filehandle = fopen(fname,"r");
+  filehandle = teems_fopen(fname,"r");
   matrow=nintraeq;
   matroworg=0;
   Jindx=0;

@@ -566,7 +566,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
   solve_real val;
   int k0,k1;
 
-  filehandle = fopen(fname,"r");
+  filehandle = teems_fopen(fname,"r");
   if(filehandle==NULL){
     errmsg("Error: cannot open %s\n",fname);
     return -1;
@@ -681,7 +681,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
             }
             n1++;
           }
-          filehandle1 = fopen(iodata[k0].filname,"r");
+          filehandle1 = teems_fopen(iodata[k0].filname,"r");
           if(filehandle1==NULL){
             errmsg("Error: cannot open data file %s\n",iodata[k0].filname);
             return -1;
@@ -836,7 +836,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
             MPI_Abort(PETSC_COMM_WORLD,1);
             return -1;
           }
-          filehandle1 = fopen(iodata[k0].filname,"r");
+          filehandle1 = teems_fopen(iodata[k0].filname,"r");
           if(filehandle1==NULL){
             errmsg("Error: cannot open data file %s\n",iodata[k0].filname);
             return -1;
@@ -1086,7 +1086,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
             MPI_Abort(PETSC_COMM_WORLD,1);
             return -1;
           }
-          filehandle1 = fopen(iodata[k0].filname,"r");
+          filehandle1 = teems_fopen(iodata[k0].filname,"r");
           if(filehandle1==NULL){
             errmsg("Error: cannot open data file %s\n",iodata[k0].filname);
             return -1;
@@ -1271,7 +1271,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
             MPI_Abort(PETSC_COMM_WORLD,1);
             return -1;
           }
-          filehandle1 = fopen(iodata[k0].filname,"r");
+          filehandle1 = teems_fopen(iodata[k0].filname,"r");
           if(filehandle1==NULL){
             errmsg("Error: cannot open data file %s\n",iodata[k0].filname);
             return -1;
@@ -1918,7 +1918,7 @@ offset_t postsim_reads_execute(char *psname, int niodata, cmf_file_entry *iodata
   nreads=tab_count_statements(psname,"read");
   if(nreads==0)return 0;
   docopy= (bool *) calloc (ncof+1,sizeof(bool));
-  f=fopen(psname,"r");
+  f=teems_fopen(psname,"r");
   if(f==NULL) {
     free(docopy);
     return -1;
@@ -1975,7 +1975,7 @@ offset_t tab_count_statements(char *fname, char *commsyntax) {
   FILE * filehandle;
   char line[TABREADLINE]="\0";
   offset_t j=0;
-  filehandle = fopen(fname,"r");
+  filehandle = teems_fopen(fname,"r");
   if (filehandle==NULL) return 0;
   while (tab_next_statement(commsyntax,filehandle,line,TABREADLINE)) {
     if (strstr(line,"(default")==NULL) {
@@ -1996,7 +1996,7 @@ int mappings_read(char *fname, map_def *maps, dim_t nmap, set_def *sets, dim_t n
   char *commsyntax="mapping";
   char *readitem=NULL;
   dim_t j=0,i;
-  filehandle = fopen(fname,"r");
+  filehandle = teems_fopen(fname,"r");
   while (tab_next_statement(commsyntax,filehandle,line,TABREADLINE)) {
     if (j>=nmap) break;
     strcpy(linecopy,line);
@@ -2087,7 +2087,7 @@ int mapping_values_read(char *fname, int niodata, cmf_file_entry *iodata, map_de
   char *readitem=NULL;
   dim_t j,i,vsize,dim1;
   int k0,k1,nj;
-  filehandle = fopen(fname,"r");
+  filehandle = teems_fopen(fname,"r");
   while (tab_next_statement("read",filehandle,line,TABREADLINE)) {
     strcpy(linecopy,line);
     int byele=(str_find_ci(line,"by_elements")>-1);
@@ -2188,7 +2188,7 @@ int mapping_use_guards(char *fname, map_def *maps, dim_t nmap) {
   char line[TABREADLINE]="\0",linecopy[TABREADLINE];
   char *readitem=NULL;
   dim_t j;
-  filehandle = fopen(fname,"r");
+  filehandle = teems_fopen(fname,"r");
   while (tab_next_statement("formula",filehandle,line,TABREADLINE)) {
     strcpy(linecopy,line);
     /* a mapping in a Formula QUANTIFIER condition (equality or a
@@ -2212,7 +2212,7 @@ int mapping_use_guards(char *fname, map_def *maps, dim_t nmap) {
      the 11.9.9 restriction (many-to-one target) and stays a named
      fatal. Equations are lowered in the tab_write_variables rewrite and
      compiled through the mapped linear-variable machinery (M2b) */
-  filehandle = fopen(fname,"r");
+  filehandle = teems_fopen(fname,"r");
   while (tab_next_statement("update",filehandle,line,TABREADLINE)) {
     dim_t gm;
     int gpos;
@@ -2230,7 +2230,7 @@ int mapping_use_guards(char *fname, map_def *maps, dim_t nmap) {
     }
   }
   fclose(filehandle);
-  filehandle = fopen(fname,"r");
+  filehandle = teems_fopen(fname,"r");
   while (tab_next_statement("write",filehandle,line,TABREADLINE)) {
     readitem = strtok(line," ");
     readitem = strtok(NULL," ");
@@ -2704,7 +2704,7 @@ void mapping_formula_scan(char *fname, map_def *maps, dim_t nmap) {
   char line[TABREADLINE]="\0";
   char *readitem=NULL;
   dim_t j;
-  filehandle = fopen(fname,"r");
+  filehandle = teems_fopen(fname,"r");
   if (filehandle==NULL) return;
   while (tab_next_statement("formula",filehandle,line,TABREADLINE)) {
     readitem = strtok(line," ");
@@ -2798,7 +2798,7 @@ offset_t closure_read(char *fname, char *commsyntax,closure_entry *closure_vals,
   bool check;
   filehandle = fopen(fname,"r");
   if (filehandle==NULL) {
-    errmsg("Error: cannot open closure file %s\n",fname);
+    errmsg("Error: cannot open closure file %s: %s\n",fname,strerror(errno));
     MPI_Abort(PETSC_COMM_WORLD,1);
     return -1;
   }
@@ -3038,7 +3038,7 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
   offset_t j,l=0,dims,n1,l1,l2,dcount,supsetid[MAXSUPSET],sup;
   solve_real val;
       if ( (filehandle = fopen(fname,"r")) == NULL ) {
-        errmsg("Error: cannot open shock file %s\n",fname);
+        errmsg("Error: cannot open shock file %s: %s\n",fname,strerror(errno));
         MPI_Abort(PETSC_COMM_WORLD,1);
         return -1;
       }
@@ -3544,7 +3544,7 @@ offset_t variables_read(char *fname, char *commsyntax, array_def *record, offset
   while (commsyntax[ncommsyntax] != '\0') {
     ncommsyntax++;
   }
-  filehandle = fopen(fname,"r");
+  filehandle = teems_fopen(fname,"r");
 
   while (tab_next_statement(commsyntax,filehandle,line,TABREADLINE)) {
     /* positional defaults (manual 10.19; audit A6): reset the LINEAR/
@@ -3726,7 +3726,7 @@ offset_t set_find_alltime(set_def *sets,dim_t nset) {
 
 /* does the TAB declare a variable of this name (case-insensitive)? */
 static int tab_declares_variable(char *fname, const char *name) {
-  FILE *f=fopen(fname,"r");
+  FILE *f=teems_fopen(fname,"r");
   char line[TABREADLINE];
   int found=0;
   while (!found&&tab_next_statement("variable",f,line,TABREADLINE)) {
@@ -3759,7 +3759,7 @@ offset_t coefficients_read(char *fname, char *commsyntax, array_def *record, off
   while (commsyntax[ncommsyntax] != '\0') {
     ncommsyntax++;
   }
-  filehandle = fopen(fname,"r");
+  filehandle = teems_fopen(fname,"r");
   /* PostSim foundation F2: (parameter) tracked in a parallel array --
      array_def is binary-locked to the R-side sol.var parser */
   free(teems_coef_is_param);
@@ -3969,7 +3969,7 @@ dim_t sets_count(char *fname) {
   char line[TABREADLINE]="\0";
   char *commsyntax="set";
   dim_t j=0;
-  filehandle = fopen(fname,"r");
+  filehandle = teems_fopen(fname,"r");
   while (tab_next_statement(commsyntax,filehandle,line,TABREADLINE)) {
     j++;
   }
@@ -4042,7 +4042,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
             strcpy(varname,readitem);
             strcpy(commsyntax,"read ");
             strcat(commsyntax,readitem);
-            filehandle = fopen(fname,"r");
+            filehandle = teems_fopen(fname,"r");
             if (filehandle==NULL) {
               errmsg("Error: cannot open TAB file %s: %s\n",fname,strerror(errno));
               return -1;
@@ -4077,7 +4077,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               errmsg("Error: intertemporal set declaration reads elements from logical file %s, which the command file does not declare\n",floginame);
               return -1;
             }
-            filehandle = fopen(iodata[k1].filname,"r");
+            filehandle = teems_fopen(iodata[k1].filname,"r");
             if (filehandle==NULL) {
               errmsg("Error: cannot open %s (logical file %s) for the intertemporal set elements: %s\n",iodata[k1].filname,floginame,strerror(errno));
               return -1;
@@ -4116,7 +4116,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
             strcpy(varname,readitem);
             strcpy(commsyntax,"read ");
             strcat(commsyntax,readitem);
-            filehandle = fopen(fname,"r");
+            filehandle = teems_fopen(fname,"r");
             if (filehandle==NULL) {
               errmsg("Error: cannot open TAB file %s: %s\n",fname,strerror(errno));
               return -1;
@@ -4151,7 +4151,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               errmsg("Error: intertemporal set declaration reads elements from logical file %s, which the command file does not declare\n",floginame);
               return -1;
             }
-            filehandle = fopen(iodata[k1].filname,"r");
+            filehandle = teems_fopen(iodata[k1].filname,"r");
             if (filehandle==NULL) {
               errmsg("Error: cannot open %s (logical file %s) for the intertemporal set elements: %s\n",iodata[k1].filname,floginame,strerror(errno));
               return -1;
@@ -4187,7 +4187,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
             strcpy(varname,readitem);
             strcpy(commsyntax,"read ");
             strcat(commsyntax,readitem);
-            filehandle = fopen(fname,"r");
+            filehandle = teems_fopen(fname,"r");
             if (filehandle==NULL) {
               errmsg("Error: cannot open TAB file %s: %s\n",fname,strerror(errno));
               return -1;
@@ -4222,7 +4222,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               errmsg("Error: intertemporal set declaration reads elements from logical file %s, which the command file does not declare\n",floginame);
               return -1;
             }
-            filehandle = fopen(iodata[k1].filname,"r");
+            filehandle = teems_fopen(iodata[k1].filname,"r");
             if (filehandle==NULL) {
               errmsg("Error: cannot open %s (logical file %s) for the intertemporal set elements: %s\n",iodata[k1].filname,floginame,strerror(errno));
               return -1;
@@ -4285,7 +4285,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
             strcpy(varname,readitem);
             strcpy(commsyntax,"read ");
             strcat(commsyntax,readitem);
-            filehandle = fopen(fname,"r");
+            filehandle = teems_fopen(fname,"r");
             if (filehandle==NULL) {
               errmsg("Error: cannot open TAB file %s: %s\n",fname,strerror(errno));
               return -1;
@@ -4320,7 +4320,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               errmsg("Error: intertemporal set declaration reads elements from logical file %s, which the command file does not declare\n",floginame);
               return -1;
             }
-            filehandle = fopen(iodata[k1].filname,"r");
+            filehandle = teems_fopen(iodata[k1].filname,"r");
             if (filehandle==NULL) {
               errmsg("Error: cannot open %s (logical file %s) for the intertemporal set elements: %s\n",iodata[k1].filname,floginame,strerror(errno));
               return -1;
@@ -4359,7 +4359,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
             strcpy(varname,readitem);
             strcpy(commsyntax,"read ");
             strcat(commsyntax,readitem);
-            filehandle = fopen(fname,"r");
+            filehandle = teems_fopen(fname,"r");
             if (filehandle==NULL) {
               errmsg("Error: cannot open TAB file %s: %s\n",fname,strerror(errno));
               return -1;
@@ -4394,7 +4394,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               errmsg("Error: intertemporal set declaration reads elements from logical file %s, which the command file does not declare\n",floginame);
               return -1;
             }
-            filehandle = fopen(iodata[k1].filname,"r");
+            filehandle = teems_fopen(iodata[k1].filname,"r");
             if (filehandle==NULL) {
               errmsg("Error: cannot open %s (logical file %s) for the intertemporal set elements: %s\n",iodata[k1].filname,floginame,strerror(errno));
               return -1;
@@ -4430,7 +4430,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
             strcpy(varname,readitem);
             strcpy(commsyntax,"read ");
             strcat(commsyntax,readitem);
-            filehandle = fopen(fname,"r");
+            filehandle = teems_fopen(fname,"r");
             if (filehandle==NULL) {
               errmsg("Error: cannot open TAB file %s: %s\n",fname,strerror(errno));
               return -1;
@@ -4465,7 +4465,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               errmsg("Error: intertemporal set declaration reads elements from logical file %s, which the command file does not declare\n",floginame);
               return -1;
             }
-            filehandle = fopen(iodata[k1].filname,"r");
+            filehandle = teems_fopen(iodata[k1].filname,"r");
             if (filehandle==NULL) {
               errmsg("Error: cannot open %s (logical file %s) for the intertemporal set elements: %s\n",iodata[k1].filname,floginame,strerror(errno));
               return -1;
@@ -4525,7 +4525,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
             strcpy(varname,readitem);
             strcpy(commsyntax,"read ");
             strcat(commsyntax,readitem);
-            filehandle = fopen(fname,"r");
+            filehandle = teems_fopen(fname,"r");
             if (filehandle==NULL) {
               errmsg("Error: cannot open TAB file %s: %s\n",fname,strerror(errno));
               return -1;
@@ -4560,7 +4560,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               errmsg("Error: intertemporal set declaration reads elements from logical file %s, which the command file does not declare\n",floginame);
               return -1;
             }
-            filehandle = fopen(iodata[k1].filname,"r");
+            filehandle = teems_fopen(iodata[k1].filname,"r");
             if (filehandle==NULL) {
               errmsg("Error: cannot open %s (logical file %s) for the intertemporal set elements: %s\n",iodata[k1].filname,floginame,strerror(errno));
               return -1;
@@ -4600,7 +4600,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
             strcpy(varname,readitem);
             strcpy(commsyntax,"read ");
             strcat(commsyntax,readitem);
-            filehandle = fopen(fname,"r");
+            filehandle = teems_fopen(fname,"r");
             if (filehandle==NULL) {
               errmsg("Error: cannot open TAB file %s: %s\n",fname,strerror(errno));
               return -1;
@@ -4635,7 +4635,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               errmsg("Error: intertemporal set declaration reads elements from logical file %s, which the command file does not declare\n",floginame);
               return -1;
             }
-            filehandle = fopen(iodata[k1].filname,"r");
+            filehandle = teems_fopen(iodata[k1].filname,"r");
             if (filehandle==NULL) {
               errmsg("Error: cannot open %s (logical file %s) for the intertemporal set elements: %s\n",iodata[k1].filname,floginame,strerror(errno));
               return -1;
@@ -4671,7 +4671,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
             strcpy(varname,readitem);
             strcpy(commsyntax,"read ");
             strcat(commsyntax,readitem);
-            filehandle = fopen(fname,"r");
+            filehandle = teems_fopen(fname,"r");
             if (filehandle==NULL) {
               errmsg("Error: cannot open TAB file %s: %s\n",fname,strerror(errno));
               return -1;
@@ -4706,7 +4706,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               errmsg("Error: intertemporal set declaration reads elements from logical file %s, which the command file does not declare\n",floginame);
               return -1;
             }
-            filehandle = fopen(iodata[k1].filname,"r");
+            filehandle = teems_fopen(iodata[k1].filname,"r");
             if (filehandle==NULL) {
               errmsg("Error: cannot open %s (logical file %s) for the intertemporal set elements: %s\n",iodata[k1].filname,floginame,strerror(errno));
               return -1;
@@ -4767,7 +4767,7 @@ int sets_read(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,
   int k0,k1,k2;
   char *readitem=NULL;//,*p;
 
-  filehandle = fopen(fname,"r");
+  filehandle = teems_fopen(fname,"r");
 
   while (tab_next_statement(commsyntax,filehandle,line,TABREADLINE)) {
     set_maxsize_excise(line);
@@ -5777,7 +5777,7 @@ offset_t subsets_read(char *fname, set_element *set_elems, set_def *sets,dim_t n
   offset_t jj,jjj,j=0,succ=0;
   char *readitem=NULL;
 
-  filehandle = fopen(fname,"r");
+  filehandle = teems_fopen(fname,"r");
   if (filehandle==NULL) return -1;
 
   while (tab_next_statement(commsyntax,filehandle,line,TABREADLINE)) {
@@ -6231,7 +6231,7 @@ offset_t backsolve_read(char *fname, array_def *vars, offset_t nvar, closure_ent
   char line[TABREADLINE]="\0",commsyntax[NAMESIZE],*p,*vname,*using,*eqname,*term;
   offset_t i,j,l;
   strcpy(commsyntax,"backsolve");
-  filehandle=fopen(fname,"r");
+  filehandle=teems_fopen(fname,"r");
   if (filehandle==NULL) {
     errmsg("Error: cannot open %s\n",fname);
     return -1;
@@ -6304,7 +6304,7 @@ offset_t backsolve_read(char *fname, array_def *vars, offset_t nvar, closure_ent
   /* omit/substitute are symbolic condensation actions the solver cannot
      perform; teems-R resolves them during model preparation */
   strcpy(commsyntax,"omit");
-  filehandle=fopen(fname,"r");
+  filehandle=teems_fopen(fname,"r");
   if (tab_next_statement_raw(commsyntax,filehandle,line,TABREADLINE)!=NULL) {
     errmsg("Error: the TAB file contains an omit statement; omission is resolved during model preparation (ems_model(omit=)) and must not reach the solver\n");
     fclose(filehandle);
@@ -6312,7 +6312,7 @@ offset_t backsolve_read(char *fname, array_def *vars, offset_t nvar, closure_ent
   }
   fclose(filehandle);
   strcpy(commsyntax,"substitute");
-  filehandle=fopen(fname,"r");
+  filehandle=teems_fopen(fname,"r");
   if (tab_next_statement_raw(commsyntax,filehandle,line,TABREADLINE)!=NULL) {
     errmsg("Error: the TAB file contains a substitute statement; substitution is resolved during model preparation (ems_model(backsolve=)) and must not reach the solver\n");
     fclose(filehandle);
@@ -6338,7 +6338,7 @@ int backsolve_validate_refs(char *fname, array_def *vars) {
   if (nbacksolve==0) return 0;
   eqfound=calloc(nbacksolve,sizeof(int));
   strcpy(commsyntax,"equation");
-  filehandle=fopen(fname,"r");
+  filehandle=teems_fopen(fname,"r");
   if (filehandle==NULL) {
     errmsg("Error: cannot open %s\n",fname);
     free(eqfound);

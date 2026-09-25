@@ -2014,7 +2014,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
   int condcap[MAXVARDIM][2];
   for (i=0; i<MAXVARDIM; i++) { condL[i]=NULL; condR[i]=NULL; condops[i][0]=condops[i][1]=NULL; }
 
-  filehandle = fopen(fname,"r");
+  filehandle = teems_fopen(fname,"r");
   /* each pass rescans from the top, so the positional zerodivide state
      replays in file order (manual 10.11.1); this also gives the PostSim
      pass its fresh initial state (manual 12.2.4) */
@@ -2780,7 +2780,7 @@ static void upd_analyse(char *fname, elem_value *elem_vals, array_def *coefs, of
   upd_pathbase=malloc((ncof+1)*sizeof(offset_t));
   for (k=0; k<ncof; k++) upd_pathbase[k]=-1;
   strcpy(cs,"update");
-  f=fopen(fname,"r");
+  f=teems_fopen(fname,"r");
   while (f!=NULL&&tab_next_statement_resolved(cs,f,line,elem_vals,coefs,ncof,&zd,TABREADLINE)) {
     char *p=line,*eq;
     int isce=0,j;
@@ -3079,7 +3079,7 @@ offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_el
   upd_shadow_sync(coefs,ncof,elem_vals);
   int stmt=0;
   upd_conds uc;
-  filehandle = fopen(fname,"r");
+  filehandle = teems_fopen(fname,"r");
   while (tab_next_statement_resolved(commsyntax,filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
     /* a mapped argument on the RHS lowers to map~idx and binds through
        the formula operand binder like any expression (manual 11.9.4;
@@ -3402,7 +3402,7 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
   upd_analyse(fname,elem_vals,coefs,ncof);
   int stmt=0;
   upd_conds uc;
-  filehandle = fopen(fname,"r");
+  filehandle = teems_fopen(fname,"r");
   while (tab_next_statement_resolved(commsyntax,filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
     /* a mapped argument on the RHS lowers to map~idx and binds through
        the formula operand binder like any expression (manual 11.9.4;
@@ -3963,7 +3963,7 @@ offset_t assertions_execute(char *fname,set_def *sets,dim_t nset,set_element *se
     nassert_fname=fname;
   }
   if(nassert==0)return 0;
-  filehandle=fopen(fname,"r");
+  filehandle=teems_fopen(fname,"r");
   if(filehandle==NULL)return 0;
   /* fresh positional zerodivide state for this rescan (manual 10.11.1) */
   zdiv_scan_reset();
@@ -4309,7 +4309,7 @@ int tab_has_postsim_assertions(char *fname) {
   FILE *filehandle;
   char line[TABREADLINE];
   int found=0;
-  filehandle=fopen(fname,"r");
+  filehandle=teems_fopen(fname,"r");
   if(filehandle==NULL)return 0;
   while (tab_next_statement("assertion",filehandle,line,TABREADLINE)) {
     if(strstr(line,"(postsim)")!=NULL) {

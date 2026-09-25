@@ -170,7 +170,7 @@ int cmf_count_files(char *fname,char *comsyntax) {
   FILE * filehandle;
   char line[TABREADLINE]="\0";
   int j=0;
-  filehandle = fopen(fname,"r");
+  filehandle = teems_fopen(fname,"r");
   if(filehandle==NULL){
     errmsg("Error: cannot open %s\n",fname);
     return -1;
@@ -190,7 +190,7 @@ int datafile_read_header_info(char *varname, char *filename,dim_t *vsize, char *
   int succ=0;
   char *readitem=NULL;
   while (varname[nlength] != '\0') nlength++;
-  filehandle = fopen(filename,"r");
+  filehandle = teems_fopen(filename,"r");
   if(filehandle==NULL){
     errmsg("Error: cannot open %s\n",filename);
     return -1;
@@ -245,7 +245,7 @@ int datafile_read_labels(char *varname, char *filename,dim_t d1, datafile_labels
   /* nothing to fill: `record` is calloc'd from d1, so d1 0 leaves a
      zero-size allocation the label loop below wrote into (fuzz batch 14) */
   if (d1<=0) return 0;
-  dfile = fopen(filename,"r");
+  dfile = teems_fopen(filename,"r");
   if (dfile==NULL) {
     errmsg("Error: cannot open %s\n",filename);
     return -1;
@@ -304,7 +304,7 @@ int cmf_read(char *filename, int niodata, cmf_file_entry *iodata, char *tabfile,
   char line[TABREADLINE],*readitem,commsyntax[NAMESIZE];
   int j=0,k;
   strcpy(commsyntax,"iodata");
-  filehandle = fopen(filename,"r");
+  filehandle = teems_fopen(filename,"r");
   if(filehandle==NULL){
     errmsg("Error: cannot open %s\n",filename);
     return -1;
@@ -327,7 +327,7 @@ int cmf_read(char *filename, int niodata, cmf_file_entry *iodata, char *tabfile,
   fclose(filehandle);
 
   strcpy(commsyntax,"outdata");
-  filehandle = fopen(filename,"r");
+  filehandle = teems_fopen(filename,"r");
   while (tab_next_statement(commsyntax,filehandle,line,TABREADLINE)) {
     readitem = strtok(line,"\"");
     readitem = strtok(NULL,"\"");
@@ -346,7 +346,7 @@ int cmf_read(char *filename, int niodata, cmf_file_entry *iodata, char *tabfile,
   fclose(filehandle);
 
   strcpy(commsyntax,"soldata");
-  filehandle = fopen(filename,"r");
+  filehandle = teems_fopen(filename,"r");
   while (tab_next_statement(commsyntax,filehandle,line,TABREADLINE)) {
     readitem = strtok(line,"\"");
     readitem = strtok(NULL,"\"");
@@ -364,7 +364,7 @@ int cmf_read(char *filename, int niodata, cmf_file_entry *iodata, char *tabfile,
   }
   fclose(filehandle);
 
-  filehandle = fopen(filename,"r");
+  filehandle = teems_fopen(filename,"r");
   strcpy(commsyntax,"tabfile");
   while (tab_next_statement(commsyntax,filehandle,line,TABREADLINE)) {
     readitem = strtok(line,"\"");
@@ -372,7 +372,7 @@ int cmf_read(char *filename, int niodata, cmf_file_entry *iodata, char *tabfile,
     strcpy(tabfile,readitem);
   }
   fclose(filehandle);
-  filehandle = fopen(filename,"r");
+  filehandle = teems_fopen(filename,"r");
   strcpy(commsyntax,"closure");
   while (tab_next_statement(commsyntax,filehandle,line,TABREADLINE)) {
     readitem = strtok(line,"\"");
@@ -380,7 +380,7 @@ int cmf_read(char *filename, int niodata, cmf_file_entry *iodata, char *tabfile,
     strcpy(closure,readitem);
   }
   fclose(filehandle);
-  filehandle = fopen(filename,"r");
+  filehandle = teems_fopen(filename,"r");
   strcpy(commsyntax,"shock");
   while (tab_next_statement(commsyntax,filehandle,line,TABREADLINE)) {
     readitem = strtok(line,"\"");
@@ -842,7 +842,7 @@ static int tab_preprocess_run(char *filename, char *newtabfile) {
   char setname[NAMESIZE],newset[NAMESIZE],varname[NAMESIZE],*n1,setelement[TABREADLINE];//,*ne,*np;//,*n2;
   char assertmsg[TABREADLINE],*am1,*am2;
   char rawline[TABLINESIZE],*rawpos;
-  filehandle = fopen(filename,"r");
+  filehandle = teems_fopen(filename,"r");
   if(filehandle==NULL){
     errmsg("Error: cannot open %s\n",filename);
     return -1;
@@ -850,7 +850,7 @@ static int tab_preprocess_run(char *filename, char *newtabfile) {
   int check,i1,i2,i,setindx,l1,l2,l3,l4,k1,k2,l5;//,necheck,npcheck;//,j;,check1
   strcpy(newtabfile1,newtabfile);
   str_replace_all(newtabfile1,".","1.");
-  fout = fopen(newtabfile1,"w");
+  fout = teems_fopen(newtabfile1,"w");
   readline[0]='\0';
   commsyntax[0]='\0';
   /* GEMPACK allows several statements on one physical line: each raw
@@ -1098,9 +1098,9 @@ static int tab_preprocess_run(char *filename, char *newtabfile) {
   }
   fclose(filehandle);
   fclose(fout);
-  filehandle = fopen(newtabfile1,"r");
+  filehandle = teems_fopen(newtabfile1,"r");
   if (filehandle==NULL) return -1;
-  fout = fopen(newtabfile,"w");
+  fout = teems_fopen(newtabfile,"w");
   i=0;
   while (fgets(line,TABREADLINE,filehandle)) {
     formula_qualifiers_normalize(line);
@@ -1440,7 +1440,7 @@ static int tab_preprocess_run(char *filename, char *newtabfile) {
 int outputs_write_csv(char *filename, char *newdatlogname, char *newdatfile,set_def *sets,dim_t nset, set_element *set_elems,array_def *coefs,offset_t ncof,offset_t ncofele,array_def *vars,offset_t nvar,offset_t nvarele, elem_value *elem_vals) {
   FILE * filehandle,*fout;
   char line[TABREADLINE]="\0",*readline,comsyntax[TABREADLINE],longname[TABREADLINE],varname[NAMESIZE],*vname1,header[NAMESIZE],setsize[DATREADLINE],tempname[NAMESIZE];
-  filehandle = fopen(filename,"r");
+  filehandle = teems_fopen(filename,"r");
   long int i,n,j,j1,innerloop,outerloop,l,indx;
   long int setindx[MAXVARDIM],antidim[MAXVARDIM];
   strcpy(comsyntax,"to file ");
@@ -1457,7 +1457,7 @@ int outputs_write_csv(char *filename, char *newdatlogname, char *newdatfile,set_
     return -1;
   }
   if(fout==NULL) {
-    errmsg("Error: cannot open %s for writing\n",newdatfile);
+    errmsg("Error: cannot open %s for writing: %s (the solver runs as uid %d)\n",newdatfile,strerror(errno),(int)getuid());
     fclose(filehandle);
     return -1;
   }
@@ -1598,11 +1598,11 @@ int outputs_write_csv(char *filename, char *newdatlogname, char *newdatfile,set_
 int tab_write_variables(char *filename, char *newtabfile,array_def *vars,offset_t nvar) {
   FILE * filehandle,*fout;
   char line[TABREADLINE+1]="\0",*p;//,nvarname[nvar][NAMESIZE+2],*p;//,line1[DATREADLINE];//,*ne,*np;//,*n2;
-  filehandle = fopen(filename,"r");
+  filehandle = teems_fopen(filename,"r");
   offset_t i,n,j,l,l1,linelght;
   int lvar;
   if (filehandle==NULL) return -1;
-  fout = fopen(newtabfile,"w");
+  fout = teems_fopen(newtabfile,"w");
   while (fgets(line,TABREADLINE,filehandle)) {
     int eqpos=str_find_ci(line,"equation ");
     int updpos=str_find_ci(line,"update ");
@@ -1692,7 +1692,7 @@ static char **decl_var=NULL,**decl_cof=NULL;
 static int n_decl_var=0,n_decl_cof=0;
 
 static int decl_index_read(char *filename, char *commsyntax, char ***out, int *nout) {
-  FILE *filehandle=fopen(filename,"r");
+  FILE *filehandle=teems_fopen(filename,"r");
   char line[TABREADLINE+1];
   offset_t lsize=TABREADLINE+1;
   int n=0,cap=0;
@@ -1816,7 +1816,7 @@ int tab_defaults_validate(char *fname) {
   FILE *f;
   char line[TABREADLINE],val[NAMESIZE];
   int bad=0;
-  f=fopen(fname,"r");
+  f=teems_fopen(fname,"r");
   if(f==NULL)return 0;
   while(fgets(line,TABREADLINE,f)) {
     if(strstr(line,"(default")==NULL)continue;
@@ -1914,7 +1914,7 @@ int tab_postsim_split(char *newtabfile, char *psfile) {
   int inps=0,nps=0,found=0;
   char (*psnames)[NAMESIZE]=NULL,(*ordlogs)[NAMESIZE]=NULL,(*pslogs)[NAMESIZE]=NULL;
   int npsn=0,nordlog=0,npslog=0,k;
-  fin=fopen(newtabfile,"r");
+  fin=teems_fopen(newtabfile,"r");
   if(fin==NULL)return 0;
   while (fgets(line,TABREADLINE,fin)) {
     if(strncmp(line,"postsim (begin)",15)==0||strncmp(line,"postsim(begin)",14)==0) {
@@ -1960,8 +1960,8 @@ int tab_postsim_split(char *newtabfile, char *psfile) {
   rewind(fin);
   strcpy(tmpname,newtabfile);
   strcat(tmpname,"_o");
-  fmain=fopen(tmpname,"w");
-  fps=fopen(psfile,"w");
+  fmain=teems_fopen(tmpname,"w");
+  fps=teems_fopen(psfile,"w");
   if(fmain==NULL||fps==NULL) {
     errmsg("Error: cannot open PostSim split scratch files\n");
     fclose(fin);
@@ -2206,7 +2206,7 @@ static int sb_elements_d(char *tabfile, cmf_file_entry *iodata, int nio, const c
   char line[TABREADLINE];
   int n=-1;
   size_t snlen=strlen(setname);
-  f=fopen(tabfile,"r");
+  f=teems_fopen(tabfile,"r");
   if (f==NULL) return -1;
   while (fgets(line,TABREADLINE,f)) {
     char *p=line;
@@ -2336,7 +2336,7 @@ static int sb_read_reals(const char *path, const char *header, double **vals) {
   int total=0,got=0;
   double *seq=NULL;
   *vals=NULL;
-  f=fopen((char *)path,"r");
+  f=teems_fopen((char *)path,"r");
   if (f==NULL) return -1;
   while (fgets(line,DATREADLINE,f)) {
     char *q=strchr(line,'\"');
@@ -2414,7 +2414,7 @@ static int sb_coef_read_stmt(char *tabfile, const char *coef, char *logname, cha
   char line[TABREADLINE];
   size_t cl=strlen(coef);
   int found=0;
-  f=fopen(tabfile,"r");
+  f=teems_fopen(tabfile,"r");
   if (f==NULL) return 0;
   while (fgets(line,TABREADLINE,f)) {
     char *p=line,*hd,*fl;
@@ -2451,7 +2451,7 @@ static int sb_coef_dims(char *tabfile, const char *coef, char dimset[][NAMESIZE]
   char line[TABREADLINE];
   int nd=-1;
   size_t cl=strlen(coef);
-  f=fopen(tabfile,"r");
+  f=teems_fopen(tabfile,"r");
   if (f==NULL) return -1;
   while (fgets(line,TABREADLINE,f)) {
     char *p=line,*nm;
@@ -2521,7 +2521,7 @@ static int sb_indicator_eval(char *tabfile, cmf_file_entry *iodata, int niodata,
   double *v=NULL;
   int nf=0,ok=1;
   size_t cl=strlen(coef);
-  f=fopen(tabfile,"r");
+  f=teems_fopen(tabfile,"r");
   if (f==NULL) return 0;
   v=calloc(nele>0?nele:1,sizeof(double));
   sele=calloc(SB_MAXELE,NAMESIZE);
@@ -2611,17 +2611,17 @@ int tab_setbuilder_transform(char *fname, cmf_file_entry *iodata, int niodata) {
   FILE *f,*fout;
   char line[TABREADLINE],tmpname[TABREADLINE];
   int any=0,rc=0;
-  f=fopen(fname,"r");
+  f=teems_fopen(fname,"r");
   if (f==NULL) { errmsg("Error: cannot open %s\n",fname); return -1; }
   while (fgets(line,TABREADLINE,f)) {
     if (strncmp(line,"set",3)==0&&strstr(line,"(all,")!=NULL&&strchr(line,':')!=NULL&&strchr(line,'=')!=NULL) any=1;
   }
   fclose(f);
   if (!any) return 0;
-  f=fopen(fname,"r");
+  f=teems_fopen(fname,"r");
   strcpy(tmpname,fname);
   strcat(tmpname,"_sb");
-  fout=f==NULL?NULL:fopen(tmpname,"w");
+  fout=f==NULL?NULL:teems_fopen(tmpname,"w");
   if (f==NULL||fout==NULL) {
     if (f!=NULL) fclose(f);
     errmsg("Error: cannot open set-builder scratch file\n");

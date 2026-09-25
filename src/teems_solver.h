@@ -10,6 +10,7 @@
 #include <math.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <errno.h>
 #include <petscksp.h>
 #include <petscsys.h>
 #include <petsctime.h>
@@ -654,6 +655,8 @@ char *tab_next_statement(char *commsyntax, FILE *filehandle, char *readline,offs
 char *tab_next_statement_resolved(char *commsyntax, FILE *filehandle, char *readline, elem_value *record, array_def *coefs,offset_t ncof,solve_real *zerodivide,offset_t rlinesize);
 int str_find_ci(char *line, char *finditem);
 int str_cmp_ci(const char *a, const char *b);
+FILE *teems_fopen(const char *path, const char *mode);
+FILE *teems_fopen_opt(const char *path, const char *mode);
 int str_ncmp_ci(const char *a, const char *b, size_t n);
 int str_find_token_ci(const char *base, const char *s, const char *pat);
 int str_count_token_ci(const char *base, const char *s, const char *pat);

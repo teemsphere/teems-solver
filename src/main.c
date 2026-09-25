@@ -31,7 +31,7 @@ static int coefficients_dump(const char *stem, array_def *coefs, offset_t ncof, 
   strcpy(path,stem);
   strcat(path,".cof");
   if((fp=fopen(path,"wb"))==NULL) {
-    errmsg("Error: cannot open %s for writing\n",path);
+    errmsg("Error: cannot open %s for writing: %s (the solver runs as uid %d)\n",path,strerror(errno),(int)getuid());
     return 1;
   }
   hdr[0]=1; hdr[1]=ncof; hdr[2]=ncofele; hdr[3]=0;
@@ -47,7 +47,7 @@ static int coefficients_dump(const char *stem, array_def *coefs, offset_t ncof, 
   strcpy(path,stem);
   strcat(path,".cbin");
   if((fp=fopen(path,"wb"))==NULL) {
-    errmsg("Error: cannot open %s for writing\n",path);
+    errmsg("Error: cannot open %s for writing: %s (the solver runs as uid %d)\n",path,strerror(errno),(int)getuid());
     return 1;
   }
   {
@@ -247,7 +247,7 @@ static void stats_la_used_patch(cmf_file_entry *iodata, int niodata, int noutdat
   if(i<niodata+noutdata+nsoldata)strcpy(statspath,iodata[i].filname);
   else strcpy(statspath,"solution");
   strcat(statspath,".stats.json");
-  FILE *fp=fopen(statspath,"r");
+  FILE *fp=teems_fopen_opt(statspath,"r");
   if (fp==NULL)return;
   fseek(fp,0,SEEK_END);
   long len=ftell(fp);
@@ -287,7 +287,7 @@ static void stats_rk_patch(cmf_file_entry *iodata, int niodata, int noutdata, in
   if(i<niodata+noutdata+nsoldata)strcpy(statspath,iodata[i].filname);
   else strcpy(statspath,"solution");
   strcat(statspath,".stats.json");
-  FILE *fp=fopen(statspath,"r");
+  FILE *fp=teems_fopen_opt(statspath,"r");
   if (fp==NULL)return;
   fseek(fp,0,SEEK_END);
   long len=ftell(fp);
@@ -333,7 +333,7 @@ static void stats_ndbbd_threads_patch(cmf_file_entry *iodata, int niodata, int n
   if(i<niodata+noutdata+nsoldata)strcpy(statspath,iodata[i].filname);
   else strcpy(statspath,"solution");
   strcat(statspath,".stats.json");
-  FILE *fp=fopen(statspath,"r");
+  FILE *fp=teems_fopen_opt(statspath,"r");
   if (fp==NULL)return;
   fseek(fp,0,SEEK_END);
   long len=ftell(fp);
@@ -376,7 +376,7 @@ static void stats_rss_patch(cmf_file_entry *iodata, int niodata, int noutdata, i
   if(i<niodata+noutdata+nsoldata)strcpy(statspath,iodata[i].filname);
   else strcpy(statspath,"solution");
   strcat(statspath,".stats.json");
-  FILE *fp=fopen(statspath,"r");
+  FILE *fp=teems_fopen_opt(statspath,"r");
   if (fp==NULL)return;
   fseek(fp,0,SEEK_END);
   long len=ftell(fp);
@@ -426,7 +426,7 @@ static void stats_condest_patch(cmf_file_entry *iodata, int niodata, int noutdat
   if(i<niodata+noutdata+nsoldata)strcpy(statspath,iodata[i].filname);
   else strcpy(statspath,"solution");
   strcat(statspath,".stats.json");
-  FILE *fp=fopen(statspath,"r");
+  FILE *fp=teems_fopen_opt(statspath,"r");
   if (fp==NULL)return;
   fseek(fp,0,SEEK_END);
   long len=ftell(fp);
@@ -628,7 +628,7 @@ static int chain_refs_scan(char *fname, set_def *sets, dim_t nset, array_def *co
   offset_t l;
   int i,np,varindx1,varindx2,leadlag;
   strcpy(commsyntax,"equation");
-  filehandle=fopen(fname,"r");
+  filehandle=teems_fopen(fname,"r");
   if(filehandle==NULL)return 0;
   while (tab_next_statement_resolved(commsyntax,filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
     if (strstr(line,"(default")!=NULL)continue;
@@ -2869,7 +2869,7 @@ comp_accurate_reentry:
       strcat(solchar,".bin");
       logmsg(2,"solchar %s\n",solchar);
       if ( (solution = fopen(solchar, "wb")) == NULL ) {
-        errmsg("Error: cannot open %s for writing\n",solchar);
+        errmsg("Error: cannot open %s for writing: %s (the solver runs as uid %d)\n",solchar,strerror(errno),(int)getuid());
         return 1;
       }
       fwrite(xcf, sizeof(solve_real),nvarele, solution);
@@ -2895,7 +2895,7 @@ comp_accurate_reentry:
       strcat(solchar,".est");
       logmsg(2,"solchar %s\n",solchar);
       if ( (solution = fopen(solchar, "wb")) == NULL ) {
-        errmsg("Error: cannot open %s for writing\n",solchar);
+        errmsg("Error: cannot open %s for writing: %s (the solver runs as uid %d)\n",solchar,strerror(errno),(int)getuid());
         return 1;
       }
       fwrite(accmetric, sizeof(solve_real),nvarele, solution);
@@ -2905,7 +2905,7 @@ comp_accurate_reentry:
     strcat(solchar,".var");
     logmsg(2,"solchar %s\n",solchar);
     if ( (solution = fopen(solchar, "wb")) == NULL ) {
-      errmsg("Error: cannot open %s for writing\n",solchar);
+      errmsg("Error: cannot open %s for writing: %s (the solver runs as uid %d)\n",solchar,strerror(errno),(int)getuid());
       return 1;
     }
     fwrite(vars, sizeof(array_def),nvar, solution);
@@ -2913,7 +2913,7 @@ comp_accurate_reentry:
     strcpy(solchar,tempchar);
     strcat(solchar,".set");
     if ( (solution = fopen(solchar, "wb")) == NULL ) {
-      errmsg("Error: cannot open %s for writing\n",solchar);
+      errmsg("Error: cannot open %s for writing: %s (the solver runs as uid %d)\n",solchar,strerror(errno),(int)getuid());
       return 1;
     }
     fwrite(sets, sizeof(set_def),nset, solution);
@@ -2921,7 +2921,7 @@ comp_accurate_reentry:
     strcpy(solchar,tempchar);
     strcat(solchar,".sel");
     if ( (solution = fopen(solchar, "wb")) == NULL ) {
-      errmsg("Error: cannot open %s for writing\n",solchar);
+      errmsg("Error: cannot open %s for writing: %s (the solver runs as uid %d)\n",solchar,strerror(errno),(int)getuid());
       return 1;
     }
     fwrite(set_elems, sizeof(set_element),nsetspace, solution);
@@ -2934,7 +2934,7 @@ comp_accurate_reentry:
     strcpy(solchar,tempchar);
     strcat(solchar,".mds");
     if ( (solution = fopen(solchar, "wb")) == NULL ) {
-      errmsg("Error: cannot open %s for writing\n",solchar);
+      errmsg("Error: cannot open %s for writing: %s (the solver runs as uid %d)\n",solchar,strerror(errno),(int)getuid());
       return 1;
     }
     fwrite(modeldes, sizeof(offset_t),4, solution);

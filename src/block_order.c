@@ -628,7 +628,7 @@ int ndbbd_order(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscI
       strcat(filename,rankname);
       strcat(filename,j1name);
       strcat(filename,".bin");
-      if((presolfile=fopen(filename, "r"))==NULL) {
+      if((presolfile=teems_fopen(filename, "r"))==NULL) {
         errmsg("Error: cannot open interface file %s; the presolve pass did not produce it (check scratch space)\n",filename);
       }
       frd=fread(insized, sizeof(int), 5, presolfile);
@@ -641,7 +641,7 @@ int ndbbd_order(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscI
         strcat(filename,rankname);
         strcat(filename,j1name);
         strcat(filename,".bin");
-        if((presolfile=fopen(filename, "r"))==NULL) {
+        if((presolfile=teems_fopen(filename, "r"))==NULL) {
           errmsg("Error: cannot open interface file %s\n",filename);
         }
         frd=fread(irn1, sizeof(int), insized[0], presolfile);
@@ -651,7 +651,7 @@ int ndbbd_order(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscI
         strcat(filename,rankname);
         strcat(filename,j1name);
         strcat(filename,".bin");
-        if((presolfile=fopen(filename, "r"))==NULL) {
+        if((presolfile=teems_fopen(filename, "r"))==NULL) {
           errmsg("Error: cannot open interface file %s\n",filename);
         }
         frd=fread(jcn1, sizeof(int), insized[0], presolfile);
