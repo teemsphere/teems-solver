@@ -242,7 +242,8 @@ The solver reads a GEMPACK-style TAB subset (statement syntax per [GM]):
   target takes its per-pass path values (Gragg: terminal-smoothed like
   the variables; accumulated in double precision), Richardson-
   extrapolated with the variables' weights ([GM] 26.2). A step counter
-  (`ITER = ITER + 1`) extrapolates meaninglessly, as in GEMPACK. Quantifier conditions
+  (`ITER = ITER + 1`) extrapolates meaninglessly, as in GEMPACK — run
+  such models single-pass (`-single_run 1`). Quantifier conditions
   `(all,i,S: <expr> op <expr>)` on Updates are evaluated per element
   from start-of-step values; an element whose condition is false is
   left alone (no write, so it does not override an earlier Update).
@@ -584,6 +585,13 @@ The updated data follow the same scheme (§2 `update`): each pass's
 (`updates_apply` mode 2) and extrapolated with the same weights
 (`updates_path_accumulate`); product updates are recomputed exactly
 from the extrapolated totals at the end of each subinterval.
+
+Single-pass runs (`-single_run 1`): the driver runs one pass (sol 0)
+with weight 1 instead of the triple — Gragg keeps its terminal
+smoothing (the GEMPACK single Gragg calculation), Euler is the plain
+forward pass; subintervals chain passes as usual. An `ITER = ITER + 1`
+counter then counts steps, and a RAS-style explicit update applied
+per step gives exactly N iterations (pmfix kit `ras`).
 
 Euler mechanics: same driver and per-step refill+solve, but every
 sub-step is a forward step from the current state (`updates_apply`
@@ -993,6 +1001,7 @@ needs corpus calibration.
 | `-matsol {0,1,2,3}` | 0 | matrix method (§6) |
 | `-solmed <name>` | `Gragg` | solution method (§5) |
 | `-step1/-step2/-step3` | 2/4/8 | Gragg step counts (all odd or all even) |
+| `-single_run {0,1}` | 0 | Euler/Gragg: one pass of `-step1` steps, no Richardson extrapolation (GEMPACK `method = euler; steps = N;`); accuracy estimates are reported as unavailable, updated data are that pass's path values; ignored for Johansen, a named fatal with the Runge–Kutta methods; `stats.json` records `"single_run"` |
 | `-nsubints n` | 1 | shock subintervals |
 | `-laA/-laDi/-laD n` | 2 (teems-R: 300/500/200) | workspace sizing, % of nnz |
 | `-fastrefac {0,1}` | 0 | all matrix methods: analyse once, fast refactorize per step (MA48 JOB=2 / MP48 FACT_JOB=2); LU auto-grows `laA` (§6) |

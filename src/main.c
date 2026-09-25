@@ -187,12 +187,15 @@ static void ordering_stats_write(cmf_file_entry *iodata, int niodata, int noutda
     int isrk=(strcmp(solmed,"RK2")==0||strcmp(solmed,"Heun")==0||strcmp(solmed,"RK4")==0||strcmp(solmed,"BoSha32")==0||strcmp(solmed,"DoPri54")==0);
     PetscOptionsGetInt(NULL,NULL,"-fastrefac",&frchk,NULL); /* post force-clear = effective */
     fprintf(fp,"  \"options\": {\n");
-    if(strcmp(solmed,"Gragg")==0||strcmp(solmed,"Euler")==0)
+    if((strcmp(solmed,"Gragg")==0||strcmp(solmed,"Euler")==0)&&teems_single_run)
+      fprintf(fp,"    \"steps\": [%d],\n",steps1);
+    else if(strcmp(solmed,"Gragg")==0||strcmp(solmed,"Euler")==0)
       fprintf(fp,"    \"steps\": [%d,%d,%d],\n",steps1,(int)llround(steps1*step_ratio2),(int)llround(steps1*step_ratio3));
     else if(strcmp(solmed,"Johansen")==0||strcmp(solmed,"probe")==0)
       fprintf(fp,"    \"steps\": null,\n");
     else fprintf(fp,"    \"steps\": [%d],\n",steps1);
     fprintf(fp,"    \"subintervals\": %ld,\n",ropt->subints);
+    fprintf(fp,"    \"single_run\": %s,\n",teems_single_run?"true":"false");
     if(isrk)fprintf(fp,"    \"adaptive\": %d,\n    \"eps_tolerance\": %g,\n    \"max_retries\": %d,\n    \"retry_adjust\": %g,\n    \"rk_chart\": \"%s\",\n    \"rk_norm\": \"%s\",\n    \"rk_controller\": \"%s\",\n    \"rk_scope\": \"%s\",\n    \"rk_h0\": %g,\n",ropt->adaptive,ropt->epstol,ropt->maxretries,ropt->retryadj,ropt->rk_chart==RK_CHART_LOG?"log":"percent",ropt->rk_norm==RK_NORM_RMS?"rms":"max",ropt->rk_ctrl==RK_CTRL_PI?"pi":"std",ropt->rk_scope==RK_SCOPE_ALL?"all":"pct",ropt->rk_h0);
     else fprintf(fp,"    \"adaptive\": null,\n    \"eps_tolerance\": null,\n    \"max_retries\": null,\n    \"retry_adjust\": null,\n    \"rk_chart\": null,\n    \"rk_norm\": null,\n    \"rk_controller\": null,\n    \"rk_scope\": null,\n    \"rk_h0\": null,\n");
     fprintf(fp,"    \"laA\": %ld,\n    \"laDi\": %ld,\n    \"laD\": %ld,\n",ropt->laA,ropt->laDi,ropt->laD);
@@ -1077,6 +1080,8 @@ int main(int argc,char **args) {
   if(steps2==0)steps2=4;
   PetscOptionsGetInt(NULL,NULL,"-step3",&steps3,NULL);
   if(steps3==0)steps3=8;
+  PetscOptionsGetInt(NULL,NULL,"-single_run",&teems_single_run,NULL);
+  teems_single_run=(teems_single_run!=0);
   section_threads=0;
   max_threads=1;
   PetscOptionsGetInt(NULL,NULL,"-maxthreads",&max_threads,NULL);
@@ -1222,6 +1227,18 @@ int main(int argc,char **args) {
      teems-R's matrix_method = "auto" consults (ROADMAP 6.10); the MC79
      diagnosis itself is ordering-invariant. */
   if(solmethod==SM_PROBE)nohsl=true;
+  /* -single_run 1 (GEMPACK "method = euler|gragg; steps = N;"): one pass
+     of -step1 steps with no extrapolation. Johansen is a single step
+     already; the Runge-Kutta family has its own step control. */
+  if(teems_single_run) {
+    if(solmethod==SM_RK2||solmethod==SM_HEUN||solmethod==SM_RK4||solmethod==SM_BOSHA32||solmethod==SM_DOPRI54) {
+      errmsg("Error: -single_run 1 applies to -solmed Euler or Gragg; the Runge-Kutta methods (%s) are single-pass already and take their steps from -step1/-adaptive\n",solmed);
+      PetscFinalize();
+      return 1;
+    }
+    if(solmethod==SM_JOHANSEN||solmethod==SM_PROBE) teems_single_run=0;
+    else if(rank==0) printf("Single-pass %s run: %d steps, no extrapolation (-single_run 1)\n",solmed,(int)steps1);
+  }
   /* -probefine: with -solmed probe, add the MC79 fine Dulmage-Mendelsohn
      report (strongly connected components of the well-determined block) */
   dim_t probefine=0;
@@ -1361,7 +1378,7 @@ int main(int argc,char **args) {
       }
     }
   }
-  if(solmethod==SM_GRAGG) {
+  if(solmethod==SM_GRAGG&&!teems_single_run) {
     /* Gragg's h^2 error expansion (Pearson 1991 Thm 6.1) holds for even
        step counts only; mixed parity also breaks the shared-power
        extrapolation */
@@ -1401,7 +1418,7 @@ int main(int argc,char **args) {
       }
     }
   }
-  if((solmethod==SM_GRAGG||solmethod==SM_EULER)&&!(steps1<steps2&&steps2<steps3)) {
+  if((solmethod==SM_GRAGG||solmethod==SM_EULER)&&!teems_single_run&&!(steps1<steps2&&steps2<steps3)) {
     /* extrapolation needs three distinct step sizes (GEMPACK: i<j<k) */
     errmsg("Error: -step1/-step2/-step3 must be strictly increasing (got %d %d %d)\n",steps1,steps2,steps3);
     PetscFinalize();

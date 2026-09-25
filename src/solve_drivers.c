@@ -844,7 +844,8 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
   int sol;
   solve_real vpercents=1.0;
   FILE* solution;
-  int maxsol=3;
+  /* -single_run: one pass, no extrapolation triple */
+  int maxsol=teems_single_run?1:3;
   /* Euler: forward step on every substep (no leapfrog, no terminal
      smoothing pass) and an h — not h^2 — truncation error series, so
      the Richardson weights below use the step ratios unsquared */
@@ -2163,6 +2164,8 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
             if(sol==0) {
               extrap_w1=1.0/(q2-1.0);
               extrap_w2=1.0/(1-q2)/(1.0-q3);
+              /* single pass: the pass itself is the result (weight 1) */
+              if(teems_single_run) { extrap_w1=0.0; extrap_w2=1.0; }
             }
             if(sol==1) {
               extrap_w1=q2/(q2-1.0);
@@ -2488,7 +2491,10 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
          precis[0]+=1;
    }
     }
-    if(rank==0)printf("Accurate at 6 digits        %ld\nAccurate at 5 digits        %ld\nAccurate at 4 digits        %ld\nAccurate at 3 digits        %ld\nAccurate at 2 digits        %ld\nAccurate at 1 digit or none %ld\n",precis[5],precis[4],precis[3],precis[2],precis[1],precis[0]);
+    if(teems_single_run) {
+      if(rank==0)printf("Accuracy estimates: not available for a single-pass run (-single_run 1; they need three multi-step solutions)\n");
+    }
+    else if(rank==0)printf("Accurate at 6 digits        %ld\nAccurate at 5 digits        %ld\nAccurate at 4 digits        %ld\nAccurate at 3 digits        %ld\nAccurate at 2 digits        %ld\nAccurate at 1 digit or none %ld\n",precis[5],precis[4],precis[3],precis[2],precis[1],precis[0]);
     }
     free(precis);
     xc0=realloc (xc0,sizeof(solve_real));

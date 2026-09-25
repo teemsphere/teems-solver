@@ -66,6 +66,7 @@ double teems_mem_avail_bytes(void); /* bytes the node can still give this proces
 extern int max_threads;
 extern double step_ratio2,step_ratio3,extrap_w1,extrap_w2,extrap_w3;
 extern int steps1,steps2,steps3;
+extern int teems_single_run;
 extern MPI_Comm node_comm,node_tail_comm;
 extern char scratch_dir[NAMESIZE];
 
