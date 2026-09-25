@@ -69,25 +69,39 @@ char *mapping_token_split(char *p, int *mp) {
    range over the mapping's domain set exactly and the argument
    position must be the codomain set exactly (subset routing around a
    mapped argument is deferred -- named fatal, not a mis-bind) */
-static void map_dim_bind(dim_addr *Dm, int mp, dim_t frame_setid, offset_t arg_setid, offset_t stride, int leadlag, const char *symname) {
-  if ((dim_t)teems_maps[mp-1].fromset!=frame_setid) {
-    errmsg("Error: the index of mapping %s does not range over its domain set (in %s); subset routing around a mapped argument is not supported\n",teems_maps[mp-1].mapname,symname);
-    MPI_Abort(PETSC_COMM_WORLD,1);
+static void map_dim_bind(dim_addr *Dm, int mp, dim_t frame_setid, offset_t arg_setid, offset_t stride, int leadlag, const char *symname, set_def *sets) {
+  map_def *md=&teems_maps[mp-1];
+  dim_t dss=0,css=0;
+  /* the index may range over a declared subset of the mapping's domain
+     (its elements route to their domain positions first), and the
+     codomain may be a declared subset of the argument set (the mapped
+     position routes on into the argument set), manual 11.9.7 --
+     potential-models vetting G9/G17/G-S5. Anything else stays fatal. */
+  if ((dim_t)md->fromset!=frame_setid) {
+    dss=set_supset_slot(sets,frame_setid,(dim_t)md->fromset);
+    if (dss<0) {
+      errmsg("Error: the index of mapping %s does not range over its domain set %s or a declared subset of it (it ranges over %s, in %s)\n",md->mapname,sets[md->fromset].setname,sets[frame_setid].setname,symname);
+      MPI_Abort(PETSC_COMM_WORLD,1);
+    }
   }
-  if ((offset_t)teems_maps[mp-1].toset!=arg_setid) {
-    errmsg("Error: mapping %s does not map into the argument set at that position of %s (manual 11.9.7)\n",teems_maps[mp-1].mapname,symname);
-    MPI_Abort(PETSC_COMM_WORLD,1);
+  if ((offset_t)md->toset!=arg_setid) {
+    css=set_supset_slot(sets,(dim_t)md->toset,(dim_t)arg_setid);
+    if (css<0) {
+      errmsg("Error: mapping %s does not map into the argument set at that position of %s (its codomain %s is neither %s nor a declared subset of it; manual 11.9.7)\n",md->mapname,symname,sets[md->toset].setname,sets[arg_setid].setname);
+      MPI_Abort(PETSC_COMM_WORLD,1);
+    }
   }
-  if (!teems_maps[mp-1].has_values) {
-    errmsg("Error: mapping %s is used (in %s) before a Formula has assigned all of its values (manual 10.13.1/11.9.1)\n",teems_maps[mp-1].mapname,symname);
+  if (!md->has_values) {
+    errmsg("Error: mapping %s is used (in %s) before a Formula has assigned all of its values (manual 10.13.1/11.9.1)\n",md->mapname,symname);
     MPI_Abort(PETSC_COMM_WORLD,1);
   }
   Dm->ADims=stride;
   Dm->leadlag=leadlag;
-  Dm->SupSet=0;
-  Dm->SSIndx=0;
+  Dm->SupSet=(css>0)?1:0;
+  Dm->SSIndx=(int)css;
   Dm->MapId=mp;
-  teems_maps[mp-1].used=true;
+  Dm->MapDomSS=(int)dss;
+  md->used=true;
 }
 
 /* $POS(...) (manual 11.5.6) inside a formula text (spaces stripped,
@@ -237,6 +251,12 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
       for(q=b+1; *q!='\0'&&*q!='}'; q++) if(*q==',') nargs_tok++;
     }
   }
+  {
+    /* ops slots are reused across compiles: the subset routing
+       field is set only by the binders below, so clear it first */
+    dim_addr *D=(varindex==2)?ops[nops].Var2Dims:ops[nops].Var1Dims;
+    for (l=0; l<MAXVARDIM; l++) { D[l].MapDomSS=0; }
+  }
   p= strtok(var2,"{");
   if (p==NULL) {
     p=&var2[0];
@@ -309,7 +329,7 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
             }
           if (strcmp(p,arSet[l].index_name)==0) {
             if(mp>0) {
-              map_dim_bind(varindex==2?&ops[nops].Var2Dims[l]:&ops[nops].Var1Dims[l],mp,arSet[l].setid,coefs[index].setid[0],coefs[index].strides[0],leadlag,coefs[index].cofname);
+              map_dim_bind(varindex==2?&ops[nops].Var2Dims[l]:&ops[nops].Var1Dims[l],mp,arSet[l].setid,coefs[index].setid[0],coefs[index].strides[0],leadlag,coefs[index].cofname,sets);
             } else
             if(varindex==2) {
               { dim_t ss=set_supset_slot(sets,arSet[l].setid,coefs[index].setid[0]); if(ss<0)set_supset_fatal(p,coefs[index].cofname,NULL,sets,arSet[l].setid,coefs[index].setid[0]); if(ss>0){ops[nops].Var2Dims[l].SupSet=1; ops[nops].Var2Dims[l].SSIndx=(int)ss;} }
@@ -345,7 +365,7 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
           for (l1=0; l1<fdim; l1++) {
             if (strcmp(p,arSet[l1].index_name)==0) {
               if(mp>0) {
-                map_dim_bind(varindex==2?&ops[nops].Var2Dims[l1]:&ops[nops].Var1Dims[l1],mp,arSet[l1].setid,coefs[index].setid[l],coefs[index].strides[l],leadlag,coefs[index].cofname);
+                map_dim_bind(varindex==2?&ops[nops].Var2Dims[l1]:&ops[nops].Var1Dims[l1],mp,arSet[l1].setid,coefs[index].setid[l],coefs[index].strides[l],leadlag,coefs[index].cofname,sets);
                 break;
               }
               if(varindex==2) {
@@ -368,7 +388,7 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
         for (l1=0; l1<fdim; l1++) {
           if (strcmp(p,arSet[l1].index_name)==0) {
             if(mp>0) {
-                map_dim_bind(varindex==2?&ops[nops].Var2Dims[l1]:&ops[nops].Var1Dims[l1],mp,arSet[l1].setid,coefs[index].setid[l],coefs[index].strides[l],leadlag,coefs[index].cofname);
+                map_dim_bind(varindex==2?&ops[nops].Var2Dims[l1]:&ops[nops].Var1Dims[l1],mp,arSet[l1].setid,coefs[index].setid[l],coefs[index].strides[l],leadlag,coefs[index].cofname,sets);
                 break;
               }
             if(varindex==2) {
@@ -438,7 +458,7 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
             }
           if (strcmp(p,arSet[l].index_name)==0) {
             if(mp>0) {
-              map_dim_bind(varindex==2?&ops[nops].Var2Dims[l]:&ops[nops].Var1Dims[l],mp,arSet[l].setid,vars[index].setid[0],vars[index].strides[0],leadlag,vars[index].cofname);
+              map_dim_bind(varindex==2?&ops[nops].Var2Dims[l]:&ops[nops].Var1Dims[l],mp,arSet[l].setid,vars[index].setid[0],vars[index].strides[0],leadlag,vars[index].cofname,sets);
             } else
             if(varindex==2) {
               { dim_t ss=set_supset_slot(sets,arSet[l].setid,vars[index].setid[0]); if(ss<0)set_supset_fatal(p,vars[index].cofname,NULL,sets,arSet[l].setid,vars[index].setid[0]); if(ss>0){ops[nops].Var2Dims[l].SupSet=1; ops[nops].Var2Dims[l].SSIndx=(int)ss;} }
@@ -474,7 +494,7 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
           for (l1=0; l1<fdim; l1++) {
             if (strcmp(p,arSet[l1].index_name)==0) {
               if(mp>0) {
-                map_dim_bind(varindex==2?&ops[nops].Var2Dims[l1]:&ops[nops].Var1Dims[l1],mp,arSet[l1].setid,vars[index].setid[l],vars[index].strides[l],leadlag,vars[index].cofname);
+                map_dim_bind(varindex==2?&ops[nops].Var2Dims[l1]:&ops[nops].Var1Dims[l1],mp,arSet[l1].setid,vars[index].setid[l],vars[index].strides[l],leadlag,vars[index].cofname,sets);
                 break;
               }
               if(varindex==2) {
@@ -497,7 +517,7 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
         for (l1=0; l1<fdim; l1++) {
           if (strcmp(p,arSet[l1].index_name)==0) {
             if(mp>0) {
-                map_dim_bind(varindex==2?&ops[nops].Var2Dims[l1]:&ops[nops].Var1Dims[l1],mp,arSet[l1].setid,vars[index].setid[l],vars[index].strides[l],leadlag,vars[index].cofname);
+                map_dim_bind(varindex==2?&ops[nops].Var2Dims[l1]:&ops[nops].Var1Dims[l1],mp,arSet[l1].setid,vars[index].setid[l],vars[index].strides[l],leadlag,vars[index].cofname,sets);
                 break;
               }
             if(varindex==2) {
@@ -997,14 +1017,31 @@ void zdiv_disable(void) {
    copies across the eval switch (refactored for the mapping mode,
    docs/mapping_complementarity_design.md M2). Sum operands arrive with
    SupSet/leadlag zeroed, so the full form is exact for them too. */
+static inline offset_t dims_route(offset_t ADims, int SupSet, int SSIndx, int leadlag, int MapId, int MapDomSS, const quantifier *q, const set_def *sets, const set_element *set_elems) {
+  if(MapId>0) {
+    /* mapped argument (manual 11.9.4): the domain element routes
+       through the mapping's codomain-position table -- from a subset
+       of the domain via its domain position, and on into a superset
+       argument set via the codomain element's position there */
+    const map_def *md=&teems_maps[MapId-1];
+    offset_t di=q->indx;
+    offset_t v;
+    if(MapDomSS>0) di=set_elems[sets[q->setid].offset+di].superset_pos[MapDomSS];
+    v=md->values[di+leadlag];
+    if(SupSet==1) v=set_elems[sets[md->toset].offset+v].superset_pos[SSIndx];
+    return ADims*v;
+  } else if(SupSet==1) {
+    return ADims*(set_elems[sets[q->setid].offset+q->indx].superset_pos[SSIndx]+leadlag);
+  }
+  return ADims*(q->indx+leadlag);
+}
+
 static inline offset_t dims_offset(const dim_addr *D, const quantifier *arSet, dim_t fdim, const set_def *sets, const set_element *set_elems) {
   offset_t l=0;
   dim_t j;
   for (j=0; j<fdim; j++) {
     if(D[j].MapId>0) {
-      /* mapped argument (manual 11.9.4): the domain element routes
-         through the mapping's codomain-position table */
-      l+=D[j].ADims*teems_maps[D[j].MapId-1].values[arSet[j].indx+D[j].leadlag];
+      l+=dims_route(D[j].ADims,D[j].SupSet,D[j].SSIndx,D[j].leadlag,D[j].MapId,D[j].MapDomSS,&arSet[j],sets,set_elems);
     } else if(D[j].SupSet==1) {
       l+=D[j].ADims*(set_elems[sets[arSet[j].setid].offset+arSet[j].indx].superset_pos[D[j].SSIndx]+D[j].leadlag);
     } else {

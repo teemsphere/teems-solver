@@ -50,6 +50,7 @@ typedef struct
   dim_t dcountdim3[MAXVARDIM];      /* variable dim -> arSet position */
   dim_t supset[MAXSUPSET];          /* superset_pos column per dim, 0 = direct */
   int dcountmap[MAXVARDIM];         /* >0: dim routes via teems_maps[id-1] (M2b) */
+  dim_t mapdss[MAXVARDIM];          /* mapped dim: superset_pos slot of the loop set into the domain, 0 = the domain */
   int condmap[MAXVARDIM];           /* >0: enclosing-sum mapping-equality gate (M3) */
   int condpos[MAXVARDIM];           /* its RHS frame position, or -1 */
   offset_t condfix[MAXVARDIM];      /* fixed codomain position, or -1 */
@@ -272,6 +273,19 @@ void jacobian_cache_free(void) {
   stmt_cache_built=false;
 }
 
+/* column position of a mapped variable dimension: the loop element's
+   domain position (lifted from a subset of the domain), through the
+   mapping, lifted into the argument set when the codomain is a subset
+   of it */
+static inline offset_t linvar_map_pos(int mp, dim_t dss, dim_t css, const quantifier *q, set_def *sets, set_element *set_elems) {
+  const map_def *md=&teems_maps[mp-1];
+  offset_t di=q->indx,v;
+  if(dss>0) di=set_elems[sets[q->setid].offset+di].superset_pos[dss];
+  v=md->values[di];
+  if(css>0) v=set_elems[sets[md->toset].offset+v].superset_pos[css];
+  return v;
+}
+
 /* Execute one built statement: evaluate its SUM programs in build order
    (equation-level first, then per occurrence -- the order they were
    evaluated inline before the split), then run each occurrence's element
@@ -337,7 +351,7 @@ static void stmt_prog_execute(stmt_prog *st, offset_t matrow, PetscInt *eq_addr,
             if(lv->dcountmap[dcount]>0) {
               /* mapped dim (M2b): the loop runs the domain; the column
                  sits at the mapping's codomain position */
-              li3=li3+((offset_t)teems_maps[lv->dcountmap[dcount]-1].values[arSet1[lv->dcountdim3[dcount]].indx])*vars[lv->LinVarIndx].strides[dcount];
+              li3=li3+linvar_map_pos(lv->dcountmap[dcount],lv->mapdss[dcount],lv->supset[dcount],&arSet1[lv->dcountdim3[dcount]],sets,set_elems)*vars[lv->LinVarIndx].strides[dcount];
             }
             else if(lv->supset[dcount]==0) {
               li3=li3+(arSet1[lv->dcountdim3[dcount]].indx+lv->dimleadlag[dcount])*vars[lv->LinVarIndx].strides[dcount];
@@ -547,15 +561,28 @@ static void linvar_dim_read(char *p, char *linecopy, offset_t lvar,
    coefficient side -- and a lead/lag offset through a mapping has no
    meaning.  Named fatals, not mis-binds. */
 static void linvar_map_dim_check(eq_var_ref *ref, dim_t d, offset_t frame_setid,
-                                 array_def *vars) {
+                                 array_def *vars, set_def *sets, dim_t *dss, dim_t *css) {
   map_def *md=&teems_maps[ref->dimmapid[d]-1];
+  offset_t argset=vars[ref->LinVarIndx].setid[d];
+  /* the loop set may be a declared subset of the domain and the
+     codomain a declared subset of the argument set (manual 11.9.7):
+     both route through superset_pos, mirroring map_dim_bind on the
+     coefficient side (potential-models vetting G9/G17/G-S5) */
+  *dss=0;
+  *css=0;
   if((offset_t)md->fromset!=frame_setid) {
-    errmsg("Error: the index of mapping %s does not range over its domain set (in %s); subset routing around a mapped argument is not supported\n",md->mapname,ref->LinVarName);
-    MPI_Abort(PETSC_COMM_WORLD,1);
+    *dss=set_supset_slot(sets,(dim_t)frame_setid,md->fromset);
+    if(*dss<0) {
+      errmsg("Error: the index of mapping %s does not range over its domain set %s or a declared subset of it (it ranges over %s, in %s)\n",md->mapname,sets[md->fromset].setname,sets[frame_setid].setname,ref->LinVarName);
+      MPI_Abort(PETSC_COMM_WORLD,1);
+    }
   }
-  if((offset_t)md->toset!=vars[ref->LinVarIndx].setid[d]) {
-    errmsg("Error: mapping %s does not map into the argument set at that position of %s (manual 11.9.7)\n",md->mapname,ref->LinVarName);
-    MPI_Abort(PETSC_COMM_WORLD,1);
+  if((offset_t)md->toset!=argset) {
+    *css=set_supset_slot(sets,md->toset,(dim_t)argset);
+    if(*css<0) {
+      errmsg("Error: mapping %s does not map into the argument set at that position of %s (its codomain %s is neither %s nor a declared subset of it; manual 11.9.7)\n",md->mapname,ref->LinVarName,sets[md->toset].setname,sets[argset].setname);
+      MPI_Abort(PETSC_COMM_WORLD,1);
+    }
   }
   if(ref->dimleadlag[d]!=0) {
     errmsg("Error: a lead/lag offset on the mapped index of %s (mapping %s) is not supported\n",ref->LinVarName,md->mapname);
@@ -567,6 +594,7 @@ static void linvar_map_dim_check(eq_var_ref *ref, dim_t d, offset_t frame_setid,
   }
   md->used=true;
 }
+
 
 /* Build one equation statement's compiled programs into *stp (the build
    half of the former jacobian_fill loop body; the statement text in line
@@ -801,7 +829,7 @@ static void stmt_prog_build_one(char *line, stmt_prog *stp, char *commsyntax,
   dim_t fdim,np,dcount,fdimlin=0,i4,supset[MAXSUPSET];
   int condmap[MAXVARDIM],condpos[MAXVARDIM];
   offset_t condfix[MAXVARDIM];
-  dim_t condss[MAXVARDIM];
+  dim_t condss[MAXVARDIM],mapdss[MAXVARDIM];
   int totalsum,sumcount=1,sumcount1=0,lvar;
   offset_t lj,i1=0,sumbegadd,dcountdim1[4*MAXVARDIM],dcountdim2[4*MAXVARDIM],dcountdim3[4*MAXVARDIM],nloops,nloopslin,nloopsfac,li3,nsumele,l2;
   int sumindx,npow,npar,nmul,nplu,ndiv,nmin,nops=0,nlinvars,varindx1,varindx2;
@@ -1186,9 +1214,9 @@ static void stmt_prog_build_one(char *line, stmt_prog *stp, char *commsyntax,
               }
               sum_cond_rhs_resolve(condmap[dcount],LinVars[i].dimcondrhs[dcount],arSet,fdimlin,sets,set_elems,&condpos[dcount],&condfix[dcount],&condss[dcount]);
             }
+            mapdss[dcount]=0;
             if(LinVars[i].dimmapid[dcount]>0) {
-              linvar_map_dim_check(&LinVars[i],dcount,arSet[dcountdim3[dcount]].setid,vars);
-              supset[dcount]=0;
+              linvar_map_dim_check(&LinVars[i],dcount,arSet[dcountdim3[dcount]].setid,vars,sets,&mapdss[dcount],&supset[dcount]);
               continue;
             }
             { dim_t ss=set_supset_slot(sets,arSet[dcountdim3[dcount]].setid,vars[LinVars[i].LinVarIndx].setid[dcount]); if(ss<0)set_supset_fatal(LinVars[i].dimnames[dcount],LinVars[i].LinVarName,NULL,sets,arSet[dcountdim3[dcount]].setid,vars[LinVars[i].LinVarIndx].setid[dcount]); supset[dcount]=(ss>0)?ss:0; }
@@ -1206,6 +1234,7 @@ static void stmt_prog_build_one(char *line, stmt_prog *stp, char *commsyntax,
             stp->lv[i].dcountdim3[dcount]=dcountdim3[dcount];
             stp->lv[i].supset[dcount]=supset[dcount];
             stp->lv[i].dcountmap[dcount]=LinVars[i].dimmapid[dcount];
+            stp->lv[i].mapdss[dcount]=mapdss[dcount];
             stp->lv[i].condmap[dcount]=condmap[dcount];
             stp->lv[i].condpos[dcount]=condpos[dcount];
             stp->lv[i].condfix[dcount]=condfix[dcount];
@@ -1397,7 +1426,7 @@ static void bs_prog_execute(bs_prog *bp, set_def *sets, set_element *set_elems,
           li3=0;
           for (dcount=0; dcount<vars[lv->LinVarIndx].size; dcount++) {
             if(lv->dcountmap[dcount]>0) {
-              li3=li3+((offset_t)teems_maps[lv->dcountmap[dcount]-1].values[arSet1[lv->dcountdim3[dcount]].indx])*vars[lv->LinVarIndx].strides[dcount];
+              li3=li3+linvar_map_pos(lv->dcountmap[dcount],lv->mapdss[dcount],lv->supset[dcount],&arSet1[lv->dcountdim3[dcount]],sets,set_elems)*vars[lv->LinVarIndx].strides[dcount];
             }
             else if(lv->supset[dcount]==0) {
               li3=li3+(arSet1[lv->dcountdim3[dcount]].indx+lv->dimleadlag[dcount])*vars[lv->LinVarIndx].strides[dcount];
@@ -2902,7 +2931,7 @@ int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,
   dim_t fdim=0,np,i4,supset[MAXSUPSET];
   int condmap[MAXVARDIM],condpos[MAXVARDIM];
   offset_t condfix[MAXVARDIM];
-  dim_t condss[MAXVARDIM];
+  dim_t condss[MAXVARDIM],mapdss[MAXVARDIM];
   /* ltime/lreg =0 only for flow analysis: the dimension loop assigns them for every intertemporal equation (eq_time/eq_reg in range) */
   offset_t rowindx,l,l1,lj,dcountdim1[4*MAXVARDIM],dcountdim2[4*MAXVARDIM],dcountdim3[4*MAXVARDIM],dcountdim4[4*MAXVARDIM],dcountdim5[4*MAXVARDIM],nloops,nloopslin,nloopsfac,li3,l2,matrow,matroworg,ltime=0,lreg=0,leq=0,eqindx=0;//,sizelinvars,totlinvars,templinvars
   offset_t nreg=0,sj,i,i3;
@@ -3183,9 +3212,9 @@ int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,
             }
             sum_cond_rhs_resolve(condmap[dcount],LinVars[i].dimcondrhs[dcount],arSet,fdimlin,sets,set_elems,&condpos[dcount],&condfix[dcount],&condss[dcount]);
           }
+          mapdss[dcount]=0;
           if(LinVars[i].dimmapid[dcount]>0) {
-            linvar_map_dim_check(&LinVars[i],dcount,arSet[dcountdim5[dcount]].setid,vars);
-            supset[dcount]=0;
+            linvar_map_dim_check(&LinVars[i],dcount,arSet[dcountdim5[dcount]].setid,vars,sets,&mapdss[dcount],&supset[dcount]);
             continue;
           }
           { dim_t ss=set_supset_slot(sets,arSet[dcountdim5[dcount]].setid,vars[LinVars[i].LinVarIndx].setid[dcount]); if(ss<0)set_supset_fatal(LinVars[i].dimnames[dcount],LinVars[i].LinVarName,NULL,sets,arSet[dcountdim5[dcount]].setid,vars[LinVars[i].LinVarIndx].setid[dcount]); supset[dcount]=(ss>0)?ss:0; }
@@ -3240,7 +3269,7 @@ int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,
           for (dcount=0; dcount<vars[LinVars[i].LinVarIndx].size; dcount++) {
             if(LinVars[i].dimmapid[dcount]>0) {
               /* must mirror the fill loop exactly or dnnz/onnz miscount */
-              li3=li3+((offset_t)teems_maps[LinVars[i].dimmapid[dcount]-1].values[arSet[dcountdim5[dcount]].indx])*vars[LinVars[i].LinVarIndx].strides[dcount];
+              li3=li3+linvar_map_pos(LinVars[i].dimmapid[dcount],mapdss[dcount],supset[dcount],&arSet[dcountdim5[dcount]],sets,set_elems)*vars[LinVars[i].LinVarIndx].strides[dcount];
             }
             else if(supset[dcount]==0) {
               li3=li3+(arSet[dcountdim5[dcount]].indx+LinVars[i].dimleadlag[dcount])*vars[LinVars[i].LinVarIndx].strides[dcount];

@@ -748,6 +748,9 @@ typedef struct
   int SSIndx;                /* column into superset_pos (< MAXSUPSET) */
   int leadlag;               /* intertemporal lead/lag shift */
   int MapId;                 /* >0: route via teems_maps[MapId-1] (11.9.4) */
+  int MapDomSS;              /* >0: the index ranges over a subset of the
+                                mapping's domain -- superset_pos column
+                                into the domain (11.9.7) */
 } dim_addr ;
 
 /* one operation of a compiled formula program (interpreted per element) */
