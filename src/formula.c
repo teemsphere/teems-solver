@@ -2802,6 +2802,8 @@ static void upd_analyse(char *fname, elem_value *elem_vals, array_def *coefs, of
     if (tgt[n]>=0&&cnt[tgt[n]]<2) cnt[tgt[n]]++;
     if (isce&&tgt[n]>=0&&upd_pathbase[tgt[n]]<0) { upd_pathbase[tgt[n]]=upd_pathn; upd_pathn+=coefs[tgt[n]].nelem; }
     eq=strchr(line,'=');
+    /* a conditional quantifier reads coefficients too (S9) */
+    if (strchr(line,':')!=NULL) { isce=1; ce[n]=2; eq=line; }
     if (isce&&eq!=NULL) {
       char *q=eq+1;
       while (*q!='\0') {
@@ -2881,6 +2883,7 @@ static void upd_pass_flush(array_def *coefs, elem_value *elem_vals) {
   offset_t k;
   int c;
   for (k=0; k<upd_pend_n; k++) {
+    if (upd_pend_off[k]<0) continue;   /* a condition left the element alone */
     elem_vals[upd_pend_off[k]].value=upd_pend_val[k];
     elem_vals[upd_pend_off[k]].substep_base=upd_pend_base[k];
     if (upd_pend_sidx[k]>=0) {
@@ -2942,6 +2945,119 @@ void updates_path_accumulate(array_def *coefs, offset_t ncof, elem_value *elem_v
   }
 }
 
+/* ---- conditional Update quantifiers (all,i,S: <cond>) (manual 11.12,
+   vetting S9): the condition is cut out of the statement text, both
+   sides compiled over the statement frame, and an element whose
+   condition is false is left alone (no write, so it does not override
+   an earlier Update of the same element) ---- */
+typedef struct {
+  int n;
+  int op[MAXVARDIM];
+  char *txt[MAXVARDIM][2];
+  formula_op *ops[MAXVARDIM][2];
+  dim_t nops[MAXVARDIM][2];
+  int cap[MAXVARDIM][2];
+} upd_conds;
+
+static void upd_cond_extract(char *line, upd_conds *uc) {
+  char *p=line;
+  memset(uc,0,sizeof(*uc));
+  while ((p=strstr(p,"(all,"))!=NULL) {
+    char *q=p,*colon=NULL,*close=NULL;
+    int d=0;
+    for (; *q!='\0'; q++) {
+      if (*q=='('||*q=='['||*q=='{') d++;
+      else if (*q==')'||*q==']'||*q=='}') { d--; if (d==0) { close=q; break; } }
+      else if (*q==':'&&d==1&&colon==NULL) colon=q;
+    }
+    if (close==NULL) return;
+    if (colon!=NULL&&uc->n<MAXVARDIM) {
+      char cond[TABREADLINE],*o=NULL;
+      int k=0,od=0,ol=0;
+      char *c;
+      for (c=colon+1; c<close&&k<TABREADLINE-1; c++) if (*c!=' ') cond[k++]=*c;
+      cond[k]='\0';
+      for (c=cond; *c!='\0'; c++) {
+        if (*c=='('||*c=='['||*c=='{') od++;
+        else if (*c==')'||*c==']'||*c=='}') od--;
+        else if (od==0&&(*c=='<'||*c=='>'||*c=='=')) { o=c; break; }
+      }
+      if (o==NULL||str_count_ci(cond,"sum(")>0||str_count_ci(cond,"sum{")>0) {
+        errmsg("Error: Update quantifier condition %s must be one comparison of two sum-free expressions (manual 11.4.11): %s\n",cond,line);
+        MPI_Abort(PETSC_COMM_WORLD,1);
+      }
+      ol=((o[0]=='<'&&(o[1]=='='||o[1]=='>'))||(o[0]=='>'&&o[1]=='='))?2:1;
+      uc->op[uc->n]=(o[0]=='=')?1:(o[0]=='<'&&o[1]=='=')?5:(o[0]=='>'&&o[1]=='=')?6:(o[0]=='<'&&o[1]=='>')?4:(o[0]=='>')?2:3;
+      uc->txt[uc->n][1]=strdup(o+ol);
+      *o='\0';
+      uc->txt[uc->n][0]=strdup(cond);
+      uc->n++;
+      memmove(colon,close,strlen(close)+1);
+      close=colon;
+    }
+    p=close+1;
+  }
+}
+
+static void upd_cond_compile(upd_conds *uc, set_def *sets, array_def *coefs, offset_t ncof, array_def *vars, offset_t nvar, offset_t ncofele, sum_def *sum_cof, int totalsum, quantifier *arSet, dim_t nframe) {
+  int i,sd;
+  for (i=0; i<uc->n; i++) for (sd=0; sd<2; sd++) {
+    char ctext[TABREADLINE];
+    int cn;
+    strcpy(ctext,uc->txt[i][sd]);
+    while (str_replace_char(ctext,'[','('));
+    while (str_replace_char(ctext,']',')'));
+    while (str_replace_char(ctext,'{','('));
+    while (str_replace_char(ctext,'}',')'));
+    while (formula_normalize(ctext)==1);
+    leadlag_encode(ctext);
+    cn=str_count_char(ctext,'^')+str_count_char(ctext,'*')+str_count_char(ctext,'/')+str_count_char(ctext,'+')+str_count_char(ctext,'-')
+       +2*(str_count_char(ctext,'(')+str_count_char(ctext,',')+str_count_char(ctext,'{')+str_count_ci(ctext,"$pos")+2)+4;
+    uc->ops[i][sd]=(formula_op *)calloc(cn,sizeof(formula_op));
+    uc->cap[i][sd]=cn;
+    uc->nops[i][sd]=0;
+    if (!formula_compile(ctext,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,uc->ops[i][sd],&uc->nops[i][sd],arSet,nframe)) {
+      errmsg("Error: cannot evaluate the Update quantifier condition %s\n",uc->txt[i][sd]);
+      MPI_Abort(PETSC_COMM_WORLD,1);
+    }
+  }
+}
+
+/* per-thread program copies (formula_eval writes its temporaries) */
+static void upd_cond_thread(const upd_conds *uc, formula_op *own[][2], int master) {
+  int i,sd;
+  for (i=0; i<uc->n; i++) for (sd=0; sd<2; sd++) {
+    if (master) own[i][sd]=uc->ops[i][sd];
+    else {
+      own[i][sd]=malloc(uc->cap[i][sd]*sizeof(formula_op));
+      memcpy(own[i][sd],uc->ops[i][sd],uc->cap[i][sd]*sizeof(formula_op));
+    }
+  }
+}
+
+static void upd_cond_thread_free(const upd_conds *uc, formula_op *own[][2], int master) {
+  int i;
+  if (master) return;
+  for (i=0; i<uc->n; i++) { free(own[i][0]); free(own[i][1]); }
+}
+
+static int upd_cond_hold(const upd_conds *uc, formula_op *own[][2], elem_value *elem_vals, set_def *sets, set_element *set_elems, sum_value *sum_vals, quantifier *arSet, dim_t nframe, solve_real zerodivide) {
+  int i;
+  for (i=0; i<uc->n; i++) {
+    solve_real a=formula_eval(elem_vals,sets,set_elems,sum_vals,own[i][0],uc->nops[i][0],arSet,nframe,zerodivide);
+    solve_real b=formula_eval(elem_vals,sets,set_elems,sum_vals,own[i][1],uc->nops[i][1],arSet,nframe,zerodivide);
+    int ok=(uc->op[i]==1)?(a==b):(uc->op[i]==2)?(a>b):(uc->op[i]==3)?(a<b):(uc->op[i]==4)?(a!=b):(uc->op[i]==5)?(a<=b):(a>=b);
+    if (!ok) return 0;
+  }
+  return 1;
+}
+
+static void upd_cond_free(upd_conds *uc) {
+  int i;
+  for (i=0; i<uc->n; i++) { free(uc->txt[i][0]); free(uc->txt[i][1]); free(uc->ops[i][0]); free(uc->ops[i][1]); }
+  uc->n=0;
+}
+
 offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_elems, array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar, elem_value *elem_vals,offset_t ncofvar,offset_t ncofele,int midpoint) {
   FILE * filehandle;
   char commsyntax[NAMESIZE],line[TABREADLINE],line1[TABREADLINE],line2[TABREADLINE],linecopy[TABREADLINE];
@@ -2962,6 +3078,7 @@ offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_el
   upd_analyse(fname,elem_vals,coefs,ncof);
   upd_shadow_sync(coefs,ncof,elem_vals);
   int stmt=0;
+  upd_conds uc;
   filehandle = fopen(fname,"r");
   while (tab_next_statement_resolved(commsyntax,filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
     /* a mapped argument on the RHS lowers to map~idx and binds through
@@ -2972,10 +3089,7 @@ offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_el
     if (teems_nmap>0) mapping_lower_calls(line);
     /* update statements have no condition machinery: a ':' used to make
        the set lookup miss and expand over sets[0] in silence (M3) */
-    if (strchr(line,':')!=NULL) {
-      errmsg("Error: conditions in Update statements are not supported\n");
-      MPI_Abort(PETSC_COMM_WORLD,1);
-    }
+    upd_cond_extract(line,&uc);
     IsChange=false;
     IsExplicit=false;
     if(strstr(line, "(change)")!=NULL) {
@@ -3149,11 +3263,14 @@ offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_el
             }
         }
     if(!formula_compile(line1,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,&nops,arSet,fdim-1))MPI_Abort(PETSC_COMM_WORLD,1);
+    upd_cond_compile(&uc,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,arSet,fdim-1);
     int dfr=upd_stmt_defer(stmt);
     offset_t pb=dfr?upd_pend_reserve(nloops):0;
     offset_t shb0=((IsChange||IsExplicit)&&!check10&&upd_shvalid&&upd_pathbase[index]>=0)?upd_pathbase[index]:-1;
         #pragma omp parallel private(l,l2,i4,dcount,i3,i1,temp1,temp2,arSet1,ops1) shared(elem_vals,arSet)
         {
+        formula_op *ucops[MAXVARDIM][2];
+        upd_cond_thread(&uc,ucops,omp_get_thread_num()==0);
         if(omp_get_thread_num()!=0){
           arSet1=malloc((fdim+1)*sizeof(quantifier));
           memcpy (arSet1,arSet,(fdim+1)*sizeof(quantifier));
@@ -3197,6 +3314,10 @@ offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_el
                 }
               }
             }
+      if(uc.n>0&&!upd_cond_hold(&uc,ucops,elem_vals,sets,set_elems,sum_vals,arSet1,fdim-1,zerodivide)) {
+        if(dfr){ upd_pend_off[pb+l]=-1; upd_pend_sidx[pb+l]=-1; }
+        continue;
+      }
       if(dfr){
         store_real v0=elem_vals[offset+l2].value,nv=v0;
         temp1=formula_eval(elem_vals,sets,set_elems,sum_vals,ops1,nops,arSet1,fdim-1,zerodivide);
@@ -3232,6 +3353,7 @@ offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_el
         if(temp1-elem_vals[offset+l2].value>0.000000001||temp1-elem_vals[offset+l2].value<-0.000000001)elem_vals[offset+l2].value=temp1;
       }
     }
+        upd_cond_thread_free(&uc,ucops,omp_get_thread_num()==0);
         if(omp_get_thread_num()!=0){
           free(arSet1);
           arSet1=NULL;
@@ -3249,6 +3371,7 @@ offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_el
 
         if(dfr) upd_check_later(index,offset,varsize);
         else upd_range_check(coefs,index,offset,varsize,elem_vals);
+        upd_cond_free(&uc);
         stmt++;
     
   }
@@ -3278,6 +3401,7 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
   zdiv_disable();
   upd_analyse(fname,elem_vals,coefs,ncof);
   int stmt=0;
+  upd_conds uc;
   filehandle = fopen(fname,"r");
   while (tab_next_statement_resolved(commsyntax,filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
     /* a mapped argument on the RHS lowers to map~idx and binds through
@@ -3288,10 +3412,7 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
     if (teems_nmap>0) mapping_lower_calls(line);
     /* update statements have no condition machinery: a ':' used to make
        the set lookup miss and expand over sets[0] in silence (M3) */
-    if (strchr(line,':')!=NULL) {
-      errmsg("Error: conditions in Update statements are not supported\n");
-      MPI_Abort(PETSC_COMM_WORLD,1);
-    }
+    upd_cond_extract(line,&uc);
     IsChange=false;
     IsExplicit=false;
     if(strstr(line, "(change)")!=NULL) {
@@ -3466,6 +3587,7 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
             }
         }
     if(!formula_compile(line1,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,&nops,arSet,fdim-1))MPI_Abort(PETSC_COMM_WORLD,1);
+    upd_cond_compile(&uc,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,arSet,fdim-1);
     int dfr=upd_stmt_defer(stmt);
     offset_t pb=dfr?upd_pend_reserve(nloops):0;
     /* the post-simulation pass of an extrapolated solve: a (change) or
@@ -3474,6 +3596,8 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
     const double *pathv=(teems_upd_pathuse&&(IsChange||IsExplicit)&&!check10&&upd_pathacc!=NULL&&upd_pathbase[index]>=0)?upd_pathacc+upd_pathbase[index]:NULL;
         #pragma omp parallel private(l,l2,i4,dcount,i3,i1,temp1,arSet1,ops1) shared(elem_vals,arSet)
         {
+        formula_op *ucops[MAXVARDIM][2];
+        upd_cond_thread(&uc,ucops,omp_get_thread_num()==0);
         if(omp_get_thread_num()!=0){
           arSet1=malloc((fdim+1)*sizeof(quantifier));
           memcpy (arSet1,arSet,(fdim+1)*sizeof(quantifier));
@@ -3519,6 +3643,10 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
             }
       temp1=formula_eval(elem_vals,sets,set_elems,sum_vals,ops1,nops,arSet1,fdim-1,zerodivide);
       if(pathv!=NULL)temp1=pathv[l2];
+      if(uc.n>0&&!upd_cond_hold(&uc,ucops,elem_vals,sets,set_elems,sum_vals,arSet1,fdim-1,zerodivide)) {
+        if(dfr){ upd_pend_off[pb+l]=-1; upd_pend_sidx[pb+l]=-1; }
+        continue;
+      }
       if(dfr){
         store_real v0=elem_vals[offset+l2].value,nv=v0;
         if(temp1-v0>0.000000001||temp1-v0<-0.000000001)nv=temp1;
@@ -3529,6 +3657,7 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
       }else
       if(temp1-elem_vals[offset+l2].value>0.000000001||temp1-elem_vals[offset+l2].value<-0.000000001)elem_vals[offset+l2].value=temp1;
     }
+        upd_cond_thread_free(&uc,ucops,omp_get_thread_num()==0);
         if(omp_get_thread_num()!=0){
           free(arSet1);
           arSet1=NULL;
@@ -3546,6 +3675,7 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
 
         if(dfr) upd_check_later(index,offset,varsize);
         else upd_range_check(coefs,index,offset,varsize,elem_vals);
+        upd_cond_free(&uc);
         stmt++;
     
   }

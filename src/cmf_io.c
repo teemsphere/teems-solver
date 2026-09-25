@@ -1584,17 +1584,8 @@ int tab_write_variables(char *filename, char *newtabfile,array_def *vars,offset_
   while (fgets(line,TABREADLINE,filehandle)) {
     int eqpos=str_find_ci(line,"equation ");
     int updpos=str_find_ci(line,"update ");
-    /* update statements have no condition machinery: a ':' used to
-       make the set lookup miss and expand over sets[0] in silence;
-       the per-step update pass may never run (a broken system dies in
-       the solver first), so fail here (M3) */
-    if((updpos==0||updpos==1)&&strchr(line,':')!=NULL) {
-      errmsg("Error: conditions in Update statements are not supported\n");
-      fclose(filehandle);
-      fclose(fout);
-      MPI_Abort(PETSC_COMM_WORLD,1);
-      return -1;
-    }
+    /* conditional Update quantifiers are evaluated by updates_apply
+       (vetting S9; this used to be a fatal) */
     if(eqpos>-1||updpos>-1) {
       linelght=strlen(line);
       for (i=0; i<nvar; i++) {

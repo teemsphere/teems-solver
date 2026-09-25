@@ -238,7 +238,10 @@ The solver reads a GEMPACK-style TAB subset (statement syntax per [GM]):
   target takes its per-pass path values (Gragg: terminal-smoothed like
   the variables; accumulated in double precision), Richardson-
   extrapolated with the variables' weights ([GM] 26.2). A step counter
-  (`ITER = ITER + 1`) extrapolates meaninglessly, as in GEMPACK.
+  (`ITER = ITER + 1`) extrapolates meaninglessly, as in GEMPACK. Quantifier conditions
+  `(all,i,S: <expr> op <expr>)` on Updates are evaluated per element
+  from start-of-step values; an element whose condition is false is
+  left alone (no write, so it does not override an earlier Update).
 - `backsolve <var> using <eq>` — condensation ([GM] 10.16, 14.1.3): the
   named endogenous variable and its nominated defining equation are
   excluded from the solved system (`backsolve_read()` marks the elements;
