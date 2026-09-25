@@ -178,6 +178,10 @@ The solver reads a GEMPACK-style TAB subset (statement syntax per [GM]):
   second address), in formulas, equations (coefficients and variables,
   inside sums too) and updates. A repeated sum index is one loop, not
   one per position.
+- names `C_*` — a coefficient may start with `c_` unless a variable of
+  the tail name exists (then `c_NAME` is that variable's change
+  column: named fatal); `c_` tokens that name a declared coefficient
+  are not rewritten to `p_` in equations and updates.
 - `formula` — `(initial)` / `(always)` semantics as in [GM]; a
   qualifier list `(initial, by_elements)` is split into its groups, and
   `write updated value to file F header "H"` is accepted with a warning

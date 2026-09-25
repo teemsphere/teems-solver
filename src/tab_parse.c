@@ -3724,6 +3724,28 @@ offset_t set_find_alltime(set_def *sets,dim_t nset) {
 }
 
 
+/* does the TAB declare a variable of this name (case-insensitive)? */
+static int tab_declares_variable(char *fname, const char *name) {
+  FILE *f=fopen(fname,"r");
+  char line[TABREADLINE];
+  int found=0;
+  while (!found&&tab_next_statement("variable",f,line,TABREADLINE)) {
+    char *p=line+8,nm[NAMESIZE];
+    int k=0;
+    for (;;) {
+      int d=0;
+      while (*p==' ') p++;
+      if (*p!='(') break;
+      for (; *p!='\0'; p++) { if (*p=='(') d++; else if (*p==')') { d--; if (d==0) { p++; break; } } }
+    }
+    while ((isalnum((unsigned char)*p)||*p=='_'||*p=='@')&&k<NAMESIZE-1) nm[k++]=*p++;
+    nm[k]='\0';
+    if (str_cmp_ci(nm,name)==0) found=1;
+  }
+  fclose(f);
+  return found;
+}
+
 offset_t coefficients_read(char *fname, char *commsyntax, array_def *record, offset_t ncof, set_def *sets,offset_t nset) {
   FILE * filehandle;
   char line[TABREADLINE]="\0",linecopy[TABREADLINE],setname1[TABREADLINE],setname[TABREADLINE],setname2[TABREADLINE],setname3[TABREADLINE],finditem[TABREADLINE],finditem1[TABREADLINE],finditem2[TABREADLINE],finditem3[TABREADLINE],vname[TABREADLINE];//,vnamecopy[NAMESIZE];
@@ -3846,8 +3868,10 @@ offset_t coefficients_read(char *fname, char *commsyntax, array_def *record, off
           return -1;
         }
         strcpy(record[j].cofname,readitem);
-        if(record[j].cofname[0]=='c'&&record[j].cofname[1]=='_'){
-          errmsg("Error: the c_/C_ prefix is reserved for change variables; rename coefficient %s\n",record[j].cofname);
+        /* c_NAME collides only when a variable NAME exists: then c_NAME
+           is its change column (vetting dynamic G8: Melitz C_* data) */
+        if(record[j].cofname[0]=='c'&&record[j].cofname[1]=='_'&&tab_declares_variable(fname,record[j].cofname+2)){
+          errmsg("Error: coefficient %s collides with the change column c_%s of variable %s; rename the coefficient\n",record[j].cofname,record[j].cofname+2,record[j].cofname+2);
           return -1;
         }
         readitem = strtok(NULL,")");
@@ -3905,6 +3929,10 @@ offset_t coefficients_read(char *fname, char *commsyntax, array_def *record, off
             return -1;
           }
           strcpy(record[j].cofname,setname);
+          if(record[j].cofname[0]=='c'&&record[j].cofname[1]=='_'&&tab_declares_variable(fname,record[j].cofname+2)){
+            errmsg("Error: coefficient %s collides with the change column c_%s of variable %s; rename the coefficient\n",record[j].cofname,record[j].cofname+2,record[j].cofname+2);
+            return -1;
+          }
           record[j].offset=addi;
           record[j].size=0;
           record[j].nelem=1;

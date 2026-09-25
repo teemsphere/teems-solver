@@ -787,6 +787,25 @@ static int tab_preprocess_run(char *filename, char *newtabfile);
 
 /* the declaration index tab_read_set_name builds lives for one
    preprocess run, whichever way the run ends */
+/* is the identifier starting at tok the name of a declared coefficient
+   (declaration index of the preprocessed TAB)? */
+static void ps_decl_name(char *line, int kwlen, char *out);
+static int decl_index_build(char *filename);
+static char **decl_cof;
+static int n_decl_cof;
+static int decl_coef_declared(char *tabfile, const char *tok) {
+  char nm[NAMESIZE],dn[NAMESIZE];
+  int k=0,i;
+  while (cond_is_namec(tok[k])&&k<NAMESIZE-1) { nm[k]=(char)tolower((int)tok[k]); k++; }
+  nm[k]='\0';
+  if (k==0||decl_index_build(tabfile)<0) return 0;
+  for (i=0; i<n_decl_cof; i++) {
+    ps_decl_name(decl_cof[i],11,dn);
+    if (str_cmp_ci(dn,nm)==0) return 1;
+  }
+  return 0;
+}
+
 int tab_preprocess(char *filename, char *newtabfile) {
   int r=tab_preprocess_run(filename,newtabfile);
   tab_decl_index_free();
@@ -1098,6 +1117,9 @@ static int tab_preprocess_run(char *filename, char *newtabfile) {
       if (l1==0||l4==0) {
         n=strstr(line,"c_");
         while (n!=NULL) {
+          /* a declared coefficient named c_... is itself, not the change
+             column of a variable (vetting dynamic G8 / small S11) */
+          if (n>line&&!cond_is_namec(line[n-line-1])&&decl_coef_declared(newtabfile1,n)) { n=strstr(n+1,"c_"); continue; }
           if (line[n-line-1]==' '||line[n-line-1]=='+'||line[n-line-1]=='-'||line[n-line-1]=='*'||line[n-line-1]=='/'||line[n-line-1]=='^'||line[n-line-1]==','||line[n-line-1]=='=') {
             line[n-line]='p';
             n=strstr(line,"c_");
