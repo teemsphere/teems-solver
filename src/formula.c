@@ -1814,8 +1814,8 @@ static void mapping_assign_formula(dim_t mm, char *vname, char *rhs, int byele, 
   map_def *md=&teems_maps[mm];
   char arg[NAMESIZE],el[NAMESIZE];
   char *p=strchr(vname,'(');
-  int k=0,sup=0,litdom=0;
-  dim_t l=-1,dom=-1,codlit=-1,nops=0;
+  int k=0,sup=0,litdom=0,idxmode=0;
+  dim_t l=-1,dom=-1,codlit=-1,nops=0,idxl=0,idxss=0,cpdss=0,cpmap=0;
   offset_t t,i4,i3;
   dim_t dcount;
   /* mapping_lower_calls has rewritten map(i) to map~i */
@@ -1865,11 +1865,54 @@ static void mapping_assign_formula(dim_t mm, char *vname, char *rhs, int byele, 
       MPI_Abort(PETSC_COMM_WORLD,1);
     }
   } else {
-    if (byele) {
-      errmsg("Error: Formula (by_elements) for mapping %s needs a quoted codomain element on the right-hand side (manual 10.13.1)\n",md->mapname);
-      MPI_Abort(PETSC_COMM_WORLD,1);
+    /* identity and copy forms (manual 10.13.1; potential-models vetting
+       G-S9/ORANI G17): the RHS is a quantifier index whose set is the
+       codomain or a declared subset of it (MAP(c) = c, AGG(s) = s), or
+       another mapping of an index (A(z) = B(z)); its value is the
+       element's codomain position. Both used to be rejected. */
+    char rr[NAMESIZE];
+    k=0;
+    for (p=rhs; *p!='\0'&&*p!=';'&&k<NAMESIZE-1; p++) if (*p!=' ') rr[k++]=*p;
+    rr[k]='\0';
+    for (idxl=0; idxl<fdim-1; idxl++) if (strcmp(rr,arSet[idxl].index_name)==0) break;
+    if (idxl<fdim-1) {
+      idxss=set_supset_slot(sets,(dim_t)arSet[idxl].setid,md->toset);
+      if (idxss<0) {
+        errmsg("Error: Formula for mapping %s: index %s ranges over set %s, which is neither the codomain %s nor a declared subset of it (manual 10.13.1)\n",md->mapname,rr,sets[arSet[idxl].setid].setname,sets[md->toset].setname);
+        MPI_Abort(PETSC_COMM_WORLD,1);
+      }
+      idxmode=1;
+    } else if ((p=strchr(rr,MAPMARK))!=NULL&&strpbrk(rr,"+-*/^(){}")==NULL) {
+      char bname[NAMESIZE];
+      dim_t mb;
+      memcpy(bname,rr,p-rr);
+      bname[p-rr]='\0';
+      for (mb=0; mb<teems_nmap; mb++) if (strcmp(bname,teems_maps[mb].mapname)==0) break;
+      for (idxl=0; idxl<fdim-1; idxl++) if (strcmp(p+1,arSet[idxl].index_name)==0) break;
+      if (mb==teems_nmap||idxl==fdim-1) {
+        errmsg("Error: Formula for mapping %s: %s is not a mapping of one of the Formula's quantifier indices (manual 10.13.1)\n",md->mapname,rr);
+        MPI_Abort(PETSC_COMM_WORLD,1);
+      }
+      if (!teems_maps[mb].has_values) {
+        errmsg("Error: mapping %s is used (in the Formula for mapping %s) before all of its values are assigned (manual 10.13.1/11.9.1)\n",teems_maps[mb].mapname,md->mapname);
+        MPI_Abort(PETSC_COMM_WORLD,1);
+      }
+      cpdss=set_supset_slot(sets,(dim_t)arSet[idxl].setid,teems_maps[mb].fromset);
+      idxss=set_supset_slot(sets,teems_maps[mb].toset,md->toset);
+      if (cpdss<0||idxss<0) {
+        errmsg("Error: Formula for mapping %s: %s needs its index over the domain of %s (or a subset) and a codomain equal to or a subset of %s (manual 10.13.1)\n",md->mapname,rr,teems_maps[mb].mapname,sets[md->toset].setname);
+        MPI_Abort(PETSC_COMM_WORLD,1);
+      }
+      teems_maps[mb].used=true;
+      cpmap=mb;
+      idxmode=2;
+    } else {
+      if (byele) {
+        errmsg("Error: Formula (by_elements) for mapping %s needs a quoted codomain element, an index of the codomain or another mapping on the right-hand side (manual 10.13.1)\n",md->mapname);
+        MPI_Abort(PETSC_COMM_WORLD,1);
+      }
+      if(!formula_compile(rhs,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,&nops,arSet,fdim-1))MPI_Abort(PETSC_COMM_WORLD,1);
     }
-    if(!formula_compile(rhs,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,&nops,arSet,fdim-1))MPI_Abort(PETSC_COMM_WORLD,1);
   }
   for (t=0; t<nloops; t++) {
     dim_t cod,d;
@@ -1885,7 +1928,15 @@ static void mapping_assign_formula(dim_t mm, char *vname, char *rhs, int byele, 
       if (sup>0) d=set_elems[sets[arSet[l].setid].offset+d].superset_pos[sup];
     }
     if (codlit>=0) cod=codlit;
-    else {
+    else if (idxmode==1) {
+      cod=(dim_t)arSet[idxl].indx;
+      if (idxss>0) cod=set_elems[sets[arSet[idxl].setid].offset+cod].superset_pos[idxss];
+    } else if (idxmode==2) {
+      dim_t bd=(dim_t)arSet[idxl].indx;
+      if (cpdss>0) bd=set_elems[sets[arSet[idxl].setid].offset+bd].superset_pos[cpdss];
+      cod=teems_maps[cpmap].values[bd];
+      if (idxss>0) cod=set_elems[sets[teems_maps[cpmap].toset].offset+cod].superset_pos[idxss];
+    } else {
       solve_real v=formula_eval(elem_vals,sets,set_elems,sum_vals,ops,nops,arSet,fdim-1,zerodivide);
       cod=(dim_t)lround((double)v)-1;
     }

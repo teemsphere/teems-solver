@@ -1147,7 +1147,11 @@ static int tab_preprocess_run(char *filename, char *newtabfile) {
               }
             }
           }
-          if (n1==NULL&&l2==0&&strstr(line,"(by_elements)")!=NULL) {
+          /* any Formula, not only one spelling "(by_elements)" exactly:
+             a qualifier list or a (default=...) by_elements formula is
+             the same statement (vetting S5); a stray literal that is no
+             mapping value fails in the executor with its own message */
+          if (n1==NULL&&l2==0) {
             /* a quoted element outside every call: the codomain element
                a Formula (by_elements) assigns to a mapping (manual
                10.13.1), `M(u) = "ele"`. It has no owner to take a set

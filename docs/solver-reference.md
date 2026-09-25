@@ -183,6 +183,8 @@ The solver reads a GEMPACK-style TAB subset (statement syntax per [GM]):
   `MAP(z) = "ele"`, `A(z) = B(y)`) compares codomain positions, and a
   mapped argument inside a numeric comparison evaluates like any
   expression; a sum inside a quantifier condition is a named fatal;
+  mapping Formulas also take an identity or copy right-hand side
+  (`MAP(c) = c` with `c` over the codomain or a subset, `A(z) = B(z)`);
   a sum condition's coefficient may be indexed over subsets of its
   dimension sets (summed or quantifier index); and
   general conditional sums,
