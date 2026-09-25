@@ -2127,6 +2127,63 @@ static int sb_eqi(const char *a, const char *b) {
   return *a=='\0'&&*b=='\0';
 }
 
+/* derived set expression for a set builder's source: named sets and
+   quoted elements joined by + / union / - / intersect (no brackets) --
+   anything else stays with the original forms */
+static int sb_expr_form(const char *p) {
+  while (*p==' ') p++;
+  if (*p=='\"'||*p=='(') return 0;
+  for (; *p!='\0'&&*p!=';'&&*p!='\n'&&*p!='#'; p++) if (*p=='('||*p=='\\') return 0;
+  return 1;
+}
+
+static int sb_expr_elements(char *tabfile, cmf_file_entry *iodata, int nio, const char *p, char (*ele)[NAMESIZE], int depth) {
+  char (*tmp)[NAMESIZE];
+  int n=0,first=1,op='+';
+  if (depth>=SB_MAXDEPTH) return -1;
+  tmp=calloc(SB_MAXELE,NAMESIZE);
+  if (tmp==NULL) return -1;
+  for (;;) {
+    char tok[NAMESIZE];
+    int tl=0,nt,i,j;
+    while (*p==' ') p++;
+    if (*p=='\0'||*p==';'||*p=='\n'||*p=='\r'||*p=='#') break;
+    if (*p=='+'||*p=='-'||*p=='&') { op=*p; p++; continue; }
+    if (*p=='\"') {
+      p++;
+      while (*p!='\0'&&*p!='\"'&&tl<NAMESIZE-1) tok[tl++]=(char)tolower((int)*p++);
+      tok[tl]='\0';
+      if (*p=='\"') p++;
+      strcpy(tmp[0],tok);
+      nt=1;
+    } else {
+      while (*p!='\0'&&*p!=' '&&*p!='+'&&*p!='-'&&*p!='&'&&*p!=';'&&*p!='\n'&&*p!='\r'&&tl<NAMESIZE-1) tok[tl++]=*p++;
+      tok[tl]='\0';
+      if (sb_eqi(tok,"union")) { op='+'; continue; }
+      if (sb_eqi(tok,"intersect")) { op='&'; continue; }
+      nt=sb_elements_d(tabfile,iodata,nio,tok,tmp,depth+1);
+      if (nt<0) { free(tmp); return -1; }
+    }
+    if (first) { for (i=0; i<nt&&n<SB_MAXELE; i++) strcpy(ele[n++],tmp[i]); first=0; continue; }
+    if (op=='+') {
+      for (i=0; i<nt; i++) {
+        for (j=0; j<n; j++) if (sb_eqi(ele[j],tmp[i])) break;
+        if (j==n&&n<SB_MAXELE) strcpy(ele[n++],tmp[i]);
+      }
+    } else {
+      int m=0;
+      for (j=0; j<n; j++) {
+        int hit=0;
+        for (i=0; i<nt; i++) if (sb_eqi(ele[j],tmp[i])) { hit=1; break; }
+        if ((op=='&')==hit) { if (m!=j) strcpy(ele[m],ele[j]); m++; }
+      }
+      n=m;
+    }
+  }
+  free(tmp);
+  return first?-1:n;
+}
+
 static int sb_elements(char *tabfile, cmf_file_entry *iodata, int nio, const char *setname, char (*ele)[NAMESIZE]) {
   return sb_elements_d(tabfile,iodata,nio,setname,ele,0);
 }
@@ -2195,6 +2252,13 @@ static int sb_elements_d(char *tabfile, cmf_file_entry *iodata, int nio, const c
         }
         free(lab);
       }
+      break;
+    }
+    if (*p=='='&&sb_expr_form(p+1)) {
+      /* a derived source set, A + B, A union B, A - B, A intersect B,
+         or a plain copy (evaluated left to right over the resolvable
+         sets; vetting G-S6: REG = DST intersect ORG) */
+      n=sb_expr_elements(tabfile,iodata,nio,p+1,ele,depth);
       break;
     }
     if (*p=='=') {
@@ -2757,14 +2821,15 @@ int tab_setbuilder_transform(char *fname, cmf_file_entry *iodata, int niodata) {
           if (ok==1) {
             /* per-dim sizes + fixed-element offsets */
             char (*dele)[NAMESIZE]=calloc(SB_MAXELE,NAMESIZE);
-            int nde;
+            char (*ldele)[NAMESIZE]=calloc(SB_MAXELE,NAMESIZE);
+            int nde,*lpos=NULL;
             fixoff=0;
-            if (dele==NULL) ok=0;
+            if (dele==NULL||ldele==NULL) ok=0;
             for (d=0; ok&&d<nd; d++) {
               nde=sb_elements(fname,iodata,niodata,dimset[d],dele);
               if (nde<=0) { ok=0; break; }
               dsz[d]=nde;
-              if (strcmp(args[d],idx)==0) loopdim=d;
+              if (strcmp(args[d],idx)==0) { loopdim=d; memcpy(ldele,dele,(size_t)nde*NAMESIZE); }
               else {
                 int e=sb_ele_find(dele,nde,args[d]);
                 if (e<0) { ok=0; break; }
@@ -2787,13 +2852,23 @@ int tab_setbuilder_transform(char *fname, cmf_file_entry *iodata, int niodata) {
                 if (sb_read_reals(path,header,&cv)!=total) ok=0;
               }
             }
+            /* the source set may be the dimension set or a subset of it
+               (a derived source, REG = DST intersect ORG; vetting G-S6):
+               each source element reads its position in the dimension */
             if (ok) {
-              if (dsz[loopdim]!=nsrc) {
-                errmsg("Error: set builder %s: the loop index %s must range over %s's dimension set %s exactly\n",name,idx,coef,dimset[loopdim]);
-                ok=0;
+              lpos=malloc((nsrc>0?nsrc:1)*sizeof(int));
+              if (lpos==NULL) ok=0;
+              for (k=0; ok&&k<nsrc; k++) {
+                lpos[k]=(dsz[loopdim]==nsrc)?k:sb_ele_find(ldele,dsz[loopdim],srcele[k]);
+                if (lpos[k]<0) {
+                  errmsg("Error: set builder %s: element %s of source set %s is not in %s's dimension set %s\n",name,srcele[k],src,coef,dimset[loopdim]);
+                  ok=0;
+                }
               }
             }
-            if (ok) for (k=0; k<nsrc; k++) keep[k]=(char)sb_op_test(cv[fixoff+(long)k*stride[loopdim]],op,cval);
+            if (ok) for (k=0; k<nsrc; k++) keep[k]=(char)sb_op_test(cv[fixoff+(long)lpos[k]*stride[loopdim]],op,cval);
+            free(lpos);
+            free(ldele);
             free(cv);
           }
           if (!ok&&rc==0) {

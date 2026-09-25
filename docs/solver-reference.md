@@ -105,7 +105,10 @@ The solver reads a GEMPACK-style TAB subset (statement syntax per [GM]):
   disjointness and `-` presence enforced), set equality, conditional
   set builders `Set X = (all,i,SRC: <cond>)` ([GM] 10.1.2 — evaluated
   from the input files ahead of set resolution by
-  `tab_setbuilder_transform`; the condition coefficient must be
+  `tab_setbuilder_transform`; the source set may be declared by list,
+  read, or derived — `A + B`, `A union B`, `A - B`, `A intersect B` —
+  and may be a subset of the condition coefficient's dimension set;
+  the condition coefficient must be
   file-Read or an indicator assigned constants only, its narrowing
   quantifier over a declared subset or the front end's synthesized
   `"ele" & RANGE` set, which the pre-pass resolves itself), and
