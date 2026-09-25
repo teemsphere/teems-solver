@@ -2187,42 +2187,9 @@ int mapping_use_guards(char *fname, map_def *maps, dim_t nmap) {
   filehandle = fopen(fname,"r");
   while (tab_next_statement("formula",filehandle,line,TABREADLINE)) {
     strcpy(linecopy,line);
-    /* a mapping equality in a Formula QUANTIFIER condition would have
-       its RHS read as a numeric constant (0) and filter silently
-       wrong; checked here, before the LHS walk below mistakes the
-       condition's mapping call for a formula-assigned mapping (M3) */
-    {
-      int qk=0,qf,qbeg,depth;
-      while ((qf=str_find_ci(line+qk,"(all,"))>-1) {
-        int hascolon=0;
-        char qsave;
-        qk+=qf+5;
-        qbeg=qk;
-        depth=1;
-        for (; line[qk]!='\0'&&depth>0; qk++) {
-          if (line[qk]=='(') depth++;
-          else if (line[qk]==')') depth--;
-          else if (line[qk]==':') hascolon=1;
-        }
-        if (hascolon) {
-          dim_t qm;
-          char qfind[NAMESIZE+2];
-          qsave=line[qk];
-          line[qk]='\0';
-          for (qm=0; qm<nmap; qm++) {
-            sprintf(qfind,"%s(",maps[qm].mapname);
-            if (str_find_ci(line+qbeg,qfind)>-1) {
-              errmsg("Error: mapping equalities in Formula quantifier conditions are not supported; move the condition into a sum (manual 11.4.11)\n");
-              fclose(filehandle);
-              MPI_Abort(PETSC_COMM_WORLD,1);
-              return -1;
-            }
-          }
-          line[qk]=qsave;
-        }
-      }
-      strcpy(line,linecopy);
-    }
+    /* a mapping in a Formula QUANTIFIER condition (equality or a
+       mapped argument) is compiled by formulas_execute's condition
+       compiler; it used to be a fatal here (vetting G-S7/G8) */
     readitem = strtok(line," ");
     readitem = strtok(NULL," (");
     /* skip quantifier groups ("all,c,com)" -- the "(" is a delimiter)

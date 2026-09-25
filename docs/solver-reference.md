@@ -179,7 +179,10 @@ The solver reads a GEMPACK-style TAB subset (statement syntax per [GM]):
   `(all,i,S: <expr> op <expr>)` — the historical `COEF(i) op number`
   form directly, anything else (`$POS(c)=$POS(g)`, a coefficient or
   arithmetic on either side, several parenthesised groups) compiled as
-  two expressions over the frame; a sum inside a quantifier condition is a named fatal;
+  two expressions over the frame; a mapping on one side (`MAP(z) = r`,
+  `MAP(z) = "ele"`, `A(z) = B(y)`) compares codomain positions, and a
+  mapped argument inside a numeric comparison evaluates like any
+  expression; a sum inside a quantifier condition is a named fatal;
   a sum condition's coefficient may be indexed over subsets of its
   dimension sets (summed or quantifier index); and
   general conditional sums,

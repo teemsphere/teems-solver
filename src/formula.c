@@ -2145,11 +2145,49 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
                    (MAP(i)=r) has no numeric value to compare: named
                    fatal (M3). A mapped ARGUMENT inside a numeric
                    comparison evaluates like any expression. */
-                if ((strchr(lhs_s,MAPMARK)!=NULL&&strchr(lhs_s,'(')==NULL&&strchr(lhs_s,'{')==NULL)||
-                    (strchr(rhs_s,MAPMARK)!=NULL&&strchr(rhs_s,'(')==NULL&&strchr(rhs_s,'{')==NULL)) {
-                  errmsg("Error: mapping equalities in Formula quantifier conditions are not supported; move the condition into a sum (manual 11.4.11)\n");
-                  MPI_Abort(PETSC_COMM_WORLD,1);
-                }
+                {
+                  /* a bare mapping side (MAP(z) = r, MAP(z) = "ele",
+                     A(z) = B(y)) compares codomain positions: it becomes
+                     $POS(MAP(z)) and the other side the position of the
+                     index or element in that codomain (vetting G-S7) */
+                  char rhs_buf[TABREADLINE];
+                  int lm=(strchr(lhs_s,MAPMARK)!=NULL&&strpbrk(lhs_s,"(){}+-*/^$")==NULL);
+                  int rm=(strchr(rhs_s,MAPMARK)!=NULL&&strpbrk(rhs_s,"(){}+-*/^$")==NULL);
+                  if (lm||rm) {
+                    char *ms=lm?lhs_s:rhs_s,*os=lm?rhs_s:lhs_s,mname[NAMESIZE],other[TABREADLINE],*mk=strchr(ms,MAPMARK);
+                    dim_t mm2,cset,q2;
+                    if (logioper[i]!=1&&logioper[i]!=4) {
+                      errmsg("Error: a mapping in a Formula quantifier condition compares by = or <> only (manual 11.4.11): %s\n",linecopy);
+                      MPI_Abort(PETSC_COMM_WORLD,1);
+                    }
+                    memcpy(mname,ms,mk-ms); mname[mk-ms]='\0';
+                    for (mm2=0; mm2<teems_nmap; mm2++) if (strcmp(mname,teems_maps[mm2].mapname)==0) break;
+                    if (mm2==teems_nmap) { errmsg("Error: unknown mapping %s in a Formula quantifier condition: %s\n",mname,linecopy); MPI_Abort(PETSC_COMM_WORLD,1); }
+                    cset=teems_maps[mm2].toset;
+                    if (strchr(os,MAPMARK)!=NULL&&strpbrk(os,"(){}+-*/^$")==NULL) { if (snprintf(other,sizeof(other),"$pos(%s)",os)>=(int)sizeof(other)) { errmsg("Error: Formula quantifier condition too long: %s\n",linecopy); MPI_Abort(PETSC_COMM_WORLD,1); } }
+                    else {
+                      for (q2=0; q2<=i; q2++) if (strcmp(os,arSet[q2].index_name)==0) break;
+                      if (q2<=i) { if (snprintf(other,sizeof(other),"$pos(%s,%s)",os,sets[cset].setname)>=(int)sizeof(other)) { errmsg("Error: Formula quantifier condition too long: %s\n",linecopy); MPI_Abort(PETSC_COMM_WORLD,1); } }
+                      else {
+                        char el[NAMESIZE];
+                        int ek=0;
+                        const char *oq=os;
+                        dim_t e;
+                        for (; *oq!='\0'&&ek<NAMESIZE-1; oq++) if (*oq!='\"') el[ek++]=(char)tolower((int)*oq);
+                        el[ek]='\0';
+                        for (e=0; e<sets[cset].size; e++) if (strcmp(el,set_elems[sets[cset].offset+e].setele)==0) break;
+                        if (e==sets[cset].size) {
+                          errmsg("Error: %s in a Formula quantifier condition is neither a quantifier index nor an element of %s, the codomain of mapping %s: %s\n",os,sets[cset].setname,mname,linecopy);
+                          MPI_Abort(PETSC_COMM_WORLD,1);
+                        }
+                        snprintf(other,sizeof(other),"%d",(int)e+1);
+                      }
+                    }
+                    if (snprintf(rhs_buf,sizeof(rhs_buf),"$pos(%s)",ms)>=(int)sizeof(rhs_buf)) { errmsg("Error: Formula quantifier condition too long: %s\n",linecopy); MPI_Abort(PETSC_COMM_WORLD,1); }
+                    strcpy(lhs_s,rhs_buf);
+                    strcpy(rhs_buf,other);
+                    rhs_s=rhs_buf;
+                  }
                 num=strtod(rhs_s,&endn);
                 /* the historical fast form: COEF or COEF(indices) against
                    a number */
@@ -2177,6 +2215,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
                   condR[i]=strdup(rhs_s);
                   condvar[i][0]='\0';
                   cond[i]=0;
+                }
                 }
               }
               ncond++;
