@@ -4074,7 +4074,14 @@ offset_t assertions_execute(char *fname,set_def *sets,dim_t nset,set_element *se
    variables were coefficients (manual ch.12). */
 void postsim_expose_results(elem_value *elem_vals,offset_t ncofele,offset_t nvarele,solve_real *xcf) {
   offset_t j5;
-  for(j5=0; j5<nvarele; j5++)elem_vals[ncofele+j5].value=(store_real)xcf[j5];
+  /* both slots: a bare name binds .value, a p_/c_ name (the linear
+     variable of a levels variable, p_V1BAS) binds the change slot
+     .substep_base, which the final update pass had zeroed -- p_X read 0
+     in PostSim (potential-models vetting, ADJUST) */
+  for(j5=0; j5<nvarele; j5++) {
+    elem_vals[ncofele+j5].value=(store_real)xcf[j5];
+    elem_vals[ncofele+j5].substep_base=(store_real)xcf[j5];
+  }
 }
 
 /* does the TAB carry any (postsim) assertions? (one scan, post-solve) */
