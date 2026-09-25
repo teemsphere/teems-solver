@@ -1569,6 +1569,13 @@ offset_t sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
           }
         }
         l3=sum_cond_carry_rhs(&sum_cof[j],arSet,fdim,l3,interchar,sets);
+        /* the token's index list is rebuilt from dimnames: the incremental
+           appends above dropped the comma after a single-index group and
+           wrote the sum index on the first branch ({dc,i0} for d,c,i0), and
+           an enclosing sum re-parsing the token took "dc" for a carried
+           index (TERM SEGV, potential-models segfaults.md #2) */
+        strcpy(interchar,interchar2);
+        for (l4=0; l4<l3; l4++) { strcat(interchar,sum_cof[j].dimnames[l4]); strcat(interchar,","); }
         if (interchar[strlen(interchar)-1]==',') {
           interchar[strlen(interchar)-1]='}';
         } else {
@@ -1722,6 +1729,13 @@ offset_t sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
           }
         }
         l3=sum_cond_carry_rhs(&sum_cof[j],arSet,fdim,l3,interchar,sets);
+        /* the token's index list is rebuilt from dimnames: the incremental
+           appends above dropped the comma after a single-index group and
+           wrote the sum index on the first branch ({dc,i0} for d,c,i0), and
+           an enclosing sum re-parsing the token took "dc" for a carried
+           index (TERM SEGV, potential-models segfaults.md #2) */
+        strcpy(interchar,interchar2);
+        for (l4=0; l4<l3; l4++) { strcat(interchar,sum_cof[j].dimnames[l4]); strcat(interchar,","); }
         if (interchar[strlen(interchar)-1]==',') {
           interchar[strlen(interchar)-1]='}';
         } else {
