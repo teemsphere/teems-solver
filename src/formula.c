@@ -1733,17 +1733,6 @@ static int cond_arg_count(const char *argu) {
   return n;
 }
 
-/* numeric constant of a quantifier condition: the text after the
-   comparison operator ("<=-1.5" -> -1.5). atof on the full token stops
-   at the operator and would yield 0 for any constant. */
-static solve_real cond_constant(const char *s) {
-  const char *p=strpbrk(s,"<>=");
-  if (p==NULL) return atof(s);
-  while (*p=='<'||*p=='>'||*p=='=') p++;
-  return atof(p);
-}
-
-
 /* Store one mapping value from a Formula (manual 10.13.1/11.9.9):
    codomain position cod (0-based) for domain position dom.  A value
    may be re-assigned freely until the mapping has been used; after
@@ -1923,11 +1912,39 @@ static char *formula_toplevel_eq(char *line, const char *commsyntax) {
   return p;
 }
 
+/* '(' inside quantifier conditions of a Formula LHS text (spaces
+   stripped): they are not quantifiers or argument lists, so the fdim
+   count by '(' must not include them */
+static int quant_cond_paren_count(const char *s) {
+  int n=0;
+  const char *p=s;
+  while (str_find_ci((char *)p,"(all,")==0) {
+    int d=0,incond=0;
+    for (; *p!='\0'; p++) {
+      if (*p=='(') { if (incond) n++; d++; }
+      else if (*p==')') { d--; if (d==0) { p++; break; } }
+      else if (*p==':'&&d==1) incond=1;
+    }
+    if (d!=0) break;
+  }
+  return n;
+}
+
+static void cond_programs_free(char **condL, char **condR, formula_op *condops[][2]) {
+  int i;
+  for (i=0; i<MAXVARDIM; i++) {
+    free(condL[i]); condL[i]=NULL;
+    free(condR[i]); condR[i]=NULL;
+    free(condops[i][0]); condops[i][0]=NULL;
+    free(condops[i][1]); condops[i][1]=NULL;
+  }
+}
+
 offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset, set_element *set_elems, array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar, elem_value *elem_vals,offset_t ncofvar,offset_t ncofele,bool IsIni) {
   FILE * filehandle;
   char line[TABREADLINE],line1[TABREADLINE],line2[TABREADLINE],linecopy[TABREADLINE],condvar[MAXVARDIM][NAMESIZE];
   char vname[NAMESIZE],sumsyntax[NAMESIZE],argu[NAMESIZE],tempset[NAMESIZE];
-  char *readitem=NULL,*p=NULL,*p1=NULL;
+  char *readitem=NULL,*p=NULL;
   offset_t i,i1,i3,i4,l,l2=0,j=0,nsumele,dcountdim1[4*MAXVARDIM],ncond,nloops,logioper[MAXVARDIM],logi,logiantidim[MAXVARDIM][MAXVARDIM],logisup[MAXVARDIM][MAXVARDIM],logivarindx[MAXVARDIM],logivartype[MAXVARDIM];//m,
   dim_t fdim,dcount,neqsign=0,varsupsetid[MAXVARDIM];
   int nops=0,totalsum,sumcount=1,npow,nmul,ndiv,nplu,nmin,npar,sumindx,b=0;
@@ -1937,6 +1954,14 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
   char fdefval[NAMESIZE];
   quantifier *arSet1=NULL;
   formula_op *ops1= NULL;
+  /* general quantifier conditions (anything but "COEF(idx) op number"):
+     both sides compiled as expressions over the statement frame */
+  int condgen[MAXVARDIM];
+  char *condL[MAXVARDIM],*condR[MAXVARDIM];
+  formula_op *condops[MAXVARDIM][2];
+  dim_t condnops[MAXVARDIM][2];
+  int condcap[MAXVARDIM][2];
+  for (i=0; i<MAXVARDIM; i++) { condL[i]=NULL; condR[i]=NULL; condops[i][0]=condops[i][1]=NULL; }
 
   filehandle = fopen(fname,"r");
   /* each pass rescans from the top, so the positional zerodivide state
@@ -2013,7 +2038,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
         strcpy(line,linecopy);
         readitem =formula_toplevel_eq(line,commsyntax);
         line[readitem-line]='\0';
-        fdim=str_count_char(line, '(');
+        fdim=str_count_char(line, '(')-quant_cond_paren_count(line);
         /* unquantified mapping assignment MAP("dom") = "cod" | <pos>
            (manual 10.13.1): no tuple machinery involved */
         if (teems_nmap>0&&strstr(line,"(all,")==NULL&&(strchr(line,'(')!=NULL||strchr(line,MAPMARK)!=NULL)) {
@@ -2048,87 +2073,110 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
         if (fdim==0) {
           readitem = line;
         } else {
+          /* quantifier groups parsed depth-aware: a condition may carry
+             several parenthesised groups ((all,r,REG:$POS(c)=$POS(g)),
+             :A(d)>A(d)), which the strtok walk used to count as
+             quantifiers until it read past the statement (tpmh0147
+             SEGV, potential-models segfaults.md #3) */
+          char *qp=line;
           for (i=0; i<fdim-1; i++) {
-            if(i==0) {
-              readitem = strtok(line,",");
-            } else {
-              readitem = strtok(NULL,",");
+            char grp[TABREADLINE],*qe,*c1,*c2,*cc;
+            int qd=0;
+            condgen[i]=0;
+            if (str_find_ci(qp,"(all,")!=0) {
+              errmsg("Error: malformed quantifier list in Formula: %s\n",linecopy);
+              MPI_Abort(PETSC_COMM_WORLD,1);
             }
-            readitem = strtok(NULL,",");
-            strcpy(arSet[i].index_name,readitem);
-            readitem = strtok(NULL,")");
-            if(strchr(readitem,':')==NULL)strcpy(tempset,readitem);
-            else {
-              p = strchr(readitem,':');
-              /* quantifier conditions support numeric comparisons only:
-                 a mapping equality here would atof its RHS to 0 and
-                 filter silently wrong (M3) */
-              if (strchr(p,MAPMARK)!=NULL) {
-                errmsg("Error: mapping equalities in Formula quantifier conditions are not supported; move the condition into a sum (manual 11.4.11)\n");
+            for (qe=qp; *qe!='\0'; qe++) {
+              if (*qe=='(') qd++;
+              else if (*qe==')') { qd--; if (qd==0) break; }
+            }
+            if (*qe!=')'||qe-qp-1>=(long)sizeof(grp)) {
+              errmsg("Error: unbalanced quantifier in Formula: %s\n",linecopy);
+              MPI_Abort(PETSC_COMM_WORLD,1);
+            }
+            memcpy(grp,qp+1,qe-qp-1);
+            grp[qe-qp-1]='\0';
+            c1=strchr(grp,',');
+            c2=(c1!=NULL)?strchr(c1+1,','):NULL;
+            if (c1==NULL||c2==NULL||c2-c1-1<=0||c2-c1-1>=NAMESIZE) {
+              errmsg("Error: malformed quantifier (%s) in Formula: %s\n",grp,linecopy);
+              MPI_Abort(PETSC_COMM_WORLD,1);
+            }
+            memcpy(arSet[i].index_name,c1+1,c2-c1-1);
+            arSet[i].index_name[c2-c1-1]='\0';
+            cc=strchr(c2+1,':');
+            if (cc==NULL) {
+              if (strlen(c2+1)>=NAMESIZE) { errmsg("Error: malformed quantifier (%s) in Formula: %s\n",grp,linecopy); MPI_Abort(PETSC_COMM_WORLD,1); }
+              strcpy(tempset,c2+1);
+            } else {
+              char *cond_s=cc+1,*op=NULL;
+              int oplen=0,od=0;
+              if (cc-c2-1>=NAMESIZE) { errmsg("Error: malformed quantifier (%s) in Formula: %s\n",grp,linecopy); MPI_Abort(PETSC_COMM_WORLD,1); }
+              memcpy(tempset,c2+1,cc-c2-1);
+              tempset[cc-c2-1]='\0';
+              /* the top-level comparison of the condition (manual 11.4.11) */
+              for (p=cond_s; *p!='\0'; p++) {
+                if (*p=='('||*p=='{'||*p=='[') od++;
+                else if (*p==')'||*p=='}'||*p==']') od--;
+                else if (od==0&&(*p=='<'||*p=='>'||*p=='=')) {
+                  op=p;
+                  oplen=((p[0]=='<'&&(p[1]=='='||p[1]=='>'))||(p[0]=='>'&&p[1]=='='))?2:1;
+                  break;
+                }
+              }
+              if (op==NULL) {
+                errmsg("Error: Formula quantifier condition %s has no comparison (=, <>, <, >, <=, >=; manual 11.4.11): %s\n",cond_s,linecopy);
                 MPI_Abort(PETSC_COMM_WORLD,1);
               }
-              strncpy(tempset,readitem,p-readitem);
-              tempset[p-readitem]='\0';
-              if(strchr(readitem,'(')!=NULL) {
-                fdim--;
-                p++;
-                strcpy(condvar[i],p);
-                strcat(condvar[i],")");
-                readitem = strtok(NULL,")");
-                if(strstr(readitem,"=")){
-                  logioper[i]=1;
-                  if(strstr(readitem,"<="))logioper[i]=5;
-                  if(strstr(readitem,">="))logioper[i]=6;
-                }else{
-                  if(strstr(readitem,">"))logioper[i]=2;
-                  if(strstr(readitem,"<"))logioper[i]=3;
-                  if(strstr(readitem,"<>"))logioper[i]=4;
+              if (op[0]=='=') logioper[i]=1;
+              else if (op[0]=='<'&&op[1]=='=') logioper[i]=5;
+              else if (op[0]=='>'&&op[1]=='=') logioper[i]=6;
+              else if (op[0]=='<'&&op[1]=='>') logioper[i]=4;
+              else if (op[0]=='>') logioper[i]=2;
+              else logioper[i]=3;
+              {
+                char lhs_s[TABREADLINE],*rhs_s=op+oplen,*endn=NULL;
+                double num;
+                int simple=0;
+                memcpy(lhs_s,cond_s,op-cond_s);
+                lhs_s[op-cond_s]='\0';
+                /* a mapping compared with an element or another mapping
+                   (MAP(i)=r) has no numeric value to compare: named
+                   fatal (M3). A mapped ARGUMENT inside a numeric
+                   comparison evaluates like any expression. */
+                if ((strchr(lhs_s,MAPMARK)!=NULL&&strchr(lhs_s,'(')==NULL&&strchr(lhs_s,'{')==NULL)||
+                    (strchr(rhs_s,MAPMARK)!=NULL&&strchr(rhs_s,'(')==NULL&&strchr(rhs_s,'{')==NULL)) {
+                  errmsg("Error: mapping equalities in Formula quantifier conditions are not supported; move the condition into a sum (manual 11.4.11)\n");
+                  MPI_Abort(PETSC_COMM_WORLD,1);
                 }
-                cond[i]=cond_constant(readitem);
-              } else {
-                p++;
-                p1=strstr(readitem,"=");
-                if(p1!=NULL) {
-                  logioper[i]=1;
-                  strncpy(condvar[i],p,p1-p);
-                  condvar[i][p1-p]='\0';
-                  cond[i]=cond_constant(readitem);
-                p1=strstr(readitem,"<=");
-                if(p1!=NULL) {
-                  logioper[i]=5;
-                  strncpy(condvar[i],p,p1-p);
-                  condvar[i][p1-p]='\0';
-                  cond[i]=cond_constant(readitem);
+                num=strtod(rhs_s,&endn);
+                /* the historical fast form: COEF or COEF(indices) against
+                   a number */
+                if (endn!=rhs_s&&*endn=='\0'&&strlen(lhs_s)<NAMESIZE&&strchr(lhs_s,MAPMARK)==NULL) {
+                  char *q=lhs_s;
+                  if (isalpha((unsigned char)*q)) {
+                    while (isalnum((unsigned char)*q)||*q=='_'||*q=='@') q++;
+                    if (*q=='\0') simple=1;
+                    else if (*q=='('&&strchr(q+1,'(')==NULL&&strchr(q,')')==q+strlen(q)-1) simple=1;
+                  }
                 }
-                p1=strstr(readitem,">=");
-                if(p1!=NULL) {
-                  logioper[i]=6;
-                  strncpy(condvar[i],p,p1-p);
-                  condvar[i][p1-p]='\0';
-                  cond[i]=cond_constant(readitem);
-                }
-                }else{
-                p1=strstr(readitem,">");
-                if(p1!=NULL) {
-                  logioper[i]=2;
-                  strncpy(condvar[i],p,p1-p);
-                  condvar[i][p1-p]='\0';
-                  cond[i]=cond_constant(readitem);
-                }
-                p1=strstr(readitem,"<");
-                if(p1!=NULL) {
-                  logioper[i]=3;
-                  strncpy(condvar[i],p,p1-p);
-                  condvar[i][p1-p]='\0';
-                  cond[i]=cond_constant(readitem);
-                }
-                p1=strstr(readitem,"<>");
-                if(p1!=NULL) {
-                  logioper[i]=4;
-                  strncpy(condvar[i],p,p1-p);
-                  condvar[i][p1-p]='\0';
-                  cond[i]=cond_constant(readitem);
-                }
+                if (simple) {
+                  strcpy(condvar[i],lhs_s);
+                  cond[i]=num;
+                } else {
+                  /* anything else -- $POS, arithmetic, a coefficient on
+                     the right (it was atof'd to 0) -- is evaluated as two
+                     expressions over the frame */
+                  if (str_count_ci(cond_s,"sum(")>0) {
+                    errmsg("Error: sums in Formula quantifier conditions are not supported; compute the sum in a coefficient first: %s\n",linecopy);
+                    MPI_Abort(PETSC_COMM_WORLD,1);
+                  }
+                  condgen[i]=1;
+                  condL[i]=strdup(lhs_s);
+                  condR[i]=strdup(rhs_s);
+                  condvar[i][0]='\0';
+                  cond[i]=0;
                 }
               }
               ncond++;
@@ -2138,8 +2186,13 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
                 break;
               }
             nloops=nloops*sets[arSet[i].setid].size;
+            qp=qe+1;
           }
-          readitem = strtok(NULL,"=");
+          readitem = qp;
+          if (*readitem=='\0') {
+            errmsg("Error: Formula has no left-hand side after its quantifiers: %s\n",linecopy);
+            MPI_Abort(PETSC_COMM_WORLD,1);
+          }
           dcountdim1[fdim-2]=1;
           for (i=fdim-3; i>-1; i--) {
             dcountdim1[i]=sets[arSet[i+1].setid].size*dcountdim1[i+1];
@@ -2212,6 +2265,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
             free(sum_vals);
             free(arSet);
             free(ops);
+            cond_programs_free(condL,condR,condops);
             j++;
             continue;
           }
@@ -2295,7 +2349,26 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
             logiantidim[i][j]=0;
             logisup[i][j]=0;
           }
-          for(i1=0; i1<fdim-1; i1++) if(logioper[i1]>0){
+          for(i1=0; i1<fdim-1; i1++) if(logioper[i1]>0&&condgen[i1]) {
+            int sd;
+            for (sd=0; sd<2; sd++) {
+              char ctext[TABREADLINE];
+              int cn;
+              strcpy(ctext,sd==0?condL[i1]:condR[i1]);
+              while (formula_normalize(ctext)==1);
+              leadlag_encode(ctext);
+              cn=str_count_char(ctext,'^')+str_count_char(ctext,'*')+str_count_char(ctext,'/')+str_count_char(ctext,'+')+str_count_char(ctext,'-')
+                 +2*(str_count_char(ctext,'(')+str_count_char(ctext,',')+str_count_char(ctext,'{')+str_count_ci(ctext,"$pos")+2)+4;
+              condops[i1][sd]=(formula_op *)calloc(cn,sizeof(formula_op));
+              condcap[i1][sd]=cn;
+              condnops[i1][sd]=0;
+              if(!formula_compile(ctext,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,condops[i1][sd],&condnops[i1][sd],arSet,fdim-1)) {
+                errmsg("Error: cannot evaluate the Formula quantifier condition %s: %s\n",sd==0?condL[i1]:condR[i1],linecopy);
+                MPI_Abort(PETSC_COMM_WORLD,1);
+              }
+            }
+          }
+          for(i1=0; i1<fdim-1; i1++) if(logioper[i1]>0&&!condgen[i1]){
             index=ncof-1;
             p=strtok(condvar[i1],"(");
             b=0;
@@ -2370,6 +2443,19 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
            a result-corrupting write-write race at maxthreads>1 */
         #pragma omp parallel private(l,l2,i,i4,dcount,i3,i1,arSet1,logi,index,eval,ops1) shared(elem_vals,arSet)
         {
+        formula_op *cops[MAXVARDIM][2];
+        {
+          int ci,sd;
+          for (ci=0; ci<MAXVARDIM; ci++) for (sd=0; sd<2; sd++) {
+            cops[ci][sd]=NULL;
+            if (ci<fdim-1&&condgen[ci]&&logioper[ci]>0) {
+              if (omp_get_thread_num()!=0) {
+                cops[ci][sd]=malloc(condcap[ci][sd]*sizeof(formula_op));
+                memcpy(cops[ci][sd],condops[ci][sd],condcap[ci][sd]*sizeof(formula_op));
+              } else cops[ci][sd]=condops[ci][sd];
+            }
+          }
+        }
         if(omp_get_thread_num()!=0){
           arSet1=malloc((fdim+1)*sizeof(quantifier));
           memcpy (arSet1,arSet,(fdim+1)*sizeof(quantifier));
@@ -2417,22 +2503,31 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
             index=0;
             for(i1=0; i1<fdim-1; i1++) {
               if(logioper[i1]>0){
+              solve_real cv=cond[i1];
+              if(condgen[i1]) {
+                eval=formula_eval(elem_vals,sets,set_elems,sum_vals,cops[i1][0],condnops[i1][0],arSet1,fdim-1,zerodivide);
+                cv=formula_eval(elem_vals,sets,set_elems,sum_vals,cops[i1][1],condnops[i1][1],arSet1,fdim-1,zerodivide);
+              } else {
+              index=0;
               for(i=0; i<fdim-1; i++){
                 index+=set_elems[sets[arSet1[i].setid].offset+arSet1[i].indx].superset_pos[logisup[i1][i]]*logiantidim[i1][i];
               }
               if(logivartype[i1]==0)eval=elem_vals[coefs[logivarindx[i1]].offset+index].value;
               else eval=elem_vals[ncofele+vars[logivarindx[i1]].offset+index].value;
-              if(logioper[i1]==1)if(eval==cond[i1])logi++;
-              if(logioper[i1]==2)if(eval>cond[i1])logi++;
-              if(logioper[i1]==3)if(eval<cond[i1])logi++;
-              if(logioper[i1]==4)if(eval!=cond[i1])logi++;
-              if(logioper[i1]==5)if(eval<=cond[i1])logi++;
-              if(logioper[i1]==6)if(eval>=cond[i1])logi++;
+              }
+              if(logioper[i1]==1)if(eval==cv)logi++;
+              if(logioper[i1]==2)if(eval>cv)logi++;
+              if(logioper[i1]==3)if(eval<cv)logi++;
+              if(logioper[i1]==4)if(eval!=cv)logi++;
+              if(logioper[i1]==5)if(eval<=cv)logi++;
+              if(logioper[i1]==6)if(eval>=cv)logi++;
               }
             }
             if(logi==ncond)elem_vals[offset+l2].value=formula_eval(elem_vals,sets,set_elems,sum_vals,ops1,nops,arSet1,fdim-1,zerodivide);
           }
         if(omp_get_thread_num()!=0){
+          int ci;
+          for (ci=0; ci<MAXVARDIM; ci++) { free(cops[ci][0]); free(cops[ci][1]); }
           free(arSet1);
           arSet1=NULL;
           free(ops1);
@@ -2522,6 +2617,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
         free(sum_vals);
         free(arSet);
         free(ops);
+        cond_programs_free(condL,condR,condops);
       }
     }
   }

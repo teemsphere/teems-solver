@@ -171,8 +171,12 @@ The solver reads a GEMPACK-style TAB subset (statement syntax per [GM]):
   second address), in formulas, equations (coefficients and variables,
   inside sums too) and updates. A repeated sum index is one loop, not
   one per position.
-- `formula` — `(initial)` / `(always)` semantics as in [GM]; conditional
-  quantifiers `(all,i,S: COEF(i) op c)` and general conditional sums,
+- `formula` — `(initial)` / `(always)` semantics as in [GM]; conditional quantifiers
+  `(all,i,S: <expr> op <expr>)` — the historical `COEF(i) op number`
+  form directly, anything else (`$POS(c)=$POS(g)`, a coefficient or
+  arithmetic on either side, several parenthesised groups) compiled as
+  two expressions over the frame; a sum inside a quantifier condition is a named fatal; and
+  general conditional sums,
   where the condition coefficient may also be a scalar (`(all,i,S: SC >
   1)`, `sum(i,S: SC > 1, …)`) and the word comparisons `EQ NE GT LT GE
   LE` are normalized to symbols while the condition is read; an
