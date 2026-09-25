@@ -190,7 +190,8 @@ The solver reads a GEMPACK-style TAB subset (statement syntax per [GM]):
   mapping Formulas also take an identity or copy right-hand side
   (`MAP(c) = c` with `c` over the codomain or a subset, `A(z) = B(z)`);
   a sum condition's coefficient may be indexed over subsets of its
-  dimension sets (summed or quantifier index); and
+  dimension sets (summed or quantifier index); an enclosing sum's
+  condition no longer leaks into a nested sum's carried set; and
   general conditional sums,
   where the condition coefficient may also be a scalar (`(all,i,S: SC >
   1)`, `sum(i,S: SC > 1, …)`) and the word comparisons `EQ NE GT LT GE

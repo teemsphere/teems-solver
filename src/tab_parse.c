@@ -1514,6 +1514,7 @@ offset_t sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
                   p1=&line3[l7+2];
                   p1 = strtok(p1,",");
                   if (p1==NULL) sum_carried_fatal(sum_dim_identity(p),formulain);
+                  { char *cc=strchr(p1,':'); if (cc!=NULL) *cc='\0'; } /* an enclosing sum's condition rides on its set token (vetting S7) */
                   for (l7=0; l7<nset; l7++) if(strcmp(p1,sets[l7].setname)==0) {
                       sum_cof[j].setid[l3]=l7;
                       break;
@@ -1557,6 +1558,7 @@ offset_t sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
                     if (p2==NULL||p2-p1>=NAMESIZE) sum_carried_fatal(sum_dim_identity(p),formulain);
                     strncpy(tempname,p1,p2-p1);
                     tempname[p2-p1]='\0';
+                    { char *cc=strchr(tempname,':'); if (cc!=NULL) *cc='\0'; } /* an enclosing sum's condition rides on its set token (vetting S7) */
                     for (l7=0; l7<nset; l7++) if(strcmp(tempname,sets[l7].setname)==0) {
                         sum_cof[j].setid[l3]=l7;
                         break;
@@ -1674,6 +1676,7 @@ offset_t sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
                   p1=&line3[l7+2];
                   p1 = strtok(p1,",");
                   if (p1==NULL) sum_carried_fatal(sum_dim_identity(p),formulain);
+                  { char *cc=strchr(p1,':'); if (cc!=NULL) *cc='\0'; } /* an enclosing sum's condition rides on its set token (vetting S7) */
                   for (l7=0; l7<nset; l7++) if(strcmp(p1,sets[l7].setname)==0) {
                       sum_cof[j].setid[l3]=l7;
                       break;
@@ -1717,6 +1720,7 @@ offset_t sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
                     if (p2==NULL||p2-p1>=NAMESIZE) sum_carried_fatal(sum_dim_identity(p),formulain);
                     strncpy(tempname,p1,p2-p1);
                     tempname[p2-p1]='\0';
+                    { char *cc=strchr(tempname,':'); if (cc!=NULL) *cc='\0'; } /* an enclosing sum's condition rides on its set token (vetting S7) */
                     for (l7=0; l7<nset; l7++) if(strcmp(tempname,sets[l7].setname)==0) {
                         sum_cof[j].setid[l3]=l7;
                         break;
