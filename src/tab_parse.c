@@ -2547,25 +2547,37 @@ void sum_cond_coef_resolve(sum_def *sc, quantifier *frame, dim_t nframe, set_def
   out->nd=coefs[ci].size;
   out->op=sc->cond_cofop;
   out->cval=sc->cond_cofval;
+  out->se=set_elems;
   for (d=0; d<out->nd; d++) {
     out->strides[d]=coefs[ci].strides[d];
     out->fix[d]=-1;
+    out->ss[d]=0;
+    out->soff[d]=0;
+    /* the index may range over the dimension set or a declared subset
+       of it (routed through superset_pos; potential-models vetting
+       G16/G-S8: LANDTYPE(l,t) with l over LNDIND, t over LNDTYPE) */
     if (strcmp(sc->cond_cofargs[d],sc->sumindx)==0) {
-      if (coefs[ci].setid[d]!=sc->sumsetid) {
-        errmsg("Error: sum condition %s: the summed index %s must range over the coefficient's dimension set %s exactly (manual 11.4.11)\n",sc->cond_coef,sc->sumindx,sets[coefs[ci].setid[d]].setname);
+      dim_t ss=set_supset_slot(sets,(dim_t)sc->sumsetid,coefs[ci].setid[d]);
+      if (ss<0) {
+        errmsg("Error: sum condition %s: the summed index %s must range over the coefficient's dimension set %s or a declared subset of it (manual 11.4.11)\n",sc->cond_coef,sc->sumindx,sets[coefs[ci].setid[d]].setname);
         MPI_Abort(PETSC_COMM_WORLD,1);
         return;
       }
+      out->ss[d]=(int)ss;
+      out->soff[d]=sets[sc->sumsetid].offset;
       out->bind[d]=-2;
       continue;
     }
     for (l=0; l<nframe; l++) if (strcmp(sc->cond_cofargs[d],frame[l].index_name)==0) break;
     if (l<nframe) {
-      if (frame[l].setid!=coefs[ci].setid[d]) {
-        errmsg("Error: sum condition %s: index %s must range over the coefficient's dimension set %s exactly (manual 11.4.11)\n",sc->cond_coef,sc->cond_cofargs[d],sets[coefs[ci].setid[d]].setname);
+      dim_t ss=set_supset_slot(sets,(dim_t)frame[l].setid,coefs[ci].setid[d]);
+      if (ss<0) {
+        errmsg("Error: sum condition %s: index %s must range over the coefficient's dimension set %s or a declared subset of it (manual 11.4.11)\n",sc->cond_coef,sc->cond_cofargs[d],sets[coefs[ci].setid[d]].setname);
         MPI_Abort(PETSC_COMM_WORLD,1);
         return;
       }
+      out->ss[d]=(int)ss;
+      out->soff[d]=sets[frame[l].setid].offset;
       out->bind[d]=(int)l;
       continue;
     }
@@ -2588,6 +2600,7 @@ int sum_cofcond_test(const sum_cofcond *cc, elem_value *elem_vals, quantifier *f
   dim_t d;
   for (d=0; d<cc->nd; d++) {
     offset_t idx=(cc->bind[d]==-2)?l1:(cc->bind[d]>=0)?(offset_t)frame[cc->bind[d]].indx:cc->fix[d];
+    if (cc->bind[d]!=-1&&cc->ss[d]>0) idx=cc->se[cc->soff[d]+idx].superset_pos[cc->ss[d]];
     off+=idx*cc->strides[d];
   }
   v=(double)elem_vals[off].value;

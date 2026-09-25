@@ -269,6 +269,9 @@ typedef struct
   int bind[MAXVARDIM];         /* -2 the summed index; >=0 frame slot; -1 fixed */
   offset_t fix[MAXVARDIM];     /* fixed element position (bind -1) */
   offset_t strides[MAXVARDIM];
+  int ss[MAXVARDIM];           /* >0: the index ranges over a subset: superset_pos slot */
+  offset_t soff[MAXVARDIM];    /* set_elems offset of that subset */
+  const set_element *se;
   int op;
   double cval;
 } sum_cofcond ;
