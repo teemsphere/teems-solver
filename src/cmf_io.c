@@ -873,7 +873,7 @@ static int tab_preprocess_run(char *filename, char *newtabfile) {
       }
     }
     if (strlen(readline)+strlen(line)>=sizeof(readline)) {
-      errmsg("Error: TAB statement too long (exceeds %d chars)\n",TABREADLINE);
+      errmsg("Error: TAB statement too long (exceeds %d chars; a Backsolve/Substitute expansion in teems-R can grow a statement past this): %.120s ...\n",TABREADLINE,readline);
       return -1;
     }
     strcat(readline,line);
@@ -918,7 +918,7 @@ static int tab_preprocess_run(char *filename, char *newtabfile) {
          unbounded str_replace_* helpers: a statement within that of
          the buffer overflowed it (fuzz batch 13) */
       if (strlen(readline)+16>=sizeof(readline)) {
-        errmsg("Error: TAB statement too long (exceeds %d chars)\n",TABREADLINE);
+        errmsg("Error: TAB statement too long (exceeds %d chars; a Backsolve/Substitute expansion in teems-R can grow a statement past this): %.120s ...\n",TABREADLINE,readline);
         fclose(filehandle);
         fclose(fout);
         return -1;
@@ -1060,7 +1060,7 @@ static int tab_preprocess_run(char *filename, char *newtabfile) {
            it past that was split mid-statement and the pieces
            re-joined past the reader's buffer (fuzz batch 13) */
         if (strlen(commsyntax)+strlen(readline)+3>TABREADLINE) {
-          errmsg("Error: TAB statement too long (exceeds %d chars)\n",TABREADLINE);
+          errmsg("Error: TAB statement too long (exceeds %d chars; a Backsolve/Substitute expansion in teems-R can grow a statement past this): %.120s ...\n",TABREADLINE,readline);
           fclose(filehandle);
           fclose(fout);
           return -1;

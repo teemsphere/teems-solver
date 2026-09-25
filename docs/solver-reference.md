@@ -1091,7 +1091,9 @@ the CMF (which is a file manifest only), and are echoed in
   `Error:`/`Warning:` prefixes with file/flag/remedy named, and teems-R
   maps them to typed conditions; the exit status is checked as well as
   the log.
-- Fixed-size line buffers (`TABREADLINE` = 20000) bound statement length;
+- Fixed-size line buffers (`TABREADLINE` = 20000) bound statement length
+  (the fatal names the statement's head; teems-R Backsolve/Substitute
+  expansion is the usual cause);
   overflow is diagnosed, not silently truncated.
 - **Language forms rejected by design** (named errors): `$POS`, set
   products (`x`), formula-assigned mappings (a mapping needs a

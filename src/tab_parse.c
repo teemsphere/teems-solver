@@ -5955,7 +5955,7 @@ char *closure_next_statement(char *commsyntax, FILE *filehandle, char *readline)
       /* same held-back character as the continuation join below: a
          statement filling one whole line left closure_read no room */
       if (strlen(line)+1>=(size_t)TABREADLINE) {
-        errmsg("Error: %s statement too long (exceeds %ld chars)\n",commsyntax,(long)TABREADLINE);
+        errmsg("Error: %s statement too long (exceeds %ld chars): %.120s ...\n",commsyntax,(long)TABREADLINE,line);
         MPI_Abort(PETSC_COMM_WORLD,1);
         return NULL;
       }
@@ -5976,7 +5976,7 @@ char *closure_next_statement(char *commsyntax, FILE *filehandle, char *readline)
            one character is held back for closure_read, which spaces the
            terminator (";" -> " ;") in the same buffer */
         if (strlen(readline)+strlen(line)+1>=(size_t)TABREADLINE) {
-          errmsg("Error: %s statement too long (exceeds %ld chars)\n",commsyntax,(long)TABREADLINE);
+          errmsg("Error: %s statement too long (exceeds %ld chars): %.120s ...\n",commsyntax,(long)TABREADLINE,readline);
           MPI_Abort(PETSC_COMM_WORLD,1);
           return NULL;
         }
@@ -6072,7 +6072,7 @@ static char *tab_next_statement_raw(char *commsyntax, FILE *filehandle, char *re
         n=strstr(line,finditem);//ha_cgefendofc
         /* the continuation join had no bound on readline (fuzz batch 13) */
         if (strlen(readline)+strlen(line)>=(size_t)rlinesize) {
-          errmsg("Error: %s statement too long (exceeds %ld chars)\n",commsyntax,(long)rlinesize);
+          errmsg("Error: %s statement too long (exceeds %ld chars; a Backsolve/Substitute expansion in teems-R can grow a statement past this): %.120s ...\n",commsyntax,(long)rlinesize,readline);
           MPI_Abort(PETSC_COMM_WORLD,1);
           return NULL;
         }
@@ -6125,7 +6125,7 @@ static char *tab_next_statement_resolved_raw(char *commsyntax, FILE *filehandle,
         n=strstr(line,finditem);//ha_cgefendofc
         /* the continuation join had no bound on readline (fuzz batch 13) */
         if (strlen(readline)+strlen(line)>=(size_t)rlinesize) {
-          errmsg("Error: %s statement too long (exceeds %ld chars)\n",commsyntax,(long)rlinesize);
+          errmsg("Error: %s statement too long (exceeds %ld chars; a Backsolve/Substitute expansion in teems-R can grow a statement past this): %.120s ...\n",commsyntax,(long)rlinesize,readline);
           MPI_Abort(PETSC_COMM_WORLD,1);
           return NULL;
         }
