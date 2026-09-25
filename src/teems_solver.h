@@ -649,6 +649,8 @@ char *closure_next_statement(char *commsyntax, FILE *filehandle, char *readline)
 char *tab_next_statement(char *commsyntax, FILE *filehandle, char *readline,offset_t rlinesize);
 char *tab_next_statement_resolved(char *commsyntax, FILE *filehandle, char *readline, elem_value *record, array_def *coefs,offset_t ncof,solve_real *zerodivide,offset_t rlinesize);
 int str_find_ci(char *line, char *finditem);
+int str_cmp_ci(const char *a, const char *b);
+int str_ncmp_ci(const char *a, const char *b, size_t n);
 int str_find_token_ci(const char *base, const char *s, const char *pat);
 int str_count_token_ci(const char *base, const char *s, const char *pat);
 char *str_replace_all(char *line, char *finditem, char *replitem);

@@ -123,3 +123,23 @@ int str_copy_bounded(char *dst, const char *src, size_t cap) {
   return 0;
 }
 
+
+/* case-insensitive strcmp/strncmp: GEMPACK header names are
+   case-insensitive (TAB "Nat" reads data header "NAT"; manual 11.2.1) */
+int str_cmp_ci(const char *a, const char *b) {
+  for (;; a++, b++) {
+    int ca=tolower((unsigned char)*a),cb=tolower((unsigned char)*b);
+    if (ca!=cb) return ca-cb;
+    if (ca=='\0') return 0;
+  }
+}
+
+int str_ncmp_ci(const char *a, const char *b, size_t n) {
+  size_t i;
+  for (i=0; i<n; i++) {
+    int ca=tolower((unsigned char)a[i]),cb=tolower((unsigned char)b[i]);
+    if (ca!=cb) return ca-cb;
+    if (ca=='\0') return 0;
+  }
+  return 0;
+}

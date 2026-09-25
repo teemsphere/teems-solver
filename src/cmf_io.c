@@ -130,7 +130,7 @@ int datafile_read_header_info(char *varname, char *filename,dim_t *vsize, char *
     if (readitem != NULL) {
       nlength1=0;
       while (readitem[nlength1] != '\0'&&readitem[nlength1] != ' ') nlength1++;
-      if (nlength1==nlength&&strncmp(readitem,varname,nlength) == 0) {
+      if (nlength1==nlength&&str_ncmp_ci(readitem,varname,nlength) == 0) {
         succ=1;
         readitem = strtok(line," ");
         if (readitem==NULL) { fclose(filehandle); return -1; }
@@ -191,7 +191,7 @@ int datafile_read_labels(char *varname, char *filename,dim_t d1, datafile_labels
       nhead=0;
       while (header[nhead] != '\0') nhead++;
       if(nhead<nlength)nhead=nlength;
-      if (strncmp(readitem,varnamecpy,nhead) == 0) {
+      if (str_ncmp_ci(readitem,varnamecpy,nhead) == 0) {
         while (fgets(line,DATREADLINE,dfile)) {
           str_delete_char(line,'\r');
           while (str_replace_all(line,"  ", " "));
@@ -2184,7 +2184,7 @@ static int sb_read_reals(const char *path, const char *header, double **vals) {
     q++;
     while (*q!='\0'&&*q!='\"'&&tl<NAMESIZE-1) hdr[tl++]=*q++;
     hdr[tl]='\0';
-    if (strcmp(hdr,header)!=0) continue;
+    if (str_cmp_ci(hdr,header)!=0) continue;
     {
       char *p=line;
       while (*p==' ') p++;

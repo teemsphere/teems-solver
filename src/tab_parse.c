@@ -690,7 +690,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
             readitem = strtok(line,"\"");
             readitem = strtok(NULL,"\"");
             if (readitem != NULL) {
-              if (strcmp(header,vname) == 0) {
+              if (str_cmp_ci(header,vname) == 0) {
                 count2=4;
                 recount=0;
                 while (fgets(line,DATREADLINE,filehandle1)) {
@@ -858,7 +858,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
                 }
                 n1++;
               }
-              if (strncmp(vname,header,strlen(header))==0&&strlen(header)==strlen(vname)) {
+              if (str_ncmp_ci(vname,header,strlen(header))==0&&strlen(header)==strlen(vname)) {
                 count2=2;
                 recount=0;
                 while (fgets(line,DATREADLINE,filehandle1)) {
@@ -1104,7 +1104,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
                 }
                 n1++;
               }
-              if (strncmp(vname1,header,strlen(header)) == 0&&strlen(header)==strlen(vname1)) {
+              if (str_ncmp_ci(vname1,header,strlen(header)) == 0&&strlen(header)==strlen(vname1)) {
                 logmsg(2,"dim %s\n",readitem);
                 count2=2;
                 recount=0;
@@ -1289,7 +1289,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
                 }
                 n1++;
               }
-              if (strncmp(vname1,header,strlen(header)) == 0&&strlen(header)==strlen(vname1)) {
+              if (str_ncmp_ci(vname1,header,strlen(header)) == 0&&strlen(header)==strlen(vname1)) {
                 count2=4;
                 recount=0;
                 while (fgets(line,DATREADLINE,filehandle1)) {
@@ -4060,7 +4060,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               if (str_count_char(line,'\"')>1) {
                 readitem = strtok(line,"\"");
                 readitem = strtok(NULL,"\"");
-                if (strcmp(readitem,header) == 0) {
+                if (str_cmp_ci(readitem,header) == 0) {
                   while (fgets(line,TABREADLINE,filehandle)) {
                     readitem = strtok(line,"\n");
                     intindx[0]=atoi(readitem);
@@ -4134,7 +4134,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               if (str_count_char(line,'\"')>1) {
                 readitem = strtok(line,"\"");
                 readitem = strtok(NULL,"\"");
-                if (strcmp(readitem,header) == 0) {
+                if (str_cmp_ci(readitem,header) == 0) {
                   while (fgets(line,TABREADLINE,filehandle)) {
                     readitem = strtok(line,"\n");
                     intindx[1]=atoi(readitem);
@@ -4205,7 +4205,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               if (str_count_char(line,'\"')>1) {
                 readitem = strtok(line,"\"");
                 readitem = strtok(NULL,"\"");
-                if (strcmp(readitem,header) == 0) {
+                if (str_cmp_ci(readitem,header) == 0) {
                   while (fgets(line,TABREADLINE,filehandle)) {
                     readitem = strtok(line,"\n");
                     intindx[0]=atoi(readitem);
@@ -4303,7 +4303,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               if (str_count_char(line,'\"')>1) {
                 readitem = strtok(line,"\"");
                 readitem = strtok(NULL,"\"");
-                if (strcmp(readitem,header) == 0) {
+                if (str_cmp_ci(readitem,header) == 0) {
                   while (fgets(line,TABREADLINE,filehandle)) {
                     readitem = strtok(line,"\n");
                     intindx[0]=atoi(readitem);
@@ -4377,7 +4377,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               if (str_count_char(line,'\"')>1) {
                 readitem = strtok(line,"\"");
                 readitem = strtok(NULL,"\"");
-                if (strcmp(readitem,header) == 0) {
+                if (str_cmp_ci(readitem,header) == 0) {
                   while (fgets(line,TABREADLINE,filehandle)) {
                     readitem = strtok(line,"\n");
                     intindx[1]=atoi(readitem);
@@ -4448,7 +4448,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               if (str_count_char(line,'\"')>1) {
                 readitem = strtok(line,"\"");
                 readitem = strtok(NULL,"\"");
-                if (strcmp(readitem,header) == 0) {
+                if (str_cmp_ci(readitem,header) == 0) {
                   while (fgets(line,TABREADLINE,filehandle)) {
                     readitem = strtok(line,"\n");
                     intindx[0]=atoi(readitem);
@@ -4543,7 +4543,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               if (str_count_char(line,'\"')>1) {
                 readitem = strtok(line,"\"");
                 readitem = strtok(NULL,"\"");
-                if (strcmp(readitem,header) == 0) {
+                if (str_cmp_ci(readitem,header) == 0) {
                   while (fgets(line,TABREADLINE,filehandle)) {
                     readitem = strtok(line,"\n");
                     intindx[2]=atoi(readitem);
@@ -4618,7 +4618,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               if (str_count_char(line,'\"')>1) {
                 readitem = strtok(line,"\"");
                 readitem = strtok(NULL,"\"");
-                if (strcmp(readitem,header) == 0) {
+                if (str_cmp_ci(readitem,header) == 0) {
                   while (fgets(line,TABREADLINE,filehandle)) {
                     readitem = strtok(line,"\n");
                     intindx[3]=atoi(readitem);
@@ -4689,7 +4689,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               if (str_count_char(line,'\"')>1) {
                 readitem = strtok(line,"\"");
                 readitem = strtok(NULL,"\"");
-                if (strcmp(readitem,header) == 0) {
+                if (str_cmp_ci(readitem,header) == 0) {
                   while (fgets(line,TABREADLINE,filehandle)) {
                     readitem = strtok(line,"\n");
                     intindx[2]=atoi(readitem);

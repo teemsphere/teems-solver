@@ -95,7 +95,10 @@ The solver reads a GEMPACK-style TAB subset (statement syntax per [GM]):
   `e_C@…` equations for a declared complementarity `C`, and
   `del_comp@`), so a user `@` name is an ordinary name in closures,
   shocks, formulas and index positions. Text inside `# labels #` is
-  opaque: a quoted element there is not lowered.
+  opaque: a quoted element there is not lowered. Header names
+  (`Read ... header "Nat"` against a data header `NAT`, set-element
+  and `(by_elements)` mapping reads alike) and logical file names are
+  case-insensitive, as in GEMPACK.
 - `set` / `subset` — explicit lists, `read elements` from a data
   file, the full set-expression grammar of [GM] 10.1.1 (`+`, `-`, `\`,
   `UNION`, `INTERSECT`, quoted single elements, parentheses; `+`
