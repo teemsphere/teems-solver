@@ -1103,6 +1103,8 @@ static void stmt_prog_build_one(char *line, stmt_prog *stp, char *commsyntax,
           nloopslin=nloops;
           if (fdim==0) {
             for (l2=0; l2<vars[LinVars[i].LinVarIndx].size; l2++) {
+              /* a repeated index (v(e,e) over a sum index) is one loop, not one per position */
+              { dim_t dq; for (dq=0; dq<i3; dq++) if (strcmp(arSet[dq].index_name,LinVars[i].dimnames[l2])==0) break; if (dq<i3) continue; }
               strcpy(arSet[i3].index_name,LinVars[i].dimnames[l2]);
               for (i4=0; i4<nset; i4++) if(strcmp(sets[i4].setname,LinVars[i].dimsetnames[l2])==0) {
                   break;
@@ -1118,6 +1120,8 @@ static void stmt_prog_build_one(char *line, stmt_prog *stp, char *commsyntax,
                   break;
                 }
                 else if (sj==fdim-1) {
+                  /* a repeated index (v(e,e) over a sum index) is one loop, not one per position */
+                  { dim_t dq; for (dq=0; dq<i3; dq++) if (strcmp(arSet[fdim+dq].index_name,LinVars[i].dimnames[l2])==0) break; if (dq<i3) break; }
                   strcpy(arSet[fdim+i3].index_name,LinVars[i].dimnames[l2]);
                   for (i4=0; i4<nset; i4++) if(strcmp(sets[i4].setname,LinVars[i].dimsetnames[l2])==0) {
                       break;
@@ -3141,6 +3145,8 @@ int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,
         nloopslin=nloops;
         if (fdim==0) {
           for (l2=0; l2<vars[LinVars[i].LinVarIndx].size; l2++) {
+            /* a repeated index (v(e,e) over a sum index) is one loop, not one per position */
+            { dim_t dq; for (dq=0; dq<i3; dq++) if (strcmp(arSet[dq].index_name,LinVars[i].dimnames[l2])==0) break; if (dq<i3) continue; }
             strcpy(arSet[i3].index_name,LinVars[i].dimnames[l2]);
             for (i4=0; i4<nset; i4++) if(strcmp(sets[i4].setname,LinVars[i].dimsetnames[l2])==0) {
                 break;
@@ -3157,6 +3163,8 @@ int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,
                 break;
               }
               else if (sj==fdim-1) {
+                /* a repeated index (v(e,e) over a sum index) is one loop, not one per position */
+                { dim_t dq; for (dq=0; dq<i3; dq++) if (strcmp(arSet[fdim+dq].index_name,LinVars[i].dimnames[l2])==0) break; if (dq<i3) break; }
                 strcpy(arSet[fdim+i3].index_name,LinVars[i].dimnames[l2]);
                 for (i4=0; i4<nset; i4++) if(strcmp(sets[i4].setname,LinVars[i].dimsetnames[l2])==0) {
                     break;

@@ -751,6 +751,11 @@ typedef struct
   int MapDomSS;              /* >0: the index ranges over a subset of the
                                 mapping's domain -- superset_pos column
                                 into the domain (11.9.7) */
+  /* a repeated index (T(d,d)) whose positions route differently: the
+     second group's address, added when Rep (formula.c dim_bind_pos) */
+  int Rep;
+  offset_t ADims2;
+  int SupSet2,SSIndx2,leadlag2,MapId2,MapDomSS2;
 } dim_addr ;
 
 /* one operation of a compiled formula program (interpreted per element) */

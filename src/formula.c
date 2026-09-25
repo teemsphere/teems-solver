@@ -104,6 +104,52 @@ static void map_dim_bind(dim_addr *Dm, int mp, dim_t frame_setid, offset_t arg_s
   md->used=true;
 }
 
+/* bind one argument position of a coefficient/variable reference to
+   the frame dimension its index ranges over. A repeated index
+   (T(d,d), TRADE(c,"dom",r,r)) binds the same frame dimension at
+   several positions: each position contributes its own stride, so the
+   contributions add -- the stride used to be assigned, and T(d,d) read
+   T(first,d) (potential-models vetting SW2). Positions routed alike
+   (same superset slot, mapping, lead/lag) share one accumulated
+   stride; a second, differently routed group takes the Rep slot. */
+static void dim_bind_pos(dim_addr *D, bool *seen, char *p, int mp, int leadlag, dim_t frame_setid, offset_t arg_setid, offset_t stride, const char *symname, set_def *sets) {
+  dim_addr b;
+  memset(&b,0,sizeof(b));
+  if (mp>0) map_dim_bind(&b,mp,frame_setid,arg_setid,stride,leadlag,symname,sets);
+  else {
+    dim_t ss=set_supset_slot(sets,frame_setid,(dim_t)arg_setid);
+    if (ss<0) set_supset_fatal(p,symname,NULL,sets,frame_setid,(dim_t)arg_setid);
+    if (ss>0) { b.SupSet=1; b.SSIndx=(int)ss; }
+    b.ADims=stride;
+    b.leadlag=leadlag;
+  }
+  if (!*seen) {
+    *D=b;
+    *seen=true;
+    return;
+  }
+  if (D->MapId==b.MapId&&D->MapDomSS==b.MapDomSS&&D->SupSet==b.SupSet&&D->SSIndx==b.SSIndx&&D->leadlag==b.leadlag) {
+    D->ADims+=b.ADims;
+    return;
+  }
+  if (!D->Rep) {
+    D->Rep=1;
+    D->ADims2=b.ADims;
+    D->SupSet2=b.SupSet;
+    D->SSIndx2=b.SSIndx;
+    D->leadlag2=b.leadlag;
+    D->MapId2=b.MapId;
+    D->MapDomSS2=b.MapDomSS;
+    return;
+  }
+  if (D->MapId2==b.MapId&&D->MapDomSS2==b.MapDomSS&&D->SupSet2==b.SupSet&&D->SSIndx2==b.SSIndx&&D->leadlag2==b.leadlag) {
+    D->ADims2+=b.ADims;
+    return;
+  }
+  errmsg("Error: index %s is repeated in %s at argument positions needing three different set routings; this is not supported\n",p,symname);
+  MPI_Abort(PETSC_COMM_WORLD,1);
+}
+
 /* $POS(...) (manual 11.5.6) inside a formula text (spaces stripped,
    lowercased, mapping calls already lowered to map~idx): each call is
    compiled to an OP_LOAD/OT_POS op emitted ahead of the expression and
@@ -232,6 +278,7 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
   int leadlag;
   int mp=0;
   bool IsChange=false;
+  bool seen[MAXVARDIM]={false};
   /* index-count guard: a reference must carry exactly the declared
      number of indices (manual 10.3/11.4.10). The binders below strtok
      the argument list positionally, so a bare reference to an indexed
@@ -252,10 +299,10 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
     }
   }
   {
-    /* ops slots are reused across compiles: the subset routing
-       field is set only by the binders below, so clear it first */
+    /* ops slots are reused across compiles: the repeat/subset routing
+       fields are set only by the binders below, so clear them first */
     dim_addr *D=(varindex==2)?ops[nops].Var2Dims:ops[nops].Var1Dims;
-    for (l=0; l<MAXVARDIM; l++) { D[l].MapDomSS=0; }
+    for (l=0; l<MAXVARDIM; l++) { D[l].Rep=0; D[l].MapDomSS=0; }
   }
   p= strtok(var2,"{");
   if (p==NULL) {
@@ -364,19 +411,7 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
           p=mapping_token_split(p,&mp);
           for (l1=0; l1<fdim; l1++) {
             if (strcmp(p,arSet[l1].index_name)==0) {
-              if(mp>0) {
-                map_dim_bind(varindex==2?&ops[nops].Var2Dims[l1]:&ops[nops].Var1Dims[l1],mp,arSet[l1].setid,coefs[index].setid[l],coefs[index].strides[l],leadlag,coefs[index].cofname,sets);
-                break;
-              }
-              if(varindex==2) {
-                { dim_t ss=set_supset_slot(sets,arSet[l1].setid,coefs[index].setid[l]); if(ss<0)set_supset_fatal(p,coefs[index].cofname,NULL,sets,arSet[l1].setid,coefs[index].setid[l]); if(ss>0){ops[nops].Var2Dims[l1].SupSet=1; ops[nops].Var2Dims[l1].SSIndx=(int)ss;} }
-                ops[nops].Var2Dims[l1].ADims=coefs[index].strides[l];
-                ops[nops].Var2Dims[l1].leadlag=leadlag;
-              } else {
-                { dim_t ss=set_supset_slot(sets,arSet[l1].setid,coefs[index].setid[l]); if(ss<0)set_supset_fatal(p,coefs[index].cofname,NULL,sets,arSet[l1].setid,coefs[index].setid[l]); if(ss>0){ops[nops].Var1Dims[l1].SupSet=1; ops[nops].Var1Dims[l1].SSIndx=(int)ss;} }
-                ops[nops].Var1Dims[l1].ADims=coefs[index].strides[l];
-                ops[nops].Var1Dims[l1].leadlag=leadlag;
-              }
+              dim_bind_pos(varindex==2?&ops[nops].Var2Dims[l1]:&ops[nops].Var1Dims[l1],&seen[l1],p,mp,leadlag,arSet[l1].setid,coefs[index].setid[l],coefs[index].strides[l],coefs[index].cofname,sets);
               break;
             }
           }
@@ -387,19 +422,7 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
           p=mapping_token_split(p,&mp);
         for (l1=0; l1<fdim; l1++) {
           if (strcmp(p,arSet[l1].index_name)==0) {
-            if(mp>0) {
-                map_dim_bind(varindex==2?&ops[nops].Var2Dims[l1]:&ops[nops].Var1Dims[l1],mp,arSet[l1].setid,coefs[index].setid[l],coefs[index].strides[l],leadlag,coefs[index].cofname,sets);
-                break;
-              }
-            if(varindex==2) {
-              { dim_t ss=set_supset_slot(sets,arSet[l1].setid,coefs[index].setid[l]); if(ss<0)set_supset_fatal(p,coefs[index].cofname,NULL,sets,arSet[l1].setid,coefs[index].setid[l]); if(ss>0){ops[nops].Var2Dims[l1].SupSet=1; ops[nops].Var2Dims[l1].SSIndx=(int)ss;} }
-              ops[nops].Var2Dims[l1].ADims=coefs[index].strides[l];
-              ops[nops].Var2Dims[l1].leadlag=leadlag;
-            } else {
-              { dim_t ss=set_supset_slot(sets,arSet[l1].setid,coefs[index].setid[l]); if(ss<0)set_supset_fatal(p,coefs[index].cofname,NULL,sets,arSet[l1].setid,coefs[index].setid[l]); if(ss>0){ops[nops].Var1Dims[l1].SupSet=1; ops[nops].Var1Dims[l1].SSIndx=(int)ss;} }
-              ops[nops].Var1Dims[l1].ADims=coefs[index].strides[l];
-              ops[nops].Var1Dims[l1].leadlag=leadlag;
-            }
+            dim_bind_pos(varindex==2?&ops[nops].Var2Dims[l1]:&ops[nops].Var1Dims[l1],&seen[l1],p,mp,leadlag,arSet[l1].setid,coefs[index].setid[l],coefs[index].strides[l],coefs[index].cofname,sets);
             break;
           }
         }
@@ -493,19 +516,7 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
           p=mapping_token_split(p,&mp);
           for (l1=0; l1<fdim; l1++) {
             if (strcmp(p,arSet[l1].index_name)==0) {
-              if(mp>0) {
-                map_dim_bind(varindex==2?&ops[nops].Var2Dims[l1]:&ops[nops].Var1Dims[l1],mp,arSet[l1].setid,vars[index].setid[l],vars[index].strides[l],leadlag,vars[index].cofname,sets);
-                break;
-              }
-              if(varindex==2) {
-                { dim_t ss=set_supset_slot(sets,arSet[l1].setid,vars[index].setid[l]); if(ss<0)set_supset_fatal(p,vars[index].cofname,NULL,sets,arSet[l1].setid,vars[index].setid[l]); if(ss>0){ops[nops].Var2Dims[l1].SupSet=1; ops[nops].Var2Dims[l1].SSIndx=(int)ss;} }
-                ops[nops].Var2Dims[l1].ADims=vars[index].strides[l];
-                ops[nops].Var2Dims[l1].leadlag=leadlag;
-              } else {
-                { dim_t ss=set_supset_slot(sets,arSet[l1].setid,vars[index].setid[l]); if(ss<0)set_supset_fatal(p,vars[index].cofname,NULL,sets,arSet[l1].setid,vars[index].setid[l]); if(ss>0){ops[nops].Var1Dims[l1].SupSet=1; ops[nops].Var1Dims[l1].SSIndx=(int)ss;} }
-                ops[nops].Var1Dims[l1].ADims=vars[index].strides[l];
-                ops[nops].Var1Dims[l1].leadlag=leadlag;
-              }
+              dim_bind_pos(varindex==2?&ops[nops].Var2Dims[l1]:&ops[nops].Var1Dims[l1],&seen[l1],p,mp,leadlag,arSet[l1].setid,vars[index].setid[l],vars[index].strides[l],vars[index].cofname,sets);
               break;
             }
           }
@@ -516,19 +527,7 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
           p=mapping_token_split(p,&mp);
         for (l1=0; l1<fdim; l1++) {
           if (strcmp(p,arSet[l1].index_name)==0) {
-            if(mp>0) {
-                map_dim_bind(varindex==2?&ops[nops].Var2Dims[l1]:&ops[nops].Var1Dims[l1],mp,arSet[l1].setid,vars[index].setid[l],vars[index].strides[l],leadlag,vars[index].cofname,sets);
-                break;
-              }
-            if(varindex==2) {
-              { dim_t ss=set_supset_slot(sets,arSet[l1].setid,vars[index].setid[l]); if(ss<0)set_supset_fatal(p,vars[index].cofname,NULL,sets,arSet[l1].setid,vars[index].setid[l]); if(ss>0){ops[nops].Var2Dims[l1].SupSet=1; ops[nops].Var2Dims[l1].SSIndx=(int)ss;} }
-              ops[nops].Var2Dims[l1].ADims=vars[index].strides[l];
-              ops[nops].Var2Dims[l1].leadlag=leadlag;
-            } else {
-              { dim_t ss=set_supset_slot(sets,arSet[l1].setid,vars[index].setid[l]); if(ss<0)set_supset_fatal(p,vars[index].cofname,NULL,sets,arSet[l1].setid,vars[index].setid[l]); if(ss>0){ops[nops].Var1Dims[l1].SupSet=1; ops[nops].Var1Dims[l1].SSIndx=(int)ss;} }
-              ops[nops].Var1Dims[l1].ADims=vars[index].strides[l];
-              ops[nops].Var1Dims[l1].leadlag=leadlag;
-            }
+            dim_bind_pos(varindex==2?&ops[nops].Var2Dims[l1]:&ops[nops].Var1Dims[l1],&seen[l1],p,mp,leadlag,arSet[l1].setid,vars[index].setid[l],vars[index].strides[l],vars[index].cofname,sets);
             break;
           }
         }
@@ -1047,6 +1046,8 @@ static inline offset_t dims_offset(const dim_addr *D, const quantifier *arSet, d
     } else {
       l+=D[j].ADims*(arSet[j].indx+D[j].leadlag);
     }
+    /* a repeated index whose positions route differently (dim_bind_pos) */
+    if(D[j].Rep) l+=dims_route(D[j].ADims2,D[j].SupSet2,D[j].SSIndx2,D[j].leadlag2,D[j].MapId2,D[j].MapDomSS2,&arSet[j],sets,set_elems);
   }
   return l;
 }
@@ -1716,12 +1717,8 @@ int formula_compile_if(char *fomulain, set_def *sets,int nif,int ipar,array_def 
   formula_bind_operand(var3,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,*nops,arSet,fdim,2);
   ops[*nops].Var3Type=ops[*nops].Var2Type;
   ops[*nops].Var3BegAdd=ops[*nops].Var2BegAdd;
-  for(i=0;i<fdim;i++){
-  ops[*nops].Var3Dims[i].leadlag=ops[*nops].Var2Dims[i].leadlag;
-  ops[*nops].Var3Dims[i].SupSet=ops[*nops].Var2Dims[i].SupSet;
-  ops[*nops].Var3Dims[i].SSIndx=ops[*nops].Var2Dims[i].SSIndx;
-  ops[*nops].Var3Dims[i].ADims=ops[*nops].Var2Dims[i].ADims;
-  }
+  /* the whole address, repeat/mapping routing included */
+  for(i=0;i<fdim;i++) ops[*nops].Var3Dims[i]=ops[*nops].Var2Dims[i];
   ops[*nops].Var3Val=ops[*nops].Var2Val;
   formula_bind_operand(var2,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,*nops,arSet,fdim,2);
   return 1;

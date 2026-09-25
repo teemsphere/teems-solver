@@ -161,6 +161,13 @@ The solver reads a GEMPACK-style TAB subset (statement syntax per [GM]):
   group after the keyword (`equation (levels) NAME`, `formula
   (initial)`, `update (change)`, `formula & equation`) stays ahead of
   the synthesized quantifier, and an equation's name ahead of it too.
+- repeated indices — `T(d,d)`, `TRADE(c,"dom",r,r)`, `v(e,e)` bind
+  one frame index at several argument positions; each position adds
+  its own stride (positions routed differently, e.g. a subset index on
+  a coefficient declared over the subset and the full set, carry a
+  second address), in formulas, equations (coefficients and variables,
+  inside sums too) and updates. A repeated sum index is one loop, not
+  one per position.
 - `formula` — `(initial)` / `(always)` semantics as in [GM]; conditional
   quantifiers `(all,i,S: COEF(i) op c)` and general conditional sums,
   where the condition coefficient may also be a scalar (`(all,i,S: SC >
