@@ -795,6 +795,10 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
 int sum_eval(char *formulain, char *commsyntax,set_def *sets,dim_t nset, set_element *set_elems,elem_value *elem_vals,offset_t ncofvar,offset_t ncofele, array_def *coefs,offset_t ncof, array_def *vars,offset_t nvar,sum_def *sum_cof,int totalsum,sum_value *sum_vals,offset_t nsumele,formula_op *ops,quantifier *arSet1,dim_t fdim,int *sumindx,int j, solve_real zerodivide);
 offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_elems, array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar, elem_value *elem_vals,offset_t ncofvar,offset_t ncofele,int midpoint);
 offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element *set_elems, array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar, elem_value *elem_vals,offset_t ncofvar,offset_t ncofele);
+void updates_path_accumulate(array_def *coefs, offset_t ncof, elem_value *elem_vals, double w, int first);
+int updates_path_active(void);
+void updates_path_restart(void);
+extern int teems_upd_pathuse;
 
 /* ============ jacobian.c — first-order derivative matrix assembly ======
    (Ha & Kompas 2016 §5; Kompas & Ha 2019) */

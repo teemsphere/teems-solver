@@ -199,9 +199,20 @@ The solver reads a GEMPACK-style TAB subset (statement syntax per [GM]):
   (`-comp_*` controls), under every matrix method.
 - `equation` — linearized equations; the left/right sides are compiled
   per equation block by `jacobian_fill()`.
-- `update` — product-form and explicit updates (`updates_apply()`,
-  `updates_apply_product()`); the modified-midpoint variant applies
-  `substep_base + 2·Δ` (see §5).
+- `update` — product-form, `(change)` and `(explicit)` updates
+  (`updates_apply()`, `updates_apply_product()`); the modified-midpoint
+  variant applies `substep_base + 2·Δ` (see §5). Every right-hand side
+  reads the values at the start of the step and several Updates of one
+  element apply in order, the later overriding ([GM] 11.12): a
+  statement another statement could read, or which shares its target,
+  holds its results until the pass ends (the rest — product updates of
+  a coefficient nothing else touches — write in place). Final updated
+  data after an extrapolated solve: product updates are the exact
+  one-shot form from the extrapolated totals; a `(change)`/`(explicit)`
+  target takes its per-pass path values (Gragg: terminal-smoothed like
+  the variables; accumulated in double precision), Richardson-
+  extrapolated with the variables' weights ([GM] 26.2). A step counter
+  (`ITER = ITER + 1`) extrapolates meaninglessly, as in GEMPACK.
 - `backsolve <var> using <eq>` — condensation ([GM] 10.16, 14.1.3): the
   named endogenous variable and its nominated defining equation are
   excluded from the solved system (`backsolve_read()` marks the elements;
@@ -535,6 +546,11 @@ eq. 6.1). The three solutions are Richardson-extrapolated with weights
 `extrap_w1..3` derived from the step ratios (valid for the even-power
 error expansion Gragg's theorem guarantees for even `s`); per-element
 error codes are accumulated (`xc124`) and reported as precision counts.
+The updated data follow the same scheme (§2 `update`): each pass's
+`(change)`/`(explicit)` Update targets are smoothed like the variables
+(`updates_apply` mode 2) and extrapolated with the same weights
+(`updates_path_accumulate`); product updates are recomputed exactly
+from the extrapolated totals at the end of each subinterval.
 
 Euler mechanics: same driver and per-step refill+solve, but every
 sub-step is a forward step from the current state (`updates_apply`

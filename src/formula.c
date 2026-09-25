@@ -2536,6 +2536,226 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
    midpoint!=0 the modified-midpoint correction is used: the value is
    advanced from the sub-step base (csolpupd) by twice the computed
    change, and csolpupd retains the pre-update value. */
+/* ---- one Update pass (manual 11.12, 4.4.4): the right-hand side of
+   every Update statement uses the values at the START of the step, and
+   several Updates of one coefficient apply in order, the later one
+   overriding. Statements used to write in place, so a later statement
+   read an earlier one's new value (Update V2 = x; Update (change) V =
+   0.01*V2*x gave 30 instead of 20; tpmh0114 LAGY 8.24 instead of 4.04 --
+   potential-models vetting SW5). A statement whose results another
+   statement of the pass could read, or which shares its target with
+   another statement, holds its results until the pass ends; the rest
+   (product updates of a coefficient nothing else touches -- they read
+   only their own element) still write in place. ---- */
+static int upd_nstmt=-1;
+static unsigned char *upd_defer=NULL;
+static offset_t upd_pend_n=0,upd_pend_cap=0;
+static offset_t *upd_pend_off=NULL,*upd_pend_sidx=NULL;
+static store_real *upd_pend_val=NULL,*upd_pend_base=NULL;
+static double *upd_pend_sv=NULL,*upd_pend_sb=NULL;
+typedef struct { offset_t index,offset,varsize; } upd_check;
+static upd_check *upd_checks=NULL;
+static int upd_nchecks=0,upd_capchecks=0;
+
+/* (change)/(explicit) targets whose final value is extrapolated from the
+   per-pass path values like the variables (manual 26.2: updated data is
+   extrapolated from the separate multi-step calculations) */
+static offset_t *upd_pathbase=NULL;     /* per coefficient: base in upd_pathacc, -1 = not a target */
+static double *upd_pathacc=NULL;
+static offset_t upd_pathn=0;
+int teems_upd_pathuse=0;
+/* double-precision shadow of those targets' path (value, previous-step
+   value): single-precision storage rounds each step's increment onto
+   the value, and a change update adding ~1e-6 per step onto ~1 loses a
+   tenth of it; the shadow accumulates the increments exactly and only
+   feeds the extrapolation -- the stored values the steps use are
+   unchanged */
+static double *upd_shv=NULL,*upd_shb=NULL;
+static int upd_shvalid=0;
+
+static offset_t upd_coef_lookup(const char *name, array_def *coefs, offset_t ncof) {
+  offset_t k;
+  for (k=0; k<ncof; k++) if (strcmp(coefs[k].cofname,name)==0) return k;
+  return -1;
+}
+
+static void upd_analyse(char *fname, elem_value *elem_vals, array_def *coefs, offset_t ncof) {
+  FILE *f;
+  char line[TABREADLINE],cs[NAMESIZE],name[NAMESIZE];
+  solve_real zd=0;
+  int n=0,cap=16,k;
+  offset_t *tgt=NULL;
+  unsigned char *ce=NULL,*cnt=NULL,*readset=NULL;
+  if (upd_nstmt>=0) return;
+  tgt=malloc(cap*sizeof(offset_t));
+  ce=malloc(cap);
+  cnt=calloc(ncof+1,1);
+  readset=calloc(ncof+1,1);
+  upd_pathbase=malloc((ncof+1)*sizeof(offset_t));
+  for (k=0; k<ncof; k++) upd_pathbase[k]=-1;
+  strcpy(cs,"update");
+  f=fopen(fname,"r");
+  while (f!=NULL&&tab_next_statement_resolved(cs,f,line,elem_vals,coefs,ncof,&zd,TABREADLINE)) {
+    char *p=line,*eq;
+    int isce=0,j;
+    if (n==cap) { cap*=2; tgt=realloc(tgt,cap*sizeof(offset_t)); ce=realloc(ce,cap); }
+    isce=(str_find_ci(line,"(change)")>=0||str_find_ci(line,"(explicit)")>=0);
+    while (*p==' ') p++;
+    if (str_find_ci(p,"update")==0) p+=6;
+    for (;;) {
+      int d=0;
+      while (*p==' ') p++;
+      if (*p!='(') break;
+      for (; *p!='\0'; p++) { if (*p=='(') d++; else if (*p==')') { d--; if (d==0) { p++; break; } } }
+    }
+    j=0;
+    while ((isalnum((unsigned char)*p)||*p=='_'||*p=='@')&&j<NAMESIZE-1) name[j++]=*p++;
+    name[j]='\0';
+    tgt[n]=upd_coef_lookup(name,coefs,ncof);
+    ce[n]=(unsigned char)isce;
+    if (tgt[n]>=0&&cnt[tgt[n]]<2) cnt[tgt[n]]++;
+    if (isce&&tgt[n]>=0&&upd_pathbase[tgt[n]]<0) { upd_pathbase[tgt[n]]=upd_pathn; upd_pathn+=coefs[tgt[n]].nelem; }
+    eq=strchr(line,'=');
+    if (isce&&eq!=NULL) {
+      char *q=eq+1;
+      while (*q!='\0') {
+        if (isalpha((unsigned char)*q)) {
+          j=0;
+          while ((isalnum((unsigned char)*q)||*q=='_'||*q=='@')&&j<NAMESIZE-1) name[j++]=*q++;
+          name[j]='\0';
+          while (isalnum((unsigned char)*q)||*q=='_'||*q=='@') q++;
+          { offset_t r=upd_coef_lookup(name,coefs,ncof); if (r>=0) readset[r]=1; }
+        } else q++;
+      }
+    }
+    n++;
+  }
+  if (f!=NULL) fclose(f);
+  upd_defer=malloc(n>0?n:1);
+  for (k=0; k<n; k++) upd_defer[k]=(unsigned char)(ce[k]||tgt[k]<0||cnt[tgt[k]]>1||readset[tgt[k]]);
+  upd_nstmt=n;
+  free(tgt); free(ce); free(cnt); free(readset);
+}
+
+static int upd_stmt_defer(int s) {
+  return (s<upd_nstmt)?upd_defer[s]:1;
+}
+
+static offset_t upd_pend_reserve(offset_t n) {
+  offset_t b=upd_pend_n;
+  if (upd_pend_n+n>upd_pend_cap) {
+    offset_t c=upd_pend_cap?upd_pend_cap:1024;
+    while (c<upd_pend_n+n) c*=2;
+    upd_pend_off=realloc(upd_pend_off,c*sizeof(offset_t));
+    upd_pend_sidx=realloc(upd_pend_sidx,c*sizeof(offset_t));
+    upd_pend_val=realloc(upd_pend_val,c*sizeof(store_real));
+    upd_pend_base=realloc(upd_pend_base,c*sizeof(store_real));
+    upd_pend_sv=realloc(upd_pend_sv,c*sizeof(double));
+    upd_pend_sb=realloc(upd_pend_sb,c*sizeof(double));
+    if (upd_pend_off==NULL||upd_pend_sidx==NULL||upd_pend_val==NULL||upd_pend_base==NULL||upd_pend_sv==NULL||upd_pend_sb==NULL) {
+      errmsg("Error: out of memory holding Update results\n");
+      MPI_Abort(PETSC_COMM_WORLD,1);
+    }
+    upd_pend_cap=c;
+  }
+  upd_pend_n+=n;
+  return b;
+}
+
+static void upd_check_later(offset_t index, offset_t offset, offset_t varsize) {
+  if (upd_nchecks==upd_capchecks) {
+    upd_capchecks=upd_capchecks?2*upd_capchecks:16;
+    upd_checks=realloc(upd_checks,upd_capchecks*sizeof(upd_check));
+  }
+  upd_checks[upd_nchecks].index=index;
+  upd_checks[upd_nchecks].offset=offset;
+  upd_checks[upd_nchecks].varsize=varsize;
+  upd_nchecks++;
+}
+
+static void upd_range_check(array_def *coefs, offset_t index, offset_t offset, offset_t varsize, elem_value *elem_vals) {
+  int glmode=teems_range_test_updated;
+  if(teems_rk_stage_checks&&glmode==2)glmode=1;   /* RK stage state: warn and let the driver retry */
+  if(glmode>0){
+    int glviol=0;
+    if(coefs[index].gltype>0)glviol|=coef_range_check(coefs,index,offset,varsize,elem_vals,glmode,coefs[index].gltype,coefs[index].glval,1);
+    if(teems_coef_gltype2!=NULL&&teems_coef_gltype2[index]>0)glviol|=coef_range_check(coefs,index,offset,varsize,elem_vals,glmode,teems_coef_gltype2[index],teems_coef_glval2[index],1);
+    /* fatal only when requested (-range_test_* 2; manual 25.4.4); the
+       GEMPACK default is warn */
+    if(glviol) {
+      if(teems_rk_stage_checks)teems_check_viol_range++;
+      else if(glmode==2)MPI_Abort(PETSC_COMM_WORLD,1);
+    }
+  }
+}
+
+/* end of a pass: held results land in statement order (a later Update
+   of the same element overrides), then their range checks run */
+static void upd_pass_flush(array_def *coefs, elem_value *elem_vals) {
+  offset_t k;
+  int c;
+  for (k=0; k<upd_pend_n; k++) {
+    elem_vals[upd_pend_off[k]].value=upd_pend_val[k];
+    elem_vals[upd_pend_off[k]].substep_base=upd_pend_base[k];
+    if (upd_pend_sidx[k]>=0) {
+      upd_shv[upd_pend_sidx[k]]=upd_pend_sv[k];
+      upd_shb[upd_pend_sidx[k]]=upd_pend_sb[k];
+    }
+  }
+  upd_pend_n=0;
+  for (c=0; c<upd_nchecks; c++) upd_range_check(coefs,upd_checks[c].index,upd_checks[c].offset,upd_checks[c].varsize,elem_vals);
+  upd_nchecks=0;
+}
+
+/* after the last step of multi-step pass `pass` (0..2): fold the path
+   values of the (change)/(explicit) targets into the extrapolation with
+   that pass's Richardson weight (the weights the variables use) */
+int updates_path_active(void) {
+  return upd_pathn>0;
+}
+
+/* a multi-step pass restarts from the initial data: the shadow re-syncs
+   from the stored values at the next Update pass */
+void updates_path_restart(void) {
+  upd_shvalid=0;
+}
+
+static void upd_shadow_sync(array_def *coefs, offset_t ncof, elem_value *elem_vals) {
+  offset_t k,e;
+  if (upd_pathn==0||upd_shvalid) return;
+  if (upd_shv==NULL) {
+    upd_shv=malloc(upd_pathn*sizeof(double));
+    upd_shb=malloc(upd_pathn*sizeof(double));
+    if (upd_shv==NULL||upd_shb==NULL) {
+      errmsg("Error: out of memory for the updated-data extrapolation\n");
+      MPI_Abort(PETSC_COMM_WORLD,1);
+    }
+  }
+  for (k=0; k<ncof; k++) {
+    offset_t b=upd_pathbase[k];
+    if (b<0) continue;
+    for (e=0; e<coefs[k].nelem; e++) {
+      upd_shv[b+e]=elem_vals[coefs[k].offset+e].value;
+      upd_shb[b+e]=elem_vals[coefs[k].offset+e].substep_base;
+    }
+  }
+  upd_shvalid=1;
+}
+
+void updates_path_accumulate(array_def *coefs, offset_t ncof, elem_value *elem_vals, double w, int first) {
+  offset_t k,e;
+  if (upd_pathbase==NULL||upd_pathn==0) return;
+  if (upd_pathacc==NULL) upd_pathacc=calloc(upd_pathn,sizeof(double));
+  for (k=0; k<ncof; k++) {
+    offset_t b=upd_pathbase[k];
+    if (b<0) continue;
+    for (e=0; e<coefs[k].nelem; e++) {
+      double v=w*(upd_shvalid?upd_shv[b+e]:(double)elem_vals[coefs[k].offset+e].value);
+      upd_pathacc[b+e]=first?v:upd_pathacc[b+e]+v;
+    }
+  }
+}
+
 offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_elems, array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar, elem_value *elem_vals,offset_t ncofvar,offset_t ncofele,int midpoint) {
   FILE * filehandle;
   char commsyntax[NAMESIZE],line[TABREADLINE],line1[TABREADLINE],line2[TABREADLINE],linecopy[TABREADLINE];
@@ -2553,6 +2773,9 @@ offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_el
   /* division by zero is never allowed in UPDATEs (manual 10.11.1):
      the dual-class state must not leak in; legacy single default only */
   zdiv_disable();
+  upd_analyse(fname,elem_vals,coefs,ncof);
+  upd_shadow_sync(coefs,ncof,elem_vals);
+  int stmt=0;
   filehandle = fopen(fname,"r");
   while (tab_next_statement_resolved(commsyntax,filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
     /* a mapped argument on the RHS lowers to map~idx and binds through
@@ -2740,6 +2963,9 @@ offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_el
             }
         }
     if(!formula_compile(line1,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,&nops,arSet,fdim-1))MPI_Abort(PETSC_COMM_WORLD,1);
+    int dfr=upd_stmt_defer(stmt);
+    offset_t pb=dfr?upd_pend_reserve(nloops):0;
+    offset_t shb0=((IsChange||IsExplicit)&&!check10&&upd_shvalid&&upd_pathbase[index]>=0)?upd_pathbase[index]:-1;
         #pragma omp parallel private(l,l2,i4,dcount,i3,i1,temp1,temp2,arSet1,ops1) shared(elem_vals,arSet)
         {
         if(omp_get_thread_num()!=0){
@@ -2785,7 +3011,31 @@ offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_el
                 }
               }
             }
-      if(midpoint){
+      if(dfr){
+        store_real v0=elem_vals[offset+l2].value,nv=v0;
+        temp1=formula_eval(elem_vals,sets,set_elems,sum_vals,ops1,nops,arSet1,fdim-1,zerodivide);
+        if(midpoint==2)nv=0.5*(elem_vals[offset+l2].substep_base+temp1);
+        else if(temp1-v0>0.000000001||temp1-v0<-0.000000001)nv=midpoint?elem_vals[offset+l2].substep_base+2*(temp1-v0):temp1;
+        upd_pend_off[pb+l]=offset+l2;
+        upd_pend_val[pb+l]=nv;
+        upd_pend_base[pb+l]=v0;
+        upd_pend_sidx[pb+l]=-1;
+        if(shb0>=0){
+          offset_t si=shb0+l2;
+          double s0=upd_shv[si],sb=upd_shb[si],d=temp1-(double)v0,sv;
+          if(IsExplicit) sv=(midpoint==2)?0.5*(sb+temp1):(midpoint?sb+2*(temp1-s0):temp1);
+          else sv=(midpoint==2)?0.5*(sb+s0+d):(midpoint?sb+2*d:s0+d);
+          upd_pend_sidx[pb+l]=si;
+          upd_pend_sv[pb+l]=sv;
+          upd_pend_sb[pb+l]=s0;
+        }
+      }else if(midpoint==2){
+        /* Gragg terminal smoothing of the data: (C[n-1] + C[n] + dC)/2 */
+        temp2=elem_vals[offset+l2].value;
+        temp1=formula_eval(elem_vals,sets,set_elems,sum_vals,ops1,nops,arSet1,fdim-1,zerodivide);
+        elem_vals[offset+l2].value=0.5*(elem_vals[offset+l2].substep_base+temp1);
+        elem_vals[offset+l2].substep_base=temp2;
+      }else if(midpoint){
         temp2=elem_vals[offset+l2].value;
         temp1=formula_eval(elem_vals,sets,set_elems,sum_vals,ops1,nops,arSet1,fdim-1,zerodivide);
         if(temp1-elem_vals[offset+l2].value>0.000000001||temp1-elem_vals[offset+l2].value<-0.000000001)elem_vals[offset+l2].value=elem_vals[offset+l2].substep_base+2*(temp1-elem_vals[offset+l2].value);
@@ -2811,22 +3061,13 @@ offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_el
     free(arSet);
     free(ops);
 
-        int glmode=teems_range_test_updated;
-        if(teems_rk_stage_checks&&glmode==2)glmode=1;   /* RK stage state: warn and let the driver retry */
-        if(glmode>0){
-          int glviol=0;
-          if(coefs[index].gltype>0)glviol|=coef_range_check(coefs,index,offset,varsize,elem_vals,glmode,coefs[index].gltype,coefs[index].glval,1);
-          if(teems_coef_gltype2!=NULL&&teems_coef_gltype2[index]>0)glviol|=coef_range_check(coefs,index,offset,varsize,elem_vals,glmode,teems_coef_gltype2[index],teems_coef_glval2[index],1);
-          /* fatal only when requested (-range_test_* 2; manual
-             25.4.4); the GEMPACK default is warn */
-          if(glviol) {
-            if(teems_rk_stage_checks)teems_check_viol_range++;
-            else if(glmode==2)MPI_Abort(PETSC_COMM_WORLD,1);
-          }
-        }
+        if(dfr) upd_check_later(index,offset,varsize);
+        else upd_range_check(coefs,index,offset,varsize,elem_vals);
+        stmt++;
     
   }
   fclose(filehandle);
+  upd_pass_flush(coefs,elem_vals);
   return j;
 }
 
@@ -2849,6 +3090,8 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
   /* division by zero is never allowed in UPDATEs (manual 10.11.1):
      the dual-class state must not leak in; legacy single default only */
   zdiv_disable();
+  upd_analyse(fname,elem_vals,coefs,ncof);
+  int stmt=0;
   filehandle = fopen(fname,"r");
   while (tab_next_statement_resolved(commsyntax,filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
     /* a mapped argument on the RHS lowers to map~idx and binds through
@@ -3037,6 +3280,12 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
             }
         }
     if(!formula_compile(line1,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,&nops,arSet,fdim-1))MPI_Abort(PETSC_COMM_WORLD,1);
+    int dfr=upd_stmt_defer(stmt);
+    offset_t pb=dfr?upd_pend_reserve(nloops):0;
+    /* the post-simulation pass of an extrapolated solve: a (change) or
+       (explicit) target takes its extrapolated path value; product
+       updates stay the exact one-shot form */
+    const double *pathv=(teems_upd_pathuse&&(IsChange||IsExplicit)&&!check10&&upd_pathacc!=NULL&&upd_pathbase[index]>=0)?upd_pathacc+upd_pathbase[index]:NULL;
         #pragma omp parallel private(l,l2,i4,dcount,i3,i1,temp1,arSet1,ops1) shared(elem_vals,arSet)
         {
         if(omp_get_thread_num()!=0){
@@ -3083,6 +3332,15 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
               }
             }
       temp1=formula_eval(elem_vals,sets,set_elems,sum_vals,ops1,nops,arSet1,fdim-1,zerodivide);
+      if(pathv!=NULL)temp1=pathv[l2];
+      if(dfr){
+        store_real v0=elem_vals[offset+l2].value,nv=v0;
+        if(temp1-v0>0.000000001||temp1-v0<-0.000000001)nv=temp1;
+        upd_pend_off[pb+l]=offset+l2;
+        upd_pend_val[pb+l]=nv;
+        upd_pend_base[pb+l]=elem_vals[offset+l2].substep_base;
+        upd_pend_sidx[pb+l]=-1;
+      }else
       if(temp1-elem_vals[offset+l2].value>0.000000001||temp1-elem_vals[offset+l2].value<-0.000000001)elem_vals[offset+l2].value=temp1;
     }
         if(omp_get_thread_num()!=0){
@@ -3100,22 +3358,13 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
     free(arSet);
     free(ops);
 
-        int glmode=teems_range_test_updated;
-        if(teems_rk_stage_checks&&glmode==2)glmode=1;   /* RK stage state: warn and let the driver retry */
-        if(glmode>0){
-          int glviol=0;
-          if(coefs[index].gltype>0)glviol|=coef_range_check(coefs,index,offset,varsize,elem_vals,glmode,coefs[index].gltype,coefs[index].glval,1);
-          if(teems_coef_gltype2!=NULL&&teems_coef_gltype2[index]>0)glviol|=coef_range_check(coefs,index,offset,varsize,elem_vals,glmode,teems_coef_gltype2[index],teems_coef_glval2[index],1);
-          /* fatal only when requested (-range_test_* 2; manual
-             25.4.4); the GEMPACK default is warn */
-          if(glviol) {
-            if(teems_rk_stage_checks)teems_check_viol_range++;
-            else if(glmode==2)MPI_Abort(PETSC_COMM_WORLD,1);
-          }
-        }
+        if(dfr) upd_check_later(index,offset,varsize);
+        else upd_range_check(coefs,index,offset,varsize,elem_vals);
+        stmt++;
     
   }
   fclose(filehandle);
+  upd_pass_flush(coefs,elem_vals);
   return j;
 }
 

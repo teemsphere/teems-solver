@@ -922,6 +922,7 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
             else for(i=0; i<ncofele; i++) {
                 elem_vals[i].value=elem_vals[i].initial;
               }
+            updates_path_restart();
             elem_vals1=elem_vals+ncofele;
             for(i=0; i<nvar; i++) {
               if(vars[i].change_real) {
@@ -2003,6 +2004,29 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
         /* recover the backsolved elements for the terminal smoothing
            solve (same pre-update evaluation point as the step loop) */
         if(rank==rank_hsl&&nbselems>0)backsolve_recover(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele,closure_vals,x1,exo_z,bsvals);
+        /* the same terminal smoothing for the updated data of the
+           (change)/(explicit) Update targets, (C[n-1] + C[n] + dC)/2 with
+           dC from this pass's changes: their pass-end values feed the
+           updated-data extrapolation only (the next pass restarts from
+           the initial data), and for a change update linear in the
+           variables it keeps the extrapolated value equal to the
+           variables' own result */
+        if(rank==rank_hsl&&updates_path_active()) {
+          for(i=0; i<nvar; i++) {
+            for(tindx1=vars[i].offset; tindx1<vars[i].nelem+vars[i].offset; tindx1++) {
+              if(CL_EXO(tindx1)) {
+                if(!vars[i].change_real) {
+                  temp2=CL_SHOCK(tindx1);
+                  temp1=((100+(subindx+1)*temp2)/(100+subindx*temp2)-1)*vpercents;
+                  elem_vals1[tindx1].substep_base=temp1/(1+varchange[tindx1]/100);
+                }
+              }
+              else if(CL_BS(tindx1)) elem_vals1[tindx1].substep_base=bsvals[closure_vals[tindx1].exo_index];
+              else elem_vals1[tindx1].substep_base=x1[closure_vals[tindx1].exo_index];
+            }
+          }
+          updates_apply(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,2);
+        }
         for(i=0; i<nvar; i++) {
           if(vars[i].change_real) {
             for(tindx1=vars[i].offset; tindx1<vars[i].nelem+vars[i].offset; tindx1++) {
@@ -2150,6 +2174,11 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
               extrap_w3=q3*q3/(q2-q3)/(1.0-q3);
             }
           }
+          /* updated data (manual 26.2): the (change)/(explicit) Update
+             targets' values at the end of this pass enter the
+             extrapolation with the weight the variables' final result
+             gives this pass (sol 0: w2, sol 1: -w3, sol 2: w3) */
+          if(updates_path_active())updates_path_accumulate(coefs,ncof,elem_vals,(sol==0)?extrap_w2:((sol==1)?-extrap_w3:extrap_w3),sol==0);
           if(subindx>0) {
             if(sol==0)for(i=0; i<nvarele; i++) xc0[i]=1+xcf[i]/100;//if(i==1287)printf("sol!!!!!!!!!!!!!!!!!! %d step %d xc %lf xc0 %lf k %d\n",sol,stepcount,1.0+xc[k]/100,xc0[i],i);}
             if(sol==0) {
@@ -2242,7 +2271,13 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
           }
           }
           for(i=0; i<ncofele; i++) elem_vals[i].value=elem_vals[i].initial;
+          /* product updates: exact one-shot form from the extrapolated
+             totals; (change)/(explicit) targets: their extrapolated path
+             values (SW5) -- not a one-shot recomputation, which is wrong
+             for nonlinear change, explicit and counter updates */
+          teems_upd_pathuse=1;
           updates_apply_product(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele);
+          teems_upd_pathuse=0;
           strcpy(commsyntax,"formula");
           IsIni=false;
           formulas_execute(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,IsIni);
