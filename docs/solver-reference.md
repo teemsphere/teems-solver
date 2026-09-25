@@ -143,8 +143,9 @@ The solver reads a GEMPACK-style TAB subset (statement syntax per [GM]):
   fill), while the backsolved variable's own occurrence must be plain
   (a mapped pivot is many-to-one: named fatal).
 - `coefficient` / `variable` — levels or percentage-change quantities
-  (`(change)`, `(levels)` variables — levels equations and
-  `Formula & Equation` pairs are linearized by `levels.c` at
+  (`(change)`, `(levels)` variables — levels equations, equations
+  whose left side holds a conditioned sum (split at the top-level `=`),
+  and `Formula & Equation` pairs are linearized by `levels.c` at
   preprocess; `(default=…)` handled by `variables_read_defaults()`),
   `(parameter)`/`(non_parameter)`, `(integer)`; optional bounds
   (`GE/GT/LE/LT`, `enum bound_type`, two slots) with initial/updated

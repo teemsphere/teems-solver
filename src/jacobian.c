@@ -453,6 +453,24 @@ static void linvar_name_set(eq_var_ref *ref, const char *vname) {
   strcpy(ref->LinVarName,vname);
 }
 
+/* the equation's left and right sides split at its TOP-LEVEL '=':
+   an '=' inside brackets (a sum condition, "sum{f,S:MAP(f)=a,...} = 0")
+   is masked for the split and restored after it -- the split used to
+   stop at the first '=' (vetting S6) */
+static void eq_mask_nested_eq(char *s) {
+  int d=0;
+  for (; *s!='\0'; s++) {
+    if (*s=='('||*s=='['||*s=='{') d++;
+    else if (*s==')'||*s==']'||*s=='}') d--;
+    else if (*s=='='&&d>0) *s='\002';
+  }
+}
+
+static void eq_unmask(char *s) {
+  if (s==NULL) return;
+  for (; *s!='\0'; s++) if (*s=='\002') *s='=';
+}
+
 static void linvar_dim_read(char *p, char *linecopy, offset_t lvar,
                             eq_var_ref *ref, dim_t d, bool split_mapped,
                             set_def *sets) {
@@ -851,6 +869,7 @@ static void stmt_prog_build_one(char *line, stmt_prog *stp, char *commsyntax,
       while (str_replace_char(line, ']', ')'));
       while (str_replace_char(line, '{', '('));
       while (str_replace_char(line, '}', ')'));
+      eq_mask_nested_eq(line);
       strcpy(linecopy,line);
       fdim=str_count_ci(line, "(all,");
       if (fdim==0) {
@@ -879,6 +898,9 @@ static void stmt_prog_build_one(char *line, stmt_prog *stp, char *commsyntax,
         strcat(readitem,vname);
         strcat(readitem,")");
       }
+      eq_unmask(readitem);
+      eq_unmask(vname);
+      eq_unmask(linecopy);
       str_delete_char(readitem,' ');
       eq_linearity_check(readitem,eqname,coefs,ncof);
       while (formula_normalize(readitem)==1);
@@ -2266,6 +2288,7 @@ int equation_order_read(char *fname, char *commsyntax,set_def *sets,dim_t nset,s
       while (str_replace_char(line, ']', ')'));
       while (str_replace_char(line, '{', '('));
       while (str_replace_char(line, '}', ')'));
+      eq_mask_nested_eq(line);
       strcpy(linecopy,line);
       fdim=str_count_ci(line, "(all,");
       if (fdim==0) {
@@ -2328,6 +2351,9 @@ int equation_order_read(char *fname, char *commsyntax,set_def *sets,dim_t nset,s
         strcat(readitem,vname);
         strcat(readitem,")");
       }
+      eq_unmask(readitem);
+      eq_unmask(vname);
+      eq_unmask(linecopy);
       str_delete_char(readitem,' ');
       while (formula_normalize(readitem)==1);
       leadlag_encode(readitem);
@@ -2618,6 +2644,7 @@ int equation_order_read_nested(char *fname, char *commsyntax,set_def *sets,dim_t
       while (str_replace_char(line, ']', ')'));
       while (str_replace_char(line, '{', '('));
       while (str_replace_char(line, '}', ')'));
+      eq_mask_nested_eq(line);
       strcpy(linecopy,line);
       fdim=str_count_ci(line, "(all,");
       if (fdim==0) {
@@ -2680,6 +2707,9 @@ int equation_order_read_nested(char *fname, char *commsyntax,set_def *sets,dim_t
         strcat(readitem,vname);
         strcat(readitem,")");
       }
+      eq_unmask(readitem);
+      eq_unmask(vname);
+      eq_unmask(linecopy);
       str_delete_char(readitem,' ');
       while (formula_normalize(readitem)==1);
       leadlag_encode(readitem);
@@ -2973,6 +3003,7 @@ int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,
       while (str_replace_char(line, ']', ')'));
       while (str_replace_char(line, '{', '('));
       while (str_replace_char(line, '}', ')'));
+      eq_mask_nested_eq(line);
       strcpy(linecopy,line);
       fdim=str_count_ci(line, "(all,");
       if (fdim==0) {
@@ -3001,6 +3032,9 @@ int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,
         strcat(readitem,vname);
         strcat(readitem,")");
       }
+      eq_unmask(readitem);
+      eq_unmask(vname);
+      eq_unmask(linecopy);
       str_delete_char(readitem,' ');
       while (formula_normalize(readitem)==1);
       leadlag_encode(readitem);
