@@ -5820,7 +5820,15 @@ offset_t subsets_read(char *fname, set_element *set_elems, set_def *sets,dim_t n
       j++;
     }
     if(i==nset)errmsg("Error: set %s is not declared\n",subset);
-    else if(succ-sets[i].size!=0)errmsg("Error: some elements of set %s are not in set %s\n",subset,set);
+    else if(succ-sets[i].size!=0) {
+      /* fatal: a subset whose elements are missing from its superset
+         left superset_pos unset and every routed read wrong (it used
+         to continue into a SEGV; potential-models segfaults.md #4) */
+      errmsg("Error: some elements of set %s are not in set %s\n",subset,set);
+      fclose(filehandle);
+      MPI_Abort(PETSC_COMM_WORLD,1);
+      return -1;
+    }
   }
   fclose(filehandle);
   return j;

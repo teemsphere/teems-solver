@@ -33,6 +33,79 @@ static int cmf_strcpy_bounded(char *dst, const char *src, size_t cap) {
 static int cond_is_namec(char ch) {
   return (ch>='a'&&ch<='z')||(ch>='A'&&ch<='Z')||(ch>='0'&&ch<='9')||ch=='_'||ch=='@'||ch==MAPMARK;
 }
+/* Formula qualifier lists (manual 10.8, 11.11): "(initial, always,
+   by_elements, ...)" and the "write updated value to file F header "H""
+   form are split into one group per qualifier, which is the form every
+   later reader recognises; the updated-value write request is dropped
+   with a warning (its value is in the coefficient dump, sol.cof/.cbin,
+   like every coefficient's). A compound group used to stay in place: its
+   '(' counted as a quantifier and formulas_execute read past the
+   statement (SEGV), and its quoted header was lowered as an element
+   literal (potential-models segfaults.md #4, G-S4). */
+static void formula_qualifiers_normalize(char *line) {
+  char out[TABREADLINE],item[TABREADLINE];
+  char *p=line;
+  size_t o=0;
+  int changed=0;
+  while (*p==' ') p++;
+  if (str_find_ci(p,"formula")!=0) return;
+  p+=7;
+  if (*p!=' '&&*p!='(') return;
+  memcpy(out,line,p-line);
+  o=p-line;
+  for (;;) {
+    char *g=p,*e;
+    int d=0,inq=0;
+    while (*g==' ') g++;
+    if (*g!='('||str_find_ci(g,"(all,")==0) break;
+    for (e=g; *e!='\0'; e++) {
+      if (*e=='\"') inq=!inq;
+      else if (!inq&&*e=='(') d++;
+      else if (!inq&&*e==')') { d--; if (d==0) break; }
+    }
+    if (*e!=')') return;
+    {
+      char *c=g+1,*st=g+1;
+      int dq=0,ni=0;
+      inq=0;
+      for (;; c++) {
+        if (*c=='\"') inq=!inq;
+        else if (!inq&&*c=='(') dq++;
+        else if (!inq&&*c==')'&&dq>0) dq--;
+        if (c==e||(!inq&&dq==0&&*c==',')) {
+          size_t n=c-st;
+          while (n>0&&*st==' ') { st++; n--; }
+          while (n>0&&st[n-1]==' ') n--;
+          if (n>=sizeof(item)) return;
+          memcpy(item,st,n);
+          item[n]='\0';
+          ni++;
+          if (str_find_ci(item,"write")==0) {
+            printf("Warning: Formula qualifier \"%s\" is accepted but no separate updated-data file is written (the value is in the coefficient dump)\n",item);
+            changed=1;
+          } else if (n>0) {
+            if (o+n+3>=sizeof(out)) return;
+            out[o++]=' ';
+            out[o++]='(';
+            memcpy(out+o,item,n);
+            o+=n;
+            out[o++]=')';
+          }
+          if (c==e) break;
+          st=c+1;
+        }
+      }
+      if (ni>1) changed=1;
+    }
+    p=e+1;
+  }
+  if (!changed) return;
+  if (o+strlen(p)+1>=sizeof(out)) return;
+  if (*p!=' ') out[o++]=' ';
+  strcpy(out+o,p);
+  strcpy(line,out);
+}
+
 static void cond_segment_normalize(char *line) {
   char buf[TABREADLINE];
   int depth=0,incond=0,conddepth=0,changed=0;
@@ -1011,6 +1084,7 @@ static int tab_preprocess_run(char *filename, char *newtabfile) {
   fout = fopen(newtabfile,"w");
   i=0;
   while (fgets(line,TABREADLINE,filehandle)) {
+    formula_qualifiers_normalize(line);
     sum_dedup_indices(line);
     l1=str_find_ci(line,"equation");
     l2=str_find_ci(line,"formula");
@@ -1106,6 +1180,10 @@ static int tab_preprocess_run(char *filename, char *newtabfile) {
             int oe=(int)(n1-line2),os=oe;
             while (os>0&&cond_is_namec(line2[os-1])) os--;
             if (os>0&&line2[os-1]=='$') os--;
+            /* no identifier before the '(' (a qualifier group such as
+               "(initial, write ... header "COST")"): not an owner --
+               ")(" used to match the first declaration with two
+               quantifier groups (segfaults.md #4a) */
             if (oe-os+2>(int)sizeof(varname)) {
               errmsg("Error: TAB statement too complex in tab_preprocess: %s\n",line);
               return -1;
@@ -1114,7 +1192,7 @@ static int tab_preprocess_run(char *filename, char *newtabfile) {
             varname[oe-os+1]='\0';
           }
           n1=varname;
-          if (tab_read_set_name(newtabfile1,n1,setindx,setname)==-1) {
+          if (!cond_is_namec(varname[0])||tab_read_set_name(newtabfile1,n1,setindx,setname)==-1) {
             /* the quoted element is not an argument of a declared
                coefficient or variable -- a $POS("el",S) literal or a
                mapping's domain/codomain element in a Formula (manual
@@ -1691,6 +1769,9 @@ static int tab_read_set_name_pass(char **stmts, int nstmt, char *varname, char *
 int tab_read_set_name(char *filename, char *varname, int indx, char *setname) {
   int r;
   char varname1[NAMESIZE+2];
+  /* an owner is a declared name: "(" alone matched ")(" in the first
+     declaration with two quantifier groups */
+  if (!cond_is_namec(varname[0])) return -1;
   strcpy(varname1,")");
   strcat(varname1,varname);
   if (decl_index_build(filename)<0) return -1;

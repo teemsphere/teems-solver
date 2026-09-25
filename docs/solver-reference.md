@@ -171,7 +171,11 @@ The solver reads a GEMPACK-style TAB subset (statement syntax per [GM]):
   second address), in formulas, equations (coefficients and variables,
   inside sums too) and updates. A repeated sum index is one loop, not
   one per position.
-- `formula` — `(initial)` / `(always)` semantics as in [GM]; conditional quantifiers
+- `formula` — `(initial)` / `(always)` semantics as in [GM]; a
+  qualifier list `(initial, by_elements)` is split into its groups, and
+  `write updated value to file F header "H"` is accepted with a warning
+  (no separate updated-data file is written; the value is in the
+  coefficient dump); conditional quantifiers
   `(all,i,S: <expr> op <expr>)` — the historical `COEF(i) op number`
   form directly, anything else (`$POS(c)=$POS(g)`, a coefficient or
   arithmetic on either side, several parenthesised groups) compiled as
