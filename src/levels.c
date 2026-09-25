@@ -73,7 +73,7 @@ typedef struct {
   bool param;
 } lv_coefrec;
 
-typedef enum { LN_NUM, LN_REF, LN_ADD, LN_SUB, LN_MUL, LN_DIV, LN_POW, LN_NEG, LN_SUM } lv_kind;
+typedef enum { LN_NUM, LN_REF, LN_ADD, LN_SUB, LN_MUL, LN_DIV, LN_POW, LN_NEG, LN_SUM, LN_FUNC } lv_kind;
 /* REF classification */
 typedef enum { LR_CHANGE, LR_PERCENT, LR_PARAM } lv_refkind;
 
@@ -86,6 +86,7 @@ typedef struct {
   const char *set; int setlen;     /* SUM set name */
   lv_refkind refkind;
   int pairidx;                     /* lv[] index for levels-var REFs */
+  int func;                        /* LN_FUNC: 0 sqrt, 1 exp, 2 loge, 3 log10 */
 } lv_node;
 
 typedef struct {
@@ -337,11 +338,9 @@ static int lv_parse_primary(lv_cur *cur) {
           if (*q == '(') depth++;
           else if (*q == ')') depth--;
           else if (*q == ',' && depth == 0) { if (c1 == NULL) c1 = q; else { c2 = q; break; } }
-          else if (*q == ':' && depth == 0) {
-            /* the loop stops at the second top-level comma, so this
-               covers the index and set parts (sum(r,REG: cond, ...)) */
-            cur->fail = 1; lv_err(c, "conditional sums are not supported in levels equations yet"); return -1;
-          }
+          /* a condition (sum(r,REG: cond, ...)) rides on the set span
+             and is re-emitted verbatim on every linearized term's sum
+             (vetting S8; it used to be rejected) */
         }
         if (c1 == NULL || c2 == NULL) { cur->fail = 1; lv_err(c, "malformed sum"); return -1; }
         n = lv_newnode(c, LN_SUM);
@@ -365,10 +364,35 @@ static int lv_parse_primary(lv_cur *cur) {
         c->nodes[n].s = start; c->nodes[n].slen = (int)(cur->p - start);
         return n;
       }
-      for (f = 0; lv_funcs[f] != NULL; f++) {
+      for (f = 0; f < 4; f++) {
+        /* SQRT/EXP/LOGE/LOG10 (manual 11.4.10): the argument is an
+           expression, differentiated through the chain rule (vetting
+           ORANI G18) */
+        if ((int)strlen(lv_funcs[f]) == nmlen && strncmp(nm, lv_funcs[f], nmlen) == 0) {
+          lv_cur inner = { 0 };
+          char save;
+          int a;
+          inner.c = c;
+          inner.p = cur->p + 1;
+          save = *(cur->p + ge);
+          *(char *)(cur->p + ge) = '\0';
+          a = lv_parse_expr(&inner);
+          *(char *)(cur->p + ge) = save;
+          if (a < 0 || inner.fail) { cur->fail = 1; return -1; }
+          if (inner.p != cur->p + ge) { cur->fail = 1; lv_err(c, "trailing text inside a function argument"); return -1; }
+          n = lv_newnode(c, LN_FUNC);
+          if (n < 0) { cur->fail = 1; lv_err(c, "expression too large"); return -1; }
+          c->nodes[n].a = a;
+          c->nodes[n].func = f;
+          cur->p += ge + 1;
+          c->nodes[n].s = start; c->nodes[n].slen = (int)(cur->p - start);
+          return n;
+        }
+      }
+      for (f = 4; lv_funcs[f] != NULL; f++) {
         if ((int)strlen(lv_funcs[f]) == nmlen && strncmp(nm, lv_funcs[f], nmlen) == 0) {
           cur->fail = 1;
-          lv_err(c, "functions are not supported in levels equations yet (manual 11.4.10 allows only SQRT/EXP/LOGE/LOG10; linearize by hand or wait for the follow-on)");
+          lv_err(c, "only SQRT, EXP, LOGE and LOG10 may appear in levels equations (manual 11.4.10); linearize this one by hand");
           return -1;
         }
       }
@@ -579,11 +603,44 @@ static int lv_diff(lv_ctx *c, int id, int sign, const char *factors, const lv_su
     if (lv_factor_span(c, fbuf, nd->b) < 0) return lv_err(c, "term too large");
     if (lv_strcat_b(fbuf, ")", LV_TERMBUF) < 0) return lv_err(c, "term too large");
     return lv_diff(c, nd->b, sign, fbuf, ss);
+  case LN_FUNC:
+    /* chain rule: d f(A) = f'(A) dA */
+    strcpy(fbuf, factors);
+    if (fbuf[0] != '\0' && lv_strcat_b(fbuf, "*", LV_TERMBUF) < 0) return lv_err(c, "term too large");
+    if (nd->func == 0) {          /* sqrt: 0.5/sqrt(A) */
+      if (lv_strcat_b(fbuf, "(0.5/", LV_TERMBUF) < 0 || lv_factor_span(c, fbuf, id) < 0 || lv_strcat_b(fbuf, ")", LV_TERMBUF) < 0) return lv_err(c, "term too large");
+    } else if (nd->func == 1) {   /* exp: exp(A) */
+      if (lv_factor_span(c, fbuf, id) < 0) return lv_err(c, "term too large");
+    } else if (nd->func == 2) {   /* loge: 1/A */
+      if (lv_strcat_b(fbuf, "(1/", LV_TERMBUF) < 0 || lv_factor_span(c, fbuf, nd->a) < 0 || lv_strcat_b(fbuf, ")", LV_TERMBUF) < 0) return lv_err(c, "term too large");
+    } else {                      /* log10: 1/(A*loge(10)) */
+      if (lv_strcat_b(fbuf, "(1/(", LV_TERMBUF) < 0 || lv_factor_span(c, fbuf, nd->a) < 0 || lv_strcat_b(fbuf, "*loge(10)))", LV_TERMBUF) < 0) return lv_err(c, "term too large");
+    }
+    return lv_diff(c, nd->a, sign, fbuf, ss);
   case LN_SUM: {
     lv_sumstack ss2 = *ss;
+    const char *colon = memchr(nd->set, ':', nd->setlen);
     if (ss2.nsum >= LV_MAXSUM) return lv_err(c, "sums nested too deeply");
     ss2.sumidx[ss2.nsum] = nd->name; ss2.sumidxlen[ss2.nsum] = nd->namelen;
     ss2.sumset[ss2.nsum] = nd->set; ss2.sumsetlen[ss2.nsum] = nd->setlen;
+    if (colon != NULL) {
+      /* a coefficient condition (COEF(i) op value) becomes an if()
+         factor on every term -- a linear equation's sum carries only
+         mapping conditions; a mapping condition stays on the set */
+      const char *q = colon + 1;
+      int nl = 0;
+      while (lv_isnamec(q[nl])) nl++;
+      if (nl > 0 && lv_find_cf(c, q, nl) >= 0) {
+        ss2.sumsetlen[ss2.nsum] = (int)(colon - nd->set);
+        strcpy(fbuf, factors);
+        if (fbuf[0] != '\0' && lv_strcat_b(fbuf, "*", LV_TERMBUF) < 0) return lv_err(c, "term too large");
+        if (lv_strcat_b(fbuf, "(if(", LV_TERMBUF) < 0 ||
+            lv_ncat_b(fbuf, colon + 1, (int)(nd->set + nd->setlen - colon - 1), LV_TERMBUF) < 0 ||
+            lv_strcat_b(fbuf, ",1))", LV_TERMBUF) < 0) return lv_err(c, "term too large");
+        ss2.nsum++;
+        return lv_diff(c, nd->b, sign, fbuf, &ss2);
+      }
+    }
     ss2.nsum++;
     return lv_diff(c, nd->b, sign, factors, &ss2);
   }
