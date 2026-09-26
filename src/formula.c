@@ -3684,6 +3684,79 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
   return j;
 }
 
+/* general sum condition (tab_parse.c sum_cond_parse): compile both
+   sides over the sum's frame (carried dims + the summed index last) */
+void sum_cond_general_compile(sum_def *sc, sum_cofcond *out, quantifier *frame, dim_t nframe, set_def *sets, array_def *coefs, offset_t ncof, array_def *vars, offset_t nvar, offset_t ncofele, sum_def *sum_cof, int totalsum) {
+  int sd;
+  out->gen=0;
+  if (sc->cond_genop==0) return;
+  for (sd=0; sd<2; sd++) {
+    char ctext[TABREADLINE];
+    int cn;
+    dim_t nops=0;
+    strcpy(ctext,sc->cond_gen[sd]);
+    /* the statement text was normalized as a set token: braces back to
+       parentheses, then the expression normalization the body got */
+    while (str_replace_char(ctext,'{','('));
+    while (str_replace_char(ctext,'}',')'));
+    while (formula_normalize(ctext)==1);
+    leadlag_encode(ctext);
+    cn=str_count_char(ctext,'^')+str_count_char(ctext,'*')+str_count_char(ctext,'/')+str_count_char(ctext,'+')+str_count_char(ctext,'-')
+       +2*(str_count_char(ctext,'(')+str_count_char(ctext,',')+str_count_char(ctext,'{')+str_count_ci(ctext,"$pos")+2)+4;
+    out->gops[sd]=calloc(cn,sizeof(formula_op));
+    out->gcap[sd]=cn;
+    if (!formula_compile(ctext,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,(formula_op *)out->gops[sd],&nops,frame,nframe)) {
+      errmsg("Error: cannot evaluate the sum condition side %s\n",sc->cond_gen[sd]);
+      MPI_Abort(PETSC_COMM_WORLD,1);
+    }
+    out->gnops[sd]=nops;
+  }
+  out->op=sc->cond_genop;
+  out->gen=1;
+}
+
+/* per-thread copies of the condition programs (formula_eval writes its
+   temporaries); master uses the originals */
+void sum_cond_general_thread(const sum_cofcond *cc, void *own[2], int master) {
+  int sd;
+  for (sd=0; sd<2; sd++) {
+    own[sd]=NULL;
+    if (!cc->gen) continue;
+    if (master) own[sd]=cc->gops[sd];
+    else {
+      own[sd]=malloc(cc->gcap[sd]*sizeof(formula_op));
+      memcpy(own[sd],cc->gops[sd],cc->gcap[sd]*sizeof(formula_op));
+    }
+  }
+}
+
+void sum_cond_general_thread_free(const sum_cofcond *cc, void *own[2], int master) {
+  if (!cc->gen||master) return;
+  free(own[0]); free(own[1]);
+}
+
+void sum_cond_general_free(sum_cofcond *cc) {
+  if (!cc->gen) return;
+  free(cc->gops[0]); free(cc->gops[1]);
+  cc->gops[0]=cc->gops[1]=NULL;
+  cc->gen=0;
+}
+
+/* frame[nframe-1].indx must already hold the summed element */
+int sum_cond_general_test(const sum_cofcond *cc, void *own[2], elem_value *elem_vals, set_def *sets, set_element *set_elems, sum_value *sum_vals, quantifier *frame, dim_t nframe, solve_real zerodivide) {
+  solve_real a=formula_eval(elem_vals,sets,set_elems,sum_vals,(formula_op *)own[0],cc->gnops[0],frame,nframe,zerodivide);
+  solve_real b=formula_eval(elem_vals,sets,set_elems,sum_vals,(formula_op *)own[1],cc->gnops[1],frame,nframe,zerodivide);
+  switch (cc->op) {
+  case 1: return a==b;
+  case 2: return a!=b;
+  case 3: return a>b;
+  case 4: return a<b;
+  case 5: return a>=b;
+  case 6: return a<=b;
+  }
+  return 1;
+}
+
 int sum_eval(char *formulain, char *commsyntax,set_def *sets,dim_t nset, set_element *set_elems,elem_value *elem_vals,offset_t ncofvar,offset_t ncofele, array_def *coefs,offset_t ncof, array_def *vars,offset_t nvar,sum_def *sum_cof,int totalsum,sum_value *sum_vals,offset_t nsumele,formula_op *ops,quantifier *arSet1,dim_t fdim,int *sumindx,int j, solve_real zerodivide) {
   char *readitem,*p;//,*p1,interchar2[NAMESIZE],line5[TABREADLINE];
   char interchar[NAMESIZE],line[TABREADLINE],line1[TABREADLINE],line2[TABREADLINE];//,line3[TABREADLINE],line4[TABREADLINE];//,interchar1[NAMESIZE]
@@ -3745,10 +3818,13 @@ int sum_eval(char *formulain, char *commsyntax,set_def *sets,dim_t nset, set_ele
         fdimsumcof=sum_cof[j].size+1;
         sum_cond_rhs_resolve(sum_cof[j].cond_mapid,sum_cof[j].cond_rhs,arSet,fdimsumcof,sets,set_elems,&condpos,&condfix,&condss);
         sum_cond_coef_resolve(&sum_cof[j],arSet,fdimsumcof,sets,set_elems,coefs,ncof,&cofcond);
+        sum_cond_general_compile(&sum_cof[j],&cofcond,arSet,fdimsumcof,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum);
         nops=0;
         if(!formula_compile(p,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,&nops,arSet,fdimsumcof))MPI_Abort(PETSC_COMM_WORLD,1);
         #pragma omp parallel private(l,l1,l2,dcount,superset_pos,vval,arSet2,ops1) shared(elem_vals,arSet,sum_vals)
         {
+        void *gown[2];
+        sum_cond_general_thread(&cofcond,gown,omp_get_thread_num()==0);
         if(omp_get_thread_num()!=0){
           arSet2=malloc(arsetsize*sizeof(quantifier));
           memcpy(arSet2,arSet,arsetsize*sizeof(quantifier));
@@ -3777,10 +3853,12 @@ int sum_eval(char *formulain, char *commsyntax,set_def *sets,dim_t nset, set_ele
             /* coefficient-comparison condition (11.4.11; IF-survey gap 2) */
             if (cofcond.cofid>=0&&!sum_cofcond_test(&cofcond,elem_vals,arSet2,l1)) continue;
             arSet2[sum_cof[j].size].indx=l1;
+            if (cofcond.gen&&!sum_cond_general_test(&cofcond,gown,elem_vals,sets,set_elems,sum_vals,arSet2,fdimsumcof,zerodivide)) continue;
             vval+=formula_eval(elem_vals,sets,set_elems,sum_vals,ops1,nops,arSet2,fdimsumcof,zerodivide);
           }
           sum_vals[*sumindx+l].value=vval;
         }
+        sum_cond_general_thread_free(&cofcond,gown,omp_get_thread_num()==0);
         if(omp_get_thread_num()!=0){
           free(arSet2);
           arSet2=NULL;
@@ -3792,6 +3870,7 @@ int sum_eval(char *formulain, char *commsyntax,set_def *sets,dim_t nset, set_ele
         }
         }
         *sumindx=*sumindx+nloops;
+        sum_cond_general_free(&cofcond);
         strcpy(interchar,sum_cof[j].sumname);
         strcat(interchar,"{");
         for (l=0; l<sum_cof[j].size; l++) {
@@ -3849,10 +3928,13 @@ int sum_eval(char *formulain, char *commsyntax,set_def *sets,dim_t nset, set_ele
         fdimsumcof=sum_cof[j].size+1;
         sum_cond_rhs_resolve(sum_cof[j].cond_mapid,sum_cof[j].cond_rhs,arSet,fdimsumcof,sets,set_elems,&condpos,&condfix,&condss);
         sum_cond_coef_resolve(&sum_cof[j],arSet,fdimsumcof,sets,set_elems,coefs,ncof,&cofcond);
+        sum_cond_general_compile(&sum_cof[j],&cofcond,arSet,fdimsumcof,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum);
         nops=0;
         if(!formula_compile(p,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,&nops,arSet,fdimsumcof))MPI_Abort(PETSC_COMM_WORLD,1);
         #pragma omp parallel private(l,l1,l2,dcount,superset_pos,vval,arSet2,ops1) shared(elem_vals,arSet,sum_vals)
         {
+        void *gown[2];
+        sum_cond_general_thread(&cofcond,gown,omp_get_thread_num()==0);
         if(omp_get_thread_num()!=0){
           arSet2=malloc(arsetsize*sizeof(quantifier));
           memcpy(arSet2,arSet,arsetsize*sizeof(quantifier));
@@ -3881,10 +3963,12 @@ int sum_eval(char *formulain, char *commsyntax,set_def *sets,dim_t nset, set_ele
             /* coefficient-comparison condition (11.4.11; IF-survey gap 2) */
             if (cofcond.cofid>=0&&!sum_cofcond_test(&cofcond,elem_vals,arSet2,l1)) continue;
             arSet2[sum_cof[j].size].indx=l1;
+            if (cofcond.gen&&!sum_cond_general_test(&cofcond,gown,elem_vals,sets,set_elems,sum_vals,arSet2,fdimsumcof,zerodivide)) continue;
             vval+=formula_eval(elem_vals,sets,set_elems,sum_vals,ops1,nops,arSet2,fdimsumcof,zerodivide);
           }
           sum_vals[*sumindx+l].value=vval;//ha_sumele[*sumindx+l2].varval=vval;
         }
+        sum_cond_general_thread_free(&cofcond,gown,omp_get_thread_num()==0);
         if(omp_get_thread_num()!=0){
           free(arSet2);
           arSet2=NULL;
@@ -3896,6 +3980,7 @@ int sum_eval(char *formulain, char *commsyntax,set_def *sets,dim_t nset, set_ele
         }
         }
         *sumindx=*sumindx+nloops;
+        sum_cond_general_free(&cofcond);
         strcpy(interchar,sum_cof[j].sumname);
         strcat(interchar,"{");
         for (l=0; l<sum_cof[j].size; l++) {

@@ -206,7 +206,12 @@ The solver reads a GEMPACK-style TAB subset (statement syntax per [GM]):
   general conditional sums,
   where the condition coefficient may also be a scalar (`(all,i,S: SC >
   1)`, `sum(i,S: SC > 1, …)`) and the word comparisons `EQ NE GT LT GE
-  LE` are normalized to symbols while the condition is read; an
+  LE` are normalized to symbols while the condition is read; a sum
+  condition that is neither a mapping equality nor `COEF(args) op
+  number` (a function call, `ABS[MAKE_D(c,i)] > 0`, or arithmetic on
+  either side) is compiled as two expressions over the sum frame and
+  compared per tuple, in formulas, mapping formulas and equations
+  alike; an
   undeclared condition name or a reference with the wrong argument
   count is a named fatal;
   `zerodivide` defaults honored by `tab_next_statement_resolved()`

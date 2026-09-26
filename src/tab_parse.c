@@ -1485,6 +1485,11 @@ offset_t sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
           p = strtok(p,"{");
           p = strtok(NULL,"}");
           l2=p-line2;
+          /* a group that opens a nested call ("abs{make_d{c,i}}" reads
+             "make_d{c,i" here) is not an index list -- the inner group
+             follows; and a quoted element is not an index (TERM
+             SIND2COM; potential-models round 3) */
+          if (strchr(p,'{')!=NULL||*p=='\"') continue;
           strcpy(argu,p);
           strcat(argu,",");
           l=str_count_ci(argu, ",");
@@ -1647,6 +1652,11 @@ offset_t sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
           p = strtok(p,"{");
           p = strtok(NULL,"}");
           l2=p-line2;
+          /* a group that opens a nested call ("abs{make_d{c,i}}" reads
+             "make_d{c,i" here) is not an index list -- the inner group
+             follows; and a quoted element is not an index (TERM
+             SIND2COM; potential-models round 3) */
+          if (strchr(p,'{')!=NULL||*p=='\"') continue;
           strcpy(argu,p);
           strcat(argu,",");
           l=str_count_ci(argu, ",");
@@ -2388,7 +2398,7 @@ void sum_cond_parse(char *settok, const char *sumindx, int *cond_mapid, char *co
   int mp=0;
   *cond_mapid=0;
   cond_rhs[0]='\0';
-  if (sc!=NULL) { sc->cond_coef[0]='\0'; sc->cond_cofnargs=0; sc->cond_cofop=0; sc->cond_cofval=0; }
+  if (sc!=NULL) { sc->cond_coef[0]='\0'; sc->cond_cofnargs=0; sc->cond_cofop=0; sc->cond_cofval=0; sc->cond_genop=0; }
   colon=strchr(settok,':');
   if (colon==NULL) return;
   *colon='\0';
@@ -2487,6 +2497,31 @@ void sum_cond_parse(char *settok, const char *sumindx, int *cond_mapid, char *co
     sc->cond_cofval=cval;
     return;
 badcond:
+    /* any other comparison of two expressions that involves a call or
+       a bracket (ABS[MAKE_D(c,i)] > 0, TERM SIND2COM; manual 11.4.11):
+       both sides are compiled over the sum's frame at evaluation. A
+       bare index compared with an element stays the named fatal. */
+    if (strpbrk(lhs,"({[")!=NULL) {
+      char *o=NULL,*c;
+      int od=0,ol=1;
+      for (c=lhs; *c!='\0'; c++) {
+        if (*c=='('||*c=='{'||*c=='[') od++;
+        else if (*c==')'||*c=='}'||*c==']') od--;
+        else if (od==0&&(*c=='<'||*c=='>'||*c=='=')) { o=c; break; }
+      }
+      if (o!=NULL&&o>lhs) {
+        ol=((o[0]=='<'&&(o[1]=='='||o[1]=='>'))||(o[0]=='>'&&o[1]=='='))?2:1;
+        if (o[ol]!='\0'&&(size_t)(o-lhs)<sizeof(sc->cond_gen[0])&&strlen(o+ol)<sizeof(sc->cond_gen[1])) {
+          sc->cond_coef[0]='\0';
+          sc->cond_cofnargs=0;
+          sc->cond_genop=(o[0]=='=')?1:(o[0]=='<'&&o[1]=='>')?2:(o[0]=='>'&&o[1]=='=')?5:(o[0]=='<'&&o[1]=='=')?6:(o[0]=='>')?3:4;
+          memcpy(sc->cond_gen[0],lhs,o-lhs);
+          sc->cond_gen[0][o-lhs]='\0';
+          strcpy(sc->cond_gen[1],o+ol);
+          return;
+        }
+      }
+    }
     errmsg("Error: unsupported sum condition '%s'; supported forms are MAPPING(index) = value and COEF[(args)] <op> <numeric const> (manual 11.4.11)\n",lhs);
     MPI_Abort(PETSC_COMM_WORLD,1);
     return;
@@ -2501,6 +2536,8 @@ void sum_cond_coef_resolve(sum_def *sc, quantifier *frame, dim_t nframe, set_def
   offset_t ci;
   dim_t d,l;
   out->cofid=-1;
+  out->gen=0;
+  out->gops[0]=out->gops[1]=NULL;
   if (sc->cond_coef[0]=='\0') return;
   for (ci=0; ci<ncof; ci++) if (strcmp(coefs[ci].cofname,sc->cond_coef)==0) break;
   if (ci==ncof) {

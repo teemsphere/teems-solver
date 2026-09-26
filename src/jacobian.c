@@ -141,6 +141,7 @@ static int sum_prog_build(char *formulain, char *commsyntax, bool skip_linvar_su
         out->cond_mapid=sum_cof[j].cond_mapid;
         sum_cond_rhs_resolve(out->cond_mapid,sum_cof[j].cond_rhs,out->arSet,(dim_t)(sum_cof[j].size+1),sets,set_elems,&out->cond_pos,&out->cond_fixed,&out->cond_ss);
         sum_cond_coef_resolve(&sum_cof[j],out->arSet,(dim_t)(sum_cof[j].size+1),sets,set_elems,coefs,ncof,&out->cofcond);
+        sum_cond_general_compile(&sum_cof[j],&out->cofcond,out->arSet,(dim_t)(sum_cof[j].size+1),sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum);
         nops=0;
         if(!formula_compile(p,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,&nops,out->arSet,(dim_t)(sum_cof[j].size+1)))MPI_Abort(PETSC_COMM_WORLD,1);
         out->ops= (formula_op *) malloc (nops*sizeof(formula_op));
@@ -187,6 +188,8 @@ static void sum_prog_eval(sum_prog *sp, set_def *sets, set_element *set_elems, e
   formula_op *ops1=NULL;
   #pragma omp parallel private(l,l1,l2,dcount,superset_pos,vval,arSet2,ops1) shared(elem_vals,sum_vals,sp)
   {
+  void *gown[2];
+  sum_cond_general_thread(&sp->cofcond,gown,omp_get_thread_num()==0);
   if(omp_get_thread_num()!=0){
     arSet2=malloc((sp->nouter+1)*sizeof(quantifier));
     memcpy(arSet2,sp->arSet,(sp->nouter+1)*sizeof(quantifier));
@@ -215,10 +218,12 @@ static void sum_prog_eval(sum_prog *sp, set_def *sets, set_element *set_elems, e
       /* coefficient-comparison condition (11.4.11; IF-survey gap 2) */
       if (sp->cofcond.cofid>=0&&!sum_cofcond_test(&sp->cofcond,elem_vals,arSet2,l1)) continue;
       arSet2[sp->nouter].indx=l1;
+      if (sp->cofcond.gen&&!sum_cond_general_test(&sp->cofcond,gown,elem_vals,sets,set_elems,sum_vals,arSet2,(dim_t)(sp->nouter+1),zerodivide)) continue;
       vval+=formula_eval(elem_vals,sets,set_elems,sum_vals,ops1,sp->nops,arSet2,(dim_t)(sp->nouter+1),zerodivide);
     }
     sum_vals[sp->base+l].value=vval;
   }
+  sum_cond_general_thread_free(&sp->cofcond,gown,omp_get_thread_num()==0);
   if(omp_get_thread_num()!=0){
     free(arSet2);
     arSet2=NULL;
@@ -1672,6 +1677,11 @@ int eq_sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifier 
             p = strtok(p,"{");
             p = strtok(NULL,"}");
             l2=p-line2;
+            /* a group that opens a nested call ("abs{make_d{c,i}}" reads
+               "make_d{c,i" here) is not an index list -- the inner group
+               follows; and a quoted element is not an index (TERM
+               SIND2COM; potential-models round 3) */
+            if (strchr(p,'{')!=NULL||*p=='\"') continue;
             strcpy(argu,p);
             strcat(argu,",");
             l=str_count_ci(argu, ",");
@@ -1847,6 +1857,11 @@ int eq_sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifier 
             p = strtok(p,"{");
             p = strtok(NULL,"}");
             l2=p-line2;
+            /* a group that opens a nested call ("abs{make_d{c,i}}" reads
+               "make_d{c,i" here) is not an index list -- the inner group
+               follows; and a quoted element is not an index (TERM
+               SIND2COM; potential-models round 3) */
+            if (strchr(p,'{')!=NULL||*p=='\"') continue;
             strcpy(argu,p);
             strcat(argu,",");
             l=str_count_ci(argu, ",");

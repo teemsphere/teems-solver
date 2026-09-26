@@ -259,6 +259,10 @@ typedef struct
   dim_t cond_cofnargs;
   int cond_cofop;              /* 1..6 = eq/ne/gt/lt/ge/le */
   double cond_cofval;
+  /* any other comparison of two expressions (ABS[MAKE_D(c,i)] > 0,
+     SQRT[$POS(c,COM)] > 2): both sides compiled over the sum's frame */
+  int cond_genop;              /* 0 = none, 1..6 as cond_cofop */
+  char cond_gen[2][4*NAMESIZE];
 } sum_def ;
 
 /* a resolved coefficient-comparison sum condition: per-tuple value
@@ -276,6 +280,10 @@ typedef struct
   const set_element *se;
   int op;
   double cval;
+  int gen;                     /* general condition: gops programs (formula_op *) */
+  void *gops[2];
+  dim_t gnops[2];
+  int gcap[2];
 } sum_cofcond ;
 
 typedef struct
@@ -694,6 +702,10 @@ void sum_cond_parse(char *settok, const char *sumindx, int *cond_mapid, char *co
    has no coefficient condition) */
 void sum_cond_coef_resolve(sum_def *sc, quantifier *frame, dim_t nframe, set_def *sets, set_element *set_elems, array_def *coefs, offset_t ncof, sum_cofcond *out);
 int sum_cofcond_test(const sum_cofcond *cc, elem_value *elem_vals, quantifier *frame, offset_t l1);
+void sum_cond_general_compile(sum_def *sc, sum_cofcond *out, quantifier *frame, dim_t nframe, set_def *sets, array_def *coefs, offset_t ncof, array_def *vars, offset_t nvar, offset_t ncofele, sum_def *sum_cof, int totalsum);
+void sum_cond_general_thread(const sum_cofcond *cc, void *own[2], int master);
+void sum_cond_general_thread_free(const sum_cofcond *cc, void *own[2], int master);
+void sum_cond_general_free(sum_cofcond *cc);
 void sum_cond_domain_check(sum_def *sc, set_def *sets);
 dim_t sum_cond_carry_rhs(sum_def *sc, quantifier *arSet, dim_t fdim, dim_t l3, char *interchar, set_def *sets);
 void sum_cond_rhs_resolve(int cond_mapid, const char *cond_rhs, quantifier *frame, dim_t nframe, set_def *sets, set_element *set_elems, int *condpos, offset_t *condfix, dim_t *condss);
@@ -796,6 +808,7 @@ int leadlag_encode(char *line);
 int parse_index_leadlag(char *p,int *leadlag);
 int formula_compile(char *fomulain, set_def *sets,array_def *coefs, offset_t ncof, array_def *vars,offset_t nvar,offset_t ncofele,sum_def *sum_cof,dim_t totalsum,formula_op *ops,dim_t *nops,quantifier *arSet,dim_t fdim);
 solve_real formula_eval(elem_value *record, set_def *sets,set_element *set_elems,sum_value *sum_vals,formula_op *ops,int nops,quantifier *arSet,dim_t fdim, solve_real zerodivide);
+int sum_cond_general_test(const sum_cofcond *cc, void *own[2], elem_value *elem_vals, set_def *sets, set_element *set_elems, sum_value *sum_vals, quantifier *frame, dim_t nframe, solve_real zerodivide);
 int formula_compile_pow(char *fomulain, set_def *sets,int npow,int ipar,array_def *coefs,offset_t ncof, array_def *vars,offset_t nvar,offset_t ncofele,sum_def *sum_cof,int totalsum,formula_op *ops,int *nops,quantifier *arSet,dim_t fdim);
 int formula_compile_muldiv(char *fomulain, set_def *sets,int nmul,int ipar,array_def *coefs,offset_t ncof, array_def *vars,offset_t nvar,offset_t ncofele,sum_def *sum_cof,int totalsum,formula_op *ops,int *nops,quantifier *arSet,dim_t fdim);
 int formula_compile_addsub(char *fomulain, set_def *sets,int nplu,int ipar,array_def *coefs,offset_t ncof, array_def *vars,offset_t nvar,offset_t ncofele,sum_def *sum_cof,int totalsum,formula_op *ops,int *nops,quantifier *arSet,dim_t fdim);
