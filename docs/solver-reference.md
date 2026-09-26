@@ -111,7 +111,11 @@ The solver reads a GEMPACK-style TAB subset (statement syntax per [GM]):
   the condition coefficient must be
   file-Read or an indicator assigned constants only, its narrowing
   quantifier over a declared subset or the front end's synthesized
-  `"ele" & RANGE` set, which the pre-pass resolves itself), and
+  `"ele" & RANGE` set, which the pre-pass resolves itself; the
+  condition may also compare a position, `$POS(i) > 1` or
+  `$POS(i,S) > 2`, where `i` is the builder index and `S` a superset
+  of its source set — an element of the source not in `S` is a named
+  fatal, [GM] 11.5.6), and
   intertemporal set declarations (`(intertemporal)`),
   which mark the time dimension used by the bordered orderings, and
   set products `Set P = A x B` ([GM] 10.1.6; elements `a_b`, first
@@ -211,7 +215,8 @@ The solver reads a GEMPACK-style TAB subset (statement syntax per [GM]):
   number` (a function call, `ABS[MAKE_D(c,i)] > 0`, or arithmetic on
   either side) is compiled as two expressions over the sum frame and
   compared per tuple, in formulas, mapping formulas and equations
-  alike; an
+  alike; `$POS(i,S)` inside a sum (`sum{c,COM: …, $POS(c,COM)}`)
+  carries one index, its second argument names a set; an
   undeclared condition name or a reference with the wrong argument
   count is a named fatal;
   `zerodivide` defaults honored by `tab_next_statement_resolved()`
@@ -1117,15 +1122,16 @@ the CMF (which is a file manifest only), and are echoed in
   (the fatal names the statement's head; teems-R Backsolve/Substitute
   expansion is the usual cause);
   overflow is diagnosed, not silently truncated.
-- **Language forms rejected by design** (named errors): `$POS`, set
-  products (`x`), formula-assigned mappings (a mapping needs a
-  `Read (by_elements)`), formula-computed operands in conditional set
-  builders, LOOP/DISPLAY/TRANSFER/BREAK/CYCLE, `(no_split)`,
-  `linear_name=`, positional `Default` semantics through the R
-  pipeline. Compound `AND/OR/NOT` conditions and `IF` nested inside
-  expressions are not evaluated by the solver; the R front end
-  rewrites the supported `IF` forms into conditional quantifiers,
-  helper coefficients and domain splits before deployment.
+- **Language forms rejected by design** (named errors):
+  LOOP/DISPLAY/TRANSFER/BREAK/CYCLE, `(no_split)`, `linear_name=`,
+  and `$POS` written directly in an equation body (use a coefficient
+  assigned `$POS`). Formula-computed operands in conditional set
+  builders are evaluated by the R front end, which hands the pre-pass
+  a read 0/1 indicator. Compound `AND/OR/NOT` conditions and `IF`
+  nested inside expressions are not evaluated by the solver; the R
+  front end rewrites the supported `IF` forms into conditional
+  quantifiers, helper coefficients and domain splits before
+  deployment.
 - **Version handshake**: the solver image and the R package are
   versioned independently. The image moves 1.0.0 → 1.1.0: everything
   since 1.0.0 is additive for the package that drives it (the `hsl`

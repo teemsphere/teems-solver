@@ -2720,7 +2720,53 @@ int tab_setbuilder_transform(char *fname, cmf_file_entry *iodata, int niodata) {
           break;
         }
         memset(keep,0,sizeof(keep));
-        if (strncmp(opnd,"sum",3)==0) {
+        if (str_find_ci(opnd,"$pos")==0) {
+          /* $POS(i) or $POS(i,S) (manual 11.5.6): the position of each
+             source element in the source set, or in S -- which must hold
+             every element of the index's set (round 3: TERM $pos(c,COM)) */
+          char a1[NAMESIZE],a2[NAMESIZE];
+          char (*sele)[NAMESIZE]=NULL;
+          int ns=0,ok=1;
+          a1[0]=a2[0]='\0';
+          p=opnd+4;
+          while (*p==' '||*p=='('||*p=='{'||*p=='[') p++;
+          tl=0; while (*p!='\0'&&*p!=','&&*p!=')'&&*p!='}'&&*p!=']'&&tl<NAMESIZE-1) { if (*p!=' ') a1[tl++]=*p; p++; }
+          a1[tl]='\0';
+          if (*p==',') {
+            p++;
+            tl=0; while (*p!='\0'&&*p!=')'&&*p!='}'&&*p!=']'&&tl<NAMESIZE-1) { if (*p!=' ') a2[tl++]=*p; p++; }
+            a2[tl]='\0';
+          }
+          if (!sb_eqi(a1,idx)) {
+            errmsg("Error: set builder %s: $POS(%s) must take the builder's index %s (manual 11.5.6)\n",name,a1,idx);
+            ok=0;
+          }
+          if (ok&&a2[0]!='\0') {
+            sele=calloc(SB_MAXELE,NAMESIZE);
+            ns=(sele==NULL)?-1:sb_elements(fname,iodata,niodata,a2,sele);
+            if (ns<=0) {
+              errmsg("Error: set builder %s: cannot resolve the elements of set %s in $POS(%s,%s)\n",name,a2,a1,a2);
+              ok=0;
+            }
+          }
+          for (k=0; ok&&k<nsrc; k++) {
+            double pos=k+1;
+            if (sele!=NULL) {
+              int e;
+              for (e=0; e<ns; e++) if (sb_eqi(sele[e],srcele[k])) break;
+              if (e==ns) {
+                errmsg("Error: set builder %s: element %s of %s is not in %s; $POS(%s,%s) needs %s to range over a subset of %s (manual 11.5.6)\n",name,srcele[k],src,a2,a1,a2,a1,a2);
+                ok=0;
+                break;
+              }
+              pos=e+1;
+            }
+            keep[k]=(char)sb_op_test(pos,op,cval);
+          }
+          free(sele);
+          if (!ok) { free(srcele); rc=-1; break; }
+        }
+        else if (strncmp(opnd,"sum",3)==0) {
           /* sum{j,S2: MAP(j) = idx, COEF2(j)} */
           char sset[NAMESIZE],mapname[NAMESIZE],c2[NAMESIZE];
           char logname[NAMESIZE],header[NAMESIZE],*path;

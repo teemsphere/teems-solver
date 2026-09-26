@@ -1487,9 +1487,11 @@ offset_t sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
           l2=p-line2;
           /* a group that opens a nested call ("abs{make_d{c,i}}" reads
              "make_d{c,i" here) is not an index list -- the inner group
-             follows; and a quoted element is not an index (TERM
+             follows; a quoted element is not an index; and $POS(i,S)
+             carries one index, its second argument names a set (TERM
              SIND2COM; potential-models round 3) */
           if (strchr(p,'{')!=NULL||*p=='\"') continue;
+          if (p-line2>=5&&str_ncmp_ci(p-5,"$pos",4)==0) { char *cm=strchr(p,','); if (cm!=NULL) *cm='\0'; }
           strcpy(argu,p);
           strcat(argu,",");
           l=str_count_ci(argu, ",");
@@ -1654,9 +1656,11 @@ offset_t sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
           l2=p-line2;
           /* a group that opens a nested call ("abs{make_d{c,i}}" reads
              "make_d{c,i" here) is not an index list -- the inner group
-             follows; and a quoted element is not an index (TERM
+             follows; a quoted element is not an index; and $POS(i,S)
+             carries one index, its second argument names a set (TERM
              SIND2COM; potential-models round 3) */
           if (strchr(p,'{')!=NULL||*p=='\"') continue;
+          if (p-line2>=5&&str_ncmp_ci(p-5,"$pos",4)==0) { char *cm=strchr(p,','); if (cm!=NULL) *cm='\0'; }
           strcpy(argu,p);
           strcat(argu,",");
           l=str_count_ci(argu, ",");
