@@ -222,7 +222,11 @@ The solver reads a GEMPACK-style TAB subset (statement syntax per [GM]):
   `zerodivide` defaults honored by `tab_next_statement_resolved()`
   (both GEMPACK zerodivide classes with `-gpzerodivide`); the [GM] 11.5
   intrinsics (ABS/MAX/MIN/SQRT/EXP/LOGE/LOG10/ID01/ID0V/ROUND/TRUNC0/
-  TRUNCB, …) and `$POS` in its five forms ([GM] 11.5.6: index,
+  TRUNCB and the statistical NORMAL/CUMNORMAL/LOGNORMAL/CUMLOGNORMAL/
+  GPERF/GPERFC of [GM] 11.5.3-11.5.5, where the log-normal pair is 0
+  for x <= 0; RANDOM and RAS_MATRIX are not implemented; in levels
+  equations only SQRT/EXP/LOGE/LOG10, [GM] 11.4.10) and `$POS` in its
+  five forms ([GM] 11.5.6: index,
   index in a superset, element literal in a set, mapped index, mapped
   index in a superset; compiled to a per-tuple position operand).
   Element-membership `IF[i in S, ...]` expressions are rewritten by

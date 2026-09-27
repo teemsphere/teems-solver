@@ -285,7 +285,9 @@ static int lv_newnode(lv_ctx *c, lv_kind k) {
 }
 
 static const char *lv_funcs[] = { "sqrt", "exp", "loge", "log10", "abs", "max", "min", "if",
-                                  "id01", "id0v", "round", "trunc0", "truncb", "prod", NULL };
+                                  "id01", "id0v", "round", "trunc0", "truncb", "prod",
+                                  "normal", "cumnormal", "lognormal", "cumlognormal",
+                                  "gperf", "gperfc", "random", NULL };
 
 static int lv_parse_primary(lv_cur *cur) {
   lv_ctx *c = cur->c;

@@ -115,7 +115,11 @@ enum operand_type { OT_ARRAY=0, OT_LINVAR=1, OT_SUM=2, OT_LINVAR2=3,
                        a mapping first, Var1Dims[0].SupSet/SSIndx then lift
                        into a named superset (Var1Dims[0].ADims = the set
                        the position is lifted from) */
-                    OT_POS=50 };
+                    OT_POS=50,
+                    /* statistical functions (manual 11.5.3-11.5.5) */
+                    OT_TEMP_NORMAL=51, OT_TEMP_CUMNORMAL=52,
+                    OT_TEMP_LOGNORMAL=53, OT_TEMP_CUMLOGNORMAL=54,
+                    OT_TEMP_GPERF=55, OT_TEMP_GPERFC=56 };
 
 
 /* ================= cmf_io.c — command (CMF) file and data I/O ========== */

@@ -941,6 +941,21 @@ int formula_compile(char *fomulain, set_def *sets,array_def *coefs, offset_t nco
           ops[*nops].Var1Type=OT_TEMP_TRUNCB;
           fpart1[j-6]='\0';
         }
+    /* statistical functions (manual 11.5.3-11.5.5); the delimiter
+       check keeps "normal" from matching inside cumnormal/lognormal */
+    {
+      static const char *statfn[]={"normal","cumnormal","lognormal","cumlognormal","gperf","gperfc"};
+      static const int stattype[]={OT_TEMP_NORMAL,OT_TEMP_CUMNORMAL,OT_TEMP_LOGNORMAL,OT_TEMP_CUMLOGNORMAL,OT_TEMP_GPERF,OT_TEMP_GPERFC};
+      int sf,sl;
+      for (sf=0; sf<6; sf++) {
+        sl=(int)strlen(statfn[sf]);
+        if (j>=sl&&strncmp(fpart1+j-sl,statfn[sf],sl)==0&&(j==sl||fpart1[j-sl-1]==' '||fpart1[j-sl-1]=='('||fpart1[j-sl-1]=='+'||fpart1[j-sl-1]=='-'||fpart1[j-sl-1]=='*'||fpart1[j-sl-1]=='/'||fpart1[j-sl-1]=='^'||fpart1[j-sl-1]==',')) {
+          ops[*nops].Var1Type=stattype[sf];
+          fpart1[j-sl]='\0';
+          break;
+        }
+      }
+    }
     if (j==2) if (fpart1[j-1]=='f'&&fpart1[j-2]=='i') {
         if(!formula_compile_if(fpart2,sets,2,i,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,nops,arSet,fdim))return 0;
         fpart1[j-2]='\0';
@@ -1109,6 +1124,27 @@ solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,
       }
       if (ops[i].Var1Type==OT_TEMP_TRUNCB) {
         ops[i].TmpVarVal=floor(ops[ops[i].Var1BegAdd].TmpVarVal);
+        break;
+      }
+      /* NORMAL = standard normal density, CUMNORMAL = its distribution
+         function, the LOGNORMAL pair the same for LOGE(x) (x > 0; the
+         log-normal has no mass at x <= 0, so both are 0 there),
+         GPERF/GPERFC = erf/erfc (manual 11.5.4, 11.5.5) */
+      if (ops[i].Var1Type>=OT_TEMP_NORMAL&&ops[i].Var1Type<=OT_TEMP_GPERFC) {
+        double x=(double)ops[ops[i].Var1BegAdd].TmpVarVal,v=0.0,lx;
+        switch (ops[i].Var1Type) {
+        case OT_TEMP_NORMAL: v=0.39894228040143267794*exp(-0.5*x*x); break;
+        case OT_TEMP_CUMNORMAL: v=0.5*erfc(-x*0.70710678118654752440); break;
+        case OT_TEMP_LOGNORMAL:
+          if (x>0.0) { lx=log(x); v=0.39894228040143267794*exp(-0.5*lx*lx)/x; }
+          break;
+        case OT_TEMP_CUMLOGNORMAL:
+          if (x>0.0) v=0.5*erfc(-log(x)*0.70710678118654752440);
+          break;
+        case OT_TEMP_GPERF: v=erf(x); break;
+        case OT_TEMP_GPERFC: v=erfc(x); break;
+        }
+        ops[i].TmpVarVal=(store_real)v;
         break;
       }
       if (ops[i].Var1Type==OT_CONST) {

@@ -131,6 +131,18 @@ int formula_normalize(char *fomulain) {
       break;
     }
   }
+  /* statistical functions (manual 11.5.3-11.5.5) keep function brackets */
+  {
+    static const char *statfn[]={"normal","cumnormal","lognormal","cumlognormal","gperf","gperfc",NULL};
+    int ns=i+1,sf;
+    for (sf=0; statfn[sf]!=NULL; sf++) {
+      if ((int)strlen(statfn[sf])==index-ns&&strncmp(fpart1+ns,statfn[sf],index-ns)==0) {
+        fomulain[p-fomulain]=']';
+        fomulain[index]='[';
+        return 1;
+      }
+    }
+  }
   if (i>-1) {
     i=index-i;
     switch (i) {
