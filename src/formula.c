@@ -789,11 +789,12 @@ int formula_compile(char *fomulain, set_def *sets,array_def *coefs, offset_t nco
     if (j>=3&&strncmp(fpart1+j-3,"max",3)==0&&(j==3||fpart1[j-4]==' '||fpart1[j-4]=='('||fpart1[j-4]=='+'||fpart1[j-4]=='-'||fpart1[j-4]=='*'||fpart1[j-4]=='/'||fpart1[j-4]=='^'||fpart1[j-4]==','))fnmulti=1;
     if (j>=3&&strncmp(fpart1+j-3,"min",3)==0&&(j==3||fpart1[j-4]==' '||fpart1[j-4]=='('||fpart1[j-4]=='+'||fpart1[j-4]=='-'||fpart1[j-4]=='*'||fpart1[j-4]=='/'||fpart1[j-4]=='^'||fpart1[j-4]==','))fnmulti=2;
     if (j>=4&&strncmp(fpart1+j-4,"id0v",4)==0&&(j==4||fpart1[j-5]==' '||fpart1[j-5]=='('||fpart1[j-5]=='+'||fpart1[j-5]=='-'||fpart1[j-5]=='*'||fpart1[j-5]=='/'||fpart1[j-5]=='^'||fpart1[j-5]==','))fnmulti=3;
+    if (j>=6&&strncmp(fpart1+j-6,"random",6)==0&&(j==6||fpart1[j-7]==' '||fpart1[j-7]=='('||fpart1[j-7]=='+'||fpart1[j-7]=='-'||fpart1[j-7]=='*'||fpart1[j-7]=='/'||fpart1[j-7]=='^'||fpart1[j-7]==','))fnmulti=4;
     if (fnmulti>0) {
       char abuf[TABREADLINE];
       offset_t argres[16];
       int nargs=0,k,adepth=0,a0=0,fl,anpow,anmul,anplu;
-      fpart1[j-((fnmulti==3)?4:3)]='\0';
+      fpart1[j-((fnmulti==4)?6:(fnmulti==3)?4:3)]='\0';
       for (k=0;; k++) {
         if(fpart2[k]=='{')adepth++;
         if(fpart2[k]=='}')adepth--;
@@ -835,12 +836,21 @@ int formula_compile(char *fomulain, set_def *sets,array_def *coefs, offset_t nco
         errmsg("Error: ID0V takes exactly 2 arguments: %s\n",fomulain);
         return 0;
       }
+      if(fnmulti==4&&nargs!=2) {
+        errmsg("Error: RANDOM takes exactly 2 arguments (manual 11.5.2): %s\n",fomulain);
+        return 0;
+      }
       if(nargs<2) {
         errmsg("Error: %s takes at least 2 arguments: %s\n",(fnmulti==1)?"MAX":"MIN",fomulain);
         return 0;
       }
       for (k=1; k<nargs; k++) {
-        ops[*nops].Oper=(fnmulti==1)?OP_MAXF:(fnmulti==2)?OP_MINF:OP_ID0VF;
+        ops[*nops].Oper=(fnmulti==1)?OP_MAXF:(fnmulti==2)?OP_MINF:(fnmulti==3)?OP_ID0VF:OP_RANDF;
+        ops[*nops].RandKey=0;
+        if(fnmulti==4) {
+          teems_rand_count++;
+          ops[*nops].RandKey=teems_rand_stmt^((uint64_t)teems_rand_count*0x9E3779B97F4A7C15ULL);
+        }
         ops[*nops].Var1Type=OT_TEMP;
         ops[*nops].Var1BegAdd=(k==1)?argres[0]:(*nops-1);
         ops[*nops].Var2Type=OT_TEMP;
@@ -1065,6 +1075,32 @@ static inline offset_t dims_offset(const dim_addr *D, const quantifier *arSet, d
     if(D[j].Rep) l+=dims_route(D[j].ADims2,D[j].SupSet2,D[j].SSIndx2,D[j].leadlag2,D[j].MapId2,D[j].MapDomSS2,&arSet[j],sets,set_elems);
   }
   return l;
+}
+
+/* RANDOM(a,b) (manual 11.5.2). The draw is a counter-based hash
+   (splitmix64 finalizer) of the seed, the op's statement/occurrence key
+   and the element tuple, not a sequential stream: a Formula re-evaluated
+   at every step, every extrapolation pass and on every rank gives each
+   element the same number, and the numbers are uniform over [a,b) */
+static uint64_t teems_rand_mix(uint64_t x) {
+  x+=0x9E3779B97F4A7C15ULL;
+  x=(x^(x>>30))*0xBF58476D1CE4E5B9ULL;
+  x=(x^(x>>27))*0x94D049BB133111EBULL;
+  return x^(x>>31);
+}
+
+void teems_rand_statement(const char *text) {
+  uint64_t h=0xCBF29CE484222325ULL;
+  for (; *text; text++) { h^=(unsigned char)*text; h*=0x100000001B3ULL; }
+  teems_rand_stmt=h;
+  teems_rand_count=0;
+}
+
+static double teems_rand_draw(uint64_t key, const quantifier *arSet, dim_t fdim) {
+  uint64_t h=teems_rand_mix(key^teems_rand_mix((uint64_t)teems_random_seed));
+  dim_t j;
+  for (j=0; j<fdim; j++) h=teems_rand_mix(h^(((uint64_t)arSet[j].setid<<32)|(uint64_t)arSet[j].indx));
+  return (double)(h>>11)*0x1.0p-53;
 }
 
 solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,sum_value *sum_vals,formula_op *ops,int nops,quantifier *arSet,dim_t fdim, solve_real zerodivide) {
@@ -1335,6 +1371,11 @@ solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,
       if(ops[i].Oper==OP_MAXF)ops[i].TmpVarVal=(eval1>eval2)?eval1:eval2;
       else if(ops[i].Oper==OP_MINF)ops[i].TmpVarVal=(eval1<eval2)?eval1:eval2;
       else ops[i].TmpVarVal=(eval1!=0)?eval1:eval2;
+      break;
+    case OP_RANDF:
+      eval1=ops[ops[i].Var1BegAdd].TmpVarVal;
+      eval2=ops[ops[i].Var2BegAdd].TmpVarVal;
+      ops[i].TmpVarVal=(store_real)(eval1+(eval2-eval1)*teems_rand_draw(ops[i].RandKey,arSet,fdim));
       break;
     default:
       if(ops[i].Var1Type==OT_ARRAY) {
@@ -2109,6 +2150,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
         while (str_replace_char(line, '{', '('));
         while (str_replace_char(line, '}', ')'));
         strcpy(linecopy,line);
+        teems_rand_statement(linecopy);
         totalsum=str_count_ci(line, "sum(");
         neqsign=str_count_char(line, '=');
         readitem = strtok(line,"=");
@@ -3146,6 +3188,7 @@ offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_el
     while (str_replace_char(line, '{', '('));
     while (str_replace_char(line, '}', ')'));
     strcpy(linecopy,line);
+    teems_rand_statement(linecopy);
     readitem = strtok(line,"=");
     fdim=str_count_char(readitem, '(');
     if (fdim==1) {
@@ -3469,6 +3512,7 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
     while (str_replace_char(line, '{', '('));
     while (str_replace_char(line, '}', ')'));
     strcpy(linecopy,line);
+    teems_rand_statement(linecopy);
     readitem = strtok(line,"=");
     fdim=str_count_char(readitem, '(');
     if (fdim==1) {
@@ -4132,6 +4176,7 @@ offset_t assertions_execute(char *fname,set_def *sets,dim_t nset,set_element *se
     while (str_replace_char(line, '{', '('));
     while (str_replace_char(line, '}', ')'));
     strcpy(linecopy,line);
+    teems_rand_statement(linecopy);
     /* leading (all,index,SET) quantifiers */
     quantifier *arSet= (quantifier *) calloc (4*MAXVARDIM+1,sizeof(quantifier));
     nq=0;

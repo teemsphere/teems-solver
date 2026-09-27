@@ -224,7 +224,10 @@ The solver reads a GEMPACK-style TAB subset (statement syntax per [GM]):
   intrinsics (ABS/MAX/MIN/SQRT/EXP/LOGE/LOG10/ID01/ID0V/ROUND/TRUNC0/
   TRUNCB and the statistical NORMAL/CUMNORMAL/LOGNORMAL/CUMLOGNORMAL/
   GPERF/GPERFC of [GM] 11.5.3-11.5.5, where the log-normal pair is 0
-  for x <= 0; RANDOM and RAS_MATRIX are not implemented; in levels
+  for x <= 0; RANDOM(a,b) of [GM] 11.5.2, uniform over [a,b) and a
+  hash of `-random_seed`, the statement, the occurrence and the element,
+  so a re-evaluated formula draws the same numbers at every step, pass
+  and rank; RAS_MATRIX is not implemented; in levels
   equations only SQRT/EXP/LOGE/LOG10, [GM] 11.4.10) and `$POS` in its
   five forms ([GM] 11.5.6: index,
   index in a superset, element literal in a set, mapped index, mapped
@@ -1020,6 +1023,7 @@ needs corpus calibration.
 | `-solmed <name>` | `Gragg` | solution method (§5) |
 | `-step1/-step2/-step3` | 2/4/8 | Gragg step counts (all odd or all even) |
 | `-single_run {0,1}` | 0 | Euler/Gragg: one pass of `-step1` steps, no Richardson extrapolation (GEMPACK `method = euler; steps = N;`); accuracy estimates are reported as unavailable, updated data are that pass's path values; ignored for Johansen, a named fatal with the Runge–Kutta methods; `stats.json` records `"single_run"` |
+| `-random_seed n` | 1 | seed of RANDOM(a,b) ([GM] 11.5.2); the same seed reproduces every draw (GEMPACK's `randomize = yes`, a new sequence per run, is not the default); `stats.json` records `"random_seed"` |
 | `-nsubints n` | 1 | shock subintervals |
 | `-laA/-laDi/-laD n` | 2 (teems-R: 300/500/200) | workspace sizing, % of nnz |
 | `-fastrefac {0,1}` | 0 | all matrix methods: analyse once, fast refactorize per step (MA48 JOB=2 / MP48 FACT_JOB=2); LU auto-grows `laA` (§6) |

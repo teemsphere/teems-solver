@@ -196,6 +196,7 @@ static void ordering_stats_write(cmf_file_entry *iodata, int niodata, int noutda
     else fprintf(fp,"    \"steps\": [%d],\n",steps1);
     fprintf(fp,"    \"subintervals\": %ld,\n",ropt->subints);
     fprintf(fp,"    \"single_run\": %s,\n",teems_single_run?"true":"false");
+    fprintf(fp,"    \"random_seed\": %ld,\n",teems_random_seed);
     if(isrk)fprintf(fp,"    \"adaptive\": %d,\n    \"eps_tolerance\": %g,\n    \"max_retries\": %d,\n    \"retry_adjust\": %g,\n    \"rk_chart\": \"%s\",\n    \"rk_norm\": \"%s\",\n    \"rk_controller\": \"%s\",\n    \"rk_scope\": \"%s\",\n    \"rk_h0\": %g,\n",ropt->adaptive,ropt->epstol,ropt->maxretries,ropt->retryadj,ropt->rk_chart==RK_CHART_LOG?"log":"percent",ropt->rk_norm==RK_NORM_RMS?"rms":"max",ropt->rk_ctrl==RK_CTRL_PI?"pi":"std",ropt->rk_scope==RK_SCOPE_ALL?"all":"pct",ropt->rk_h0);
     else fprintf(fp,"    \"adaptive\": null,\n    \"eps_tolerance\": null,\n    \"max_retries\": null,\n    \"retry_adjust\": null,\n    \"rk_chart\": null,\n    \"rk_norm\": null,\n    \"rk_controller\": null,\n    \"rk_scope\": null,\n    \"rk_h0\": null,\n");
     fprintf(fp,"    \"laA\": %ld,\n    \"laDi\": %ld,\n    \"laD\": %ld,\n",ropt->laA,ropt->laDi,ropt->laD);
@@ -1082,6 +1083,18 @@ int main(int argc,char **args) {
   if(steps3==0)steps3=8;
   PetscOptionsGetInt(NULL,NULL,"-single_run",&teems_single_run,NULL);
   teems_single_run=(teems_single_run!=0);
+  /* -random_seed N: seed of RANDOM(a,b) (manual 11.5.2); the same seed
+     reproduces every draw */
+  {
+    PetscInt rs=1;
+    PetscBool rset=PETSC_FALSE;
+    PetscOptionsGetInt(NULL,NULL,"-random_seed",&rs,&rset);
+    if(rset&&rs<0) {
+      errmsg("Error: -random_seed must be a non-negative integer, got %ld\n",(long)rs);
+      MPI_Abort(PETSC_COMM_WORLD,1);
+    }
+    teems_random_seed=(long)rs;
+  }
   section_threads=0;
   max_threads=1;
   PetscOptionsGetInt(NULL,NULL,"-maxthreads",&max_threads,NULL);

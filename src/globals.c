@@ -24,6 +24,12 @@ int steps1, steps2, steps3;
 /* -single_run 1: one multi-step Euler/Gragg pass over -step1 steps, no
    Richardson extrapolation (GEMPACK "method = euler; steps = N;") */
 int teems_single_run=0;
+/* RANDOM (manual 11.5.2): a value is a hash of the seed, the statement
+   text, the occurrence in the statement and the element tuple, so every
+   re-evaluation (steps, passes, ranks) draws the same number */
+long teems_random_seed=1;
+uint64_t teems_rand_stmt=0;
+int teems_rand_count=0;
 MPI_Comm node_comm, node_tail_comm;
 char scratch_dir[NAMESIZE] = "/tmp/";
 backsolve_def *backsolves = NULL;

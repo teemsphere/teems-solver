@@ -1058,6 +1058,7 @@ static void stmt_prog_build_one(char *line, stmt_prog *stp, char *commsyntax,
       else isinproc=true;
       stp->inproc=isinproc;
       if(isinproc) {
+        teems_rand_statement(line1);
         strcpy(line,line1);
         readitem=line;
         strcpy(sumsyntax,"sum(");

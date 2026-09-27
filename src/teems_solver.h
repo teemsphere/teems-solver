@@ -8,6 +8,7 @@
 #include <sys/time.h>
 #include <ctype.h>
 #include <math.h>
+#include <stdint.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
@@ -68,6 +69,12 @@ extern int max_threads;
 extern double step_ratio2,step_ratio3,extrap_w1,extrap_w2,extrap_w3;
 extern int steps1,steps2,steps3;
 extern int teems_single_run;
+/* RANDOM (manual 11.5.2): -random_seed, and the key of the statement
+   being compiled with its running RANDOM occurrence count */
+extern long teems_random_seed;
+extern uint64_t teems_rand_stmt;
+extern int teems_rand_count;
+void teems_rand_statement(const char *text);
 extern MPI_Comm node_comm,node_tail_comm;
 extern char scratch_dir[NAMESIZE];
 
@@ -101,6 +108,7 @@ enum bound_type { BT_NONE=0, BT_GE=1, BT_GT=2, BT_LE=3, BT_LT=4 };
 enum op_code { OP_LOAD=0, OP_MUL=1, OP_DIV=2, OP_ADD=3, OP_SUB=4, OP_POW=5,
                OP_MAXF=61, OP_MINF=62, OP_ID0VF=63, /* multi-arg intrinsics
                (manual 11.5/11.5.1): pairwise folds over compiled temps */
+               OP_RANDF=64, /* RANDOM(a,b) (manual 11.5.2), keyed by RandKey */
                OP_IF_EQ=71, OP_IF_GT=72, OP_IF_LT=73, OP_IF_NE=74,
                OP_IF_LE=75, OP_IF_GE=76 };
 /* formula_op operand types (Var1Type/Var2Type/Var3Type) */
@@ -801,6 +809,9 @@ typedef struct
   offset_t Var3BegAdd;
   dim_addr Var3Dims[MAXVARDIM];
   store_real Var3Val;
+  /* RANDOM(a,b): statement and occurrence key, mixed with the seed and
+     the element tuple at evaluation (formula.c teems_rand_draw) */
+  uint64_t RandKey;
   /* compile-time only (generated temp name); kept last and short so the
      eval-hot fields above stay cache-dense */
   char TmpVarName[64];
