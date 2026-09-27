@@ -1,6 +1,109 @@
 #include <teems_solver.h>
 #include <errno.h>
 
+/* Shock and closure files follow the GEMPACK command-file rules (manual
+   20.7): "!" comments to the end of the line, every statement ends in
+   ";", an unknown keyword is an error. The TAB scan skips any line that
+   does not open the wanted statement; on these two files that dropped
+   junk, a statement with no ";" and everything after a ";" in silence
+   and the run exited 0 (fuzz batch 14). */
+typedef struct {
+  const char *file;
+  const char *expect;
+  const char *const *also;
+} strict_spec;
+
+static const char *const closure_also[]={"rest endogenous",NULL};
+static const char *const shock_also[]={NULL};
+static const strict_spec closure_strict={"closure","an \"exogenous\" or \"rest endogenous\" statement",closure_also};
+static const strict_spec shock_strict={"shock","a \"shock\" statement",shock_also};
+
+static char *strict_getline(char *line,int size,FILE *f,long *pos) {
+  char *p;
+  size_t len;
+  int c;
+  *pos=ftell(f);
+  if (fgets(line,size,f)==NULL) return NULL;
+  if (*pos==0&&strncmp(line,"\xEF\xBB\xBF",3)==0) memmove(line,line+3,strlen(line+3)+1);
+  len=strlen(line);
+  p=strchr(line,'!');
+  if (p!=NULL) {
+    if (len>0&&line[len-1]!='\n') {
+      while ((c=fgetc(f))!=EOF&&c!='\n');
+    }
+    p[0]='\n';
+    p[1]='\0';
+  }
+  len=0;
+  while (line[len]==' '||line[len]=='\t') len++;
+  if (len>0) memmove(line,line+len,strlen(line+len)+1);
+  return line;
+}
+
+static int strict_blank(const char *s) {
+  for (; *s!='\0'; s++) if (!isspace((unsigned char)*s)) return 0;
+  return 1;
+}
+
+static int strict_keyword(const char *line,const char *kw) {
+  size_t i;
+  for (i=0; kw[i]!='\0'; i++) {
+    if (kw[i]==' ') {
+      if (line[i]!=' '&&line[i]!='\t') return 0;
+    } else if (tolower((unsigned char)line[i])!=kw[i]) {
+      return 0;
+    }
+  }
+  return line[i]=='\0'||line[i]==';'||isspace((unsigned char)line[i]);
+}
+
+static const char *strict_also(const char *line,const strict_spec *strict) {
+  int i;
+  for (i=0; strict->also[i]!=NULL; i++) if (strict_keyword(line,strict->also[i])) return strict->also[i];
+  return NULL;
+}
+
+static char *strict_fail(FILE *f,long pos,const strict_spec *strict,const char *what,const char *text) {
+  char shown[81];
+  long lineno=1,i;
+  int c;
+  size_t k;
+  if (pos>=0&&fseek(f,0,SEEK_SET)==0) {
+    for (i=0; i<pos&&(c=fgetc(f))!=EOF; i++) if (c=='\n') lineno++;
+  } else {
+    lineno=-1;
+  }
+  while (*text==' '||*text=='\t'||*text=='\r'||*text=='\n') text++;
+  for (k=0; k<sizeof(shown)-1&&text[k]!='\0'&&text[k]!='\n'&&text[k]!='\r'; k++) {
+    shown[k]=isprint((unsigned char)text[k])?text[k]:'?';
+  }
+  shown[k]='\0';
+  errmsg("Error: %s at line %ld of the %s file (expected %s): %s\n",what,lineno,strict->file,strict->expect,shown);
+  MPI_Abort(PETSC_COMM_WORLD,1);
+  return NULL;
+}
+
+/* consumes the rest of a skipped statement (strict_also) up to its ";" */
+static int strict_skip(char *line,FILE *f,long pos,const strict_spec *strict,const char *kw) {
+  long startpos=pos;
+  char *n;
+  do {
+    n=strchr(line,';');
+    if (n!=NULL) {
+      if (!strict_blank(n+1)) {
+        strict_fail(f,pos,strict,"content after \";\" (one statement per line)",n+1);
+        return 0;
+      }
+      return 1;
+    }
+  } while (strict_getline(line,TABLINESIZE,f,&pos)!=NULL);
+  strict_fail(f,startpos,strict,"statement has no terminating \";\"",kw);
+  return 0;
+}
+
+static char *tab_next_statement_raw(char *commsyntax, FILE *filehandle, char *readline,offset_t rlinesize,const strict_spec *strict);
+
+
 /* bounded in-place replace-all used by the declaration parsers' set-symbol
    substitution: see the definition below str_replace_all. */
 
@@ -3083,7 +3186,7 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
         MPI_Abort(PETSC_COMM_WORLD,1);
         return -1;
       }
-  while (tab_next_statement(commsyntax,filehandle,line,DATREADLINE)) {
+  while (tab_next_statement_raw(commsyntax,filehandle,line,DATREADLINE,&shock_strict)) {
     str_replace_char_all(line,'\r',' ');
     str_replace_char_all(line,'\n',' ');
     k1=0;
@@ -5993,71 +6096,46 @@ dim_t subset_map_build(set_element *set_elems, set_def *sets,dim_t nset,offset_t
 }
 
 char *closure_next_statement(char *commsyntax, FILE *filehandle, char *readline) {
-  int check1=0,i,count1=0;
-  while (commsyntax[count1] != '\0') {
-    count1++;
-  }
-  char uppercomsyn[TABLINESIZE],*n,*p;
-  char line[TABLINESIZE],linecomm[TABLINESIZE],upperlinecomm[TABLINESIZE],*finditem=";";//,linecopy[TABLINESIZE+2]
-  for (i=0; i<count1; i++) {
-    uppercomsyn[ i ] = toupper( (int) commsyntax[ i ] );
-  }
+  const strict_spec *strict=&closure_strict;
+  const char *kw;
+  char *n;
+  char line[TABLINESIZE],*finditem=";";
+  long pos,startpos;
   strcpy(readline,"\0");
 
-  while (fgets(line,TABLINESIZE,filehandle)) {
+  while (strict_getline(line,TABLINESIZE,filehandle,&pos)) {
     while (str_replace_all(line,"  ", " "));
-    if (line[0]==' ') {
-      memmove(line,&line[0]+1,strlen(line)-1);
+    if (strict_blank(line)) continue;
+    if ((kw=strict_also(line,strict))!=NULL) {
+      if (!strict_skip(line,filehandle,pos,strict,kw)) return NULL;
+      continue;
     }
-    strncpy(linecomm,line,count1);
-    for ( i = 0; i<count1; i++) {
-      upperlinecomm[ i ] = toupper( (int) linecomm[ i ] );
+    if (!strict_keyword(line,commsyntax)) return strict_fail(filehandle,pos,strict,"unrecognised content",line);
+    startpos=pos;
+    /* same held-back character as the continuation join below: a
+       statement filling one whole line left closure_read no room */
+    if (strlen(line)+1>=(size_t)TABREADLINE) {
+      errmsg("Error: %s statement too long (exceeds %ld chars): %.120s ...\n",commsyntax,(long)TABREADLINE,line);
+      MPI_Abort(PETSC_COMM_WORLD,1);
+      return NULL;
     }
-    if (strncmp(upperlinecomm,uppercomsyn,count1) == 0&&check1==0) {
-      p=strpbrk(line,"!");
-      while(p!=NULL) {
-        line[p-line]='\0';
-        p=strpbrk(line,"!");
-      }
-      check1=1;
-      n=strstr(line,finditem);//ha_cgefendofc
-      /* same held-back character as the continuation join below: a
-         statement filling one whole line left closure_read no room */
-      if (strlen(line)+1>=(size_t)TABREADLINE) {
-        errmsg("Error: %s statement too long (exceeds %ld chars): %.120s ...\n",commsyntax,(long)TABREADLINE,line);
+    strcpy(readline,line);
+    n=strstr(line,finditem);
+    while (n==NULL) {
+      if (strict_getline(line,TABLINESIZE,filehandle,&pos)==NULL) return strict_fail(filehandle,startpos,strict,"statement has no terminating \";\"",readline);
+      n=strstr(line,finditem);
+      /* the continuation join had no bound on readline (fuzz batch 13);
+         one character is held back for closure_read, which spaces the
+         terminator (";" -> " ;") in the same buffer */
+      if (strlen(readline)+strlen(line)+1>=(size_t)TABREADLINE) {
+        errmsg("Error: %s statement too long (exceeds %ld chars): %.120s ...\n",commsyntax,(long)TABREADLINE,readline);
         MPI_Abort(PETSC_COMM_WORLD,1);
         return NULL;
       }
-      if (n==NULL) {
-        strcpy(readline,line);
-      } else {
-        strcpy(readline,line);
-        return readline;
-      }
-      while (fgets(line,TABLINESIZE,filehandle)) {
-        p=strpbrk(line,"!");
-        while(p!=NULL) {
-          line[p-line]='\0';
-          p=strpbrk(line,"!");
-        }
-        n=strstr(line,finditem);//ha_cgefendofc
-        /* the continuation join had no bound on readline (fuzz batch 13);
-           one character is held back for closure_read, which spaces the
-           terminator (";" -> " ;") in the same buffer */
-        if (strlen(readline)+strlen(line)+1>=(size_t)TABREADLINE) {
-          errmsg("Error: %s statement too long (exceeds %ld chars): %.120s ...\n",commsyntax,(long)TABREADLINE,readline);
-          MPI_Abort(PETSC_COMM_WORLD,1);
-          return NULL;
-        }
-        if (n==NULL) {
-          strcat(readline, line);
-        } else {
-          strcat(readline, line);
-          return readline;
-        }
-      }
-
+      strcat(readline, line);
     }
+    if (!strict_blank(n+1)) return strict_fail(filehandle,pos,strict,"content after \";\" (one statement per line)",n+1);
+    return readline;
   }
   return NULL;
 }
@@ -6106,8 +6184,10 @@ static int backsolve_eq_reject(char *commsyntax, char *stmt) {
   return hit;
 }
 
-static char *tab_next_statement_raw(char *commsyntax, FILE *filehandle, char *readline,offset_t rlinesize) {
+static char *tab_next_statement_raw(char *commsyntax, FILE *filehandle, char *readline,offset_t rlinesize,const strict_spec *strict) {
   int check1=0,i,count1=0;
+  long pos=0,startpos=0;
+  const char *kw;
   while (commsyntax[count1] != '\0') {
     count1++;
   }
@@ -6118,10 +6198,19 @@ static char *tab_next_statement_raw(char *commsyntax, FILE *filehandle, char *re
   }
   strcpy(readline,"\0");
 
-  while (fgets(line,TABLINESIZE,filehandle)) {
+  while (strict?strict_getline(line,TABLINESIZE,filehandle,&pos):fgets(line,TABLINESIZE,filehandle)) {
     while (str_replace_all(line,"  ", " "));
     if (line[0]==' ') {
       memmove(line,&line[0]+1,strlen(line)-1);
+    }
+    if (strict) {
+      if (strict_blank(line)) continue;
+      if ((kw=strict_also(line,strict))!=NULL) {
+        if (!strict_skip(line,filehandle,pos,strict,kw)) return NULL;
+        continue;
+      }
+      if (!strict_keyword(line,commsyntax)) return strict_fail(filehandle,pos,strict,"unrecognised content",line);
+      startpos=pos;
     }
     strncpy(linecomm,line,count1);
     for ( i = 0; i<count1; i++) {
@@ -6135,9 +6224,10 @@ static char *tab_next_statement_raw(char *commsyntax, FILE *filehandle, char *re
       } else {
         strcpy(readline,line);
           if(strlen(readline)>=((size_t)(9*rlinesize/10)))printf("Warning: statement near the line-buffer limit (%ld of %ld bytes) in tab_next_statement; increase TABREADLINE/DATREADLINE\n",strlen(readline),rlinesize);
+        if (strict&&!strict_blank(n+1)) return strict_fail(filehandle,pos,strict,"content after \";\" (one statement per line)",n+1);
         return readline;
       }
-      while (fgets(line,TABLINESIZE,filehandle)) {
+      while (strict?strict_getline(line,TABLINESIZE,filehandle,&pos):fgets(line,TABLINESIZE,filehandle)) {
         n=strstr(line,finditem);//ha_cgefendofc
         /* the continuation join had no bound on readline (fuzz batch 13) */
         if (strlen(readline)+strlen(line)>=(size_t)rlinesize) {
@@ -6150,9 +6240,11 @@ static char *tab_next_statement_raw(char *commsyntax, FILE *filehandle, char *re
         } else {
           strcat(readline, line);
           if(strlen(readline)>=((size_t)(9*rlinesize/10)))printf("Warning: statement near the line-buffer limit (%ld of %ld bytes) in tab_next_statement; increase TABREADLINE/DATREADLINE\n",strlen(readline),rlinesize);
+          if (strict&&!strict_blank(n+1)) return strict_fail(filehandle,pos,strict,"content after \";\" (one statement per line)",n+1);
           return readline;
         }
       }
+      if (strict) return strict_fail(filehandle,startpos,strict,"statement has no terminating \";\"",readline);
 
     }
   }
@@ -6160,7 +6252,7 @@ static char *tab_next_statement_raw(char *commsyntax, FILE *filehandle, char *re
 }
 char *tab_next_statement(char *commsyntax, FILE *filehandle, char *readline,offset_t rlinesize) {
   char *r;
-  while ((r=tab_next_statement_raw(commsyntax,filehandle,readline,rlinesize))!=NULL) {
+  while ((r=tab_next_statement_raw(commsyntax,filehandle,readline,rlinesize,NULL))!=NULL) {
     if (backsolve_eq_reject(commsyntax,r)) continue;
     return r;
   }
@@ -6277,7 +6369,7 @@ offset_t backsolve_read(char *fname, array_def *vars, offset_t nvar, closure_ent
     errmsg("Error: cannot open %s\n",fname);
     return -1;
   }
-  while (tab_next_statement_raw(commsyntax,filehandle,line,TABREADLINE)) {
+  while (tab_next_statement_raw(commsyntax,filehandle,line,TABREADLINE,NULL)) {
     while (str_replace_all(line,"\n"," "));
     while (str_replace_all(line,"\r"," "));
     while (str_replace_all(line,"  "," "));
@@ -6346,7 +6438,7 @@ offset_t backsolve_read(char *fname, array_def *vars, offset_t nvar, closure_ent
      perform; teems-R resolves them during model preparation */
   strcpy(commsyntax,"omit");
   filehandle=teems_fopen(fname,"r");
-  if (tab_next_statement_raw(commsyntax,filehandle,line,TABREADLINE)!=NULL) {
+  if (tab_next_statement_raw(commsyntax,filehandle,line,TABREADLINE,NULL)!=NULL) {
     errmsg("Error: the TAB file contains an omit statement; omission is resolved during model preparation (ems_model(omit=)) and must not reach the solver\n");
     fclose(filehandle);
     return -1;
@@ -6354,7 +6446,7 @@ offset_t backsolve_read(char *fname, array_def *vars, offset_t nvar, closure_ent
   fclose(filehandle);
   strcpy(commsyntax,"substitute");
   filehandle=teems_fopen(fname,"r");
-  if (tab_next_statement_raw(commsyntax,filehandle,line,TABREADLINE)!=NULL) {
+  if (tab_next_statement_raw(commsyntax,filehandle,line,TABREADLINE,NULL)!=NULL) {
     errmsg("Error: the TAB file contains a substitute statement; substitution is resolved during model preparation (ems_model(backsolve=)) and must not reach the solver\n");
     fclose(filehandle);
     return -1;
@@ -6385,7 +6477,7 @@ int backsolve_validate_refs(char *fname, array_def *vars) {
     free(eqfound);
     return -1;
   }
-  while (tab_next_statement_raw(commsyntax,filehandle,line,TABREADLINE)) {
+  while (tab_next_statement_raw(commsyntax,filehandle,line,TABREADLINE,NULL)) {
     if (strstr(line,"(default")!=NULL) continue;
     if (!tab_equation_name(line,eqname)) continue;
     hit=-1;
