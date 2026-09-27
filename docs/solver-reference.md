@@ -285,7 +285,11 @@ The solver reads a GEMPACK-style TAB subset (statement syntax per [GM]):
   `shocks_read()` into per-element `closure_entry` records.
 
 Shock statement values follow GEMPACK-standard ordering (first
-subscript varies fastest; fixed dimensions collapsed to size 1).
+subscript varies fastest; fixed dimensions collapsed to size 1). A
+statement without an argument list covers the whole variable ([GM]
+24.1, 24.6.2): `Shock v = uniform x;` shocks every exogenous component,
+and `Shock v = x1 x2 …;` needs exactly one value per component, in
+component order ([GM] 66.4); any other count is a named fatal.
 Startup notes remind that intertemporal variables should be declared
 with minimal dimensionality to keep the border (netcut) small;
 element-level classification (§3 phase 7) borders only the elements a

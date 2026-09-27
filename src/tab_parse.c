@@ -3250,13 +3250,51 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
             MPI_Abort(PETSC_COMM_WORLD,1);
             return -1;
           }
-          k1=str_rfind_ci(readitem,"uniform");
-          if(k1!=-1){
-            CL_SHOCK(vars[j].offset)=teems_value_checked(readitem+k1+1,"shock value",vars[j].cofname)/subints;
-          }else{
-            CL_SHOCK(vars[j].offset)=teems_value_checked(readitem,"shock value",vars[j].cofname)/subints;
+          /* no argument list = the whole variable (GEMPACK 24.1, 24.6.2):
+             "uniform" shocks every exogenous component, a value list
+             gives one value per component in component order, first
+             index fastest (66.4). Only the first element used to be
+             shocked, so "Shock pfactwld = uniform 1;" moved one period
+             of pfactwld(ALLTIME) and left the rest unshocked. */
+          {
+            offset_t nel=(vars[j].nelem>0)?vars[j].nelem:1,e,rem,pos;
+            dim_t d;
+            k1=str_rfind_ci(readitem,"uniform");
+            if(k1!=-1){
+              val=teems_value_checked(readitem+k1+1,"shock value",vars[j].cofname);
+              for (e=0; e<nel; e++) if (CL_EXO(vars[j].offset+e)) {
+                CL_SHOCK(vars[j].offset+e)=val/subints;
+                l=l+1;
+              }
+            }else{
+              char *tok=strtok(readitem," ");
+              for (e=0; e<nel; e++) {
+                if (tok==NULL) {
+                  errmsg("Error: shock statement for variable %s supplies %ld value(s) for its %ld components; give one value per component or use \"uniform\" (shock file)\n",vars[j].cofname,(long)e,(long)nel);
+                  fclose(filehandle);
+                  MPI_Abort(PETSC_COMM_WORLD,1);
+                  return -1;
+                }
+                val=teems_value_checked(tok,"shock value",vars[j].cofname);
+                rem=e;
+                pos=0;
+                for (d=0; d<vars[j].size; d++) {
+                  offset_t sz=sets[vars[j].setid[d]].size;
+                  pos+=(rem%sz)*vars[j].strides[d];
+                  rem/=sz;
+                }
+                CL_SHOCK(vars[j].offset+pos)=val/subints;
+                if (CL_EXO(vars[j].offset+pos)) l=l+1;
+                tok=strtok(NULL," ");
+              }
+              if (tok!=NULL) {
+                errmsg("Error: shock statement for variable %s supplies more values than its %ld components (shock file)\n",vars[j].cofname,(long)nel);
+                fclose(filehandle);
+                MPI_Abort(PETSC_COMM_WORLD,1);
+                return -1;
+              }
+            }
           }
-          l=l+1;
           break;
         }
       /* previously fell through in silence: the shock never landed and
