@@ -457,6 +457,49 @@ static void stats_condest_patch(cmf_file_entry *iodata, int niodata, int noutdat
   free(buf);
 }
 
+/* solve-accuracy record (manual 30.1.5): maximum residual ratio over
+   every checked solve, patched into stats.json like la_used; null when
+   the matrix method releases A before the solve (no solve checked) */
+static void stats_resid_patch(cmf_file_entry *iodata, int niodata, int noutdata, int nsoldata,
+                              double rmax, long solves, long warns, long skipped) {
+  char statspath[TABREADLINE+16];
+  int i;
+  for (i=niodata+noutdata; i<niodata+noutdata+nsoldata; i++) {
+    if (strcmp("solfiles",iodata[i].logname)==0)break;
+  }
+  if(i<niodata+noutdata+nsoldata)strcpy(statspath,iodata[i].filname);
+  else strcpy(statspath,"solution");
+  strcat(statspath,".stats.json");
+  FILE *fp=teems_fopen_opt(statspath,"r");
+  if (fp==NULL)return;
+  fseek(fp,0,SEEK_END);
+  long len=ftell(fp);
+  fseek(fp,0,SEEK_SET);
+  char *buf=(char *) malloc (len+1);
+  size_t rd=fread(buf,1,len,fp);
+  fclose(fp);
+  if((long)rd!=len) {
+    free(buf);
+    return;
+  }
+  buf[len]='\0';
+  char *end=strrchr(buf,'}');
+  if(end==NULL) {
+    free(buf);
+    return;
+  }
+  *end='\0';
+  fp=fopen(statspath,"w");
+  if (fp==NULL) {
+    free(buf);
+    return;
+  }
+  if(solves>0)fprintf(fp,"%s,\n  \"residual\": {\"max_residual_ratio\": %.6e, \"solves\": %ld, \"warnings\": %ld, \"unchecked_solves\": %ld}\n}\n",buf,rmax,solves,warns,skipped);
+  else fprintf(fp,"%s,\n  \"residual\": {\"max_residual_ratio\": null, \"solves\": 0, \"warnings\": 0, \"unchecked_solves\": %ld}\n}\n",buf,skipped);
+  fclose(fp);
+  free(buf);
+}
+
 /* ====================================================================
    Structural partition detection
 
@@ -1758,6 +1801,14 @@ int main(int argc,char **args) {
   if(nohsl) {
     MPI_Bcast(&ncofele1,sizeof(offset_t), MPI_BYTE,0, PETSC_COMM_WORLD);
     MPI_Bcast(coefs,ncof*sizeof(array_def), MPI_BYTE,0, PETSC_COMM_WORLD);
+    /* every rank runs the step formulas under nohsl: the integer flags
+       decide their INITIAL default (manual 11.6.3) */
+    MPI_Bcast(&teems_n_int_coefs,sizeof(offset_t), MPI_BYTE,0, PETSC_COMM_WORLD);
+    if(rank!=0) {
+      free(teems_coef_is_int);
+      teems_coef_is_int= (bool *) calloc (ncof+1,sizeof(bool));
+    }
+    MPI_Bcast(teems_coef_is_int,(ncof+1)*sizeof(bool), MPI_BYTE,0, PETSC_COMM_WORLD);
   }
   ncofele=ncofele1;
   logmsg(2,"rank %d ncofele %ld\n",rank,ncofele);
@@ -2164,6 +2215,18 @@ comp_accurate_reentry:
     }
     else if(!equation_order_read(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,closure_vals,var_inter,ele_inter,eq_defs,eq_intertemp,eq_time,eq_reg,allregset,alltimeset,orderintra,orderreg))MPI_Abort(PETSC_COMM_WORLD,1);
     if(alltimeset>=0||allregset>=0)for(i=0; i<neq; i++)eq_intertemp[i]=!eq_intertemp[i];
+    /* initial closure check (manual 23.2.7): the number of endogenous
+       components must equal the number of equation rows, checked
+       before any matrix is sized from it (a non-square closure used to
+       surface as an unnamed MA48/PETSc failure or an overrun) */
+    {
+      offset_t neqrows=0;
+      for(i=0; i<neq; i++)neqrows+=eq_defs[i].nelem;
+      if(neqrows!=(offset_t)VecSize) {
+        errmsg("Error: initial closure check: %ld endogenous components is not equal to the number of equation rows (%ld); %ld variable components, %ld exogenous, %ld backsolved -- make %ld more component(s) %s (manual 23.2.7)\n",(long)VecSize,(long)neqrows,(long)nvarele,(long)nexo,(long)nbselems,(long)(neqrows>(offset_t)VecSize?neqrows-(offset_t)VecSize:(offset_t)VecSize-neqrows),neqrows>(offset_t)VecSize?"endogenous":"exogenous");
+        MPI_Abort(PETSC_COMM_WORLD,1);
+      }
+    }
     j0=0;
     for(i=0; i<nvarele; i++)if(ele_inter[i])j0++;
     if(j0>0&&rank==0)logmsg(1,"Element-level border classification: %ld elements bordered by sliced lead/lag references\n",j0);
@@ -2973,6 +3036,21 @@ comp_accurate_reentry:
     MPI_Allreduce(cdl,cdlsum,2,MPI_LONG,MPI_SUM,PETSC_COMM_WORLD);
     if(rank==0)stats_condest_patch(iodata,niodata,noutdata,nsoldata,
                                    cddmax[0],cddmax[1],cddmax[2],cdlsum[0],cdlsum[1]);
+  }
+  {
+    double rmax=0.0;
+    long rl[3]={teems_resid_solves,teems_resid_warn,teems_resid_skipped},rls[3];
+    MPI_Allreduce(&teems_resid_max,&rmax,1,MPI_DOUBLE,MPI_MAX,PETSC_COMM_WORLD);
+    MPI_Allreduce(rl,rls,3,MPI_LONG,MPI_SUM,PETSC_COMM_WORLD);
+    if(rank==0&&(rls[0]>0||rls[2]>0)) {
+      if(rls[0]>0)logmsg(1,"Maximum residual ratio across the whole simulation is %.8e (%ld solves checked; manual 30.1.5)\n",rmax,rls[0]);
+      if(rls[2]>0)logmsg(1,"Residual ratios not checked for %ld solve(s): this matrix method releases the LHS matrix before the solve completes\n",rls[2]);
+      stats_resid_patch(iodata,niodata,noutdata,nsoldata,rmax,rls[0],rls[1],rls[2]);
+      if(rls[1]>0)printf("Warning: there have been %ld warnings about equations not being satisfied very accurately; the more there are, the more likely it is that the solution is not valid (manual 30.6.1)\n",rls[1]);
+      /* GEMPACK finishes and saves every file, then ends with an error
+         (30.6.1); errmsg sets the exit status without aborting */
+      if(rls[1]>100)errmsg("Error: more than 100 equations were not satisfied very accurately (%ld warnings); all files are written, but the solution may not be valid (manual 30.6.1)\n",rls[1]);
+    }
   }
   if(isrk&&!comp_dispatch&&rank==0)stats_rk_patch(iodata,niodata,noutdata,nsoldata);
   /* phase resident-memory record: a last probe for the run's high-water

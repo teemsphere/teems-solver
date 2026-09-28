@@ -301,6 +301,8 @@ static void rk_stage_solve(PetscBool nohsl,PetscInt VecSize,PetscInt BSize,
       if(mc66!=0)spec48_single_(ptx,irn,jcn,b1,values,x1,neleperrow,ai1,&fcomm);
       free(irn);
       if(mc66==0)spec48_nomc66_(ptx,jcn,b1,values,x1,neleperrow,&fcomm,counteq,countvarintra1);
+      solve_x_check(x1,VecSize,rank==rank_hsl);
+      if(rank==rank_hsl)teems_resid_skipped++;
       free(jcn);
       free(values);
       free(neleperrow);

@@ -388,6 +388,8 @@ extern int teems_rk_softfail;
 extern int teems_stage_solve_failed;
 /* (parameter)-qualified coefficients, parallel to coefs[] (F2) */
 extern bool *teems_coef_is_param;
+extern bool *teems_coef_is_int;
+extern offset_t teems_n_int_coefs;
 /* second range bound (one lower + one upper per declaration, manual
    10.19.1; audit A9), parallel to coefs[] -- slot 1 stays in the
    binary-locked array_def */
@@ -821,6 +823,18 @@ solve_real formula_subst_scalar(char *var2, elem_value *record, array_def *coefs
 int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t ncof, array_def *vars,offset_t nvar,offset_t ncofele,sum_def *sum_cof,int totalsum,formula_op *ops,int nops,quantifier *arSet,dim_t fdim,int varindex);
 int leadlag_encode(char *line);
 int parse_index_leadlag(char *p,int *leadlag);
+void offset_range_check(dim_t frame_setid, dim_t ss, dim_t arg_setid, int leadlag, const char *idx, const char *symname);
+void array_element_label(array_def *a, offset_t k, char *out, size_t cap);
+extern long zdiv_default_hits;
+void probe_col_label(PetscInt col, char *out, size_t cap);
+void probe_row_label(PetscInt row, char *out, size_t cap);
+void solve_x_check(const solve_real *x, PetscInt n, int doit);
+extern double teems_resid_max;
+extern long teems_resid_solves,teems_resid_warn,teems_resid_skipped;
+void zdiv_default_report(const char *kind, const char *name, const char *stmt, solve_real zdefault);
+/* NaN/Inf tests on the bits: -Ofast (finite-math) folds isfinite/isnan */
+static inline int teems_nonfinite(double x) { uint64_t u; memcpy(&u,&x,sizeof u); return (u&0x7ff0000000000000ULL)==0x7ff0000000000000ULL; }
+static inline int teems_isnan_bits(double x) { uint64_t u; memcpy(&u,&x,sizeof u); return (u&0x7ff0000000000000ULL)==0x7ff0000000000000ULL&&(u&0x000fffffffffffffULL)!=0; }
 int formula_compile(char *fomulain, set_def *sets,array_def *coefs, offset_t ncof, array_def *vars,offset_t nvar,offset_t ncofele,sum_def *sum_cof,dim_t totalsum,formula_op *ops,dim_t *nops,quantifier *arSet,dim_t fdim);
 solve_real formula_eval(elem_value *record, set_def *sets,set_element *set_elems,sum_value *sum_vals,formula_op *ops,int nops,quantifier *arSet,dim_t fdim, solve_real zerodivide);
 int sum_cond_general_test(const sum_cofcond *cc, void *own[2], elem_value *elem_vals, set_def *sets, set_element *set_elems, sum_value *sum_vals, quantifier *frame, dim_t nframe, solve_real zerodivide);

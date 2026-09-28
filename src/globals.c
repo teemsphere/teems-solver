@@ -44,6 +44,9 @@ int teems_assertions_mode = 2;
 /* (parameter)-qualified coefficients (PostSim foundation F2): parallel
    to coefs[] -- array_def itself is binary-locked to sol.var */
 bool *teems_coef_is_param = NULL;
+/* INTEGER coefficients (manual 11.6.3): their Formulas default to INITIAL */
+bool *teems_coef_is_int = NULL;
+offset_t teems_n_int_coefs = 0;
 
 /* second declared-range bound (audit A9): a declaration may carry one
    lower (GE/GT) and one upper (LE/LT) bound (manual 10.19.1); slot 1

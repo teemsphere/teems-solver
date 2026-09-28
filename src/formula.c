@@ -95,6 +95,7 @@ static void map_dim_bind(dim_addr *Dm, int mp, dim_t frame_setid, offset_t arg_s
     errmsg("Error: mapping %s is used (in %s) before a Formula has assigned all of its values (manual 10.13.1/11.9.1)\n",md->mapname,symname);
     MPI_Abort(PETSC_COMM_WORLD,1);
   }
+  offset_range_check(frame_setid,dss>0?dss:0,(dim_t)md->fromset,leadlag,md->mapname,symname);
   Dm->ADims=stride;
   Dm->leadlag=leadlag;
   Dm->SupSet=(css>0)?1:0;
@@ -122,6 +123,7 @@ static void dim_bind_pos(dim_addr *D, bool *seen, char *p, int mp, int leadlag, 
     if (ss>0) { b.SupSet=1; b.SSIndx=(int)ss; }
     b.ADims=stride;
     b.leadlag=leadlag;
+    offset_range_check(frame_setid,ss>0?ss:0,(dim_t)arg_setid,leadlag,p,symname);
   }
   if (!*seen) {
     *D=b;
@@ -379,11 +381,11 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
               map_dim_bind(varindex==2?&ops[nops].Var2Dims[l]:&ops[nops].Var1Dims[l],mp,arSet[l].setid,coefs[index].setid[0],coefs[index].strides[0],leadlag,coefs[index].cofname,sets);
             } else
             if(varindex==2) {
-              { dim_t ss=set_supset_slot(sets,arSet[l].setid,coefs[index].setid[0]); if(ss<0)set_supset_fatal(p,coefs[index].cofname,NULL,sets,arSet[l].setid,coefs[index].setid[0]); if(ss>0){ops[nops].Var2Dims[l].SupSet=1; ops[nops].Var2Dims[l].SSIndx=(int)ss;} }
+              { dim_t ss=set_supset_slot(sets,arSet[l].setid,coefs[index].setid[0]); if(ss<0)set_supset_fatal(p,coefs[index].cofname,NULL,sets,arSet[l].setid,coefs[index].setid[0]); if(ss>0){ops[nops].Var2Dims[l].SupSet=1; ops[nops].Var2Dims[l].SSIndx=(int)ss;} offset_range_check(arSet[l].setid,ss>0?ss:0,coefs[index].setid[0],leadlag,p,coefs[index].cofname); }
               ops[nops].Var2Dims[l].ADims=coefs[index].strides[0];
               ops[nops].Var2Dims[l].leadlag=leadlag;
             } else {
-              { dim_t ss=set_supset_slot(sets,arSet[l].setid,coefs[index].setid[0]); if(ss<0)set_supset_fatal(p,coefs[index].cofname,NULL,sets,arSet[l].setid,coefs[index].setid[0]); if(ss>0){ops[nops].Var1Dims[l].SupSet=1; ops[nops].Var1Dims[l].SSIndx=(int)ss;} }
+              { dim_t ss=set_supset_slot(sets,arSet[l].setid,coefs[index].setid[0]); if(ss<0)set_supset_fatal(p,coefs[index].cofname,NULL,sets,arSet[l].setid,coefs[index].setid[0]); if(ss>0){ops[nops].Var1Dims[l].SupSet=1; ops[nops].Var1Dims[l].SSIndx=(int)ss;} offset_range_check(arSet[l].setid,ss>0?ss:0,coefs[index].setid[0],leadlag,p,coefs[index].cofname); }
               ops[nops].Var1Dims[l].ADims=coefs[index].strides[0];
               ops[nops].Var1Dims[l].leadlag=leadlag;
             }
@@ -484,11 +486,11 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
               map_dim_bind(varindex==2?&ops[nops].Var2Dims[l]:&ops[nops].Var1Dims[l],mp,arSet[l].setid,vars[index].setid[0],vars[index].strides[0],leadlag,vars[index].cofname,sets);
             } else
             if(varindex==2) {
-              { dim_t ss=set_supset_slot(sets,arSet[l].setid,vars[index].setid[0]); if(ss<0)set_supset_fatal(p,vars[index].cofname,NULL,sets,arSet[l].setid,vars[index].setid[0]); if(ss>0){ops[nops].Var2Dims[l].SupSet=1; ops[nops].Var2Dims[l].SSIndx=(int)ss;} }
+              { dim_t ss=set_supset_slot(sets,arSet[l].setid,vars[index].setid[0]); if(ss<0)set_supset_fatal(p,vars[index].cofname,NULL,sets,arSet[l].setid,vars[index].setid[0]); if(ss>0){ops[nops].Var2Dims[l].SupSet=1; ops[nops].Var2Dims[l].SSIndx=(int)ss;} offset_range_check(arSet[l].setid,ss>0?ss:0,vars[index].setid[0],leadlag,p,vars[index].cofname); }
               ops[nops].Var2Dims[l].ADims=vars[index].strides[0];
               ops[nops].Var2Dims[l].leadlag=leadlag;
             } else {
-              { dim_t ss=set_supset_slot(sets,arSet[l].setid,vars[index].setid[0]); if(ss<0)set_supset_fatal(p,vars[index].cofname,NULL,sets,arSet[l].setid,vars[index].setid[0]); if(ss>0){ops[nops].Var1Dims[l].SupSet=1; ops[nops].Var1Dims[l].SSIndx=(int)ss;} }
+              { dim_t ss=set_supset_slot(sets,arSet[l].setid,vars[index].setid[0]); if(ss<0)set_supset_fatal(p,vars[index].cofname,NULL,sets,arSet[l].setid,vars[index].setid[0]); if(ss>0){ops[nops].Var1Dims[l].SupSet=1; ops[nops].Var1Dims[l].SSIndx=(int)ss;} offset_range_check(arSet[l].setid,ss>0?ss:0,vars[index].setid[0],leadlag,p,vars[index].cofname); }
               ops[nops].Var1Dims[l].ADims=vars[index].strides[0];
               ops[nops].Var1Dims[l].leadlag=leadlag;
             }
@@ -701,20 +703,54 @@ int leadlag_encode(char *line) {
   return 1;
 }
 
+/* an index offset is an integer constant (manual 11.2.4: index +
+   <integer>, index - <integer>); "t+NLAG" went through atoi and read as
+   t+0 */
+static void leadlag_digits_check(const char *p, const char *sign, char ch) {
+  const char *d=sign+1;
+  if (*d=='\0') goto bad;
+  for (; *d!='\0'; d++) if (!isdigit((unsigned char)*d)) goto bad;
+  return;
+bad:
+  errmsg("Error: index offset %.*s%c%s is not an integer constant (manual 11.2.4: an offset is index + <integer> or index - <integer>)\n",(int)(sign-p),p,ch,sign+1);
+  MPI_Abort(PETSC_COMM_WORLD,1);
+}
+
 int parse_index_leadlag(char *p,int *leadlag) {
   char *plussign,*minsign;
   if(p==NULL) return 0;
   plussign=strchr(p,'#');
   minsign=strchr(p,'!');
   if(plussign!=NULL) {
+    leadlag_digits_check(p,plussign,'+');
     *leadlag=atoi(plussign+1);
     *plussign='\0';
   }
   if(minsign!=NULL) {
+    leadlag_digits_check(p,minsign,'-');
     *leadlag=-atoi(minsign+1);
     *minsign='\0';
   }
   return 1;
+}
+
+/* compile-time range check of an index offset (manual 16.4: indices
+   with offsets must stay in range): every element of the set the index
+   ranges over, routed into the argument's declared set (ss = superset
+   slot, 0 = the same set), plus the offset must be a position of that
+   set. Out of range used to read the next row, the next variable's
+   columns or another coefficient. Only runs for a nonzero offset. */
+void offset_range_check(dim_t frame_setid, dim_t ss, dim_t arg_setid, int leadlag, const char *idx, const char *symname) {
+  offset_t e,pos;
+  if (leadlag==0) return;
+  for (e=0; e<teems_sets[frame_setid].size; e++) {
+    pos=(ss>0)?teems_set_elems[teems_sets[frame_setid].offset+e].superset_pos[ss]:e;
+    pos+=leadlag;
+    if (pos<0||pos>=teems_sets[arg_setid].size) {
+      errmsg("Error: index offset %s%+d in %s runs outside set %s (at element %s of %s; manual 16.4)\n",idx,leadlag,symname,teems_sets[arg_setid].setname,teems_set_elems[teems_sets[frame_setid].offset+e].setele,teems_sets[frame_setid].setname);
+      MPI_Abort(PETSC_COMM_WORLD,1);
+    }
+  }
 }
 
 int formula_compile(char *fomulain, set_def *sets,array_def *coefs, offset_t ncof, array_def *vars,offset_t nvar,offset_t ncofele,sum_def *sum_cof,dim_t totalsum,formula_op *ops,dim_t *nops,quantifier *arSet,dim_t fdim) {
@@ -1025,6 +1061,37 @@ static int coef_range_check(array_def *coefs,offset_t index,offset_t offset,offs
 static zdiv_state zdiv_active = { 0, 0, 1, 0 };
 static int zdiv_enabled = 0;
 
+/* nonzero-by-zero divisions that took the legacy single default (the
+   -gpzerodivide 0 path, which never aborts): counted in formula_eval,
+   reported once per statement per run (manual 10.11, 34.3) so the
+   substitution is visible; the values are unchanged */
+long zdiv_default_hits=0;
+static uint64_t *zdiv_warned=NULL;
+static int zdiv_nwarned=0,zdiv_capwarned=0;
+
+void zdiv_default_report(const char *kind, const char *name, const char *stmt, solve_real zdefault) {
+  uint64_t h=0xCBF29CE484222325ULL;
+  const char *c;
+  int k;
+  long hits=zdiv_default_hits;
+  zdiv_default_hits=0;
+  if (hits==0) return;
+  for (c=kind; *c; c++) { h^=(unsigned char)*c; h*=0x100000001B3ULL; }
+  for (c=stmt; *c; c++) { h^=(unsigned char)*c; h*=0x100000001B3ULL; }
+  for (k=0; k<zdiv_nwarned; k++) if (zdiv_warned[k]==h) return;
+  {
+    int rk=0;
+    MPI_Comm_rank(PETSC_COMM_WORLD,&rk);
+    if (rk!=0) return;
+  }
+  if (zdiv_nwarned==zdiv_capwarned) {
+    zdiv_capwarned=zdiv_capwarned?2*zdiv_capwarned:32;
+    zdiv_warned=realloc(zdiv_warned,zdiv_capwarned*sizeof(uint64_t));
+  }
+  zdiv_warned[zdiv_nwarned++]=h;
+  printf("Warning: %ld division(s) of a nonzero value by zero in %s %s took the Zerodivide default %g (-gpzerodivide 0; GEMPACK stops unless a ZERODIVIDE (NONZERO_BY_ZERO) default is set, manual 10.11, 34.3): %.160s\n",hits,kind,name,(double)zdefault,stmt);
+}
+
 void zdiv_capture(void) {
   zdiv_active=teems_zdiv_scan;
   zdiv_enabled=teems_gpzerodivide;
@@ -1255,6 +1322,10 @@ solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,
           }
         } else {
           ops[i].TmpVarVal=zerodivide;
+          if(eval1!=0) {
+            #pragma omp atomic
+            zdiv_default_hits++;
+          }
         }
       } else {
         ops[i].TmpVarVal=eval1/eval2;
@@ -1357,6 +1428,8 @@ solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,
       if(ops[i].Var2Type==OT_CHANGE) eval2=record[ops[i].Var2BegAdd+l1].substep_base;
       if(eval1==0&&eval2<0) {
         ops[i].TmpVarVal=zerodivide;
+        #pragma omp atomic
+        zdiv_default_hits++;
       } else {
         if(eval1<0&&eval2-floor(eval2)!=0)errmsg("Error: fractional power of a negative number in formula evaluation\n");
         ops[i].TmpVarVal=pow(eval1,eval2);
@@ -2068,6 +2141,277 @@ static void cond_programs_free(char **condL, char **condR, formula_op *condops[]
   }
 }
 
+/* is the LHS of this Formula statement (keyword and qualifiers still in
+   the text) an integer coefficient? The name is the token before the
+   argument group that ends the text ahead of the top-level '=' */
+static int formula_lhs_is_int(const char *line, const char *commsyntax, array_def *coefs, offset_t ncof) {
+  char buf[TABREADLINE],*eq,*e,*b;
+  offset_t i;
+  if (strlen(line)>=sizeof(buf)) return 0;
+  strcpy(buf,line);
+  eq=str_rfind_toplevel(buf,'=');
+  if (eq==NULL) return 0;
+  e=eq;
+  while (e>buf&&e[-1]==' ') e--;
+  if (e>buf&&(e[-1]==')'||e[-1]==']'||e[-1]=='}')) {
+    int d=0;
+    for (e--; e>=buf; e--) {
+      if (*e==')'||*e==']'||*e=='}') d++;
+      else if (*e=='('||*e=='['||*e=='{') { d--; if (d==0) break; }
+    }
+    if (e<buf) return 0;
+    while (e>buf&&e[-1]==' ') e--;
+  }
+  *e='\0';
+  b=e;
+  while (b>buf&&(isalnum((unsigned char)b[-1])||b[-1]=='_'||b[-1]=='@')) b--;
+  if (*b=='\0'||strcmp(b,commsyntax)==0) return 0;
+  for (i=0; i<ncof; i++) if (strcmp(coefs[i].cofname,b)==0) return teems_coef_is_int[i]?1:0;
+  return 0;
+}
+
+/* element label "name(e1,e2)" of element k (0-based, row-major) of an
+   array declaration */
+void array_element_label(array_def *a, offset_t k, char *out, size_t cap) {
+  dim_t d;
+  size_t o;
+  snprintf(out,cap,"%s",a->cofname);
+  if (a->size==0) return;
+  o=strlen(out);
+  for (d=0; d<a->size&&o+2<cap; d++) {
+    offset_t idx=k/a->strides[d];
+    k-=idx*a->strides[d];
+    o+=snprintf(out+o,cap-o,"%s%s",d==0?"(":",",teems_set_elems[teems_sets[a->setid[d]].offset+idx].setele);
+  }
+  if (o+2<cap) strcat(out,")");
+}
+
+/* LHS arguments of a Formula or Update (manual 10.8, 11.4.10): each is
+   an ALL index of the statement, optionally with an integer offset
+   (16.5(a): (all,t,TIME1) C1(t+1) = ...). An offset bound nothing, so
+   every tuple wrote element 0 of that dimension; any other unmatched
+   name did the same; too few arguments crashed. Offsets are range
+   checked like the right-hand side's (16.4). */
+static void lhs_args_bind(const char *kind, const char *stmt, array_def *a, char *argu, quantifier *arSet, dim_t nq, set_def *sets,
+                          offset_t *varantidim, offset_t *vararset, offset_t *varsubset, dim_t *varsupsetid, offset_t *varll) {
+  int nargs=0;
+  dim_t d;
+  char *p=argu;
+  if (a->size==0) return;
+  if (argu!=NULL) for (; *p!='\0'; p++) if (*p==',') nargs++;
+  if (argu==NULL||nargs!=(int)a->size) {
+    errmsg("Error: the left-hand side of %s %s carries %d argument(s); %s is declared with %d (manual 10.8, 11.4.10): %s\n",kind,a->cofname,nargs,a->cofname,(int)a->size,stmt);
+    MPI_Abort(PETSC_COMM_WORLD,1);
+  }
+  p=argu;
+  for (d=0; d<a->size; d++) {
+    char tok[NAMESIZE],*c=strchr(p,','),*sg;
+    int ll=0;
+    dim_t l,ss;
+    if (c==NULL||c-p<=0||c-p>=NAMESIZE) {
+      errmsg("Error: the left-hand side of %s %s has an empty or malformed argument (manual 10.8, 11.4.10): %s\n",kind,a->cofname,stmt);
+      MPI_Abort(PETSC_COMM_WORLD,1);
+    }
+    memcpy(tok,p,c-p);
+    tok[c-p]='\0';
+    p=c+1;
+    sg=strpbrk(tok+1,"+-#!");
+    if (sg!=NULL) {
+      char *q=sg+1;
+      if (*q=='\0') q=NULL;
+      else for (; *q!='\0'; q++) if (!isdigit((unsigned char)*q)) { q=NULL; break; }
+      if (q==NULL) {
+        errmsg("Error: index offset %s on the left-hand side of %s %s is not an integer constant (manual 11.2.4: an offset is index + <integer> or index - <integer>): %s\n",tok,kind,a->cofname,stmt);
+        MPI_Abort(PETSC_COMM_WORLD,1);
+      }
+      ll=atoi(sg+1);
+      if (*sg=='-'||*sg=='!') ll=-ll;
+      *sg='\0';
+    }
+    for (l=0; l<nq; l++) if (strcmp(arSet[l].index_name,tok)==0) break;
+    if (l==nq) {
+      errmsg("Error: %s on the left-hand side of %s %s is not an index of the statement's quantifiers (each LHS argument is an ALL index, manual 10.8, 11.4.10): %s\n",tok,kind,a->cofname,stmt);
+      MPI_Abort(PETSC_COMM_WORLD,1);
+    }
+    varantidim[d]=a->strides[d];
+    vararset[d]=l+1;
+    varll[d]=ll;
+    ss=set_supset_slot(sets,(dim_t)arSet[l].setid,(dim_t)a->setid[d]);
+    if (ss<0) set_supset_fatal(tok,a->cofname,NULL,sets,(dim_t)arSet[l].setid,(dim_t)a->setid[d]);
+    if (ss>0) { varsubset[d]=1; varsupsetid[d]=ss; }
+    offset_range_check((dim_t)arSet[l].setid,ss>0?ss:0,(dim_t)a->setid[d],ll,tok,a->cofname);
+  }
+}
+
+/* ---- recursive formulas (manual 16.5) ------------------------------
+   Formula loops run in parallel and write in place. When the LHS
+   coefficient is also read on the right at a possibly different element
+   (an offset, another index, a sum over it), GEMPACK runs the loop in
+   order (first quantifier outermost, 16.5(a)) and always uses the most
+   recent values (16.5(c)); the parallel loop made the result depend on
+   the thread count. The references are classified from the statement
+   text: one whose element provably equals the one written (same index,
+   same offset, or the same fixed position) or provably differs at some
+   argument (disjoint positions, e.g. another literal slice) leaves the
+   loop parallel; anything else runs it serially, and when such a
+   reference sits inside a SUM the sums are re-evaluated per tuple (they
+   are otherwise tabulated before the loop). A reference to a LATER
+   element along the same index is backward recursion, which TABLO
+   rejects (16.5(b)). */
+enum { SR_PARALLEL=0, SR_SERIAL=1, SR_SERIAL_SUMS=2 };
+
+typedef struct {
+  char idx[NAMESIZE];
+  dim_t setid;
+  long close;
+} sr_sum;
+
+static int sr_namec(char c) {
+  return isalnum((unsigned char)c)||c=='_'||c=='@';
+}
+
+static long sr_group_close(const char *t, long o) {
+  int d=0;
+  long i;
+  for (i=o; t[i]!='\0'; i++) {
+    if (t[i]=='('||t[i]=='{'||t[i]=='[') d++;
+    else if (t[i]==')'||t[i]=='}'||t[i]==']') { d--; if (d==0) return i; }
+  }
+  return -1;
+}
+
+/* positions (in the declared set of the argument) an index can take:
+   marks[] of size |declared set|; returns 0 when unknown (all) */
+static int sr_positions(dim_t frame, dim_t declset, int ll, char *marks) {
+  dim_t ss=set_supset_slot(teems_sets,frame,declset);
+  offset_t e,n=teems_sets[declset].size;
+  if (ss<0) return 0;
+  memset(marks,0,n);
+  for (e=0; e<teems_sets[frame].size; e++) {
+    offset_t pos=((ss>0)?teems_set_elems[teems_sets[frame].offset+e].superset_pos[ss]:e)+ll;
+    if (pos>=0&&pos<n) marks[pos]=1;
+  }
+  return 1;
+}
+
+static int sr_classify_text(const char *t, const char *lhsname, array_def *a, quantifier *arSet, dim_t nq,
+                            const offset_t *vararset, const offset_t *varll, int incond, const char *stmt) {
+  sr_sum stk[4*MAXVARDIM];
+  int nstk=0,mode=SR_PARALLEL;
+  long i=0,n=(long)strlen(t);
+  offset_t dmax=0;
+  dim_t d;
+  char *wm=NULL,*rm=NULL;
+  for (d=0; d<a->size; d++) if (teems_sets[a->setid[d]].size>dmax) dmax=teems_sets[a->setid[d]].size;
+  while (i<n) {
+    long j;
+    while (nstk>0&&i>stk[nstk-1].close) nstk--;
+    if (!sr_namec(t[i])||(i>0&&(sr_namec(t[i-1])||t[i-1]==MAPMARK||t[i-1]=='$'))) { i++; continue; }
+    for (j=i; j<n&&sr_namec(t[j]); j++) {}
+    if (j-i==3&&strncmp(t+i,"sum",3)==0&&(t[j]=='('||t[j]=='{')&&nstk<4*MAXVARDIM) {
+      long cl=sr_group_close(t,j),c1,c2;
+      char sname[NAMESIZE];
+      dim_t sid;
+      c1=j+1;
+      while (c1<n&&t[c1]!=',') c1++;
+      c2=c1+1;
+      while (c2<n&&t[c2]!=','&&t[c2]!=':') c2++;
+      if (cl>0&&c1-j-1>0&&c1-j-1<NAMESIZE&&c2-c1-1>0&&c2-c1-1<NAMESIZE) {
+        memcpy(stk[nstk].idx,t+j+1,c1-j-1);
+        stk[nstk].idx[c1-j-1]='\0';
+        memcpy(sname,t+c1+1,c2-c1-1);
+        sname[c2-c1-1]='\0';
+        for (sid=0; sid<teems_nset; sid++) if (strcmp(teems_sets[sid].setname,sname)==0) break;
+        stk[nstk].setid=(sid<teems_nset)?sid:-1;
+        stk[nstk].close=cl;
+        nstk++;
+        i=c2+1;
+        continue;
+      }
+    }
+    if ((long)strlen(lhsname)==j-i&&strncmp(t+i,lhsname,j-i)==0&&!(i>1&&t[i-1]=='_'&&t[i-2]=='p')) {
+      long cl=-1;
+      int same=1,disj=0,back=0;
+      if (t[j]=='('||t[j]=='{') cl=sr_group_close(t,j);
+      if (a->size>0&&cl<0) { i=j; continue; }
+      if (a->size>0) {
+        long p=j+1;
+        if (wm==NULL) { wm=(char *) malloc (dmax+1); rm=(char *) malloc (dmax+1); }
+        for (d=0; d<a->size; d++) {
+          char tok[NAMESIZE],*sg;
+          long q=p;
+          int rll=0,known=0;
+          dim_t rset=-1,rq=-1,k;
+          int dep=0;
+          while (q<cl&&!(dep==0&&t[q]==',')) { if (t[q]=='('||t[q]=='{'||t[q]=='[') dep++; else if (t[q]==')'||t[q]=='}'||t[q]==']') dep--; q++; }
+          if (q-p<=0||q-p>=NAMESIZE) { same=0; p=q+1; continue; }
+          memcpy(tok,t+p,q-p);
+          tok[q-p]='\0';
+          p=q+1;
+          if (strchr(tok,MAPMARK)==NULL) {
+            sg=strpbrk(tok+1,"+-#!");
+            if (sg!=NULL) {
+              rll=atoi(sg+1);
+              if (*sg=='-'||*sg=='!') rll=-rll;
+              *sg='\0';
+            }
+            for (k=0; k<nq; k++) if (strcmp(arSet[k].index_name,tok)==0) { rq=k; rset=(dim_t)arSet[k].setid; break; }
+            if (rq<0) for (k=nstk-1; k>=0; k--) if (strcmp(stk[k].idx,tok)==0) { rset=stk[k].setid; break; }
+            known=(rset>=0);
+          }
+          {
+            dim_t wq=(dim_t)vararset[d]-1;
+            int wll=(int)varll[d];
+            if (known&&rq==wq&&rll==wll) continue;
+            if (known&&rq==wq&&rll>wll) back=1;
+            if (known&&teems_sets[rset].size==1&&teems_sets[arSet[wq].setid].size==1) {
+              if (sr_positions(rset,(dim_t)a->setid[d],rll,rm)&&sr_positions((dim_t)arSet[wq].setid,(dim_t)a->setid[d],wll,wm)&&memcmp(rm,wm,teems_sets[a->setid[d]].size)==0) continue;
+            }
+            same=0;
+            if (known&&sr_positions(rset,(dim_t)a->setid[d],rll,rm)&&sr_positions((dim_t)arSet[wq].setid,(dim_t)a->setid[d],wll,wm)) {
+              offset_t e;
+              int hit=0;
+              for (e=0; e<teems_sets[a->setid[d]].size; e++) if (rm[e]&&wm[e]) { hit=1; break; }
+              if (!hit) disj=1;
+            }
+          }
+        }
+      }
+      if (!same&&!disj) {
+        if (back) {
+          free(wm); free(rm);
+          errmsg("Error: Formula for %s reads a later element of %s along the loop (backward recursion; formulas run forwards through their loops and use the most recent values, manual 16.5(b)/(c) -- copy the coefficient first): %s\n",a->cofname,a->cofname,stmt);
+          MPI_Abort(PETSC_COMM_WORLD,1);
+        }
+        if (nstk>0&&!incond) mode=SR_SERIAL_SUMS;
+        else if (mode<SR_SERIAL) mode=SR_SERIAL;
+      }
+      i=(cl>0)?cl+1:j;
+      continue;
+    }
+    i=j;
+  }
+  free(wm);
+  free(rm);
+  return mode;
+}
+
+/* a serial self-referencing formula whose reference sits inside a SUM:
+   the sums are tabulated before the loop, so before each tuple after the
+   first they are re-evaluated on the current values and the statement
+   recompiled against them (same text, same RANDOM keys) */
+static void formula_sums_redo(const char *fsrc, const char *fmain, const char *stmt, set_def *sets, dim_t nset, set_element *set_elems, elem_value *elem_vals, offset_t ncofvar, offset_t ncofele, array_def *coefs, offset_t ncof, array_def *vars, offset_t nvar, sum_def *sum_cof, int totalsum, sum_value *sum_vals, offset_t nsumele, formula_op *ops, int *nops, quantifier *arSet, dim_t fdim, solve_real zerodivide) {
+  char t[TABREADLINE],m[TABREADLINE],syn[NAMESIZE];
+  int sumindx=0,sumcount=0;
+  strcpy(syn,"sum(");
+  teems_rand_statement(stmt);
+  strcpy(t,fsrc);
+  while (sum_eval(t,syn,sets,nset,set_elems,elem_vals,ncofvar,ncofele,coefs,ncof,vars,nvar,sum_cof,totalsum,sum_vals,nsumele,ops,arSet,fdim,&sumindx,sumcount,zerodivide)==1) sumcount++;
+  strcpy(m,fmain);
+  *nops=0;
+  if(!formula_compile(m,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,nops,arSet,fdim-1))MPI_Abort(PETSC_COMM_WORLD,1);
+}
+
 offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset, set_element *set_elems, array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar, elem_value *elem_vals,offset_t ncofvar,offset_t ncofele,bool IsIni) {
   FILE * filehandle;
   char line[TABREADLINE],line1[TABREADLINE],line2[TABREADLINE],linecopy[TABREADLINE],condvar[MAXVARDIM][NAMESIZE];
@@ -2076,9 +2420,12 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
   offset_t i,i1,i3,i4,l,l2=0,j=0,nsumele,dcountdim1[4*MAXVARDIM],ncond,nloops,logioper[MAXVARDIM],logi,logiantidim[MAXVARDIM][MAXVARDIM],logisup[MAXVARDIM][MAXVARDIM],logivarindx[MAXVARDIM],logivartype[MAXVARDIM];//m,
   dim_t fdim,dcount,neqsign=0,varsupsetid[MAXVARDIM];
   int nops=0,totalsum,sumcount=1,npow,nmul,ndiv,nplu,nmin,npar,sumindx,b=0;
-  offset_t varantidim[MAXVARDIM],varsubset[MAXVARDIM],vararset[MAXVARDIM];
+  offset_t varantidim[MAXVARDIM],varsubset[MAXVARDIM],vararset[MAXVARDIM],varll[MAXVARDIM];
   solve_real zerodivide=0,cond[MAXVARDIM],eval;
   bool IsFomIni=false,IsDefFomIni=false;
+  char fsrc[TABREADLINE],fmain[TABREADLINE];
+  int fsr=SR_PARALLEL;
+  offset_t nf_l=-1,nf_off=0;
   char fdefval[NAMESIZE];
   quantifier *arSet1=NULL;
   formula_op *ops1= NULL;
@@ -2112,8 +2459,9 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
     }
     /* positional INITIAL/ALWAYS default (manual 10.19; audit A6):
        both directions and spaced forms; values validated up front by
-       tab_defaults_validate. Integer-LHS formulas nominally keep
-       INITIAL regardless (10.19) -- not distinguished here. */
+       tab_defaults_validate. It applies to real-LHS formulas only:
+       integer-LHS formulas are INITIAL unless (always) is explicit
+       (10.19, 11.6.3; below). */
     if (tab_default_value(line,fdefval)) {
       if(strcmp(fdefval,"initial")==0)IsDefFomIni=true;
       else if(strcmp(fdefval,"always")==0)IsDefFomIni=false;
@@ -2121,7 +2469,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
     }
     {
       IsFomIni=IsDefFomIni;
-      int byele=0;
+      int byele=0,explicit_always=0;
       if(strstr(line, "(initial)")!=NULL) {
         str_replace_first(line, "(initial)", "");
         IsFomIni=true;
@@ -2129,7 +2477,13 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
       if(strstr(line, "(always)")!=NULL) {
         str_replace_first(line, "(always)", "");
         IsFomIni=false;
+        explicit_always=1;
       }
+      /* a Formula whose LHS is an integer coefficient is INITIAL by
+         default whatever FORMULA(DEFAULT=...) says; only an explicit
+         (always) recomputes it at each step (manual 10.19, 11.6.3). It
+         used to be recomputed from updated data (TERM NCOMPROD). */
+      if(!IsFomIni&&!explicit_always&&teems_n_int_coefs>0&&formula_lhs_is_int(line,commsyntax,coefs,ncof))IsFomIni=true;
       /* Formula (by_elements): a mapping assigned by codomain element
          name rather than position (manual 10.13.1/11.9.12) */
       if(strstr(line, "(by_elements)")!=NULL) {
@@ -2138,6 +2492,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
       }
       if(!(IsFomIni&&!IsIni)) {
         zdiv_capture();
+        zdiv_default_hits=0;
         ncond=0;
         for (i=0; i<MAXVARDIM; i++)logioper[i]=0;
         str_replace_first(line, commsyntax, "");
@@ -2411,6 +2766,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
         sum_value *sum_vals= (sum_value *) calloc (nsumele,sizeof(sum_value));
         sumcount=0;
         strcpy(line2,line1);
+        strcpy(fsrc,line1);
         readitem=line2;
         sumindx=0;
         while (sum_eval(readitem,sumsyntax,sets,nset,set_elems,elem_vals,ncofvar,ncofele,coefs,ncof,vars,nvar,sum_cof,totalsum,sum_vals,nsumele,ops,arSet,fdim,&sumindx,sumcount,zerodivide)==1) {
@@ -2451,7 +2807,6 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
             coefs[index].suplval=true;
             offset=coefs[index].offset;
             varsize=coefs[index].size;
-            if(coefs[index].size>0){strcpy(argu,strtok(NULL,")"));strcat(argu,",");}
             check10=false;
             break;
           }
@@ -2463,10 +2818,14 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
               offset=ncofele+vars[index].offset;
               varsize=vars[index].size;
               vars[index].suplval=true;
-              if(vars[index].size>0){strcpy(argu,strtok(NULL,")"));strcat(argu,",");}
               break;
             }
           } while (index--);
+        }
+        char *lhsargs=NULL;
+        if (varsize>0) {
+          char *ta=strtok(NULL,")");
+          if (ta!=NULL&&strlen(ta)+2<sizeof(argu)) { strcpy(argu,ta); strcat(argu,","); lhsargs=argu; }
         }
         /* a satisfied Read (IfHeaderExists) supersedes formulas
            assigning the read coefficient (manual 11.11.8 idiom under
@@ -2487,30 +2846,31 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
             MPI_Abort(PETSC_COMM_WORLD,1);
           }
         }
-        for (l=0; l<MAXVARDIM; l++){varantidim[l]=0;varsubset[l]=0;varsupsetid[l]=0;}
-        if (check10) {
-            for (dcount=0; dcount<vars[index].size; dcount++) {
-              if(dcount==0)p=strtok(argu,",");
-              else p=strtok(NULL,",");
-              for (l=0; l<fdim-1; l++) if (strcmp(arSet[l].index_name,p)==0) {
-                  varantidim[dcount]=vars[index].strides[dcount];
-                  vararset[dcount]=l+1;
-                  { dim_t ss=set_supset_slot(sets,arSet[l].setid,vars[index].setid[dcount]); if(ss<0)set_supset_fatal(p,vars[index].cofname,NULL,sets,arSet[l].setid,vars[index].setid[dcount]); if(ss>0){varsubset[dcount]=1; varsupsetid[dcount]=ss;} }
-                  break;
-                }
-            }
-        } else {
-            for (dcount=0; dcount<coefs[index].size; dcount++) {
-              if(dcount==0)p=strtok(argu,",");
-              else p=strtok(NULL,",");
-              for (l=0; l<fdim-1; l++) if (strcmp(arSet[l].index_name,p)==0) {
-                  varantidim[dcount]=coefs[index].strides[dcount];
-                  vararset[dcount]=l+1;
-                  { dim_t ss=set_supset_slot(sets,arSet[l].setid,coefs[index].setid[dcount]); if(ss<0)set_supset_fatal(p,coefs[index].cofname,NULL,sets,arSet[l].setid,coefs[index].setid[dcount]); if(ss>0){varsubset[dcount]=1; varsupsetid[dcount]=ss;} }
-                  break;
-                }
-            }
+        for (l=0; l<MAXVARDIM; l++){varantidim[l]=0;varsubset[l]=0;varsupsetid[l]=0;varll[l]=0;}
+        array_def *lhsdef=check10?&vars[index]:&coefs[index];
+        lhs_args_bind("Formula",linecopy,lhsdef,lhsargs,arSet,fdim-1,sets,varantidim,vararset,varsubset,varsupsetid,varll);
+        if (IsFomIni) for (l=0; l<varsize; l++) if (varll[l]!=0) {
+          errmsg("Error: index offsets are not allowed on the left-hand side of a Formula(Initial) (a Read in later steps; manual 10.8, 11.11.4): %s\n",linecopy);
+          MPI_Abort(PETSC_COMM_WORLD,1);
         }
+        /* recursive formulas (manual 16.5): classify references to the
+           LHS array in the right-hand side and the quantifier conditions */
+        fsr=SR_PARALLEL;
+        {
+          char *lhsname=lhsdef->cofname;
+          if (strstr(fsrc,lhsname)!=NULL) fsr=sr_classify_text(fsrc,lhsname,lhsdef,arSet,fdim-1,vararset,varll,0,linecopy);
+          for (i=0; i<fdim-1; i++) if (logioper[i]>0) {
+            int m=SR_PARALLEL;
+            if (condgen[i]) {
+              if (strstr(condL[i],lhsname)!=NULL) m=sr_classify_text(condL[i],lhsname,lhsdef,arSet,fdim-1,vararset,varll,1,linecopy);
+              if (m<SR_SERIAL&&strstr(condR[i],lhsname)!=NULL) m=sr_classify_text(condR[i],lhsname,lhsdef,arSet,fdim-1,vararset,varll,1,linecopy);
+            } else if (strstr(condvar[i],lhsname)!=NULL) m=sr_classify_text(condvar[i],lhsname,lhsdef,arSet,fdim-1,vararset,varll,1,linecopy);
+            if (m>fsr) fsr=m;
+          }
+          if (fsr!=SR_PARALLEL) logmsg(2,"formula for %s runs serially in loop order (%s; manual 16.5)\n",lhsname,fsr==SR_SERIAL_SUMS?"self reference inside a sum":"self reference");
+        }
+        if (fsr==SR_SERIAL_SUMS) strcpy(fmain,line1);
+        nf_l=-1;
         if(!formula_compile(line1,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,&nops,arSet,fdim-1))MPI_Abort(PETSC_COMM_WORLD,1);
         if(ncond>0) {
           for(i=0; i<MAXVARDIM; i++)for(j=0; j<MAXVARDIM; j++){
@@ -2609,7 +2969,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
           }
         /* i: inner condition loop's counter — was shared-by-omission,
            a result-corrupting write-write race at maxthreads>1 */
-        #pragma omp parallel private(l,l2,i,i4,dcount,i3,i1,arSet1,logi,index,eval,ops1) shared(elem_vals,arSet)
+        #pragma omp parallel if(fsr==SR_PARALLEL) private(l,l2,i,i4,dcount,i3,i1,arSet1,logi,index,eval,ops1) shared(elem_vals,arSet)
         {
         formula_op *cops[MAXVARDIM][2];
         {
@@ -2638,6 +2998,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
     #pragma omp barrier
         #pragma omp for
           for (l=0; l<nloops; l++) {
+            if(fsr==SR_SERIAL_SUMS&&l>0)formula_sums_redo(fsrc,fmain,linecopy,sets,nset,set_elems,elem_vals,ncofvar,ncofele,coefs,ncof,vars,nvar,sum_cof,totalsum,sum_vals,nsumele,ops1,&nops,arSet1,fdim,zerodivide);
             l2=0;
             i4=l;
             for (dcount=0; dcount<fdim-1; dcount++) {
@@ -2648,9 +3009,9 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
                 for(i1=0; i1<varsize; i1++) {
                   if(vararset[i1]-1==dcount) {
                     if(varsubset[i1]==1) {
-                      l2=l2+set_elems[sets[arSet1[dcount].setid].offset+i3].superset_pos[varsupsetid[i1]]*varantidim[i1];
+                      l2=l2+(set_elems[sets[arSet1[dcount].setid].offset+i3].superset_pos[varsupsetid[i1]]+varll[i1])*varantidim[i1];
                     } else {
-                      l2=l2+i3*varantidim[i1];
+                      l2=l2+(i3+varll[i1])*varantidim[i1];
                     }
                     break;
                   }
@@ -2659,9 +3020,9 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
                 for(i1=0; i1<varsize; i1++) {
                   if(vararset[i1]-1==dcount) {
                     if(varsubset[i1]==1) {
-                      l2=l2+set_elems[sets[arSet1[dcount].setid].offset+i3].superset_pos[varsupsetid[i1]]*varantidim[i1];
+                      l2=l2+(set_elems[sets[arSet1[dcount].setid].offset+i3].superset_pos[varsupsetid[i1]]+varll[i1])*varantidim[i1];
                     } else {
-                      l2=l2+i3*varantidim[i1];
+                      l2=l2+(i3+varll[i1])*varantidim[i1];
                     }
                   }
                 }
@@ -2691,7 +3052,14 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
               if(logioper[i1]==6)if(eval>=cv)logi++;
               }
             }
-            if(logi==ncond)elem_vals[offset+l2].value=formula_eval(elem_vals,sets,set_elems,sum_vals,ops1,nops,arSet1,fdim-1,zerodivide);
+            if(logi==ncond) {
+              store_real fv=formula_eval(elem_vals,sets,set_elems,sum_vals,ops1,nops,arSet1,fdim-1,zerodivide);
+              elem_vals[offset+l2].value=fv;
+              if(teems_nonfinite((double)fv)) {
+                #pragma omp critical(formula_nonfinite)
+                { if(nf_l<0||l<nf_l) { nf_l=l; nf_off=l2; } }
+              }
+            }
           }
         if(omp_get_thread_num()!=0){
           int ci;
@@ -2706,7 +3074,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
         }
         }
         } else {
-        #pragma omp parallel private(l,l2,i4,dcount,i3,i1,arSet1,ops1) shared(elem_vals,arSet)
+        #pragma omp parallel if(fsr==SR_PARALLEL) private(l,l2,i4,dcount,i3,i1,arSet1,ops1) shared(elem_vals,arSet)
         {
         if(omp_get_thread_num()!=0){
           arSet1=malloc((fdim+1)*sizeof(quantifier));
@@ -2722,6 +3090,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
     #pragma omp barrier
         #pragma omp for
           for (l=0; l<nloops; l++) {
+            if(fsr==SR_SERIAL_SUMS&&l>0)formula_sums_redo(fsrc,fmain,linecopy,sets,nset,set_elems,elem_vals,ncofvar,ncofele,coefs,ncof,vars,nvar,sum_cof,totalsum,sum_vals,nsumele,ops1,&nops,arSet1,fdim,zerodivide);
             l2=0;
             i4=l;
             for (dcount=0; dcount<fdim-1; dcount++) {
@@ -2732,9 +3101,9 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
                 for(i1=0; i1<varsize; i1++) {
                   if(vararset[i1]-1==dcount) {
                     if(varsubset[i1]==1) {
-                      l2=l2+set_elems[sets[arSet1[dcount].setid].offset+i3].superset_pos[varsupsetid[i1]]*varantidim[i1];
+                      l2=l2+(set_elems[sets[arSet1[dcount].setid].offset+i3].superset_pos[varsupsetid[i1]]+varll[i1])*varantidim[i1];
                     } else {
-                      l2=l2+i3*varantidim[i1];
+                      l2=l2+(i3+varll[i1])*varantidim[i1];
                     }
                     break;
                   }
@@ -2743,15 +3112,22 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
                 for(i1=0; i1<varsize; i1++) {
                   if(vararset[i1]-1==dcount) {
                     if(varsubset[i1]==1) {
-                      l2=l2+set_elems[sets[arSet1[dcount].setid].offset+i3].superset_pos[varsupsetid[i1]]*varantidim[i1];
+                      l2=l2+(set_elems[sets[arSet1[dcount].setid].offset+i3].superset_pos[varsupsetid[i1]]+varll[i1])*varantidim[i1];
                     } else {
-                      l2=l2+i3*varantidim[i1];
+                      l2=l2+(i3+varll[i1])*varantidim[i1];
                     }
                   }
                 }
               }
             }
-            elem_vals[offset+l2].value=formula_eval(elem_vals,sets,set_elems,sum_vals,ops1,nops,arSet1,fdim-1,zerodivide);
+            {
+              store_real fv=formula_eval(elem_vals,sets,set_elems,sum_vals,ops1,nops,arSet1,fdim-1,zerodivide);
+              elem_vals[offset+l2].value=fv;
+              if(teems_nonfinite((double)fv)) {
+                #pragma omp critical(formula_nonfinite)
+                { if(nf_l<0||l<nf_l) { nf_l=l; nf_off=l2; } }
+              }
+            }
           }
         if(omp_get_thread_num()!=0){
           free(arSet1);
@@ -2765,6 +3141,18 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
         }
         }
 
+        /* arithmetic errors (manual 34.3/34.4, GEMPACK default fatal): a
+           value that is NaN or infinite -- LOGE(0), SQRT of a negative,
+           a negative base to a fractional power, float overflow -- used
+           to flow on into the equations and the solution */
+        if(nf_l>=0) {
+          char lab[4*NAMESIZE];
+          store_real bad=elem_vals[offset+nf_off].value;
+          array_element_label(check10?&vars[index]:&coefs[index],nf_off,lab,sizeof(lab));
+          errmsg("Error: Formula for %s gives a value that is not finite (%s) at %s: a division, LOGE, SQRT or power left its domain or the value overflowed (arithmetic error, manual 34.3): %s\n",check10?vars[index].cofname:coefs[index].cofname,teems_isnan_bits((double)bad)?"NaN":"infinite",lab,linecopy);
+          MPI_Abort(PETSC_COMM_WORLD,1);
+        }
+        zdiv_default_report("Formula",check10?vars[index].cofname:coefs[index].cofname,linecopy,zerodivide);
         int glmode=IsIni?teems_range_test_initial:teems_range_test_updated;
         if(teems_rk_stage_checks&&glmode==2)glmode=1;   /* RK stage state: warn and let the driver retry */
         if(glmode>0){
@@ -3136,6 +3524,117 @@ static void upd_cond_free(upd_conds *uc) {
   uc->n=0;
 }
 
+/* PRODUCT update shape (manual 11.12.4): the right-hand side is
+   v1*v2*...*vn, each vi a percentage-change linear variable. Every '*'
+   is rewritten into the product of (1+vi/100) factors, so a constant or
+   coefficient factor, a change variable, a '/' or a '+' used to be
+   evaluated as if it were another percentage change. The p_ column of a
+   levels variable is its percentage change (11.12.4 names it for
+   levels variables updated automatically). */
+static int product_factor_ok(const char *f, array_def *coefs, offset_t ncof, array_def *vars, offset_t nvar) {
+  char nm[NAMESIZE];
+  int m=0,e;
+  offset_t j;
+  while ((isalnum((unsigned char)f[m])||f[m]=='_'||f[m]=='@')&&m<NAMESIZE-1) { nm[m]=f[m]; m++; }
+  nm[m]='\0';
+  if (m==0||isdigit((unsigned char)nm[0])) return 0;
+  if (f[m]!='\0') {
+    int dd=0;
+    if (f[m]!='(') return 0;
+    for (e=m; f[e]!='\0'; e++) {
+      if (f[e]=='(') dd++;
+      else if (f[e]==')') { dd--; if (dd==0) break; }
+    }
+    if (f[e]=='\0'||f[e+1]!='\0') return 0;
+    /* IF[cond, v]: the factor is v where the condition holds and no
+       change elsewhere (a gated percentage change) */
+    if (strcmp(nm,"if")==0) {
+      char v[TABREADLINE];
+      int d=0,c=-1;
+      for (e=m+1; f[e+1]!='\0'; e++) {
+        if (f[e]=='('||f[e]=='{'||f[e]=='[') d++;
+        else if (f[e]==')'||f[e]=='}'||f[e]==']') d--;
+        else if (f[e]==','&&d==0) c=e;
+      }
+      if (c<0||(size_t)(e-c)>=sizeof(v)) return 0;
+      memcpy(v,f+c+1,e-c-1);
+      v[e-c-1]='\0';
+      return product_factor_ok(v,coefs,ncof,vars,nvar);
+    }
+  }
+  {
+    const char *vn=nm;
+    int pref=(nm[0]=='p'&&nm[1]=='_');
+    if (!pref) for (j=0; j<ncof; j++) if (strcmp(coefs[j].cofname,nm)==0) return 0;
+    if (pref) vn=nm+2;
+    j=linvar_resolve((char *)vn,vars,nvar);
+    if (j<0&&pref) j=linvar_resolve(nm,vars,nvar);
+    if (j<0||vars[j].change_real) return 0;
+  }
+  return 1;
+}
+
+static void product_update_check(const char *rhs, const char *lhs, array_def *coefs, offset_t ncof, array_def *vars, offset_t nvar, const char *stmt) {
+  char f[TABREADLINE],lname[NAMESIZE];
+  const char *p=rhs;
+  int k=0;
+  while (lhs[k]!='\0'&&lhs[k]!='('&&k<NAMESIZE-1) { lname[k]=lhs[k]; k++; }
+  lname[k]='\0';
+  if (rhs==NULL) return;
+  for (;;) {
+    int d=0,n=0,ok;
+    const char *q=p;
+    while (*q!='\0'&&!(d==0&&*q=='*')) {
+      if (*q=='('||*q=='{'||*q=='[') d++;
+      else if (*q==')'||*q=='}'||*q==']') d--;
+      if (n<(int)sizeof(f)-1) f[n++]=*q;
+      q++;
+    }
+    f[n]='\0';
+    ok=product_factor_ok(f,coefs,ncof,vars,nvar);
+    if (!ok) {
+      errmsg("Error: product Update of %s: the right-hand side must be a product of percentage-change variables v1*v2*...*vn (manual 11.12.4), and %s is not one; write a (change) Update for any other form: %s\n",lname,f[0]!='\0'?f:"an empty factor",stmt);
+      MPI_Abort(PETSC_COMM_WORLD,1);
+    }
+    if (*q=='\0') break;
+    p=q+1;
+  }
+}
+
+/* coefficients written by the Updates of one pass, scanned once for
+   NaN/Inf after the pass (arithmetic errors, manual 34.3) */
+static offset_t *upd_nf_list=NULL;
+static int upd_nf_n=0,upd_nf_cap=0;
+static void upd_nonfinite_note(offset_t index) {
+  int k;
+  if (index<0) return;
+  for (k=0; k<upd_nf_n; k++) if (upd_nf_list[k]==index) return;
+  if (upd_nf_n==upd_nf_cap) {
+    upd_nf_cap=upd_nf_cap?2*upd_nf_cap:64;
+    upd_nf_list=realloc(upd_nf_list,upd_nf_cap*sizeof(offset_t));
+  }
+  upd_nf_list[upd_nf_n++]=index;
+}
+static offset_t upd_nf_off=-1;
+static void upd_nf_hit(offset_t off) {
+  #pragma omp critical(upd_nonfinite)
+  { if (upd_nf_off<0||off<upd_nf_off) upd_nf_off=off; }
+}
+static void upd_nonfinite_scan(array_def *coefs, elem_value *elem_vals) {
+  int k;
+  for (k=0; k<upd_nf_n; k++) {
+    array_def *a=&coefs[upd_nf_list[k]];
+    offset_t e;
+    for (e=0; e<a->nelem; e++) if (teems_nonfinite((double)elem_vals[a->offset+e].value)) {
+      char lab[4*NAMESIZE];
+      array_element_label(a,e,lab,sizeof(lab));
+      errmsg("Error: Update of %s gives a value that is not finite (%s) at %s (arithmetic error, manual 34.3)\n",a->cofname,teems_isnan_bits((double)elem_vals[a->offset+e].value)?"NaN":"infinite",lab);
+      MPI_Abort(PETSC_COMM_WORLD,1);
+    }
+  }
+  upd_nf_n=0;
+}
+
 offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_elems, array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar, elem_value *elem_vals,offset_t ncofvar,offset_t ncofele,int midpoint) {
   FILE * filehandle;
   char commsyntax[NAMESIZE],line[TABREADLINE],line1[TABREADLINE],line2[TABREADLINE],linecopy[TABREADLINE];
@@ -3146,7 +3645,7 @@ offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_el
   int nops=0,totalsum,sumcount=1,npow,nmul,ndiv,nplu,nmin,npar,sumindx;
   bool IsChange=false,IsExplicit=false;
   solve_real zerodivide=0,temp1,temp2;
-  offset_t varantidim[MAXVARDIM],varsubset[MAXVARDIM],vararset[MAXVARDIM];
+  offset_t varantidim[MAXVARDIM],varsubset[MAXVARDIM],vararset[MAXVARDIM],varll[MAXVARDIM];
   quantifier *arSet1=NULL;
   formula_op *ops1= NULL;
   strcpy(commsyntax,"update");
@@ -3168,6 +3667,7 @@ offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_el
     /* update statements have no condition machinery: a ':' used to make
        the set lookup miss and expand over sets[0] in silence (M3) */
     upd_cond_extract(line,&uc);
+    zdiv_default_hits=0;
     IsChange=false;
     IsExplicit=false;
     if(strstr(line, "(change)")!=NULL) {
@@ -3225,6 +3725,7 @@ offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_el
     strcpy(line,linecopy);
     readitem = strtok(line,"=");
     readitem = strtok(NULL,";");
+    if(IsChange==false&&IsExplicit==false) product_update_check(readitem,vname,coefs,ncof,vars,nvar,linecopy);
     if(IsChange==false&&IsExplicit==false) {
       while (str_replace_all(readitem,"*", "+"));
       strcpy(line1,vname);
@@ -3235,7 +3736,7 @@ offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_el
     }
     if(IsChange==true) {
       strcpy(line1,vname);
-      if(readitem[0]!='+'||readitem[0]!='-') strcat(line1,"+");
+      if(readitem[0]!='+'&&readitem[0]!='-') strcat(line1,"+");
       strcat(line1,readitem);
       readitem=line1;
     }
@@ -3301,7 +3802,6 @@ offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_el
           if (strcmp(coefs[index].cofname,p)==0) {
             offset=coefs[index].offset;
             varsize=coefs[index].size;
-            if(coefs[index].size>0){strcpy(argu,strtok(NULL,")"));strcat(argu,",");}
             check10=false;
             break;
           }
@@ -3312,35 +3812,18 @@ offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_el
             if (strcmp(vars[index].cofname,p)==0) {
               offset=ncofele+vars[index].offset;
               varsize=vars[index].size;
-              if(vars[index].size>0){strcpy(argu,strtok(NULL,")"));strcat(argu,",");}
               break;
             }
           } while (index--);
         }
-        for (l=0; l<MAXVARDIM; l++){varantidim[l]=0;varsubset[l]=0;varsupsetid[l]=0;}
-        if (check10) {
-            for (dcount=0; dcount<vars[index].size; dcount++) {
-              if(dcount==0)p=strtok(argu,",");
-              else p=strtok(NULL,",");
-              for (l=0; l<fdim-1; l++) if (strcmp(arSet[l].index_name,p)==0) {
-                  varantidim[dcount]=vars[index].strides[dcount];
-                  vararset[dcount]=l+1;
-                  { dim_t ss=set_supset_slot(sets,arSet[l].setid,vars[index].setid[dcount]); if(ss<0)set_supset_fatal(p,vars[index].cofname,NULL,sets,arSet[l].setid,vars[index].setid[dcount]); if(ss>0){varsubset[dcount]=1; varsupsetid[dcount]=ss;} }
-                  break;
-                }
-            }
-        } else {
-            for (dcount=0; dcount<coefs[index].size; dcount++) {
-              if(dcount==0)p=strtok(argu,",");
-              else p=strtok(NULL,",");
-              for (l=0; l<fdim-1; l++) if (strcmp(arSet[l].index_name,p)==0) {
-                  varantidim[dcount]=coefs[index].strides[dcount];
-                  vararset[dcount]=l+1;
-                  { dim_t ss=set_supset_slot(sets,arSet[l].setid,coefs[index].setid[dcount]); if(ss<0)set_supset_fatal(p,coefs[index].cofname,NULL,sets,arSet[l].setid,coefs[index].setid[dcount]); if(ss>0){varsubset[dcount]=1; varsupsetid[dcount]=ss;} }
-                  break;
-                }
-            }
+        char *lhsargs=NULL;
+        if (varsize>0) {
+          char *ta=strtok(NULL,")");
+          if (ta!=NULL&&strlen(ta)+2<sizeof(argu)) { strcpy(argu,ta); strcat(argu,","); lhsargs=argu; }
         }
+        for (l=0; l<MAXVARDIM; l++){varantidim[l]=0;varsubset[l]=0;varsupsetid[l]=0;varll[l]=0;}
+        lhs_args_bind("Update",linecopy,check10?&vars[index]:&coefs[index],lhsargs,arSet,fdim-1,sets,varantidim,vararset,varsubset,varsupsetid,varll);
+        upd_nonfinite_note(check10?-1:index);
     if(!formula_compile(line1,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,&nops,arSet,fdim-1))MPI_Abort(PETSC_COMM_WORLD,1);
     upd_cond_compile(&uc,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,arSet,fdim-1);
     int dfr=upd_stmt_defer(stmt);
@@ -3374,9 +3857,9 @@ offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_el
                 for(i1=0; i1<varsize; i1++) {
                   if(vararset[i1]-1==dcount) {
                     if(varsubset[i1]==1) {
-                      l2=l2+set_elems[sets[arSet1[dcount].setid].offset+i3].superset_pos[varsupsetid[i1]]*varantidim[i1];
+                      l2=l2+(set_elems[sets[arSet1[dcount].setid].offset+i3].superset_pos[varsupsetid[i1]]+varll[i1])*varantidim[i1];
                     } else {
-                      l2=l2+i3*varantidim[i1];
+                      l2=l2+(i3+varll[i1])*varantidim[i1];
                     }
                     break;
                   }
@@ -3385,9 +3868,9 @@ offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_el
                 for(i1=0; i1<varsize; i1++) {
                   if(vararset[i1]-1==dcount) {
                     if(varsubset[i1]==1) {
-                      l2=l2+set_elems[sets[arSet1[dcount].setid].offset+i3].superset_pos[varsupsetid[i1]]*varantidim[i1];
+                      l2=l2+(set_elems[sets[arSet1[dcount].setid].offset+i3].superset_pos[varsupsetid[i1]]+varll[i1])*varantidim[i1];
                     } else {
-                      l2=l2+i3*varantidim[i1];
+                      l2=l2+(i3+varll[i1])*varantidim[i1];
                     }
                   }
                 }
@@ -3400,6 +3883,7 @@ offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_el
       if(dfr){
         store_real v0=elem_vals[offset+l2].value,nv=v0;
         temp1=formula_eval(elem_vals,sets,set_elems,sum_vals,ops1,nops,arSet1,fdim-1,zerodivide);
+        if(teems_nonfinite(temp1))upd_nf_hit(offset+l2);
         if(midpoint==2)nv=0.5*(elem_vals[offset+l2].substep_base+temp1);
         else if(temp1-v0>0.000000001||temp1-v0<-0.000000001)nv=midpoint?elem_vals[offset+l2].substep_base+2*(temp1-v0):temp1;
         upd_pend_off[pb+l]=offset+l2;
@@ -3419,16 +3903,19 @@ offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_el
         /* Gragg terminal smoothing of the data: (C[n-1] + C[n] + dC)/2 */
         temp2=elem_vals[offset+l2].value;
         temp1=formula_eval(elem_vals,sets,set_elems,sum_vals,ops1,nops,arSet1,fdim-1,zerodivide);
+        if(teems_nonfinite(temp1))upd_nf_hit(offset+l2);
         elem_vals[offset+l2].value=0.5*(elem_vals[offset+l2].substep_base+temp1);
         elem_vals[offset+l2].substep_base=temp2;
       }else if(midpoint){
         temp2=elem_vals[offset+l2].value;
         temp1=formula_eval(elem_vals,sets,set_elems,sum_vals,ops1,nops,arSet1,fdim-1,zerodivide);
+        if(teems_nonfinite(temp1))upd_nf_hit(offset+l2);
         if(temp1-elem_vals[offset+l2].value>0.000000001||temp1-elem_vals[offset+l2].value<-0.000000001)elem_vals[offset+l2].value=elem_vals[offset+l2].substep_base+2*(temp1-elem_vals[offset+l2].value);
         elem_vals[offset+l2].substep_base=temp2;
       }else{
         elem_vals[offset+l2].substep_base=elem_vals[offset+l2].value;
         temp1=formula_eval(elem_vals,sets,set_elems,sum_vals,ops1,nops,arSet1,fdim-1,zerodivide);
+        if(teems_nonfinite(temp1))upd_nf_hit(offset+l2);
         if(temp1-elem_vals[offset+l2].value>0.000000001||temp1-elem_vals[offset+l2].value<-0.000000001)elem_vals[offset+l2].value=temp1;
       }
     }
@@ -3451,11 +3938,19 @@ offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_el
         if(dfr) upd_check_later(index,offset,varsize);
         else upd_range_check(coefs,index,offset,varsize,elem_vals);
         upd_cond_free(&uc);
+        if(upd_nf_off>=0) {
+          char lab[4*NAMESIZE];
+          array_element_label(check10?&vars[index]:&coefs[index],upd_nf_off-offset,lab,sizeof(lab));
+          errmsg("Error: Update of %s gives a value that is not finite at %s: a division, LOGE, SQRT or power left its domain (arithmetic error, manual 34.3): %s\n",check10?vars[index].cofname:coefs[index].cofname,lab,linecopy);
+          MPI_Abort(PETSC_COMM_WORLD,1);
+        }
+        zdiv_default_report("Update",check10?vars[index].cofname:coefs[index].cofname,linecopy,zerodivide);
         stmt++;
     
   }
   fclose(filehandle);
   upd_pass_flush(coefs,elem_vals);
+  upd_nonfinite_scan(coefs,elem_vals);
   return j;
 }
 
@@ -3471,7 +3966,7 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
   int nops=0,totalsum,sumcount=1,npow,nmul,ndiv,nplu,nmin,npar,sumindx;
   bool IsChange=false,IsExplicit=false;
   solve_real zerodivide=0,temp1;
-  offset_t varantidim[MAXVARDIM],varsubset[MAXVARDIM],vararset[MAXVARDIM];
+  offset_t varantidim[MAXVARDIM],varsubset[MAXVARDIM],vararset[MAXVARDIM],varll[MAXVARDIM];
   quantifier *arSet1=NULL;
   formula_op *ops1= NULL;
   strcpy(commsyntax,"update");
@@ -3492,6 +3987,7 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
     /* update statements have no condition machinery: a ':' used to make
        the set lookup miss and expand over sets[0] in silence (M3) */
     upd_cond_extract(line,&uc);
+    zdiv_default_hits=0;
     IsChange=false;
     IsExplicit=false;
     if(strstr(line, "(change)")!=NULL) {
@@ -3549,6 +4045,7 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
     strcpy(line,linecopy);
     readitem = strtok(line,"=");
     readitem = strtok(NULL,";");
+    if(IsChange==false&&IsExplicit==false) product_update_check(readitem,vname,coefs,ncof,vars,nvar,linecopy);
     if(IsChange==false&&IsExplicit==false) {
       while (str_replace_all(readitem,"*", "/100)!(1+"));
       while (str_replace_all(readitem,"!", "*"));
@@ -3560,7 +4057,7 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
     }
     if(IsChange==true) {
       strcpy(line1,vname);
-      if(readitem[0]!='+'||readitem[0]!='-') strcat(line1,"+");
+      if(readitem[0]!='+'&&readitem[0]!='-') strcat(line1,"+");
       strcat(line1,readitem);
       readitem=line1;
     }
@@ -3626,7 +4123,6 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
           if (strcmp(coefs[index].cofname,p)==0) {
             offset=coefs[index].offset;
             varsize=coefs[index].size;
-            if(coefs[index].size>0){strcpy(argu,strtok(NULL,")"));strcat(argu,",");}
             check10=false;
             break;
           }
@@ -3637,35 +4133,18 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
             if (strcmp(vars[index].cofname,p)==0) {
               offset=ncofele+vars[index].offset;
               varsize=vars[index].size;
-              if(vars[index].size>0){strcpy(argu,strtok(NULL,")"));strcat(argu,",");}
               break;
             }
           } while (index--);
         }
-        for (l=0; l<MAXVARDIM; l++){varantidim[l]=0;varsubset[l]=0;varsupsetid[l]=0;}
-        if (check10) {
-            for (dcount=0; dcount<vars[index].size; dcount++) {
-              if(dcount==0)p=strtok(argu,",");
-              else p=strtok(NULL,",");
-              for (l=0; l<fdim-1; l++) if (strcmp(arSet[l].index_name,p)==0) {
-                  varantidim[dcount]=vars[index].strides[dcount];
-                  vararset[dcount]=l+1;
-                  { dim_t ss=set_supset_slot(sets,arSet[l].setid,vars[index].setid[dcount]); if(ss<0)set_supset_fatal(p,vars[index].cofname,NULL,sets,arSet[l].setid,vars[index].setid[dcount]); if(ss>0){varsubset[dcount]=1; varsupsetid[dcount]=ss;} }
-                  break;
-                }
-            }
-        } else {
-            for (dcount=0; dcount<coefs[index].size; dcount++) {
-              if(dcount==0)p=strtok(argu,",");
-              else p=strtok(NULL,",");
-              for (l=0; l<fdim-1; l++) if (strcmp(arSet[l].index_name,p)==0) {
-                  varantidim[dcount]=coefs[index].strides[dcount];
-                  vararset[dcount]=l+1;
-                  { dim_t ss=set_supset_slot(sets,arSet[l].setid,coefs[index].setid[dcount]); if(ss<0)set_supset_fatal(p,coefs[index].cofname,NULL,sets,arSet[l].setid,coefs[index].setid[dcount]); if(ss>0){varsubset[dcount]=1; varsupsetid[dcount]=ss;} }
-                  break;
-                }
-            }
+        char *lhsargs=NULL;
+        if (varsize>0) {
+          char *ta=strtok(NULL,")");
+          if (ta!=NULL&&strlen(ta)+2<sizeof(argu)) { strcpy(argu,ta); strcat(argu,","); lhsargs=argu; }
         }
+        for (l=0; l<MAXVARDIM; l++){varantidim[l]=0;varsubset[l]=0;varsupsetid[l]=0;varll[l]=0;}
+        lhs_args_bind("Update",linecopy,check10?&vars[index]:&coefs[index],lhsargs,arSet,fdim-1,sets,varantidim,vararset,varsubset,varsupsetid,varll);
+        upd_nonfinite_note(check10?-1:index);
     if(!formula_compile(line1,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,&nops,arSet,fdim-1))MPI_Abort(PETSC_COMM_WORLD,1);
     upd_cond_compile(&uc,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,arSet,fdim-1);
     int dfr=upd_stmt_defer(stmt);
@@ -3702,9 +4181,9 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
                 for(i1=0; i1<varsize; i1++) {
                   if(vararset[i1]-1==dcount) {
                     if(varsubset[i1]==1) {
-                      l2=l2+set_elems[sets[arSet1[dcount].setid].offset+i3].superset_pos[varsupsetid[i1]]*varantidim[i1];
+                      l2=l2+(set_elems[sets[arSet1[dcount].setid].offset+i3].superset_pos[varsupsetid[i1]]+varll[i1])*varantidim[i1];
                     } else {
-                      l2=l2+i3*varantidim[i1];
+                      l2=l2+(i3+varll[i1])*varantidim[i1];
                     }
                     break;
                   }
@@ -3713,9 +4192,9 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
                 for(i1=0; i1<varsize; i1++) {
                   if(vararset[i1]-1==dcount) {
                     if(varsubset[i1]==1) {
-                      l2=l2+set_elems[sets[arSet1[dcount].setid].offset+i3].superset_pos[varsupsetid[i1]]*varantidim[i1];
+                      l2=l2+(set_elems[sets[arSet1[dcount].setid].offset+i3].superset_pos[varsupsetid[i1]]+varll[i1])*varantidim[i1];
                     } else {
-                      l2=l2+i3*varantidim[i1];
+                      l2=l2+(i3+varll[i1])*varantidim[i1];
                     }
                   }
                 }
@@ -3727,6 +4206,7 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
         if(dfr){ upd_pend_off[pb+l]=-1; upd_pend_sidx[pb+l]=-1; }
         continue;
       }
+      if(teems_nonfinite(temp1))upd_nf_hit(offset+l2);
       if(dfr){
         store_real v0=elem_vals[offset+l2].value,nv=v0;
         if(temp1-v0>0.000000001||temp1-v0<-0.000000001)nv=temp1;
@@ -3756,11 +4236,19 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
         if(dfr) upd_check_later(index,offset,varsize);
         else upd_range_check(coefs,index,offset,varsize,elem_vals);
         upd_cond_free(&uc);
+        if(upd_nf_off>=0) {
+          char lab[4*NAMESIZE];
+          array_element_label(check10?&vars[index]:&coefs[index],upd_nf_off-offset,lab,sizeof(lab));
+          errmsg("Error: Update of %s gives a value that is not finite at %s: a division, LOGE, SQRT or power left its domain (arithmetic error, manual 34.3): %s\n",check10?vars[index].cofname:coefs[index].cofname,lab,linecopy);
+          MPI_Abort(PETSC_COMM_WORLD,1);
+        }
+        zdiv_default_report("Update",check10?vars[index].cofname:coefs[index].cofname,linecopy,zerodivide);
         stmt++;
     
   }
   fclose(filehandle);
   upd_pass_flush(coefs,elem_vals);
+  upd_nonfinite_scan(coefs,elem_vals);
   return j;
 }
 

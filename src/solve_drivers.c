@@ -107,6 +107,66 @@ void jac_mat_prealloc(Mat M,const char *what,PetscBool mpi,int count,PetscInt nr
    zero at the analyse state can become nonzero at a later step and must
    be present in the pattern.  rank_hsl only. */
 static int *fr_irn=NULL,*fr_jcn=NULL;
+/* ---- solve accuracy (manual 30.1.5, 30.6.1) and arithmetic errors
+   (34.3) ----------------------------------------------------------
+   After a solve A y = b the residual of every equation is compared with
+   the sum of the absolute values of its terms (GEMPACK's residual
+   ratio); the maximum across the simulation is logged and recorded in
+   stats.json, and an equation whose ratio reaches 1e-4 (30.1.5: "somewhat
+   concerned ... 0.0001 or larger") is reported as not satisfied very
+   accurately. More than 100 such warnings make the run end with an
+   error after all files are written, as GEMPACK does (30.6.1). The check
+   needs A and b after the solve: the LU paths and -fastrefac SBBD keep
+   them; one-shot SBBD, DBBD and NDBBD release A before or during the
+   factorization, so their solves are counted as skipped. Every method's
+   solution is scanned for NaN/Inf. */
+double teems_resid_max=0.0;
+long teems_resid_solves=0,teems_resid_warn=0,teems_resid_skipped=0;
+#define TEEMS_RESID_WARN 1e-4
+#define TEEMS_RESID_WARN_PRINT 10
+
+void solve_x_check(const solve_real *x, PetscInt n, int doit) {
+  PetscInt i;
+  if(!doit||x==NULL) return;
+  for(i=0; i<n; i++) if(teems_nonfinite((double)x[i])) {
+      char lab[(MAXVARDIM+2)*NAMESIZE];
+      probe_col_label(i,lab,sizeof(lab));
+      errmsg("Error: the linear solve gave a value that is not finite (%s) for %s: the LHS matrix is singular or badly scaled at this step, or a coefficient overflowed (manual 34.1, 34.3)\n",teems_isnan_bits((double)x[i])?"NaN":"infinite",lab);
+      MPI_Abort(PETSC_COMM_WORLD,1);
+    }
+}
+
+static void solve_residual_check(Mat A, const PetscScalar *b, const solve_real *x, PetscInt n) {
+  Mat_SeqAIJ *aa=(Mat_SeqAIJ*)A->data;
+  PetscInt i,k;
+  double worst=0.0;
+  long nw=0;
+  solve_x_check(x,n,1);
+  for(i=0; i<n; i++) {
+    double sum=0.0,sabs=fabs((double)b[i]),r,q;
+    for(k=aa->i[i]; k<aa->i[i+1]; k++) {
+      double t=(double)aa->a[k]*(double)x[aa->j[k]];
+      sum+=t;
+      sabs+=fabs(t);
+    }
+    r=fabs(sum-(double)b[i]);
+    q=(sabs>0.0)?r/sabs:0.0;
+    if(q>worst) worst=q;
+    if(q>=TEEMS_RESID_WARN) {
+      nw++;
+      if(nw<=TEEMS_RESID_WARN_PRINT) {
+        char lab[(4*MAXVARDIM+2)*NAMESIZE];
+        probe_row_label(i,lab,sizeof(lab));
+        printf("Warning: equation %s is not satisfied very accurately (residual ratio %.3e: the sum of its terms is %.6g while the sum of their absolute values is %.6g); this may be because the LHS matrix is not really invertible (manual 30.6.1)\n",lab,q,sum-(double)b[i],sabs);
+      }
+    }
+  }
+  if(nw>TEEMS_RESID_WARN_PRINT) printf("Warning: ... %ld more equations of this solve are not satisfied very accurately (manual 30.6.1)\n",nw-TEEMS_RESID_WARN_PRINT);
+  if(worst>teems_resid_max) teems_resid_max=worst;
+  teems_resid_solves++;
+  teems_resid_warn+=nw;
+}
+
 static solve_real *fr_values=NULL;
 static PetscInt fr_nz=-1;
 static PetscInt *fr_pat=NULL;  /* the assembled column pattern the pivot sequence belongs to
@@ -169,6 +229,7 @@ void lu_fastrefac_solve(Mat A,PetscInt VecSize,dim_t laA,solve_real *rhs,solve_r
       fr_ready=1;
       teems_condest_scope=0;
       probe_onfail_scope_clear();
+      solve_residual_check(A,rhs,x,VecSize);
       return;
     }
     if(insize[4]==-3) {
@@ -263,6 +324,7 @@ void lu_grow_solve(Mat A,PetscInt VecSize,dim_t laA,solve_real *rhs,solve_real *
         grow_hw=lasize;
         grow_hw_n=VecSize;
       }
+      solve_residual_check(A,rhs,x,VecSize);
       return;
     }
     lasize=ma48_grow_la(lasize,insize[5],count,"laA",&teems_laA_used);
@@ -302,6 +364,8 @@ void sbbd_csr_solve(Mat *A,Vec *vecb,PetscInt VecSize,PetscInt rank,PetscInt ran
   CHKERRABORT(PETSC_COMM_WORLD,ierr);
   spec48_nomc66_run_(indata,x,&fcomm);
   probe_onfail_scope_clear();
+  solve_x_check(x,VecSize,rank==rank_hsl);
+  if(rank==rank_hsl) teems_resid_skipped++;
 }
 
 /* -fastrefac SBBD (6.15(c) form): the persistent MP48 instance is staged
@@ -351,6 +415,7 @@ void sbbd_fastrefac_solve(Mat *A,Vec *vecb,PetscInt VecSize,PetscInt rank,PetscI
     }
   }
   probe_onfail_scope_clear();
+  if(rank==rank_hsl)solve_residual_check(*A,bv,x,VecSize);
   if(rank==rank_hsl)VecRestoreArray(*vecb,&bv);
   ierr = VecDestroy(vecb);
   CHKERRABORT(PETSC_COMM_WORLD,ierr);
@@ -679,6 +744,8 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
         if(rank==rank_hsl)probe_onfail_scope_set_coo(irn,jcn,values,NULL,count,VecSize,VecSize,"SBBD system (MP48)",NULL,NULL);
         if(mc66!=0)spec48_single_(ptx,irn,jcn,b1,values,x0,neleperrow,ai1,&fcomm);
         if(mc66==0)spec48_nomc66_(ptx,jcn,b1,values,x0,neleperrow,&fcomm,counteq,countvarintra1);
+              solve_x_check(x0,VecSize,rank==rank_hsl);
+              if(rank==rank_hsl)teems_resid_skipped++;
         probe_onfail_scope_clear();
         free(irn);
         free(jcn);
@@ -1256,6 +1323,8 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
               if(rank==rank_hsl)probe_onfail_scope_set_coo(irn,jcn,values,NULL,count,VecSize,VecSize,"SBBD system (MP48)",NULL,NULL);
               if(mc66!=0)spec48_single_(ptx,irn,jcn,b1,values,x1,neleperrow,ai1,&fcomm);
               if(mc66==0)spec48_nomc66_(ptx,jcn,b1,values,x1,neleperrow,&fcomm,counteq,countvarintra1);
+              solve_x_check(x1,VecSize,rank==rank_hsl);
+              if(rank==rank_hsl)teems_resid_skipped++;
               probe_onfail_scope_clear();
               free(irn);
               ierr = PetscGetCPUTime(&time1);
@@ -1873,6 +1942,8 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
             if(rank==rank_hsl)probe_onfail_scope_set_coo(irn,jcn,values,NULL,count,VecSize,VecSize,"SBBD system (MP48)",NULL,NULL);
             if(mc66!=0)spec48_single_(ptx,irn,jcn,b1,values,x1,neleperrow,ai1,&fcomm);
             if(mc66==0)spec48_nomc66_(ptx,jcn,b1,values,x1,neleperrow,&fcomm,counteq,countvarintra1);
+              solve_x_check(x1,VecSize,rank==rank_hsl);
+              if(rank==rank_hsl)teems_resid_skipped++;
             probe_onfail_scope_clear();
             free(irn);
             ierr = PetscGetCPUTime(&time1);

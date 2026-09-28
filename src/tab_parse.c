@@ -2435,8 +2435,21 @@ void sum_carried_fatal(const char *idx, const char *stmt) {
 }
 
 char *sum_dim_identity(char *p) {
-  char *at=strchr(p,MAPMARK);
-  return at==NULL?p:at+1;
+  static char buf[4][NAMESIZE];
+  static int k=0;
+  char *at=strchr(p,MAPMARK),*q=(at==NULL)?p:at+1,*o;
+  size_t n;
+  /* an index offset (t+1, encoded t#1 / t!1) is carried or summed by
+     its index (manual 16.4); the offset applies when the body's
+     operand binds */
+  o=strpbrk(q,"#!");
+  if (o==NULL) return q;
+  n=(size_t)(o-q);
+  if (n>=NAMESIZE) n=NAMESIZE-1;
+  k=(k+1)%4;
+  memcpy(buf[k],q,n);
+  buf[k][n]='\0';
+  return buf[k];
 }
 
 /* Parse the ":<condition>" tail of a sum's set token (manual 11.4.11;
@@ -2947,6 +2960,11 @@ static offset_t closure_var_find(char *vname, array_def *vars, offset_t nvar) {
   return -1;
 }
 
+/* closure statements are set operations (manual 23.2.1, 23.2.3): a
+   component already exogenous stays exogenous and is counted once. The
+   count went up on every mention, so a component listed twice shrank
+   the system size (VecSize = nvarele - nexo - backsolved) below the
+   number of endogenous columns. */
 offset_t closure_read(char *fname, char *commsyntax,closure_entry *closure_vals, array_def *vars,offset_t nvar,set_def *sets,dim_t nset, set_element *set_elems) {
   FILE * filehandle;
   char line[TABREADLINE]="\0",*readitem=NULL,*p=NULL,*p1=NULL,vname[TABREADLINE],argu[TABREADLINE];//,linecopy[TABREADLINE]
@@ -3003,8 +3021,7 @@ offset_t closure_read(char *fname, char *commsyntax,closure_entry *closure_vals,
                its offset is the NEXT variable's first element */
             dims=vars[j].nelem;
             for (l=0; l<dims; l++) {
-                CL_SET_EXO(vars[j].offset+l,true);
-                n=n+1;
+                if(!CL_EXO(vars[j].offset+l)) { CL_SET_EXO(vars[j].offset+l,true); n=n+1; }
               }
             check=false;
             break;
@@ -3042,8 +3059,7 @@ offset_t closure_read(char *fname, char *commsyntax,closure_entry *closure_vals,
                 *p1='\0';
                 for (l1=0; l1<sets[vars[j].setid[0]].size; l1++) {
                   if (strcmp(p,set_elems[sets[vars[j].setid[0]].offset+l1].setele)==0) {
-                    CL_SET_EXO(vars[j].offset+l1,true);
-                    n=n+1;
+                    if(!CL_EXO(vars[j].offset+l1)) { CL_SET_EXO(vars[j].offset+l1,true); n=n+1; }
                     check=false;
                     break;
                   } }
@@ -3163,8 +3179,7 @@ offset_t closure_read(char *fname, char *commsyntax,closure_entry *closure_vals,
                   }
                   exodims=exodims+l2*vars[j].strides[dcount];
                 }
-                CL_SET_EXO(vars[j].offset+exodims,true);
-                n=n+1;
+                if(!CL_EXO(vars[j].offset+exodims)) { CL_SET_EXO(vars[j].offset+exodims,true); n=n+1; }
               }
             free(arSet);
             free(exoantidim);
@@ -3183,6 +3198,27 @@ offset_t closure_read(char *fname, char *commsyntax,closure_entry *closure_vals,
   return n;
 }
 
+/* one shocked component (manual 24, 24.14.1, 68.1.1): only exogenous
+   components can be shocked, and each at most once. A shock to an
+   endogenous component used to be stored and dropped without a word,
+   and a second statement on one component silently replaced the first. */
+static void shock_component_set(array_def *vars, offset_t j, offset_t e, solve_real v, unsigned char *seen) {
+  offset_t x=vars[j].offset+e;
+  char lab[4*NAMESIZE];
+  if (!CL_EXO(x)) {
+    array_element_label(&vars[j],e,lab,sizeof(lab));
+    errmsg("Error: the shock statement for %s names component %s, which is endogenous; only exogenous components can be shocked (manual 24, 24.14.1; shock file)\n",vars[j].cofname,lab);
+    MPI_Abort(PETSC_COMM_WORLD,1);
+  }
+  if (seen[x]) {
+    array_element_label(&vars[j],e,lab,sizeof(lab));
+    errmsg("Error: some components of %s have been specified more than once (%s is shocked by two statements; manual 68.1.1; shock file)\n",vars[j].cofname,lab);
+    MPI_Abort(PETSC_COMM_WORLD,1);
+  }
+  seen[x]=1;
+  CL_SHOCK(x)=v;
+}
+
 offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,offset_t nvarele, array_def *vars,offset_t nvar,set_def *sets,dim_t nset, set_element *set_elems,dim_t subints) {
   FILE * filehandle;
   char line[DATREADLINE],linecopy[DATREADLINE],argu[TABREADLINE];
@@ -3199,6 +3235,7 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
         MPI_Abort(PETSC_COMM_WORLD,1);
         return -1;
       }
+  unsigned char *seen= (unsigned char *) calloc (nvarele>0?nvarele:1,sizeof(unsigned char));
   while (tab_next_statement_raw(commsyntax,filehandle,line,DATREADLINE,&shock_strict)) {
     str_replace_char_all(line,'\r',' ');
     str_replace_char_all(line,'\n',' ');
@@ -3257,25 +3294,54 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
              shocked, so "Shock pfactwld = uniform 1;" moved one period
              of pfactwld(ALLTIME) and left the rest unshocked. */
           {
-            offset_t nel=(vars[j].nelem>0)?vars[j].nelem:1,e,rem,pos;
+            /* a variable over an empty set (nelem 0, manual 11.7.9) has
+               no components: its offset is the NEXT variable's first
+               element, which the old nel=1 fallback shocked */
+            offset_t nel=vars[j].nelem,e,rem,pos,nexov=0;
             dim_t d;
+            for (e=0; e<nel; e++) if (CL_EXO(vars[j].offset+e)) nexov++;
+            if (nexov==0) {
+              errmsg("Error: %s has no exogenous components, so it cannot be shocked (manual 24, 24.6.3; shock file)\n",vars[j].cofname);
+              fclose(filehandle);
+              MPI_Abort(PETSC_COMM_WORLD,1);
+              return -1;
+            }
             k1=str_rfind_ci(readitem,"uniform");
             if(k1!=-1){
               val=teems_value_checked(readitem+k1+1,"shock value",vars[j].cofname);
               for (e=0; e<nel; e++) if (CL_EXO(vars[j].offset+e)) {
-                CL_SHOCK(vars[j].offset+e)=val/subints;
+                shock_component_set(vars,j,e,val/subints,seen);
                 l=l+1;
               }
             }else{
-              char *tok=strtok(readitem," ");
-              for (e=0; e<nel; e++) {
-                if (tok==NULL) {
-                  errmsg("Error: shock statement for variable %s supplies %ld value(s) for its %ld components; give one value per component or use \"uniform\" (shock file)\n",vars[j].cofname,(long)e,(long)nel);
-                  fclose(filehandle);
-                  MPI_Abort(PETSC_COMM_WORLD,1);
-                  return -1;
+              /* one value per EXOGENOUS component, in component order
+                 (manual 24.14.1), or one per component with the
+                 endogenous ones' values unused (the "select from"
+                 reading, 24.2) */
+              offset_t nval=0;
+              char *tok;
+              {
+                char *c=readitem;
+                while (*c!='\0') {
+                  while (*c==' ') c++;
+                  if (*c=='\0') break;
+                  nval++;
+                  while (*c!=' '&&*c!='\0') c++;
                 }
-                val=teems_value_checked(tok,"shock value",vars[j].cofname);
+              }
+              if (nval!=nel&&nval!=nexov) {
+                if (nexov==nel) {
+                  if (nval<nel) errmsg("Error: shock statement for variable %s supplies %ld value(s) for its %ld components; give one value per component or use \"uniform\" (shock file)\n",vars[j].cofname,(long)nval,(long)nel);
+                  else errmsg("Error: shock statement for variable %s supplies more values than its %ld components (shock file)\n",vars[j].cofname,(long)nel);
+                } else {
+                  errmsg("Error: shock statement for variable %s supplies %ld value(s); it has %ld exogenous of %ld components: give one value per exogenous component or one per component, or use \"uniform\" (manual 24.14.1; shock file)\n",vars[j].cofname,(long)nval,(long)nexov,(long)nel);
+                }
+                fclose(filehandle);
+                MPI_Abort(PETSC_COMM_WORLD,1);
+                return -1;
+              }
+              tok=strtok(readitem," ");
+              for (e=0; e<nel&&tok!=NULL; e++) {
                 rem=e;
                 pos=0;
                 for (d=0; d<vars[j].size; d++) {
@@ -3283,15 +3349,13 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
                   pos+=(rem%sz)*vars[j].strides[d];
                   rem/=sz;
                 }
-                CL_SHOCK(vars[j].offset+pos)=val/subints;
-                if (CL_EXO(vars[j].offset+pos)) l=l+1;
+                if (nval==nexov&&!CL_EXO(vars[j].offset+pos)) continue;
+                val=teems_value_checked(tok,"shock value",vars[j].cofname);
+                if (CL_EXO(vars[j].offset+pos)) {
+                  shock_component_set(vars,j,pos,val/subints,seen);
+                  l=l+1;
+                }
                 tok=strtok(NULL," ");
-              }
-              if (tok!=NULL) {
-                errmsg("Error: shock statement for variable %s supplies more values than its %ld components (shock file)\n",vars[j].cofname,(long)nel);
-                fclose(filehandle);
-                MPI_Abort(PETSC_COMM_WORLD,1);
-                return -1;
               }
             }
           }
@@ -3466,7 +3530,7 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
               for (dcount=0; dcount<vars[j].size; dcount++) {
                 l2=l2+arSet[dcount]*vars[j].strides[dcount];
               }
-              CL_SHOCK(vars[j].offset+l2)=val/subints;
+              shock_component_set(vars,j,l2,val/subints,seen);
               l=l+1;
             }
           } else {
@@ -3507,7 +3571,7 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
               for (dcount=0; dcount<vars[j].size; dcount++) {
                 l2=l2+arSet[dcount]*vars[j].strides[dcount];
               }
-              CL_SHOCK(vars[j].offset+l2)=val/subints;
+              shock_component_set(vars,j,l2,val/subints,seen);
               l=l+1;
             }
           }
@@ -3522,6 +3586,7 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
     }
   }
   fclose(filehandle);
+  free(seen);
   return l;
 }
 
@@ -3959,6 +4024,9 @@ offset_t coefficients_read(char *fname, char *commsyntax, array_def *record, off
      array_def is binary-locked to the R-side sol.var parser */
   free(teems_coef_is_param);
   teems_coef_is_param= (bool *) calloc (ncof+1,sizeof(bool));
+  free(teems_coef_is_int);
+  teems_coef_is_int= (bool *) calloc (ncof+1,sizeof(bool));
+  teems_n_int_coefs=0;
   free(teems_coef_gltype2);
   free(teems_coef_glval2);
   teems_coef_gltype2= (int *) calloc (ncof+1,sizeof(int));
@@ -3989,6 +4057,7 @@ offset_t coefficients_read(char *fname, char *commsyntax, array_def *record, off
     }
     if (j<ncof) {
       if (expparam>=0?expparam==1:(isint||DefParam))teems_coef_is_param[j]=true;
+      if (isint) { teems_coef_is_int[j]=true; teems_n_int_coefs++; }
       teems_coef_gltype2[j]=cgltype2;
       teems_coef_glval2[j]=cglval2;
     }

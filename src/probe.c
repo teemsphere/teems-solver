@@ -394,6 +394,27 @@ void probe_onfail_context(set_def *sets,set_element *set_elems,array_def *vars,o
   onfail_ctx.set=1;
 }
 
+/* names of a condensed column (variable element) and row (equation
+   element) for solve diagnostics; plain positions when no context is
+   registered on this rank */
+void probe_col_label(PetscInt col, char *out, size_t cap) {
+  char buf[(MAXVARDIM+2)*NAMESIZE];
+  if(onfail_ctx.set&&col>=0&&col<onfail_ctx.VecSize&&onfail_ctx.col2ele[col]>=0) {
+    probe_var_ele_name(onfail_ctx.col2ele[col],onfail_ctx.vars,onfail_ctx.nvar,onfail_ctx.sets,onfail_ctx.set_elems,buf);
+    snprintf(out,cap,"%s",buf);
+  }
+  else snprintf(out,cap,"solution column %ld",(long)col);
+}
+
+void probe_row_label(PetscInt row, char *out, size_t cap) {
+  char buf[(4*MAXVARDIM+2)*NAMESIZE];
+  if(onfail_ctx.set&&row>=0&&row<onfail_ctx.VecSize&&onfail_ctx.row2leq[row]>=0&&onfail_ctx.eqmeta!=NULL) {
+    probe_eq_ele_name(onfail_ctx.row2leq[row],onfail_ctx.eqmeta,onfail_ctx.neqmeta,onfail_ctx.sets,onfail_ctx.set_elems,buf);
+    snprintf(out,cap,"%s",buf);
+  }
+  else snprintf(out,cap,"equation row %ld",(long)row);
+}
+
 void probe_onfail_scope_set(Mat A,PetscInt m,PetscInt n,const char *label,int block_id,int *row_order,int *col_order,offset_t row_base,offset_t col_base,offset_t row_add,offset_t col_add) {
   onfail_scope.A=A;
   onfail_scope.coo_irn=NULL;

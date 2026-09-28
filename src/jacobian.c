@@ -1252,6 +1252,7 @@ static void stmt_prog_build_one(char *line, stmt_prog *stp, char *commsyntax,
               continue;
             }
             { dim_t ss=set_supset_slot(sets,arSet[dcountdim3[dcount]].setid,vars[LinVars[i].LinVarIndx].setid[dcount]); if(ss<0)set_supset_fatal(LinVars[i].dimnames[dcount],LinVars[i].LinVarName,NULL,sets,arSet[dcountdim3[dcount]].setid,vars[LinVars[i].LinVarIndx].setid[dcount]); supset[dcount]=(ss>0)?ss:0; }
+            offset_range_check((dim_t)arSet[dcountdim3[dcount]].setid,supset[dcount],(dim_t)vars[LinVars[i].LinVarIndx].setid[dcount],LinVars[i].dimleadlag[dcount],LinVars[i].dimnames[dcount],LinVars[i].LinVarName);
           }
           stp->lv[i].ops= (formula_op *) malloc (nops*sizeof(formula_op));
           memcpy(stp->lv[i].ops,ops,nops*sizeof(formula_op));
@@ -1284,6 +1285,27 @@ static void stmt_prog_build_one(char *line, stmt_prog *stp, char *commsyntax,
       free(arSet);
 }
 
+/* name of an equation statement (the token after the keyword and its
+   qualifiers), for messages */
+static void eq_stmt_name(const char *line, char *out) {
+  const char *p=line;
+  int k=0;
+  while (*p==' ') p++;
+  if (strncmp(p,"equation",8)==0) p+=8;
+  for (;;) {
+    while (*p==' ') p++;
+    if (*p=='('&&strncmp(p,"(all,",5)!=0) {
+      const char *c=strchr(p,')');
+      if (c==NULL) break;
+      p=c+1;
+      continue;
+    }
+    break;
+  }
+  while (*p!='\0'&&*p!=' '&&*p!='('&&*p!='#'&&k<NAMESIZE-1) out[k++]=*p++;
+  out[k]='\0';
+}
+
 int jacobian_fill(char *fname, char *commsyntax,set_def *sets,offset_t nset, set_element *set_elems, array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar, elem_value *elem_vals,offset_t ncofvar,offset_t ncofele,closure_entry *closure_vals,offset_t ndblock,offset_t alltimeset,offset_t allregset,PetscInt *eq_addr,offset_t *counteq,offset_t nintraeq,Mat A,Mat B) {
   FILE * filehandle;
   char line[TABREADLINE];
@@ -1314,7 +1336,9 @@ int jacobian_fill(char *fname, char *commsyntax,set_def *sets,offset_t nset, set
     while (tab_next_statement_resolved(commsyntax,filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
       if (strstr(line,"(default")==NULL) {
         stmt_cache[sidx].zerodivide=zerodivide;
+        zdiv_default_hits=0;
         stmt_prog_execute(&stmt_cache[sidx],matrow,eq_addr,stmt_cache[sidx].nloops,sets,set_elems,elem_vals,closure_vals,vars,Istart1,Iend1,A,B);
+        if (zdiv_default_hits>0) { char en[NAMESIZE]; eq_stmt_name(line,en); zdiv_default_report("Equation",en,line,zerodivide); }
         matrow+=stmt_cache[sidx].nloops;
         sidx++;
       }
@@ -1330,8 +1354,15 @@ int jacobian_fill(char *fname, char *commsyntax,set_def *sets,offset_t nset, set
       stmt_cache_n++;
       memset(stp,0,sizeof(stmt_prog));
       stp->zerodivide=zerodivide;
-      stmt_prog_build_one(line,stp,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,ncofele,eq_addr,matrow,Istart1,Iend1,mpisize1,false);
-      stmt_prog_execute(stp,matrow,eq_addr,stp->nloops,sets,set_elems,elem_vals,closure_vals,vars,Istart1,Iend1,A,B);
+      {
+        char en[NAMESIZE],lc[TABREADLINE];
+        eq_stmt_name(line,en);
+        strcpy(lc,line);
+        zdiv_default_hits=0;
+        stmt_prog_build_one(line,stp,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,ncofele,eq_addr,matrow,Istart1,Iend1,mpisize1,false);
+        stmt_prog_execute(stp,matrow,eq_addr,stp->nloops,sets,set_elems,elem_vals,closure_vals,vars,Istart1,Iend1,A,B);
+        zdiv_default_report("Equation",en,lc,zerodivide);
+      }
       matrow+=stp->nloops;
       eqindx++;
     }
@@ -3298,6 +3329,7 @@ int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,
             continue;
           }
           { dim_t ss=set_supset_slot(sets,arSet[dcountdim5[dcount]].setid,vars[LinVars[i].LinVarIndx].setid[dcount]); if(ss<0)set_supset_fatal(LinVars[i].dimnames[dcount],LinVars[i].LinVarName,NULL,sets,arSet[dcountdim5[dcount]].setid,vars[LinVars[i].LinVarIndx].setid[dcount]); supset[dcount]=(ss>0)?ss:0; }
+            offset_range_check((dim_t)arSet[dcountdim5[dcount]].setid,supset[dcount],(dim_t)vars[LinVars[i].LinVarIndx].setid[dcount],LinVars[i].dimleadlag[dcount],LinVars[i].dimnames[dcount],LinVars[i].LinVarName);
         }
         for (lj=0; lj<nloopslin; lj++) {
           l2=lj;

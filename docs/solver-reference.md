@@ -288,8 +288,75 @@ Shock statement values follow GEMPACK-standard ordering (first
 subscript varies fastest; fixed dimensions collapsed to size 1). A
 statement without an argument list covers the whole variable ([GM]
 24.1, 24.6.2): `Shock v = uniform x;` shocks every exogenous component,
-and `Shock v = x1 x2 …;` needs exactly one value per component, in
-component order ([GM] 66.4); any other count is a named fatal.
+and `Shock v = x1 x2 …;` takes one value per exogenous component, or
+one per component with the endogenous components' values unused
+([GM] 24.14.1, 66.4); any other count is a named fatal. A shock
+statement with arguments that names an endogenous component, a
+component shocked by two statements ("specified more than once",
+[GM] 68.1.1; statements on different components of one variable stay
+legal) and a shock to a variable with no exogenous component (also a
+variable over an empty set, [GM] 24.6.3) are named fatals. Closure
+statements are set operations ([GM] 23.2.1/23.2.3): a component listed
+twice is exogenous once and counted once. The initial closure check
+([GM] 23.2.7) compares the endogenous count with the equation rows
+right after the ordering scan and stops with both numbers before any
+matrix is sized.
+
+Language rules enforced as in GEMPACK (Tier A, 2026-09-28):
+
+- index offsets ([GM] 11.2.4, 16.4) are integer constants (`t+NLAG`
+  is a named fatal); an offset on a Formula/Update left-hand side
+  (`(all,t,TIME1) C1(t+1) = …`, 16.5(a)) addresses the written element
+  (not on a `Formula(Initial)`, 10.8/11.11.4: named fatal); every
+  offset, in formulas, sums (on the summed or a carried index),
+  equations, updates and mapped indices, is range-checked at compile
+  time over every element of its index's set, and one that leaves the
+  argument's declared set is a named fatal naming the element. A
+  left-hand-side argument that is not an ALL index, or a wrong argument
+  count, is a named fatal.
+- recursive formulas ([GM] 16.5): a Formula whose LHS array is read on
+  the right-hand side (or in its quantifier condition) at an element
+  that may differ from the one written runs serially in loop order
+  (first quantifier outermost) with the most recent values; when such a
+  read sits inside a SUM the sums are re-evaluated before each tuple.
+  References to the same element, or to provably disjoint elements (a
+  different literal slice), keep the parallel loop. A read of a later
+  element along the written index (`C1(t) = C1(t+1) + …`, 16.5(b), and
+  the averaging form of 16.5(c)) is a named fatal.
+- a Formula whose LHS is an integer coefficient is `(initial)` unless
+  `(always)` is written; `Formula (default=…)` does not apply to it
+  ([GM] 10.19, 11.6.3).
+- numeric constants in exponent notation (`1e-5`, `2.5E+3`, [GM]
+  11.4.9 discourages them) are rewritten as plain decimals by the
+  preprocess, and a signed operand next to `^` is bracketed, so unary
+  `+`/`-` binds before `^` in formulas, equations, updates and
+  assertions alike (`-X^2 = (-X)^2`, `X^-1 = X^(-1)`, [GM] 11.4.1).
+- a product Update's right-hand side must be `v1*v2*…*vn` of
+  percentage-change linear variables ([GM] 11.12.4; the `p_` column of
+  a levels variable counts, and an `IF[cond, v]` factor gates `v`): a
+  constant or
+  coefficient factor, a change variable, `/` or `+` is a
+  named fatal (write a `(change)` Update).
+- statement keywords ([GM] 11.1.1): `LOOP`/`BREAK`/`CYCLE` are named
+  fatals; `DISPLAY` and `TRANSFER` (and their keyword-less
+  continuations) are dropped with one warning each. Nested strong
+  comments `![[! … ![[! … !]]! … !]]!` are paired by depth ([GM]
+  11.1.5); an unbalanced marker is a named fatal.
+- arithmetic ([GM] 34.3/34.4): a Formula or Update value that is NaN
+  or infinite, and a non-finite value in a linear-solve solution, is a
+  named fatal naming the statement and the first element; a division
+  of a nonzero value by zero that takes the Zerodivide default under
+  `-gpzerodivide 0` (values unchanged) is reported once per statement
+  (Formula, Update, Equation) with its count.
+- solve accuracy ([GM] 30.1.5, 30.6.1): after each solve on the LU
+  paths and `-fastrefac` SBBD the residual ratio of every equation
+  (|residual| over the sum of the absolute values of its terms) is
+  computed; the maximum across the run is logged and written to
+  `stats.json` (`residual.max_residual_ratio`), an equation at or above
+  1e-4 is warned as not satisfied very accurately, and more than 100
+  such warnings end the run with an error after all files are written.
+  One-shot SBBD, DBBD and NDBBD release A before or during the
+  factorization: their solves are counted as `unchecked_solves`.
 Startup notes remind that intertemporal variables should be declared
 with minimal dimensionality to keep the border (netcut) small;
 element-level classification (§3 phase 7) borders only the elements a
@@ -1135,7 +1202,8 @@ the CMF (which is a file manifest only), and are echoed in
   expansion is the usual cause);
   overflow is diagnosed, not silently truncated.
 - **Language forms rejected by design** (named errors):
-  LOOP/DISPLAY/TRANSFER/BREAK/CYCLE, `(no_split)`, `linear_name=`,
+  LOOP/BREAK/CYCLE (DISPLAY/TRANSFER are dropped with a warning),
+  `(no_split)`, `linear_name=`,
   and `$POS` written directly in an equation body (use a coefficient
   assigned `$POS`). Formula-computed operands in conditional set
   builders are evaluated by the R front end, which hands the pre-pass
@@ -1144,6 +1212,13 @@ the CMF (which is a file manifest only), and are echoed in
   front end rewrites the supported `IF` forms into conditional
   quantifiers, helper coefficients and domain splits before
   deployment.
+- **Tier A residue** (2026-09-28): the residual-ratio check covers LU
+  and `-fastrefac` SBBD only (one-shot SBBD, DBBD and NDBBD free A
+  first; keeping a copy would double the matrix memory); zerodivide
+  reports on equation rows owned by ranks other than 0 are not printed
+  under nohsl; an unknown statement keyword cannot be told from a
+  keyword-less continuation ([GM] 11.1.1), so only the named TABLO
+  keywords are caught.
 - **Version handshake**: the solver image and the R package are
   versioned independently. The image moves 1.0.0 → 1.1.0: everything
   since 1.0.0 is additive for the package that drives it (the `hsl`

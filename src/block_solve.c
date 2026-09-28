@@ -1412,6 +1412,8 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
   timestr=clock();
   if(SORD==1)MPI_Allreduce(x0,x1,VecSize, MPI_DOUBLE, MPI_SUM,PETSC_COMM_WORLD);
   else MPI_Allreduce(x0,x1,VecSize, MPI_FLOAT, MPI_SUM,PETSC_COMM_WORLD);
+  solve_x_check(x1,(PetscInt)VecSize,rank==0);
+  if(rank==0)teems_resid_skipped++;
   logmsg(2,"Reduce solution rank %d time %f\n",rank,((double)clock()-timestr)/CLOCKS_PER_SEC);
   free(x0);
   for (i=0; i<nmatinplus; i++){
@@ -3884,6 +3886,8 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
   timestr=clock();
   if(SORD==1)MPI_Allreduce(x0,x1,VecSize, MPI_DOUBLE, MPI_SUM,PETSC_COMM_WORLD);
   else MPI_Allreduce(x0,x1,VecSize, MPI_FLOAT, MPI_SUM,PETSC_COMM_WORLD);
+  solve_x_check(x1,(PetscInt)VecSize,rank==0);
+  if(rank==0)teems_resid_skipped++;
   logmsg(2,"Reduce solution rank %d time %f\n",rank,((double)(clock()-timestr))/CLOCKS_PER_SEC);
   free(x0);
   return 0;

@@ -833,6 +833,181 @@ static int formula_lhs_scalar(const char *line) {
   return 1;
 }
 
+/* strong comments (manual 11.1.5): the markers nest -- one !]]! cancels
+   one ![[! -- and everything between the outermost pair is comment. The
+   depth rides across lines; the removed text becomes one blank. The two
+   markers used to map to one character stripped in pairs by parity, so
+   the text between an inner opener and its closer came back to life.
+   Returns -1 on a closer with nothing open. */
+static int strong_comment_strip(char *s, int *depth) {
+  char *r=s,*w=s;
+  while (*r!='\0') {
+    if (strncmp(r,"![[!",4)==0) {
+      if (*depth==0) *w++=' ';
+      (*depth)++;
+      r+=4;
+      continue;
+    }
+    if (strncmp(r,"!]]!",4)==0) {
+      if (*depth==0) return -1;
+      (*depth)--;
+      r+=4;
+      continue;
+    }
+    if (*depth>0) {
+      if (*r=='\n') *w++='\n';
+      r++;
+      continue;
+    }
+    *w++=*r++;
+  }
+  *w='\0';
+  return 0;
+}
+
+/* first word of a statement, lowercased (letters and '_' only) */
+static void stmt_first_word(const char *s, char *out, int cap) {
+  int k=0;
+  while (*s==' '||*s=='\t') s++;
+  while (((*s>='a'&&*s<='z')||(*s>='A'&&*s<='Z')||*s=='_')&&k<cap-1) out[k++]=(char)tolower((int)*s++);
+  out[k]='\0';
+  if (cond_is_namec(*s)) out[0]='\0';
+}
+
+/* numeric constants in exponent notation (1e-5, 2.5e+3, 1.e-3; manual
+   11.4.9 discourages them, R-generated text can carry them) are
+   rewritten as plain decimals before any tokenizer runs: the expression
+   splitters cut at the sign, so 1e-5 used to read as 1 - 5. The digits
+   move, nothing is rounded, so strtod reads the same double either way.
+   Quoted text is left alone; a token glued to a name (c1e5) is a name. */
+static int num_exp_expand(char *s, size_t cap) {
+  char out[TABREADLINE];
+  size_t o=0,i=0,n=strlen(s);
+  int inq=0;
+  while (i<n) {
+    char c=s[i];
+    if (c=='"') inq=!inq;
+    if (!inq&&(isdigit((unsigned char)c)||(c=='.'&&isdigit((unsigned char)s[i+1])))&&(i==0||(!cond_is_namec(s[i-1])&&s[i-1]!='.'))) {
+      size_t j=i,ms,me,dp=0,nd=0,ee;
+      char dig[TABREADLINE];
+      int neg=0,k=0,any=0;
+      while (isdigit((unsigned char)s[j])) { dig[nd++]=s[j++]; dp++; }
+      if (s[j]=='.') { j++; while (isdigit((unsigned char)s[j])) dig[nd++]=s[j++]; }
+      ms=i; me=j;
+      ee=j;
+      if (s[ee]=='e'||s[ee]=='E') {
+        ee++;
+        if (s[ee]=='+'||s[ee]=='-') { neg=(s[ee]=='-'); ee++; }
+        while (isdigit((unsigned char)s[ee])) { if (k<1000) k=k*10+(s[ee]-'0'); ee++; any=1; }
+      }
+      if (any&&!cond_is_namec(s[ee])&&s[ee]!='.') {
+        char num[TABREADLINE];
+        long p,q,m=0;
+        if (k>99) {
+          errmsg("Error: numeric constant %.*s is out of the supported range (exponent notation, manual 11.4.9)\n",(int)(ee-ms),s+ms);
+          return -1;
+        }
+        p=(long)dp+(neg?-k:k);
+        if (p<=0) {
+          num[m++]='0'; num[m++]='.';
+          for (q=0; q<-p; q++) num[m++]='0';
+          for (q=0; q<(long)nd; q++) num[m++]=dig[q];
+        } else {
+          for (q=0; q<p; q++) num[m++]=(q<(long)nd)?dig[q]:'0';
+          if (p<(long)nd) {
+            num[m++]='.';
+            for (q=p; q<(long)nd; q++) num[m++]=dig[q];
+          }
+        }
+        num[m]='\0';
+        if (o+m>=sizeof(out)) return -1;
+        memcpy(out+o,num,m);
+        o+=m;
+        i=ee;
+        continue;
+      }
+      if (o+(me-ms)>=sizeof(out)) return -1;
+      memcpy(out+o,s+ms,me-ms);
+      o+=me-ms;
+      i=me;
+      continue;
+    }
+    if (o+1>=sizeof(out)) return -1;
+    out[o++]=c;
+    i++;
+  }
+  out[o]='\0';
+  if (o>=cap) return -1;
+  strcpy(s,out);
+  return 0;
+}
+
+/* end of the operand starting at s[i] (a number, a name with an
+   optional argument group, or a bracket group), -1 if none */
+static long unary_operand_end(const char *s, long i) {
+  long j=i;
+  if (s[j]=='(') {
+    int d=0;
+    for (; s[j]!='\0'; j++) {
+      if (s[j]=='(') d++;
+      else if (s[j]==')') { d--; if (d==0) return j+1; }
+    }
+    return -1;
+  }
+  if (isdigit((unsigned char)s[j])||s[j]=='.') {
+    while (isdigit((unsigned char)s[j])||s[j]=='.') j++;
+    return j;
+  }
+  if (!cond_is_namec(s[j])&&s[j]!='$') return -1;
+  if (s[j]=='$') j++;
+  while (cond_is_namec(s[j])) j++;
+  {
+    long k=j;
+    while (s[k]==' ') k++;
+    if (s[k]=='(') {
+      long e=unary_operand_end(s,k);
+      if (e>0) return e;
+    }
+  }
+  return j;
+}
+
+/* unary + and - bind before ^ (manual 11.4.1: -A+B^C/D is
+   ((-A)+((B^C)/D))). levels.c parses that way but the formula engine
+   raised first and negated after, so -X^2 was -(X^2) there and +(X)^2
+   in the levels half of the same model. A signed operand next to a ^
+   -- -X^2, 2*-3^2, X^-1 -- is bracketed here, before either engine
+   reads the text, so both see (-X)^2 and X^(-1). */
+static int unary_pow_bracket(char *s, size_t cap) {
+  long i,n;
+  int inq=0;
+  for (i=0; s[i]!='\0'; i++) {
+    long b,e,k;
+    char pc;
+    if (s[i]=='"') { inq=!inq; continue; }
+    if (inq||(s[i]!='-'&&s[i]!='+')) continue;
+    for (b=i-1; b>=0&&s[b]==' '; b--) {}
+    pc=(b>=0)?s[b]:'=';
+    if (strchr("=(,*/^<>:+-",pc)==NULL) continue;
+    for (k=i+1; s[k]==' '; k++) {}
+    e=unary_operand_end(s,k);
+    if (e<0) continue;
+    {
+      long f=e;
+      while (s[f]==' ') f++;
+      if (pc!='^'&&s[f]!='^') continue;
+    }
+    n=(long)strlen(s);
+    if ((size_t)(n+3)>=cap) return -1;
+    memmove(s+e+1,s+e,n-e+1);
+    s[e]=')';
+    memmove(s+i+1,s+i,e+1-i+(n+1-e));
+    s[i]='(';
+    i++;
+  }
+  return 0;
+}
+
 #define MAXLITDEDUP 64
 static int tab_preprocess_run(char *filename, char *newtabfile) {
   FILE * filehandle,*fout;
@@ -847,7 +1022,7 @@ static int tab_preprocess_run(char *filename, char *newtabfile) {
     errmsg("Error: cannot open %s\n",filename);
     return -1;
   }
-  int check,i1,i2,i,setindx,l1,l2,l3,l4,k1,k2,l5;//,necheck,npcheck;//,j;,check1
+  int check,i1,i,setindx,l1,l2,l3,l4,k1,k2,l5;//,necheck,npcheck;//,j;,check1
   strcpy(newtabfile1,newtabfile);
   str_replace_all(newtabfile1,".","1.");
   fout = teems_fopen(newtabfile1,"w");
@@ -860,21 +1035,26 @@ static int tab_preprocess_run(char *filename, char *newtabfile) {
      is followed by further text, so every iteration below sees at most
      one statement terminator */
   rawpos=NULL;
+  int sdepth=0;
+  long rawno=0;
   while (rawpos!=NULL||fgets(rawline,TABLINESIZE,filehandle)) {
     if (rawpos==NULL) {
-      str_replace_all(rawline,"\v"," ");
-      str_replace_all(rawline,"![[!","\v");
-      str_replace_all(rawline,"!]]!","\v");
+      rawno++;
+      if (strong_comment_strip(rawline,&sdepth)<0) {
+        errmsg("Error: '!]]!' at line %ld of the TAB file closes a strong comment that was never opened (manual 11.1.5)\n",rawno);
+        fclose(filehandle);
+        fclose(fout);
+        return -1;
+      }
       rawpos=rawline;
     }
     {
-      int pb=str_count_char(readline,'!')%2,pv=str_count_char(readline,'\v')%2,ph=str_count_char(readline,'#')%2;
+      int pb=str_count_char(readline,'!')%2,ph=str_count_char(readline,'#')%2;
       char *c,*cut=NULL;
       for (c=rawpos; *c!='\0'; c++) {
         if (*c=='!') pb^=1;
-        else if (*c=='\v') pv^=1;
         else if (*c=='#') ph^=1;
-        else if (*c==';'&&!pb&&!pv&&!ph) {
+        else if (*c==';'&&!pb&&!ph) {
           char *d=c+1;
           while (*d==' '||*d=='\t') d++;
           if (*d!='\0'&&*d!='\n'&&*d!='\r') cut=c+1;
@@ -902,12 +1082,7 @@ static int tab_preprocess_run(char *filename, char *newtabfile) {
       while (str_strip_comment(readline,"!"));
       i1-=2;
     }
-    i2=str_count_char(readline,'\v');
-    while (i2>1) {
-      while (str_strip_comment(readline,"\v"));
-      i2-=2;
-    }
-    if (n!=NULL&&i1==0&&i2==0) {
+    if (n!=NULL&&i1==0) {
       check=0;
       /* capture the first # label # BEFORE the strip and the lowercase
          pass: assertion messages must survive preprocessing verbatim
@@ -921,7 +1096,7 @@ static int tab_preprocess_run(char *filename, char *newtabfile) {
           strncpy(assertmsg,am1+1,am2-am1-1);
           assertmsg[am2-am1-1]='\0';
           for (am1=assertmsg; *am1!='\0'; am1++)
-            if (*am1=='\n'||*am1=='\r'||*am1=='\v') *am1=' ';
+            if (*am1=='\n'||*am1=='\r') *am1=' ';
         }
       }
       while (str_strip_comment(readline,"#"));
@@ -1065,6 +1240,56 @@ static int tab_preprocess_run(char *filename, char *newtabfile) {
         strcpy(commsyntax,"postsim");
         check=1;
       }
+      /* keywords the solver does not carry (manual 11.1.1 lists them):
+         a keyword-less statement inherits the previous keyword, so
+         "Loop (begin) ..." used to become "formula loop ..." and
+         "Display X" a Write or a bogus declaration. TAB-file loops are
+         fatal; DISPLAY and TRANSFER write files TEEMS does not produce
+         (every coefficient is in the coefficient dump) and are dropped
+         with a warning, their keyword-less continuations with them */
+      if (check==0) {
+        char kw[16];
+        stmt_first_word(readline,kw,sizeof(kw));
+        if (strcmp(kw,"loop")==0||strcmp(kw,"break")==0||strcmp(kw,"cycle")==0) {
+          char up[16];
+          for (k1=0; kw[k1]!='\0'; k1++) up[k1]=(char)toupper((int)kw[k1]);
+          up[k1]='\0';
+          errmsg("Error: %s statements are not supported (loops in TAB files, manual 11.18): %.120s\n",up,readline);
+          fclose(filehandle);
+          fclose(fout);
+          return -1;
+        }
+        if (strcmp(kw,"display")==0||strcmp(kw,"transfer")==0) {
+          strcpy(commsyntax,kw);
+          check=1;
+        }
+      }
+      if (strchr(readline,';')!=NULL&&(strcmp(commsyntax,"display")==0||strcmp(commsyntax,"transfer")==0)) {
+        char *t=readline;
+        while (*t==' ') t++;
+        if (commsyntax[0]=='d') printf("Warning: DISPLAY statement ignored (TEEMS writes every coefficient to the coefficient dump; manual 10.12): %.120s\n",t);
+        else printf("Warning: TRANSFER statement ignored (TEEMS writes no Header Array output files; manual 10.15): %.120s\n",t);
+        readline[0]='\0';
+        continue;
+      }
+      /* exponent constants and signed operands of ^ (manual 11.4.9,
+         11.4.1) are rewritten once here, for every later reader */
+      if (strcmp(commsyntax,"formula")==0||strcmp(commsyntax,"equation")==0||strcmp(commsyntax,"update")==0||strcmp(commsyntax,"assertion")==0
+          ||strcmp(commsyntax,"coefficient")==0||strcmp(commsyntax,"variable")==0||strcmp(commsyntax,"zerodivide")==0||strcmp(commsyntax,"complementarity")==0) {
+        if (strpbrk(readline,"eE")!=NULL&&num_exp_expand(readline,sizeof(readline))<0) {
+          errmsg("Error: TAB statement too long after expanding exponent-notation constants: %.120s ...\n",readline);
+          fclose(filehandle);
+          fclose(fout);
+          return -1;
+        }
+        if (strcmp(commsyntax,"coefficient")!=0&&strcmp(commsyntax,"variable")!=0&&strcmp(commsyntax,"zerodivide")!=0&&strcmp(commsyntax,"complementarity")!=0
+            &&strchr(readline,'^')!=NULL&&unary_pow_bracket(readline,sizeof(readline))<0) {
+          errmsg("Error: TAB statement too long after bracketing signed powers: %.120s ...\n",readline);
+          fclose(filehandle);
+          fclose(fout);
+          return -1;
+        }
+      }
       /* reinsert the captured message ahead of the terminator; only
          assertions keep their label (sticky commsyntax covers the
          keyword-less continuation form) */
@@ -1095,6 +1320,12 @@ static int tab_preprocess_run(char *filename, char *newtabfile) {
         }
       }
     }
+  }
+  if (sdepth>0) {
+    errmsg("Error: a strong comment opened with '![[!' in the TAB file is never closed by '!]]!' (%d still open at the end of the file; manual 11.1.5)\n",sdepth);
+    fclose(filehandle);
+    fclose(fout);
+    return -1;
   }
   fclose(filehandle);
   fclose(fout);
