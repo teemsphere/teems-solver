@@ -103,6 +103,85 @@ static int strict_skip(char *line,FILE *f,long pos,const strict_spec *strict,con
 
 static char *tab_next_statement_raw(char *commsyntax, FILE *filehandle, char *readline,offset_t rlinesize,const strict_spec *strict);
 
+/* The manifest (.cmf) teems-R writes is read in one keyword pass per
+   statement kind, and each pass skipped every line it did not want: an
+   unknown statement vanished and the run exited 0. A newer teems that
+   names a file the image does not know (a statement added later) must
+   stop with the statement named, not run without it. Same rules as the
+   closure and shock files, except that "!" and ";" inside a quoted path
+   are part of the path. */
+static const char *const manifest_also[]={"iodata","outdata","soldata","tabfile","closure","shock",NULL};
+static const strict_spec manifest_strict={"manifest (.cmf)","one of iodata, outdata, soldata, tabfile, closure, shock",manifest_also};
+
+static char *manifest_getline(char *line,int size,FILE *f,long *pos,int inq) {
+  char *p;
+  size_t len;
+  int c;
+  *pos=ftell(f);
+  if (fgets(line,size,f)==NULL) return NULL;
+  if (*pos==0&&strncmp(line,"\xEF\xBB\xBF",3)==0) memmove(line,line+3,strlen(line+3)+1);
+  len=strlen(line);
+  for (p=line; *p!='\0'; p++) {
+    if (*p=='"') inq=!inq;
+    else if (*p=='!'&&!inq) {
+      if (len>0&&line[len-1]!='\n') {
+        while ((c=fgetc(f))!=EOF&&c!='\n');
+      }
+      p[0]='\n';
+      p[1]='\0';
+      break;
+    }
+  }
+  len=0;
+  while (line[len]==' '||line[len]=='\t') len++;
+  if (len>0) memmove(line,line+len,strlen(line+len)+1);
+  return line;
+}
+
+static char *manifest_semicolon(char *line,int *inq) {
+  char *p;
+  for (p=line; *p!='\0'; p++) {
+    if (*p=='"') *inq=!*inq;
+    else if (*p==';'&&!*inq) return p;
+  }
+  return NULL;
+}
+
+int manifest_check(const char *fname) {
+  FILE *f;
+  char line[TABLINESIZE];
+  long pos,startpos;
+  int inq;
+  char *n;
+  const char *kw;
+  f=teems_fopen(fname,"r");
+  if (f==NULL) return 0;
+  while (manifest_getline(line,TABLINESIZE,f,&pos,0)) {
+    if (strict_blank(line)) continue;
+    kw=strict_also(line,&manifest_strict);
+    if (kw==NULL) {
+      strict_fail(f,pos,&manifest_strict,"unknown statement",line);
+      fclose(f);
+      return -1;
+    }
+    startpos=pos;
+    inq=0;
+    while ((n=manifest_semicolon(line,&inq))==NULL) {
+      if (manifest_getline(line,TABLINESIZE,f,&pos,inq)==NULL) {
+        strict_fail(f,startpos,&manifest_strict,"statement has no terminating \";\"",kw);
+        fclose(f);
+        return -1;
+      }
+    }
+    if (!strict_blank(n+1)) {
+      strict_fail(f,pos,&manifest_strict,"content after \";\" (one statement per line)",n+1);
+      fclose(f);
+      return -1;
+    }
+  }
+  fclose(f);
+  return 0;
+}
 
 /* bounded in-place replace-all used by the declaration parsers' set-symbol
    substitution: see the definition below str_replace_all. */

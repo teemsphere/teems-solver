@@ -713,6 +713,7 @@ int probe_structural(PetscInt VecSize,offset_t nvarele,offset_t ncofele,PetscInt
   FILE *fp=teems_fopen(probepath,"w");
   if(fp==NULL)printf("Warning: cannot write probe report %s\n",probepath);
   else {
+    outputs_note(probepath,"probe",2);
     fprintf(fp,"{\n");
     fprintf(fp,"  \"version\": 2,\n");
     fprintf(fp,"  \"solver_version\": \"%s\",\n",TEEMS_SOLVER_VERSION);

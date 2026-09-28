@@ -44,6 +44,7 @@ static int coefficients_dump(const char *stem, array_def *coefs, offset_t ncof, 
     fwrite(&kind,1,1,fp);
   }
   fclose(fp);
+  outputs_note(path,"coefficient_declarations",1);
   strcpy(path,stem);
   strcat(path,".cbin");
   if((fp=fopen(path,"wb"))==NULL) {
@@ -64,6 +65,7 @@ static int coefficients_dump(const char *stem, array_def *coefs, offset_t ncof, 
     }
   }
   fclose(fp);
+  outputs_note(path,"coefficients",0);
   return 0;
 }
 
@@ -86,6 +88,180 @@ static const char *blas_corename(void) {
     cached=(n!=NULL&&n[0]!='\0')?n:"unknown";
   }
   return cached;
+}
+
+/* Command-line options are strict (Tier B1). PETSc keeps every -name it
+   is given and nothing checked for leftovers, so a flag the image does
+   not know (a newer teems driving an older image, or a typo) ran as if
+   it had not been given and the run exited 0. Every option must be one
+   the solver reads, a legacy flag that an earlier teems sent and the
+   solver has since dropped (accepted and ignored), or a PETSc runtime
+   option. The check runs once, before any work. */
+static const char *const cli_teems_flags[]={
+  "adaptive","assertions","cmdfile","cntl_3","cntl_6","cofdump",
+  "comp_do_acc","comp_do_approx","comp_redo","comp_redo_min_frac",
+  "comp_sberr_warn","comp_steps","condest","epstol","fastrefac",
+  "gpzerodivide","inmemory","laA","laD","laDi","ma48u","matsol",
+  "maxretries","maxthreads","ndcutcache","nowrites","nsbbdblocks",
+  "nsubints","postsim","probefine","probepattern","random_seed",
+  "range_test_initial","range_test_updated","retryadj","rkchart",
+  "rkctrl","rkguard","rk_h0","rknorm","rkscope","single_run",
+  "smllthreads","solmed","step1","step2","step3","tempdir","verbosity",
+  "withmc66","version",NULL
+};
+/* sent by earlier teems releases or read by earlier solvers, no longer
+   read: -regset, -enable_time, -presol, -nesteddbbd, -ndbbd_bl_rank
+   (teems-R), -enable_iter, -isLinux, -medthreads, -nestfile, -no_hsl,
+   -stoiter (solver) */
+static const char *const cli_legacy_flags[]={
+  "regset","enable_time","presol","nesteddbbd","ndbbd_bl_rank",
+  "enable_iter","islinux","medthreads","nestfile","no_hsl","stoiter",NULL
+};
+/* PETSc runtime options a run may carry (the ASan/TSan gates pass
+   -no_signal_handler; teems-R always passes -nox) */
+static const char *const cli_petsc_flags[]={
+  "nox","nox_warning","display","help","h","options_left","options_view",
+  "options_monitor","options_file","skip_petscrc","log_view","log_trace",
+  "info","malloc_debug","malloc_dump","malloc_view","malloc_test",
+  "memory_view","on_error_abort","on_error_attach_debugger",
+  "start_in_debugger","debugger_ranks","stop_for_debugger",
+  "no_signal_handler","fp_trap","check_pointer_intensity",
+  "mpi_linebuffer","objects_dump","history",NULL
+};
+
+static int cli_in(const char *const *list,const char *name) {
+  int i;
+  for(i=0; list[i]!=NULL; i++)if(strcasecmp(list[i],name)==0)return 1;
+  return 0;
+}
+
+static int cli_options_check(PetscInt rank) {
+  PetscInt n=0,i;
+  char **names=NULL,**values=NULL;
+  int nbad=0;
+  if(PetscOptionsLeftGet(NULL,&n,&names,&values)!=0)return 0;
+  for(i=0; i<n; i++) {
+    const char *nm=names[i];
+    if(nm==NULL)continue;
+    while(*nm=='-')nm++;
+    if(cli_in(cli_teems_flags,nm)||cli_in(cli_petsc_flags,nm))continue;
+    if(cli_in(cli_legacy_flags,nm)) {
+      if(rank==0)logmsg(2,"legacy option -%s accepted and ignored\n",nm);
+      continue;
+    }
+    if(rank==0)errmsg("Error: unknown command-line option -%s: teems-solver %s does not read it (teems and its solver image are released together; use the image that matches this teems version, and see docs/solver-reference.md section 11 for the options)\n",nm,TEEMS_SOLVER_VERSION);
+    nbad++;
+  }
+  PetscOptionsLeftRestore(NULL,&n,&names,&values);
+  return nbad;
+}
+
+/* Side-cars that a later reader could take for this run's (Tier B2):
+   removed before any work, so a run that fails leaves none of them and
+   no completion marker behind. The locked five and the .cof/.cbin dump
+   keep their existing rules. */
+static const char *const sidecar_exts[]={".outputs.json",".outputs.json.tmp",".cols",".cols.json",".cbin0",".xac",NULL};
+
+static void sidecars_clear_stale(const char *cmfname) {
+  FILE *f;
+  char line[TABREADLINE],*a,*b,*c,*d,path[TABREADLINE+32];
+  int i;
+  strcpy(teems_sol_stem,"solution");
+  f=fopen(cmfname,"r");
+  if(f!=NULL) {
+    while(tab_next_statement("soldata",f,line,TABREADLINE)) {
+      a=strchr(line,'"');
+      b=a?strchr(a+1,'"'):NULL;
+      c=b?strchr(b+1,'"'):NULL;
+      d=c?strchr(c+1,'"'):NULL;
+      if(d==NULL||b-a-1!=8||strncasecmp(a+1,"solfiles",8)!=0)continue;
+      if((size_t)(d-c-1)>=sizeof(teems_sol_stem))continue;
+      memcpy(teems_sol_stem,c+1,d-c-1);
+      teems_sol_stem[d-c-1]='\0';
+      break;
+    }
+    fclose(f);
+  }
+  for(i=0; sidecar_exts[i]!=NULL; i++) {
+    snprintf(path,sizeof(path),"%s%s",teems_sol_stem,sidecar_exts[i]);
+    remove(path);
+  }
+}
+
+/* Pre-simulation coefficient values (<stem>.cbin0, Tier B2): the values
+   after the initial Reads and Formulas, before any step. Same layout as
+   the post-simulation .cbin, behind the .cof header form: int64
+   {version 1, ncof, ncofele, phase 0 = pre-simulation}, then ncofele
+   doubles in begadd order; the declarations are the run's .cof. */
+static int coefficients_dump_phase(const char *stem, const char *ext, offset_t phase, offset_t ncof, offset_t ncofele, elem_value *elem_vals) {
+  char path[TABREADLINE];
+  FILE *fp;
+  offset_t i,hdr[4];
+  enum { CHUNK=1<<14 };
+  solve_real buf[CHUNK];
+  offset_t k=0,n;
+  snprintf(path,sizeof(path),"%s%s",stem,ext);
+  if((fp=fopen(path,"wb"))==NULL) {
+    errmsg("Error: cannot open %s for writing: %s (the solver runs as uid %d)\n",path,strerror(errno),(int)getuid());
+    return 1;
+  }
+  hdr[0]=1; hdr[1]=ncof; hdr[2]=ncofele; hdr[3]=phase;
+  fwrite(hdr,sizeof(offset_t),4,fp);
+  while(k<ncofele) {
+    n=ncofele-k; if(n>CHUNK)n=CHUNK;
+    for(i=0; i<n; i++)buf[i]=(solve_real)elem_vals[k+i].value;
+    fwrite(buf,sizeof(solve_real),n,fp);
+    k+=n;
+  }
+  if(fclose(fp)!=0) {
+    errmsg("Error: cannot write %s: %s\n",path,strerror(errno));
+    return 1;
+  }
+  outputs_note(path,"coefficients_presim",1);
+  return 0;
+}
+
+/* Extra solution columns (<stem>.cols + <stem>.cols.json, Tier B2): one
+   container for every per-element column beyond the solution itself.
+   int64 header {version 1, ncol, nrow, kind}, nrow int64 row offsets
+   (element offsets in .bin order), then ncol x nrow doubles, column by
+   column. kind: 0 mixed (per column in the JSON), 1 subtotal,
+   2 sagem_individual, 3 approx_cumulative, 4 pass_solution. Written
+   today for the complementarity approximate run (kind 3). */
+static const char *const cols_kind_names[]={"mixed","subtotal","sagem_individual","approx_cumulative","pass_solution"};
+
+static int cols_write(const char *stem, offset_t kind, offset_t ncol, offset_t nrow, const solve_real *const *cols, const char *const *labels) {
+  char path[TABREADLINE+16];
+  FILE *fp;
+  offset_t hdr[4],i,c;
+  snprintf(path,sizeof(path),"%s.cols",stem);
+  if((fp=fopen(path,"wb"))==NULL) {
+    errmsg("Error: cannot open %s for writing: %s (the solver runs as uid %d)\n",path,strerror(errno),(int)getuid());
+    return 1;
+  }
+  hdr[0]=1; hdr[1]=ncol; hdr[2]=nrow; hdr[3]=kind;
+  fwrite(hdr,sizeof(offset_t),4,fp);
+  for(i=0; i<nrow; i++)fwrite(&i,sizeof(offset_t),1,fp);
+  for(c=0; c<ncol; c++)fwrite(cols[c],sizeof(solve_real),nrow,fp);
+  if(fclose(fp)!=0) {
+    errmsg("Error: cannot write %s: %s\n",path,strerror(errno));
+    return 1;
+  }
+  outputs_note(path,"cols",1);
+  snprintf(path,sizeof(path),"%s.cols.json",stem);
+  if((fp=fopen(path,"w"))==NULL) {
+    errmsg("Error: cannot open %s for writing: %s (the solver runs as uid %d)\n",path,strerror(errno),(int)getuid());
+    return 1;
+  }
+  fprintf(fp,"{\n  \"version\": 1,\n  \"ncol\": %ld,\n  \"nrow\": %ld,\n  \"kind\": \"%s\",\n  \"rows\": \"all\",\n  \"columns\": [",(long)ncol,(long)nrow,cols_kind_names[kind]);
+  for(c=0; c<ncol; c++)fprintf(fp,"%s\n    {\"index\": %ld, \"kind\": \"%s\", \"label\": \"%s\", \"shocked\": \"all\"}",c?",":"",(long)c,cols_kind_names[kind],labels[c]);
+  fprintf(fp,"\n  ]\n}\n");
+  if(fclose(fp)!=0) {
+    errmsg("Error: cannot write %s: %s\n",path,strerror(errno));
+    return 1;
+  }
+  outputs_note(path,"cols_index",1);
+  return 0;
 }
 
 /* Per-run ordering statistics (<solfiles>.stats.json): netcut, border
@@ -143,6 +319,7 @@ static void ordering_stats_write(cmf_file_entry *iodata, int niodata, int noutda
     printf("Warning: cannot write ordering stats %s\n",statspath);
     return;
   }
+  outputs_note(statspath,"stats",2);
   bool bordered=alltimeset>=0||allregset>=0;
   fprintf(fp,"{\n");
   fprintf(fp,"  \"version\": 2,\n");
@@ -1060,6 +1237,20 @@ int main(int argc,char **args) {
     logmsg(2,"Notes:\n  Shock statement values follow GEMPACK ordering (first subscript varies fastest).\n  Declare intertemporal variables with minimum dimension to minimise the net cut,\n  e.g. capital(REG,TIME)=qo(\"capital\",REG,TIME) rather than shocking qo(COM,REG,TIME).\n  laA/laDi control solver workspace sizes; use the smallest that solves.\n  Beware CRLF line endings in model text files.\n");
   }
   MPI_Barrier(PETSC_COMM_WORLD);
+  char run_id[64];
+  solve_real *comp_approx_col=NULL; /* complementarity approximate-run solution, for <stem>.cols (kept across the accurate-run re-entry) */
+  snprintf(run_id,sizeof(run_id),"%ld.%06ld-%ld",(long)begintime.tv_sec,(long)begintime.tv_usec,(long)getpid());
+  MPI_Bcast(run_id,sizeof(run_id),MPI_CHAR,0,PETSC_COMM_WORLD);
+  if(rank==0) {
+    char cmfopt[TABREADLINE];
+    PetscBool cmfflg=PETSC_FALSE;
+    PetscOptionsGetString(NULL,NULL,"-cmdfile",cmfopt,TABREADLINE,&cmfflg);
+    sidecars_clear_stale(cmfflg?cmfopt:"./reg.cmf");
+  }
+  if(cli_options_check(rank)>0) {
+    PetscFinalize();
+    return 1;
+  }
   //**************************************************************************************
   //****************************** READ SET ELEMENT***************************************
   //**************************************************************************************
@@ -1498,6 +1689,7 @@ int main(int argc,char **args) {
   }
   char *readitem=NULL;
   if(rank==0) {
+    if(manifest_check(filename)<0)MPI_Abort(PETSC_COMM_WORLD,1);
     niodata=cmf_count_files(filename,"iodata");
     if(niodata==-1)MPI_Abort(PETSC_COMM_WORLD,1);/* rank 0 only: the other ranks wait in the Bcast below */
     noutdata=cmf_count_files(filename,"outdata");
@@ -2055,6 +2247,7 @@ int main(int argc,char **args) {
   if(rank==0) {
     formulas_execute(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,IsIni);
 assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,IsIni,teems_assertions_mode,0);
+    if(cofdump&&elem_vals!=NULL)coefficients_dump_phase(teems_sol_stem,".cbin0",0,ncof,ncofele,elem_vals); /* reported, not fatal: the run goes on and exits 1 without a completion marker */
   }
   /* formula-assigned mappings (manual 10.13.1) got their values on rank
      0 during the pass above; the equation side on every rank routes
@@ -2811,6 +3004,11 @@ comp_accurate_reentry:
       if(rank==0)printf("Complementarity: %ld active (endogenous) component(s); approximate simulation as forward Euler with %d steps (manual 51.1.2)\n",(long)teems_comp_active,comp_steps);
       if(rank==0&&subints>1)printf("Warning: the complementarity approximate run treats the simulation as one interval (per-subinterval approximate+accurate pairs, manual 51.7.4, are not implemented)\n");
       solve_comp_approx(nohsl,VecSize,dnz,dnnz,onz,onnz,dnzB,dnnzB,onzB,onnzB,&vece,rank,rank_hsl,mpisize,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,&elem_vals,ncofele,nvarele,&closure_vals,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,eq_addr,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,fcomm,comp_steps,comp_redo,comp_minfrac,&xcf);
+      if(rank==0&&comp_do_acc&&xcf!=NULL) {
+        free(comp_approx_col);
+        comp_approx_col=(solve_real *) malloc (nvarele*sizeof(solve_real));
+        if(comp_approx_col!=NULL)memcpy(comp_approx_col,xcf,nvarele*sizeof(solve_real));
+      }
     }
     else {
       if(rank==0)printf("Complementarity: -comp_do_approx 0; taking the pre-simulation states as the accurate run's targets (manual 51.6)\n");
@@ -2950,6 +3148,7 @@ comp_accurate_reentry:
       }
       fwrite(xcf, sizeof(solve_real),nvarele, solution);
       fclose(solution);
+      outputs_note(solchar,"solution",0);
     }
     if(xcf!=NULL&&accmetric==NULL) {
       /* a non-embedded run after an embedded one in the same directory:
@@ -2976,6 +3175,7 @@ comp_accurate_reentry:
       }
       fwrite(accmetric, sizeof(solve_real),nvarele, solution);
       fclose(solution);
+      outputs_note(solchar,"rk_error_estimate",0);
     }
     strcpy(solchar,tempchar);
     strcat(solchar,".var");
@@ -2986,6 +3186,7 @@ comp_accurate_reentry:
     }
     fwrite(vars, sizeof(array_def),nvar, solution);
     fclose(solution);
+    outputs_note(solchar,"variable_declarations",0);
     strcpy(solchar,tempchar);
     strcat(solchar,".set");
     if ( (solution = fopen(solchar, "wb")) == NULL ) {
@@ -2994,6 +3195,7 @@ comp_accurate_reentry:
     }
     fwrite(sets, sizeof(set_def),nset, solution);
     fclose(solution);
+    outputs_note(solchar,"set_declarations",0);
     strcpy(solchar,tempchar);
     strcat(solchar,".sel");
     if ( (solution = fopen(solchar, "wb")) == NULL ) {
@@ -3002,6 +3204,7 @@ comp_accurate_reentry:
     }
     fwrite(set_elems, sizeof(set_element),nsetspace, solution);
     fclose(solution);
+    outputs_note(solchar,"set_elements",0);
     offset_t modeldes[4];
     modeldes[0]=nsetspace;
     modeldes[1]=nvar;
@@ -3015,7 +3218,16 @@ comp_accurate_reentry:
     }
     fwrite(modeldes, sizeof(offset_t),4, solution);
     fclose(solution);
+    outputs_note(solchar,"model_description",0);
+    if(rank==0&&comp_approx_col!=NULL&&xcf!=NULL) {
+      char label[96];
+      const solve_real *cp[1]={comp_approx_col};
+      const char *lp[1]={label};
+      snprintf(label,sizeof(label),"complementarity approximate run (Euler, %d steps)",comp_steps);
+      cols_write(teems_sol_stem,3,1,nvarele,cp,lp);
+    }
   }
+  free(comp_approx_col);
   MPI_Barrier(PETSC_COMM_WORLD);
   /* la* auto-sizing record: reduce the per-rank grown maxima and patch
      the effective percents into stats.json */
@@ -3084,8 +3296,17 @@ comp_accurate_reentry:
     logmsg(1,"Wrote coefficient dump (%ld coefficients, %ld elements)\n",(long)ncof,(long)ncofele);
   }
   if(nowrites==0&&rank==0)for(i=0; i<noutdata; i++){
-    if(outputs_write_csv(tabfile,iodata[i+niodata].logname,iodata[i+niodata].filname,sets,nset,set_elems,coefs,ncof,ncofele,vars,nvar,nvarele,elem_vals)!=-1)
+    if(outputs_write_csv(tabfile,iodata[i+niodata].logname,iodata[i+niodata].filname,sets,nset,set_elems,coefs,ncof,ncofele,vars,nvar,nvarele,elem_vals)!=-1) {
       logmsg(1,"Wrote %s\n",iodata[i+niodata].logname);
+      outputs_note(iodata[i+niodata].filname,"csv",0);
+    }
+  }
+  /* completion marker, the run's last write: only a run that printed no
+     Error line on any rank gets one */
+  {
+    int nerr=teems_error_count,nerrsum=0;
+    MPI_Allreduce(&nerr,&nerrsum,1,MPI_INT,MPI_SUM,PETSC_COMM_WORLD);
+    if(rank==0&&nerrsum==0)outputs_json_write(teems_sol_stem,run_id);
   }
   free(iodata);
   free(countvarintra1);

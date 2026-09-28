@@ -875,6 +875,78 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
     return 1;
   }
 
+/* Extrapolation accuracy side-car (<stem>.xac, Tier B2; GEMPACK's XAC
+   file, manual 26.2.3): per variable element the three pass solutions
+   the Richardson extrapolation combines and the figures-of-accuracy
+   code that the log only summarises. int64 header {version 1, nrow =
+   nvarele, npass 3, nsubints}, then npass x nrow doubles (pass by pass,
+   rows in .bin order), then nrow int32 codes: 6 = the passes agree to
+   6 or more figures, 5..2 = that many, 1 = one figure or none (the
+   minimum over subintervals). With subintervals a pass value is that
+   pass over the last subinterval, compounded onto the extrapolated
+   result of the ones before (the path the last subinterval starts
+   from). Rank 0 only; a run that stops midway leaves a partial file
+   that <stem>.outputs.json does not list. */
+static FILE *xac_fp=NULL;
+static char xac_path[TABREADLINE+8];
+static solve_real *xac_base=NULL;
+
+static void xac_pass(int sol,dim_t subindx,dim_t subints,array_def *vars,offset_t nvar,offset_t nvarele,const solve_real *varchange,const solve_real *xcf) {
+  enum { CHUNK=1<<14 };
+  solve_real buf[CHUNK];
+  offset_t i,k,n,m;
+  if(sol==0) {
+    offset_t hdr[4]={1,nvarele,3,(offset_t)subints};
+    if(xac_fp!=NULL)fclose(xac_fp);
+    snprintf(xac_path,sizeof(xac_path),"%s.xac",teems_sol_stem);
+    xac_fp=fopen(xac_path,"wb");
+    if(xac_fp==NULL) {
+      errmsg("Error: cannot open %s for writing: %s (the solver runs as uid %d)\n",xac_path,strerror(errno),(int)getuid());
+      return;
+    }
+    fwrite(hdr,sizeof(offset_t),4,xac_fp);
+    free(xac_base);
+    xac_base=NULL;
+    if(subindx>0) {
+      xac_base=(solve_real *) malloc (nvarele*sizeof(solve_real));
+      if(xac_base==NULL) {
+        printf("Warning: no memory for the extrapolation accuracy file; %s not written\n",xac_path);
+        fclose(xac_fp);
+        xac_fp=NULL;
+        remove(xac_path);
+        return;
+      }
+      memcpy(xac_base,xcf,nvarele*sizeof(solve_real));
+    }
+  }
+  if(xac_fp==NULL)return;
+  for(i=0; i<nvar; i++) {
+    if(vars[i].nelem<=0)continue;
+    fseeko(xac_fp,(off_t)(4*sizeof(offset_t))+(off_t)sizeof(solve_real)*((off_t)sol*nvarele+vars[i].offset),SEEK_SET);
+    for(k=0; k<vars[i].nelem; k+=n) {
+      n=vars[i].nelem-k; if(n>CHUNK)n=CHUNK;
+      for(m=0; m<n; m++) {
+        offset_t e=vars[i].offset+k+m;
+        if(xac_base==NULL)buf[m]=varchange[e];
+        else if(vars[i].change_real)buf[m]=xac_base[e]+varchange[e];
+        else buf[m]=xac_base[e]+varchange[e]*(1+xac_base[e]/100);
+      }
+      fwrite(buf,sizeof(solve_real),n,xac_fp);
+    }
+  }
+}
+
+static void xac_codes(offset_t nvarele,const int *codes) {
+  if(xac_fp==NULL)return;
+  fseeko(xac_fp,(off_t)(4*sizeof(offset_t))+(off_t)sizeof(solve_real)*3*nvarele,SEEK_SET);
+  fwrite(codes,sizeof(int),nvarele,xac_fp);
+  if(fclose(xac_fp)!=0)errmsg("Error: cannot write %s: %s\n",xac_path,strerror(errno));
+  else outputs_note(xac_path,"extrapolation_accuracy",1);
+  xac_fp=NULL;
+  free(xac_base);
+  xac_base=NULL;
+}
+
 bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt* dnnz,PetscInt onz,PetscInt* onnz,Mat* B1,PetscInt dnzB,PetscInt* dnnzB,PetscInt onzB,PetscInt* onnzB,Vec* vecb1,Vec *vece1,PetscInt rank,PetscInt rank_hsl,PetscInt mpisize,char* tabfile, char *commsyntax,set_def *sets,dim_t nset, set_element *set_elems, array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar, elem_value **elem_vals2,offset_t ncofvar,offset_t ncofele,offset_t nvarele,closure_entry **closure_vals2,offset_t alltimeset,offset_t allregset,offset_t nintraeq,dim_t matsol,PetscInt Istart,PetscInt Iend,  offset_t nreg, offset_t ntime, PetscInt *eq_addr, offset_t ndblock, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laDi,dim_t laD,PetscReal cntl3,PetscReal cntl6,dim_t nesteddbbd,int localsize,PetscInt *ndbbddrank1,fortran_int* indata,dim_t mc66,fortran_int *ptx,struct timeval begintime,dim_t subints,MPI_Fint fcomm,int solmethod,solve_real **xcf2){ /* multistep driver: Gragg (smoothed modified midpoint, Pearson 1991 eq. 6.1 / Alg. 7.1.2) or forward Euler, per solmethod */
   char tempfilenam[256],tempchar[256],solchar[255];
   PetscScalar *vals;
@@ -2252,6 +2324,7 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
              targets' values at the end of this pass enter the
              extrapolation with the weight the variables' final result
              gives this pass (sol 0: w2, sol 1: -w3, sol 2: w3) */
+          if(rank==0&&maxsol==3&&subindx==subints-1)xac_pass(sol,subindx,subints,vars,nvar,nvarele,varchange,xcf);
           if(updates_path_active())updates_path_accumulate(coefs,ncof,elem_vals,(sol==0)?extrap_w2:((sol==1)?-extrap_w3:extrap_w3),sol==0);
           if(subindx>0) {
             if(sol==0)for(i=0; i<nvarele; i++) xc0[i]=1+xcf[i]/100;//if(i==1287)printf("sol!!!!!!!!!!!!!!!!!! %d step %d xc %lf xc0 %lf k %d\n",sol,stepcount,1.0+xc[k]/100,xc0[i],i);}
@@ -2465,6 +2538,7 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
           }
         }
       }
+      if(rank==0&&maxsol==3&&subindx==subints-1)xac_codes(nvarele,xc124);
       if(subindx!=subints-1){
             if(!inmemory){
             strcpy(tempfilenam,scratch_dir);

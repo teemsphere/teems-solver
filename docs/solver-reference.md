@@ -56,7 +56,14 @@ The CMF is a sequence of statements read by `cmf_read()`:
 `outdata` statements name per-set/per-coefficient CSV outputs; `soldata`
 names the solution binary prefix; `tabfile`/`closure`/`shock` point at
 the model inputs. All paths are absolute container paths when deployed
-by teems-R.
+by teems-R. The manifest is strict (Tier B1): every statement opens
+with one of those six keywords (any case) and ends in `;`, may run over
+several lines, and takes `!` comments outside quoted paths; an unknown
+statement, a missing final `;` or a second statement after a `;` on
+the same line is a named fatal with the line number ("unknown
+statement at line N of the manifest (.cmf) file ..."). Run controls
+are never manifest statements (the pre-2026-08 `Assertions = …;`
+style is rejected by name).
 
 Solver outputs, consumed by `ems_compose()`:
 
@@ -76,6 +83,10 @@ Solver outputs, consumed by `ems_compose()`:
 | `.mds` | 4 × long: `nsetspace, nvar, nvarele, nset` |
 | `.cof` | coefficient dump header + declarations (`-cofdump`, default on): 4 × long `{version=1, ncof, ncofele, reserved}`, then `ncof × array_def` (same struct as `.var`), then `ncof × uint8 kind` (bit 0 = PostSim coefficient, bit 1 = `(parameter)`). Written after PostSim, so PostSim coefficients carry their computed values |
 | `.cbin` | `ncofele × double` — updated (post-simulation) coefficient values, the coefficient slice of the value vector in `array_def.offset` order; the coefficient twin of `.bin`. Together with `.cof` this replaces the per-coefficient CSVs as teems-R's coefficient transport (2026-08) |
+| `.cbin0` | pre-simulation coefficient values (`-cofdump`, Tier B2): 4 × long `{version=1, ncof, ncofele, phase=0}` (phase 0 = after the initial Reads and Formulas, before any step), then `ncofele × double` in the same order as `.cbin`; the declarations are the run's `.cof`. Unblocks levels results, `ORIG_LEVEL`, AVC-style averages and level-value shocks on the R side |
+| `.xac` | Gragg/Euler extrapolation record (Tier B2; GEMPACK's XAC file, [GM] 26.2.3), three-pass runs only: 4 × long `{version=1, nrow=nvarele, npass=3, nsubints}`, then `3 × nrow` doubles (pass by pass, `.bin` order: each pass's solution; with subintervals, the last subinterval's pass compounded onto the extrapolated result before it, so the Richardson weights of the passes give `.bin` exactly), then `nrow × int32` accuracy codes (6 = the passes agree to 6+ figures … 1 = one or none; minimum over subintervals; their histogram is the log's accuracy summary) |
+| `.cols` + `.cols.json` | extra solution columns (Tier B2): 4 × long `{version=1, ncol, nrow, kind}`, `nrow × long` row offsets (element offsets in `.bin` order), `ncol × nrow` doubles column by column; kind 0 mixed, 1 subtotal, 2 sagem_individual, 3 approx_cumulative, 4 pass_solution. The JSON carries `version/ncol/nrow/kind` and per column `index/kind/label/shocked`. Written today for a complementarity run with both runs: the approximate (Euler) run's solution, kind 3. Subtotals, SAGEM columns and per-subinterval pass solutions use the same container when they arrive |
+| `.outputs.json` | completion marker (Tier B2), the run's LAST write and only after a run that printed no `Error:` line on any rank: `{version=1, solver_version, run_id, complete: true, files: [{name, path, kind, format_version}]}` listing every file rank 0 wrote (the locked five with `format_version` 0, `.cof` 1, `.cbin` 0, `.cbin0`/`.xac`/`.cols`/`.cols.json` 1, `.stats.json`/`.probe.json` 2, the CSVs). Written to a temporary name and renamed. The solver removes a previous run's `.outputs.json`, `.cbin0`, `.xac`, `.cols`, `.cols.json` before any work, so a failed run leaves no marker; a reader trusts a side-car only when this file lists it |
 | `.stats.json` | per-run ordering statistics (v2): system size, method, `netcut`, border sizes, per-block variable/equation counts (null/empty when no bordered ordering was built), plus `chain_set`/`partition_set` with `chain_source`/`partition_source` (`explicit`/`structural`/`none`) and, when the partition probe ran, the full `partition_auto` candidate table (§6). Written before the solve, so failed runs still record their ordering; feeds `matrix_method` auto-calibration |
 
 The structs are written raw; teems-R's `parse_solution.cpp` mirrors their
@@ -339,7 +350,12 @@ Language rules enforced as in GEMPACK (Tier A, 2026-09-28):
   named fatal (write a `(change)` Update).
 - statement keywords ([GM] 11.1.1): `LOOP`/`BREAK`/`CYCLE` are named
   fatals; `DISPLAY` and `TRANSFER` (and their keyword-less
-  continuations) are dropped with one warning each. Nested strong
+  continuations) are dropped with one warning each. A keyword-less
+  statement continues the previous statement's kind; where that kind
+  cannot open with a name followed by a quantifier `(all,…)` or by a
+  second word (Coefficient, Variable, Formula, Update; Assertion for
+  the quantifier), the first word is a misspelt keyword and a named
+  fatal ("unknown statement keyword 'coeficient' …", Tier B1). Nested strong
   comments `![[! … ![[! … !]]! … !]]!` are paired by depth ([GM]
   11.1.5); an unbalanced marker is a named fatal.
 - arithmetic ([GM] 34.3/34.4): a Formula or Update value that is NaN
@@ -1124,7 +1140,7 @@ needs corpus calibration.
 | `-postsim {0,1}` | 1 | execute the TAB's PostSim section after the simulation |
 | `-comp_steps n`, `-comp_do_approx/-comp_do_acc {0,1}`, `-comp_redo {0,1}`, `-comp_redo_min_frac x`, `-comp_sberr_warn {0,1}` | see log | complementarity ([GM] ch. 51) approximate/accurate run controls |
 | `-nowrites n` | 0 | suppress output writes |
-| `-cofdump {0,1}` | 1 | write the `.cof`/`.cbin` coefficient dump (recorded in `stats.json` `options`) |
+| `-cofdump {0,1}` | 1 | write the `.cof`/`.cbin` coefficient dump and the pre-simulation `.cbin0` (recorded in `stats.json` `options`) |
 | `-verbosity {0,1,2}` | 1 | 0 = errors/warnings + accuracy summary only; 1 = phase progress and timings; 2 = per-rank/per-block debug detail (also exported as `TEEMS_VERBOSITY` for the Fortran kernels; MA48 duplicate-entry notes appear only at 2) |
 | `-nox` | — | PETSc: no X output |
 
@@ -1146,8 +1162,26 @@ teems-R populates these from `ems_solve()`/`ems_RK()` arguments
 `fastrefac`, `condest`, `assertions`, `range_test_*`, RK controls,
 complementarity controls). Options travel on the invocation, never in
 the CMF (which is a file manifest only), and are echoed in
-`stats.json`'s `options` object. Stale flags from older commands
-(`-regset`, `-enable_time`, `-presol`, `-nesteddbbd`) are ignored.
+`stats.json`'s `options` object.
+
+**Unknown options are fatal (Tier B1).** Before any work the solver
+checks every option it was given: an option it reads (the table
+above), a legacy flag that an earlier teems sent or
+an earlier solver read (`-regset`, `-enable_time`, `-presol`,
+`-nesteddbbd`, `-ndbbd_bl_rank`, `-enable_iter`, `-isLinux`,
+`-medthreads`, `-nestfile`, `-no_hsl`, `-stoiter`: accepted and
+ignored), or a PETSc runtime option (`-nox`, `-nox_warning`,
+`-display`, `-help`, `-options_left/_view/_monitor/_file`,
+`-skip_petscrc`, `-log_view`, `-log_trace`, `-info`, `-malloc_debug`,
+`-malloc_dump`, `-malloc_view`, `-malloc_test`, `-memory_view`,
+`-on_error_abort`, `-on_error_attach_debugger`, `-start_in_debugger`,
+`-debugger_ranks`, `-stop_for_debugger`, `-no_signal_handler`,
+`-fp_trap`, `-check_pointer_intensity`, `-mpi_linebuffer`,
+`-objects_dump`, `-history`). Anything else is named, one line per
+option, and the run exits 1: "unknown command-line option -x:
+teems-solver <version> does not read it …". A newer teems that sends a
+flag an older image lacks therefore stops by name instead of running
+without the feature. Names are case-insensitive, as in PETSc.
 
 ## 12. Verifying a build
 
@@ -1216,9 +1250,11 @@ the CMF (which is a file manifest only), and are echoed in
   and `-fastrefac` SBBD only (one-shot SBBD, DBBD and NDBBD free A
   first; keeping a copy would double the matrix memory); zerodivide
   reports on equation rows owned by ranks other than 0 are not printed
-  under nohsl; an unknown statement keyword cannot be told from a
-  keyword-less continuation ([GM] 11.1.1), so only the named TABLO
-  keywords are caught.
+  under nohsl; an unknown statement keyword cannot always be told from
+  a keyword-less continuation ([GM] 11.1.1): besides the named TABLO
+  keywords, only the forms no continuation can take are caught (Tier
+  B1); a misspelt `Read`/`Write`/`Set`/`Equation` keyword still ends in
+  the continued kind's own fatal.
 - **Version handshake**: the solver image and the R package are
   versioned independently. The image moves 1.0.0 → 1.1.0: everything
   since 1.0.0 is additive for the package that drives it (the `hsl`

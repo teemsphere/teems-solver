@@ -252,3 +252,87 @@ void zdiv_scan_reset(void) {
   teems_zdiv_scan.zbz_on=1;
   teems_zdiv_scan.nbz_on=0;
 }
+
+/* Side-car output record (Tier B2). Rank 0 notes every file it writes;
+   outputs_json_write lists them in <solfiles>.outputs.json as the very
+   last write of a run that printed no Error line. A reader trusts a
+   side-car only when this file lists it, so a file left by an earlier
+   run in the same directory is never read against this run's solution,
+   and the file's presence says the run completed. */
+char teems_sol_stem[TABREADLINE] = "";
+typedef struct {
+  char *path;
+  const char *kind;
+  int version;
+} outputs_entry;
+static outputs_entry *outputs_list = NULL;
+static long outputs_n = 0, outputs_cap = 0;
+
+void outputs_note(const char *path,const char *kind,int format_version) {
+  int rank=0;
+  long i;
+  MPI_Comm_rank(PETSC_COMM_WORLD,&rank);
+  if(rank!=0||path==NULL||path[0]=='\0')return;
+  for(i=0; i<outputs_n; i++) {
+    if(strcmp(outputs_list[i].path,path)==0) {
+      outputs_list[i].kind=kind;
+      outputs_list[i].version=format_version;
+      return;
+    }
+  }
+  if(outputs_n==outputs_cap) {
+    long cap=outputs_cap?2*outputs_cap:64;
+    outputs_entry *p=(outputs_entry *) realloc (outputs_list,cap*sizeof(outputs_entry));
+    if(p==NULL)return;
+    outputs_list=p;
+    outputs_cap=cap;
+  }
+  outputs_list[outputs_n].path=strdup(path);
+  if(outputs_list[outputs_n].path==NULL)return;
+  outputs_list[outputs_n].kind=kind;
+  outputs_list[outputs_n].version=format_version;
+  outputs_n++;
+}
+
+static void json_str(FILE *fp,const char *s) {
+  fputc('"',fp);
+  for(; *s!='\0'; s++) {
+    unsigned char c=(unsigned char)*s;
+    if(c=='"'||c=='\\')fprintf(fp,"\\%c",c);
+    else if(c<0x20)fprintf(fp,"\\u%04x",c);
+    else fputc(c,fp);
+  }
+  fputc('"',fp);
+}
+
+int outputs_json_write(const char *stem,const char *run_id) {
+  char path[TABREADLINE+32],tmp[TABREADLINE+40];
+  const char *base;
+  FILE *fp;
+  long i;
+  snprintf(path,sizeof(path),"%s.outputs.json",stem);
+  snprintf(tmp,sizeof(tmp),"%s.outputs.json.tmp",stem);
+  if((fp=fopen(tmp,"w"))==NULL) {
+    errmsg("Error: cannot open %s for writing: %s (the solver runs as uid %d)\n",tmp,strerror(errno),(int)getuid());
+    return 1;
+  }
+  fprintf(fp,"{\n  \"version\": 1,\n  \"solver_version\": \"%s\",\n  \"run_id\": ",TEEMS_SOLVER_VERSION);
+  json_str(fp,run_id);
+  fprintf(fp,",\n  \"complete\": true,\n  \"files\": [");
+  for(i=0; i<outputs_n; i++) {
+    base=strrchr(outputs_list[i].path,'/');
+    base=base?base+1:outputs_list[i].path;
+    fprintf(fp,"%s\n    {\"name\": ",i?",":"");
+    json_str(fp,base);
+    fprintf(fp,", \"path\": ");
+    json_str(fp,outputs_list[i].path);
+    fprintf(fp,", \"kind\": \"%s\", \"format_version\": %d}",outputs_list[i].kind,outputs_list[i].version);
+  }
+  fprintf(fp,"\n  ]\n}\n");
+  if(fclose(fp)!=0||rename(tmp,path)!=0) {
+    errmsg("Error: cannot write %s: %s\n",path,strerror(errno));
+    remove(tmp);
+    return 1;
+  }
+  return 0;
+}

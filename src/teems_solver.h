@@ -139,6 +139,18 @@ typedef struct
   char filname[TABREADLINE];
 } cmf_file_entry ;
 int cmf_count_files(char *fname,char *comsyntax);
+/* the manifest is strict (Tier B1): every statement opens with one of
+   the six manifest keywords and ends in ";"; anything else is a named
+   fatal (tab_parse.c). Returns 0 when the file cannot be opened (the
+   readers report that). */
+int manifest_check(const char *fname);
+/* side-car output record (Tier B2): every file rank 0 writes is noted
+   here and listed in <solfiles>.outputs.json, written last and only by
+   a run that ends without an error. teems_sol_stem is the <solfiles>
+   path ("" until the manifest has been read). */
+extern char teems_sol_stem[TABREADLINE];
+void outputs_note(const char *path,const char *kind,int format_version);
+int outputs_json_write(const char *stem,const char *run_id);
 
 typedef struct
 {

@@ -1008,6 +1008,32 @@ static int unary_pow_bracket(char *s, size_t cap) {
   return 0;
 }
 
+/* A statement with no keyword continues the previous statement's kind
+   (manual 11.1.1), so a misspelt keyword was read as that kind:
+   "Coeficient (all,r,REG) K(r);" after a Coefficient declared a
+   coefficient named coeficient and exited 0. Where the continued kind
+   cannot open with a name followed by a quantifier or by another word
+   (declarations, formulas, updates; assertions for the quantifier), the
+   first word is an unknown keyword. Returns 1 and the word in `word`. */
+static int kwless_unknown(const char *s,const char *sticky,char *word,int cap) {
+  int k=0,sp=0,decl;
+  const char *p;
+  decl=strcmp(sticky,"coefficient")==0||strcmp(sticky,"variable")==0||strcmp(sticky,"formula")==0||strcmp(sticky,"update")==0;
+  if (!decl&&strcmp(sticky,"assertion")!=0) return 0;
+  while (*s==' '||*s=='\t') s++;
+  if (!isalpha((unsigned char)*s)) return 0;
+  while ((isalnum((unsigned char)*s)||*s=='_')&&k<cap-1) word[k++]=(char)tolower((unsigned char)*s++);
+  word[k]='\0';
+  if (isalnum((unsigned char)*s)||*s=='_') return 0;
+  while (*s==' '||*s=='\t') { s++; sp=1; }
+  if (*s=='(') {
+    for (p=s+1; *p==' '; p++);
+    if (strncmp(p,"all,",4)==0||strncmp(p,"all ,",5)==0) return 1;
+    return 0;
+  }
+  return decl&&sp&&isalpha((unsigned char)*s);
+}
+
 #define MAXLITDEDUP 64
 static int tab_preprocess_run(char *filename, char *newtabfile) {
   FILE * filehandle,*fout;
@@ -1262,6 +1288,17 @@ static int tab_preprocess_run(char *filename, char *newtabfile) {
         if (strcmp(kw,"display")==0||strcmp(kw,"transfer")==0) {
           strcpy(commsyntax,kw);
           check=1;
+        }
+        else if (commsyntax[0]!='\0') {
+          char uw[NAMESIZE];
+          if (kwless_unknown(readline,commsyntax,uw,sizeof(uw))) {
+            char *t=readline;
+            while (*t==' ') t++;
+            errmsg("Error: unknown statement keyword '%s' (a statement without a keyword continues the previous %s statement, manual 11.1.1, and this one cannot): %.120s\n",uw,commsyntax,t);
+            fclose(filehandle);
+            fclose(fout);
+            return -1;
+          }
         }
       }
       if (strchr(readline,';')!=NULL&&(strcmp(commsyntax,"display")==0||strcmp(commsyntax,"transfer")==0)) {
