@@ -250,6 +250,248 @@ void dbbd_fastrefac_free(void) {
   dfr_ready=0;
 }
 
+/* ==== DBBD factor handle (Tier B3) ====
+   What dbbd_solve keeps when teems_fh_keep is set, so dbbd_fh_solve can
+   take more right-hand sides through the same arithmetic as the step's
+   own solve: per local block its MA48 factors (resident, the -fastrefac
+   store, or the scratch files left on disk under -inmemory 0), the
+   bottom-border block B_i and right-border block C_i, and the block's
+   global column indices; the border row/column lists and this rank's
+   slice of the border rows; the orderings and block layout the RHS
+   gather needs; on the last rank the interface (border Schur)
+   factorization (VA/IRN here, KEEP in Fortran slot 2).  With one OpenMP
+   thread the extra solve reproduces the step's solution bit for bit
+   (same kernels, same reductions, same order); the step's own solve
+   applies its border updates with atomics across threads, so with more
+   threads the two agree to rounding. */
+static struct {
+  int ready,persist,disk,own_mats;
+  PetscInt VecSize,Istart,Iend;
+  int mpisize,nmatin,nmatinplus,b0,nb,ndblock;
+  int *begblock,*block_sizes,*row_order,*indicesB,*indicesC,*insize;
+  offset_t *counteq;
+  int jb0,jb1;
+  int **colidx,**irn,**keep;
+  solve_real **va;
+  Mat *B,*C;
+  char **fn01,**fn02,**fn03;
+  int *sirn;
+  solve_real *sva;
+} dfh;
+
+int dbbd_fh_ready(void) {
+  return dfh.ready;
+}
+
+/* one block's factors for an extra solve: resident/persistent pointers,
+   or read back from the scratch files the step left (freed by the
+   caller when disk is set) */
+static void dbbd_fh_factors(int j1,int **irn,int **keep,solve_real **va) {
+  if(!dfh.disk) {
+    *irn=dfh.irn[j1];
+    *keep=dfh.keep[j1];
+    *va=dfh.va[j1];
+    return;
+  }
+  {
+    int la1=dfh.insize[j1*19+16],nk=dfh.insize[j1*19+12];
+    FILE *fp1=scratch_open(dfh.fn01[j1],"rb"),*fp2=scratch_open(dfh.fn02[j1],"rb"),*fp3=scratch_open(dfh.fn03[j1],"rb");
+    if(fp1==NULL||fp2==NULL||fp3==NULL) {
+      errmsg("Error: cannot open the kept DBBD factor files for block %d (%s)\n",j1,dfh.fn01[j1]);
+      MPI_Abort(PETSC_COMM_WORLD,1);
+    }
+    *irn=(int*)calloc(la1,sizeof(int));
+    *keep=(int*)calloc(nk,sizeof(int));
+    *va=(solve_real*)calloc(la1,sizeof(solve_real));
+    scratch_read(*irn,sizeof(int),la1,fp1,dfh.fn01[j1]);
+    scratch_read(*keep,sizeof(int),nk,fp2,dfh.fn02[j1]);
+    scratch_read(*va,sizeof(solve_real),la1,fp3,dfh.fn03[j1]);
+    fclose(fp1);
+    fclose(fp2);
+    fclose(fp3);
+  }
+}
+
+static int dbbd_fh_nonzero(const solve_real *b,int n) {
+  int i,nz=0;
+  for(i=0; i<n; i++) {
+    if(b[i]!=b[i])return 0;
+    if(b[i]!=0)nz=1;
+  }
+  return nz;
+}
+
+void dbbd_fh_solve(const solve_real *rhs,solve_real *x,int nrhs,PetscInt rank,PetscInt mpisize) {
+  PetscInt n=dfh.VecSize;
+  int nb=dfh.nb,j,j1,j2,j3,i,k,jj;
+  PetscInt bfirst,bend;
+  solve_real *r=(solve_real *) malloc (n*nrhs*sizeof(solve_real));
+  solve_real **yi=(solve_real **) calloc (dfh.nmatin>0?dfh.nmatin:1,sizeof(solve_real*));
+  solve_real **xi=(solve_real **) calloc (dfh.nmatin>0?dfh.nmatin:1,sizeof(solve_real*));
+  solve_real *vecbiui=(solve_real *) calloc ((size_t)nb*nrhs,sizeof(solve_real));
+  solve_real *xd=(solve_real *) calloc ((size_t)nb*nrhs,sizeof(solve_real));
+  solve_real *x0=(solve_real *) calloc ((size_t)n*nrhs,sizeof(solve_real));
+  if(rank==0)memcpy(r,rhs,n*nrhs*sizeof(solve_real));
+  MPI_Bcast(r,(int)(n*nrhs),SORD==1?MPI_DOUBLE:MPI_FLOAT,0,PETSC_COMM_WORLD);
+  for(i=0; i<dfh.nmatin; i++) {
+    int bs=dfh.block_sizes[i+dfh.b0];
+    yi[i]=(solve_real *) calloc ((size_t)bs*nrhs,sizeof(solve_real));
+    xi[i]=(solve_real *) calloc ((size_t)bs*nrhs,sizeof(solve_real));
+  }
+  /* block RHS: the step's gather (owned rows, reduced to the owner) */
+  for(j=0; j<mpisize; j++) {
+    for(j3=0; j3<dfh.nmatinplus; j3++) {
+      if(j3==dfh.nmatin)i=j3-1;
+      else i=j3;
+      bfirst=dfh.counteq[i+dfh.b0];
+      bend=dfh.block_sizes[i+dfh.b0];
+      MPI_Bcast(&bfirst,1,MPI_INT,j,PETSC_COMM_WORLD);
+      MPI_Bcast(&bend,1,MPI_INT,j,PETSC_COMM_WORLD);
+      for(k=0; k<nrhs; k++) {
+        solve_real *yi0=(solve_real *) calloc (bend>0?bend:1,sizeof(solve_real));
+        for(jj=0; jj<bend; jj++) {
+          j2=dfh.row_order[bfirst+jj]+bfirst;
+          if(j2>=dfh.Istart&&j2<dfh.Iend)yi0[jj]=r[(size_t)k*n+j2];
+        }
+        reduce_to_rank(yi0,(fortran_int)bend,mpisize,rank,j);
+        if(rank==j&&i<dfh.nmatin)memcpy(yi[i]+(size_t)k*bend,yi0,bend*sizeof(solve_real));
+        free(yi0);
+      }
+    }
+  }
+  /* border RHS: this rank's slice of the border rows */
+  for(k=0; k<nrhs; k++)for(jj=dfh.jb0; jj<dfh.jb1; jj++)vecbiui[(size_t)k*nb+jj]=r[(size_t)k*n+dfh.indicesB[jj]];
+  /* block solves and the border update, block by block as the step did */
+  for(j1=0; j1<dfh.nmatin; j1++) {
+    int bs=dfh.block_sizes[j1+dfh.b0];
+    int *irn,*keep;
+    solve_real *va;
+    Mat_SeqAIJ *ab=(Mat_SeqAIJ*)dfh.B[j1]->data;
+    PetscInt *ai=ab->i,*aj=ab->j,nz=ab->nz,nrowb=dfh.B[j1]->rmap->n;
+    PetscScalar *vals=ab->a;
+    dbbd_fh_factors(j1,&irn,&keep,&va);
+    for(k=0; k<nrhs; k++) {
+      solve_real *y=yi[j1]+(size_t)k*bs,*xp=xi[j1]+(size_t)k*bs,*vb=vecbiui+(size_t)k*nb;
+      if(dbbd_fh_nonzero(y,bs))spec48m_esol_(dfh.insize+j1*19,irn,va,keep,y,xp);
+      for(i=0; i<nrowb-1; i++) {
+        for(jj=ai[i]; jj<ai[i+1]; jj++) {
+          #pragma omp atomic
+          vb[i]-=vals[jj]*xp[aj[jj]];
+        }
+      }
+      for(jj=ai[i]; jj<nz; jj++) {
+        #pragma omp atomic
+        vb[i]-=vals[jj]*xp[aj[jj]];
+      }
+    }
+    if(dfh.disk) {
+      free(irn);
+      free(keep);
+      free(va);
+    }
+  }
+  for(k=0; k<nrhs; k++)reduce_to_rank_nocompress(vecbiui+(size_t)k*nb,nb,mpisize,rank,mpisize-1);
+  if(rank==mpisize-1) {
+    int slot=2;
+    spec48_keep_solve_(&slot,dfh.sva,dfh.sirn,&nrhs,vecbiui,xd);
+    for(k=0; k<nrhs; k++)for(i=0; i<nb; i++)x0[(size_t)k*n+dfh.indicesC[i]]=xd[(size_t)k*nb+i];
+  }
+  MPI_Barrier(PETSC_COMM_WORLD);
+  for(k=0; k<nrhs; k++)MPI_Bcast(xd+(size_t)k*nb,nb,SORD==1?MPI_DOUBLE:MPI_FLOAT,mpisize-1,PETSC_COMM_WORLD);
+  /* back-substitution: x_i = A_i^-1 y_i - A_i^-1 (C_i xd) */
+  for(j1=0; j1<dfh.nmatin; j1++) {
+    int bs=dfh.block_sizes[j1+dfh.b0];
+    int *irn,*keep;
+    solve_real *va;
+    Mat_SeqAIJ *ac=(Mat_SeqAIJ*)dfh.C[j1]->data;
+    PetscInt *ai=ac->i,*aj=ac->j,nz=ac->nz,nrow=dfh.C[j1]->rmap->n;
+    PetscScalar *vals=ac->a;
+    dbbd_fh_factors(j1,&irn,&keep,&va);
+    for(k=0; k<nrhs; k++) {
+      solve_real *be0=(solve_real*)calloc(nrow>0?nrow:1,sizeof(solve_real));
+      solve_real *biui0=(solve_real*)calloc(bs>0?bs:1,sizeof(solve_real));
+      solve_real *xdk=xd+(size_t)k*nb,*xp=xi[j1]+(size_t)k*bs,*x0k=x0+(size_t)k*n;
+      for(i=0; i<nrow-1; i++) {
+        for(jj=ai[i]; jj<ai[i+1]; jj++)be0[i]+=vals[jj]*xdk[aj[jj]];
+      }
+      for(jj=ai[i]; jj<nz; jj++)be0[i]+=vals[jj]*xdk[aj[jj]];
+      spec48m_esol_(dfh.insize+j1*19,irn,va,keep,be0,biui0);
+      for(i=0; i<bs; i++)x0k[dfh.colidx[j1][i]]+=xp[i]-biui0[i];
+      free(be0);
+      free(biui0);
+    }
+    if(dfh.disk) {
+      free(irn);
+      free(keep);
+      free(va);
+    }
+  }
+  MPI_Barrier(PETSC_COMM_WORLD);
+  for(k=0; k<nrhs; k++) {
+    if(SORD==1)MPI_Allreduce(x0+(size_t)k*n,x+(size_t)k*n,(int)n,MPI_DOUBLE,MPI_SUM,PETSC_COMM_WORLD);
+    else MPI_Allreduce(x0+(size_t)k*n,x+(size_t)k*n,(int)n,MPI_FLOAT,MPI_SUM,PETSC_COMM_WORLD);
+  }
+  for(i=0; i<dfh.nmatin; i++) {
+    free(yi[i]);
+    free(xi[i]);
+  }
+  free(yi);
+  free(xi);
+  free(vecbiui);
+  free(xd);
+  free(x0);
+  free(r);
+}
+
+void dbbd_fh_free(void) {
+  int i;
+  if(!dfh.ready)return;
+  for(i=0; i<dfh.nmatin; i++) {
+    if(dfh.own_mats) {
+      MatDestroy(&dfh.B[i]);
+      MatDestroy(&dfh.C[i]);
+    }
+    if(!dfh.persist&&!dfh.disk) {
+      free(dfh.irn[i]);
+      free(dfh.keep[i]);
+      free(dfh.va[i]);
+    }
+    if(dfh.disk) {
+      remove(dfh.fn01[i]);
+      remove(dfh.fn02[i]);
+      remove(dfh.fn03[i]);
+      free(dfh.fn01[i]);
+      free(dfh.fn02[i]);
+      free(dfh.fn03[i]);
+    }
+    free(dfh.colidx[i]);
+  }
+  free(dfh.B);
+  free(dfh.C);
+  free(dfh.irn);
+  free(dfh.keep);
+  free(dfh.va);
+  free(dfh.fn01);
+  free(dfh.fn02);
+  free(dfh.fn03);
+  free(dfh.colidx);
+  free(dfh.begblock);
+  free(dfh.block_sizes);
+  free(dfh.row_order);
+  free(dfh.counteq);
+  free(dfh.indicesB);
+  free(dfh.indicesC);
+  free(dfh.insize);
+  free(dfh.sirn);
+  free(dfh.sva);
+  if(dfh.mpisize>0) {
+    int slot=2,rank=0;
+    MPI_Comm_rank(PETSC_COMM_WORLD,&rank);
+    if(rank==dfh.mpisize-1)spec48_keep_free_(&slot);
+  }
+  memset(&dfh,0,sizeof(dfh));
+}
+
 static void ndbbd_fac_init(int n) {
   int i;
   if(ndbbd_fac_n<n) {
@@ -396,6 +638,26 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
     dfr_la=(offset_t*)calloc(nmatin,sizeof(offset_t));
     for(i=0; i<nmatin; i++)dfr_nz[i]=-1;
     dfr_nblocks=nmatin;
+  }
+  /* Tier B3: keep what an extra solve needs (dfh) when a consumer asked */
+  int fhk=teems_fh_keep;
+  if(dfh.ready)dbbd_fh_free();
+  if(fhk) {
+    int nm=nmatin>0?nmatin:1;
+    dfh.persist=dbbd_fastrefac?1:0;
+    dfh.disk=(!dbbd_fastrefac&&!inmemory)?1:0;
+    dfh.own_mats=dbbd_fastrefac?0:1;
+    dfh.B=(Mat*)calloc(nm,sizeof(Mat));
+    dfh.C=(Mat*)calloc(nm,sizeof(Mat));
+    dfh.irn=(int**)calloc(nm,sizeof(int*));
+    dfh.keep=(int**)calloc(nm,sizeof(int*));
+    dfh.va=(solve_real**)calloc(nm,sizeof(solve_real*));
+    dfh.colidx=(int**)calloc(nm,sizeof(int*));
+    if(dfh.disk) {
+      dfh.fn01=(char**)calloc(nm,sizeof(char*));
+      dfh.fn02=(char**)calloc(nm,sizeof(char*));
+      dfh.fn03=(char**)calloc(nm,sizeof(char*));
+    }
   }
   /* the persisted extraction is valid only while the orderings are:
      any row/col-ordering change forces a fresh MAT_INITIAL build */
@@ -612,6 +874,10 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
     }
   logmsg(2,"rank %d j %d j1 %d istart %d iend %d\n",rank,j,j1,Istart,Iend);
   VecGetValues(b,j1-j,&indicesB[j],&vecbiui[j]);//implicite yd save mem
+  if(fhk) {
+    dfh.jb0=(int)j;
+    dfh.jb1=(int)j1;
+  }
   ierr = VecDestroy(&b);
   CHKERRQ(ierr);
   for(i=0; i<mpisize; i++) {
@@ -637,6 +903,11 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
       ifc_rowmap[i]=(int)indicesB[i];
       ifc_colmap[i]=(int)indicesC[i];
     }
+  }
+  if(fhk) {
+    dfh.nb=(int)(VecSize-sumrowcolin);
+    dfh.indicesB=(int *) malloc ((dfh.nb>0?dfh.nb:1)*sizeof(int));
+    for(i=0; i<dfh.nb; i++)dfh.indicesB[i]=(int)indicesB[i];
   }
   free(indicesB);
   free(offblock);
@@ -989,7 +1260,8 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
         #pragma omp atomic
         vecbiui[i]-=vals[j]*xi1point[aj[j]];//xi[i];
       }
-      if(!dbbd_fastrefac)MatDestroy(&submatB[j1]);//submatBT);
+      if(fhk)dfh.B[j1]=submatB[j1];
+      else if(!dbbd_fastrefac)MatDestroy(&submatB[j1]);//submatBT);
       xi1indx+=block_sizes[j1+begblock[rank]];
       time(&timeend);
       logmsg(2,"Submatrix %d rank %d thrd %d calculation time %f\n",j1,rank,jthrd,difftime(timeend,timestr));
@@ -1192,8 +1464,8 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
     vecbiui=NULL;
   }
   timestr=clock();
-  solve_real *xd;//= (ha_cgetype*)calloc(vecbiuisize,sizeof(ha_cgetype));
-  solve_real *x0;//,*vecbivi0;//= (ha_cgetype*)calloc(VecSize,sizeof(ha_cgetype));
+  solve_real *xd=NULL;//= (ha_cgetype*)calloc(vecbiuisize,sizeof(ha_cgetype));
+  solve_real *x0=NULL;//,*vecbivi0;//= (ha_cgetype*)calloc(VecSize,sizeof(ha_cgetype));
   long int j7,lnz;
   if(rank==mpisize-1) {
     Mat_SeqAIJ         *aa=(Mat_SeqAIJ*)submatD[0]->data;//*aa=subA->data;
@@ -1246,12 +1518,13 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
     free(obiviindx0);
     obiviindx0=NULL;
     irn1=realloc(irn1,ldsize*sizeof(int));
-    int *insizeD=(int *) calloc (6,sizeof(int));
+    int *insizeD=(int *) calloc (8,sizeof(int));
     insizeD[0]=nrow;
     insizeD[1]=ncol;
     insizeD[2]=lnz;
     insizeD[3]=laD;
     insizeD[5]=ldsize;
+    insizeD[6]=fhk?2:0; /* Tier B3: keep the interface factorization (slot 2) */
     xd=(solve_real *) calloc (vecbiuisize,sizeof(solve_real));//realloc (xd,vecbiuisize*sizeof(ha_cgetype));
     /* MA48 clobbers the staged triplet in place and its sources are
        gone (border reduction output + destroyed D block), so keep a
@@ -1290,7 +1563,12 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
     free(sirn);
     free(sjcn);
     free(sva);
-    free(vecbivi);
+    if(fhk) {
+      dfh.sva=vecbivi;
+      dfh.sirn=irn1;
+      irn1=NULL;
+    }
+    else free(vecbivi);
     vecbivi=NULL;
     free(vecbiui);
     vecbiui=NULL;
@@ -1310,6 +1588,10 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
     free(obiviindx0);
     obiviindx0=NULL;
   free(vecbivi);
+  if(fhk&&rank==mpisize-1) {
+    dfh.indicesC=(int *) malloc ((vecbiuisize>0?vecbiuisize:1)*sizeof(int));
+    for(i=0; i<vecbiuisize; i++)dfh.indicesC[i]=(int)indicesC[i];
+  }
   free(indicesC);
   if(rank!=mpisize-1) {
     xd=(solve_real *) calloc (vecbiuisize,sizeof(solve_real));//realloc (xd,vecbiuisize*sizeof(ha_cgetype));
@@ -1359,9 +1641,16 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
         fclose(fp1);
         fclose(fp2);
         fclose(fp3);
-        remove(fn01[j1]);
-        remove(fn02[j1]);
-        remove(fn03[j1]);
+        if(fhk) {
+          dfh.fn01[j1]=strdup(fn01[j1]);
+          dfh.fn02[j1]=strdup(fn02[j1]);
+          dfh.fn03[j1]=strdup(fn03[j1]);
+        }
+        else {
+          remove(fn01[j1]);
+          remove(fn02[j1]);
+          remove(fn03[j1]);
+        }
       }
       Mat_SeqAIJ         *ac=(Mat_SeqAIJ*)submatC[j1]->data;//*aa=subA->data;
       ai= ac->i;
@@ -1379,9 +1668,20 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
       for(j=ai[i]; j<nz; j++) {
         be0[i]+=vals[j]*xd[aj[j]];
       }
-      if(!dbbd_fastrefac)MatDestroy(&submatC[j1]);
+      if(fhk)dfh.C[j1]=submatC[j1];
+      else if(!dbbd_fastrefac)MatDestroy(&submatC[j1]);
       spec48m_esol_(insize+j1*insizes,irne,vale,keep,be0,biui0);
-      if(!dbbd_fastrefac) {
+      if(fhk&&!dfh.disk) {
+        dfh.irn[j1]=irne;
+        dfh.keep[j1]=keep;
+        dfh.va[j1]=vale;
+        if(inmemory&&!dbbd_fastrefac) {
+          fac_irn[j1]=NULL;
+          fac_keep[j1]=NULL;
+          fac_va[j1]=NULL;
+        }
+      }
+      else if(!dbbd_fastrefac) {
       free(irne);
       free(keep);
       free(vale);
@@ -1403,6 +1703,13 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
     }
   }
   free(xi1);
+  if(fhk) {
+    dfh.insize=(int *) malloc ((nmatin>0?nmatin:1)*insizes*sizeof(int));
+    memcpy(dfh.insize,insize,nmatin*insizes*sizeof(int));
+    dfh.begblock=(int *) malloc (mpisize*sizeof(int));
+    memcpy(dfh.begblock,begblock,mpisize*sizeof(int));
+    dfh.b0=begblock[rank];
+  }
   free(insize);
   if(!dbbd_fastrefac)ierr = PetscFree(submatC);
   free(begblock);
@@ -1413,7 +1720,7 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
   if(SORD==1)MPI_Allreduce(x0,x1,VecSize, MPI_DOUBLE, MPI_SUM,PETSC_COMM_WORLD);
   else MPI_Allreduce(x0,x1,VecSize, MPI_FLOAT, MPI_SUM,PETSC_COMM_WORLD);
   solve_x_check(x1,(PetscInt)VecSize,rank==0);
-  if(rank==0)teems_resid_skipped++;
+  residual_note_skipped(rank,0);
   logmsg(2,"Reduce solution rank %d time %f\n",rank,((double)clock()-timestr)/CLOCKS_PER_SEC);
   free(x0);
   for (i=0; i<nmatinplus; i++){
@@ -1428,6 +1735,29 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
     free(fac_irn);
     free(fac_keep);
     free(fac_va);
+  }
+  if(fhk) {
+    for(i=0; i<nmatin; i++) {
+      int bs=block_sizes[i+dfh.b0];
+      dfh.colidx[i]=(int *) malloc ((bs>0?bs:1)*sizeof(int));
+      ISGetIndices(colindices[i],&nindices);
+      for(j=0; j<bs; j++)dfh.colidx[i][j]=(int)nindices[j];
+      ISRestoreIndices(colindices[i],&nindices);
+    }
+    dfh.VecSize=(PetscInt)VecSize;
+    dfh.Istart=Istart;
+    dfh.Iend=Iend;
+    dfh.mpisize=(int)mpisize;
+    dfh.nmatin=(int)nmatin;
+    dfh.nmatinplus=(int)nmatinplus;
+    dfh.ndblock=(int)ndblock;
+    dfh.block_sizes=(int *) malloc (ndblock*sizeof(int));
+    memcpy(dfh.block_sizes,block_sizes,ndblock*sizeof(int));
+    dfh.counteq=(offset_t *) malloc ((ndblock+1)*sizeof(offset_t));
+    memcpy(dfh.counteq,counteq,(ndblock+1)*sizeof(offset_t));
+    dfh.row_order=(int *) malloc (VecSize*sizeof(int));
+    memcpy(dfh.row_order,row_order,VecSize*sizeof(int));
+    dfh.ready=1;
   }
   for (i=0; i<nmatin; i++) {
     ierr = ISDestroy(&colindices[i]);
@@ -3887,7 +4217,7 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
   if(SORD==1)MPI_Allreduce(x0,x1,VecSize, MPI_DOUBLE, MPI_SUM,PETSC_COMM_WORLD);
   else MPI_Allreduce(x0,x1,VecSize, MPI_FLOAT, MPI_SUM,PETSC_COMM_WORLD);
   solve_x_check(x1,(PetscInt)VecSize,rank==0);
-  if(rank==0)teems_resid_skipped++;
+  residual_note_skipped(rank,0);
   logmsg(2,"Reduce solution rank %d time %f\n",rank,((double)(clock()-timestr))/CLOCKS_PER_SEC);
   free(x0);
   return 0;

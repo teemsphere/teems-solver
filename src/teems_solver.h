@@ -331,13 +331,34 @@ typedef struct
 } closure_entry ;
 #define CL_F_EXO ((unsigned char)1)
 #define CL_F_BS  ((unsigned char)2)
-extern unsigned char *teems_cl_flags; /* per element: CL_F_EXO | CL_F_BS */
+#define CL_F_SHK ((unsigned char)4) /* a shock statement names the element (a zero shock included) */
+extern unsigned char *teems_cl_flags; /* per element: CL_F_EXO | CL_F_BS | CL_F_SHK */
 extern store_real *teems_cl_shock;    /* per element: shock value (0 = none) */
 #define CL_EXO(i) ((teems_cl_flags[(i)]&CL_F_EXO)!=0)
 #define CL_BS(i)  ((teems_cl_flags[(i)]&CL_F_BS)!=0)
 #define CL_SET_EXO(i,v) do{ if(v)teems_cl_flags[(i)]|=CL_F_EXO; else teems_cl_flags[(i)]&=(unsigned char)~CL_F_EXO; }while(0)
 #define CL_SET_BS(i,v)  do{ if(v)teems_cl_flags[(i)]|=CL_F_BS;  else teems_cl_flags[(i)]&=(unsigned char)~CL_F_BS;  }while(0)
 #define CL_SHOCK(i) (teems_cl_shock[(i)])
+#define CL_SHOCKED(i) ((teems_cl_flags[(i)]&CL_F_SHK)!=0)
+
+/* Shock groups for subtotals (Tier B3; GEMPACK manual 29, Harrison,
+   Horridge and Pearson 1999, CoPS IP-73): a named set of shocked
+   exogenous components, read from the manifest's subtotals file on
+   rank 0 (tab_parse.c subtotals_read) and broadcast (main.c). exo holds
+   each member's column in the shock vector, filled on every rank. */
+#define SUB_LABEL 128
+#define SUB_SPEC 256
+typedef struct {
+  char label[SUB_LABEL];
+  char spec[SUB_SPEC];
+  offset_t nmem;
+  offset_t *mem;
+  exo_idx_t *exo;
+} sub_group;
+extern int teems_nsub;
+extern sub_group *teems_subs;
+int subtotals_read(char *fname, array_def *vars, offset_t nvar, set_def *sets, dim_t nset, set_element *set_elems, offset_t nvarele);
+int cmf_subtotals_file(char *filename, char *out);
 
 /* one "backsolve <var> using <eq> ;" statement (GEMPACK manual 10.16,
    14.1.3): the variable and its defining equation are eliminated from
@@ -885,6 +906,51 @@ void sbbd_fastrefac_free(void);
    arrays (6.15(c)); destroys *A and *vecb before the factorization.
    Collective. */
 void sbbd_csr_solve(Mat *A,Vec *vecb,PetscInt VecSize,PetscInt rank,PetscInt rank_hsl,fortran_int *indata,MPI_Fint fcomm,offset_t *counteq,offset_t *countvarintra1,solve_real *x);
+/* ---- Factor once, solve many (Tier B3; solve_drivers.c + block_solve.c) ----
+   A consumer that needs more solves with a step's factorization, or the
+   step's LHS matrix after the solve, says so before the method runs;
+   otherwise every method releases its factors and matrix exactly when it
+   did before.  At every solve site of every driver (Johansen, Gragg,
+   Euler, RK stages, the complementarity approximate run):
+     fh_step_begin(A,vecb,...)   before the matrix-method dispatch
+     <dispatch>                  the method keeps what was asked for
+     fh_step_end(...)            the consumers run, then everything kept
+                                 is released (collective)
+   Consumers today: the residual check on one-shot SBBD/DBBD/NDBBD
+   (-residcheck 1: the LHS matrix is kept) and the -fhtest self-test
+   (factors kept, the step's RHS solved again).  Later: subtotals, SAGEM,
+   Jacobian work.  NDBBD and -withmc66 SBBD cannot keep their factors yet:
+   a request is a named fatal (fh_step_begin). */
+extern int teems_fh_selftest;   /* -fhtest: solve [b, 2b] again after every solve */
+extern int teems_resid_all;     /* -residcheck 1: keep A so every solve is checked */
+extern int teems_fh_keep;       /* set for the current dispatch: the method keeps its factors */
+extern int teems_resid_retain;  /* set for the current dispatch: A is kept for the residual check */
+void fh_request_check(dim_t matsol,dim_t mc66,PetscInt rank); /* named fatal when a consumer needs factors a method cannot keep */
+void fh_step_begin(Mat A,Vec vecb,dim_t matsol,dim_t mc66,PetscInt VecSize,PetscInt rank,PetscInt rank_hsl);
+void fh_step_end(PetscInt VecSize,const solve_real *x,PetscInt rank,PetscInt rank_hsl,PetscInt mpisize);
+/* nrhs more right-hand sides with the current step's kept factorization:
+   rhs = nrhs columns of VecSize (condensed row order, column-major), read
+   on rank 0; x = the same shape, valid on every rank on return.
+   Collective.  Returns 0, or -1 when no factorization is kept. */
+int teems_fh_solve(const solve_real *rhs,solve_real *x,int nrhs);
+void teems_fh_free(void);       /* collective; no-op when nothing is kept */
+void fh_selftest_summary(PetscInt rank); /* end-of-run log line (-fhtest) */
+void residual_note_skipped(PetscInt rank,PetscInt counting_rank); /* the skip sites of one-shot bordered solves */
+/* shock-group subtotals on the kept factorizations (solve_drivers.c;
+   manual 29, IP-73): teems_sub_active is set by main when the manifest
+   names a subtotals file and the run's method/driver supports it */
+extern int teems_sub_active;
+enum { SUB_JOHANSEN=0, SUB_FIRST=1, SUB_EULER=2, SUB_LEAP=3, SUB_SMOOTH=4 };
+void sub_step_rhs(Mat B,Vec vece,PetscInt VecSize,dim_t matsol,PetscInt rank,PetscInt rank_hsl);
+void sub_update(int mode,char *tabfile,char *commsyntax,set_def *sets,dim_t nset,set_element *set_elems,array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar,elem_value *elem_vals,offset_t ncofele,closure_entry *closure_vals,offset_t nvarele,const solve_real *exo_z,const solve_real *V);
+void sub_exo_sync(const solve_real *varchange);
+void sub_pass_end(int sol,dim_t subindx,array_def *vars,offset_t nvar,offset_t nvarele,const solve_real *xc0);
+solve_real **sub_columns(void);
+void sub_free(void);
+/* DBBD handle (block_solve.c) */
+int dbbd_fh_ready(void);
+void dbbd_fh_solve(const solve_real *rhs,solve_real *x,int nrhs,PetscInt rank,PetscInt mpisize);
+void dbbd_fh_free(void);
 /* -fastrefac DBBD per-block persistent factors (block_solve.c): the flag is
    read inside dbbd_solve, so all drivers inherit it */
 void dbbd_fastrefac_free(void);

@@ -521,6 +521,9 @@ module mp48_oneshot
   USE HSL_MP48_DOUBLE
   implicit none
   TYPE (MP48_DATA), save :: odata
+  ! Tier B3: the instance was kept after its solve (SPEC48_NOMC66_RUN
+  ! with keep) for SPEC48_NOMC66_OSOLVE; SPEC48_NOMC66_OFREE tears it down
+  logical, save :: okept=.false.
 end module mp48_oneshot
 
 SUBROUTINE SPEC48_NOMC66_STAGE(indata,ai,aj,a,b1,fcomm,rowptrin,colptrin)
@@ -591,10 +594,12 @@ SUBROUTINE SPEC48_NOMC66_STAGE(indata,ai,aj,a,b1,fcomm,rowptrin,colptrin)
   END IF
 END SUBROUTINE SPEC48_NOMC66_STAGE
 
-SUBROUTINE SPEC48_NOMC66_RUN(indata,x,fcomm)
+SUBROUTINE SPEC48_NOMC66_RUN(indata,x,fcomm,keep)
   ! Analyse+factorize+solve (JOB=25) of the instance staged by
-  ! SPEC48_NOMC66_STAGE, solution copied to x on the host, then teardown.
-  ! Collective.
+  ! SPEC48_NOMC66_STAGE, solution copied to x on the host, then teardown
+  ! -- unless keep(1) is nonzero: then the instance (factors included)
+  ! stays for SPEC48_NOMC66_OSOLVE until SPEC48_NOMC66_OFREE.
+  ! Collective, same keep on every rank.
   use mp48_oneshot
   use constants
   IMPLICIT NONE
@@ -602,7 +607,7 @@ SUBROUTINE SPEC48_NOMC66_RUN(indata,x,fcomm)
   integer (8) :: o,m
   INTEGER ERCODE
   INTEGER (4) ZDIAG
-  integer (4) fcomm(*),fcomm1
+  integer (4) fcomm(*),fcomm1,keep(*)
   integer (8) indata(*)
   real (kind=DPC) x(*)
   fcomm1=fcomm(1)
@@ -629,6 +634,16 @@ SUBROUTINE SPEC48_NOMC66_RUN(indata,x,fcomm)
       end do
     END IF
   END IF
+  IF (keep(1).NE.0) THEN
+    okept=.true.
+    RETURN
+  END IF
+  CALL SPEC48_NOMC66_OTEAR()
+END SUBROUTINE SPEC48_NOMC66_RUN
+
+SUBROUTINE SPEC48_NOMC66_OTEAR()
+  use mp48_oneshot
+  IMPLICIT NONE
   odata%JOB = 6
   CALL MP48AD(odata)
   ! user-supplied components survive JOB=6
@@ -637,7 +652,71 @@ SUBROUTINE SPEC48_NOMC66_RUN(indata,x,fcomm)
   IF (ALLOCATED(odata%EQVAR)) DEALLOCATE(odata%EQVAR)
   IF (ALLOCATED(odata%VALUES)) DEALLOCATE(odata%VALUES)
   IF (ALLOCATED(odata%B)) DEALLOCATE(odata%B)
-END SUBROUTINE SPEC48_NOMC66_RUN
+END SUBROUTINE SPEC48_NOMC66_OTEAR
+
+SUBROUTINE SPEC48_NOMC66_OFREE()
+  ! Teardown of an instance SPEC48_NOMC66_RUN kept; collective, no-op
+  ! when none is kept.
+  use mp48_oneshot
+  IMPLICIT NONE
+  IF (.NOT.okept) RETURN
+  okept=.false.
+  CALL SPEC48_NOMC66_OTEAR()
+END SUBROUTINE SPEC48_NOMC66_OFREE
+
+SUBROUTINE SPEC48_NOMC66_XSOLVE(pd,m,nrhs,b,x)
+  ! nrhs more right-hand sides (host, column-major b(m,nrhs) ->
+  ! x(m,nrhs)) on an MP48 instance that has solved once: the solve job
+  ! (JOB=5) on its factors, the path the analyse+factorize+solve call
+  ! finished with.  Collective; b and x are read/written on the host.
+  use HSL_MP48_DOUBLE
+  use constants
+  IMPLICIT NONE
+  TYPE (MP48_DATA) pd
+  integer (8) :: m,o,k
+  integer (4) nrhs
+  real (kind=DPC) b(*),x(*)
+  do k = 0, nrhs-1
+    IF (pd%RANK.EQ.0) THEN
+      do o=1,m
+        pd%B(o)=b(k*m+o)
+      end do
+    END IF
+    pd%JOB = 5
+    CALL MP48AD(pd)
+    IF (pd%ERROR.LT.0) THEN
+      IF (pd%RANK.EQ.0) WRITE (6,'(A,I4)') 'Error: MP48 could not solve with the kept SBBD factorization, data%ERROR = ',pd%ERROR
+      CALL TEEMS_ONFAIL_ABORT()
+    END IF
+    IF (pd%RANK.EQ.0) THEN
+      do o=1,m
+        x(k*m+o)=pd%X(o)
+      end do
+    END IF
+  end do
+END SUBROUTINE SPEC48_NOMC66_XSOLVE
+
+SUBROUTINE SPEC48_NOMC66_OSOLVE(indata,nrhs,b,x)
+  ! Extra right-hand sides on the instance SPEC48_NOMC66_RUN kept.
+  use mp48_oneshot
+  use constants
+  IMPLICIT NONE
+  integer (8) indata(*)
+  integer (4) nrhs
+  real (kind=DPC) b(*),x(*)
+  CALL SPEC48_NOMC66_XSOLVE(odata,indata(2),nrhs,b,x)
+END SUBROUTINE SPEC48_NOMC66_OSOLVE
+
+SUBROUTINE SPEC48_NOMC66_PSOLVE(indata,nrhs,b,x)
+  ! Extra right-hand sides on the -fastrefac persistent instance.
+  use mp48_persist
+  use constants
+  IMPLICIT NONE
+  integer (8) indata(*)
+  integer (4) nrhs
+  real (kind=DPC) b(*),x(*)
+  CALL SPEC48_NOMC66_XSOLVE(pdata,indata(2),nrhs,b,x)
+END SUBROUTINE SPEC48_NOMC66_PSOLVE
 
 SUBROUTINE SPEC48_NOMC66_P_CSR(indata,ai,aj,a,b1,x,fcomm,rowptrin,colptrin,redo)
   ! Persistent-instance variant staged from the 0-based CSR (6.15(c)):
@@ -1541,6 +1620,25 @@ END SUBROUTINE SPEC48M_RPESOL
 
 
 
+module ma48_keepslot
+  ! Factor once, solve many (Tier B3): the MA48 state a one-shot
+  ! SPEC48_SSOL2LA factorization leaves behind when the caller asks to
+  ! keep it (INSIZE(7) = slot).  L and U live in the caller's VA/IRN,
+  ! which the caller keeps; the pivot sequence (KEEP) and the controls
+  ! the factorization ran with live here until SPEC48_KEEP_FREE.
+  ! Slot 1 = the sequential LU system, slot 2 = the DBBD interface
+  ! (border Schur) system.
+  use constants
+  implicit none
+  integer, parameter :: NKSLOT=2
+  type kslot_t
+    integer, allocatable :: KEEP(:),ICNTL(:)
+    real(kind=DPC), allocatable :: CNTL(:)
+    integer :: M=0,N=0,LA=0
+  end type kslot_t
+  type(kslot_t), save :: kslot(NKSLOT)
+end module ma48_keepslot
+
 SUBROUTINE SPEC48_SSOL2LA(INSIZE,IRN,JCN,VA,B,X)
   ! One-shot LU solve.  INSIZE: 1=M 2=N 3=NE 4=LA percent (LA computed
   ! as ceiling(pct/100*NE) unless INSIZE(6)>0 gives an explicit LA),
@@ -1548,7 +1646,11 @@ SUBROUTINE SPEC48_SSOL2LA(INSIZE,IRN,JCN,VA,B,X)
   ! holds MA48's suggested LA; caller reallocates IRN/JCN/VA, refills
   ! them -- MA48 clobbers all three in place -- and retries with
   ! INSIZE(6) = the new size); other MA48 failures abort here.
+  ! INSIZE(7): 0 = release the factorization on return, 1..NKSLOT =
+  ! keep it in that slot of ma48_keepslot (the caller then keeps VA and
+  ! IRN, which hold L and U, until SPEC48_KEEP_FREE).
   use constants
+  use ma48_keepslot
   IMPLICIT NONE
 
   integer NEFAC,JOB
@@ -1752,6 +1854,16 @@ call teems_apply_ma48u(CNTL)
                               COND60(1),COND60(2),CDNOITER)
     deallocate(CX,CY,CRX,CD,C60W,C60IW)
     deallocate(CIRN,CJCN,CVA,CB)
+  END IF
+  IF (INSIZE(7).GE.1 .AND. INSIZE(7).LE.NKSLOT) THEN
+    IF (allocated(kslot(INSIZE(7))%KEEP)) deallocate(kslot(INSIZE(7))%KEEP,kslot(INSIZE(7))%ICNTL,kslot(INSIZE(7))%CNTL)
+    allocate(kslot(INSIZE(7))%KEEP(T),kslot(INSIZE(7))%ICNTL(20),kslot(INSIZE(7))%CNTL(10))
+    kslot(INSIZE(7))%KEEP(1:T)=KEEP(1:T)
+    kslot(INSIZE(7))%ICNTL(1:20)=ICNTL(1:20)
+    kslot(INSIZE(7))%CNTL(1:10)=CNTL(1:10)
+    kslot(INSIZE(7))%M=M
+    kslot(INSIZE(7))%N=N
+    kslot(INSIZE(7))%LA=LA
   END IF
   deallocate(CNTL,RINFO,W,ERROR1)!A,,RHS,SOL
   deallocate(ICNTL,INFO,IW,KEEP)!IRN1,
@@ -1996,6 +2108,71 @@ SUBROUTINE SPEC48_PERSIST_FREE()
   if(allocated(pCIRN)) deallocate(pCIRN,pCJCN)
   pready=.false.
 END SUBROUTINE SPEC48_PERSIST_FREE
+
+SUBROUTINE SPEC48_KEEP_SOLVE(SLOT,VA,IRN,NRHS,B,X)
+  ! Solve NRHS more right-hand sides (column-major B(M,NRHS) ->
+  ! X(N,NRHS)) with a factorization kept by SPEC48_SSOL2LA in SLOT:
+  ! the same MA48C/CD call (JOB=1, no refinement) the factorizing call
+  ! made, so a column equal to that call's B reproduces its X bit for
+  ! bit.  VA/IRN are the arrays the factorizing call left the factors in.
+  use constants
+  use ma48_keepslot
+  IMPLICIT NONE
+  integer(4) SLOT,NRHS,IRN(*)
+  real(kind=DPC) VA(*),B(*),X(*)
+  integer M,N,LA,MAXN,K
+  real(kind=DPC), allocatable :: W(:),ERROR1(:)
+  integer, allocatable :: IW(:),INFO(:)
+  M=kslot(SLOT)%M
+  N=kslot(SLOT)%N
+  LA=kslot(SLOT)%LA
+  MAXN=max(M,N)
+  allocate(W(2*MAXN),IW(MAXN),ERROR1(3),INFO(20))
+  DO K=0,NRHS-1
+    IF (FSORD.EQ.1) THEN
+      CALL MA48CD(M,N,.FALSE.,1,LA,VA,IRN,kslot(SLOT)%KEEP,kslot(SLOT)%CNTL,kslot(SLOT)%ICNTL,&
+                  B(K*M+1),X(K*N+1),ERROR1,W,IW,INFO)
+    ELSE
+      CALL MA48C(M,N,.FALSE.,1,LA,VA,IRN,kslot(SLOT)%KEEP,kslot(SLOT)%CNTL,kslot(SLOT)%ICNTL,&
+                 B(K*M+1),X(K*N+1),ERROR1,W,IW,INFO)
+    ENDIF
+  END DO
+  deallocate(W,IW,ERROR1,INFO)
+END SUBROUTINE SPEC48_KEEP_SOLVE
+
+SUBROUTINE SPEC48_KEEP_FREE(SLOT)
+  use ma48_keepslot
+  IMPLICIT NONE
+  integer(4) SLOT
+  IF (SLOT.LT.1 .OR. SLOT.GT.NKSLOT) RETURN
+  IF (allocated(kslot(SLOT)%KEEP)) deallocate(kslot(SLOT)%KEEP,kslot(SLOT)%ICNTL,kslot(SLOT)%CNTL)
+  kslot(SLOT)%M=0
+  kslot(SLOT)%N=0
+  kslot(SLOT)%LA=0
+END SUBROUTINE SPEC48_KEEP_FREE
+
+SUBROUTINE SPEC48_PERSIST_SOLVE(INSIZE,IRN,VA,NRHS,B,X)
+  ! Extra right-hand sides on the -fastrefac persistent factorization
+  ! (SPEC48_SSOL2LA_P's last successful call).  INSIZE: 1=M 2=N 4=LA as
+  ! that call had them.  Same MA48C/CD call as its solve.
+  use ma48_persist
+  IMPLICIT NONE
+  integer(4) INSIZE(*),IRN(*),NRHS
+  real(kind=DPC) VA(*),B(*),X(*)
+  integer M,N,LA,K
+  M=INSIZE(1)
+  N=INSIZE(2)
+  LA=INSIZE(4)
+  DO K=0,NRHS-1
+    IF (FSORD.EQ.1) THEN
+      CALL MA48CD(M,N,.FALSE.,1,LA,VA,IRN,pKEEP,pCNTL,pICNTL,&
+                  B(K*M+1),X(K*N+1),pERROR1,pW,pIW,pINFO)
+    else
+      CALL MA48C(M,N,.FALSE.,1,LA,VA,IRN,pKEEP,pCNTL,pICNTL,&
+                 B(K*M+1),X(K*N+1),pERROR1,pW,pIW,pINFO)
+    endif
+  END DO
+END SUBROUTINE SPEC48_PERSIST_SOLVE
 
 SUBROUTINE SPEC48M_SSOL2LA(INSIZE,IRN,JCN,VA,B,X)
   ! One-shot LU solve, explicit-LA variant (NDBBD final interface).

@@ -48,6 +48,7 @@ The run directory contains:
 | `<model>.tab` | `ems_model()` | TAB model description |
 | `<model>.cls` | `ems_model()` | closure (exogenous variable list) |
 | `*.shf` | `ems_shock()`/deploy | shock statements |
+| `*.sts` (optional) | written by hand today (no R API yet) | shock groups for subtotals, named by the manifest's `subtotals` statement (§5, Subtotals) |
 | `GTAPSETS/GTAPDATA/GTAPPARM.txt` | `ems_data()` | set elements and base-data arrays (text) |
 | `out/` | solver | outputs (below) |
 
@@ -55,9 +56,11 @@ The CMF is a sequence of statements read by `cmf_read()`:
 `file iodata "<logical>" "<path>";` binds model file names to paths;
 `outdata` statements name per-set/per-coefficient CSV outputs; `soldata`
 names the solution binary prefix; `tabfile`/`closure`/`shock` point at
-the model inputs. All paths are absolute container paths when deployed
+the model inputs; the optional `subtotals "<path>";` (Tier B3, at most
+one) names a file of shock groups whose contributions the run writes
+to `.cols` (§5). All paths are absolute container paths when deployed
 by teems-R. The manifest is strict (Tier B1): every statement opens
-with one of those six keywords (any case) and ends in `;`, may run over
+with one of those seven keywords (any case) and ends in `;`, may run over
 several lines, and takes `!` comments outside quoted paths; an unknown
 statement, a missing final `;` or a second statement after a `;` on
 the same line is a named fatal with the line number ("unknown
@@ -85,7 +88,7 @@ Solver outputs, consumed by `ems_compose()`:
 | `.cbin` | `ncofele × double` — updated (post-simulation) coefficient values, the coefficient slice of the value vector in `array_def.offset` order; the coefficient twin of `.bin`. Together with `.cof` this replaces the per-coefficient CSVs as teems-R's coefficient transport (2026-08) |
 | `.cbin0` | pre-simulation coefficient values (`-cofdump`, Tier B2): 4 × long `{version=1, ncof, ncofele, phase=0}` (phase 0 = after the initial Reads and Formulas, before any step), then `ncofele × double` in the same order as `.cbin`; the declarations are the run's `.cof`. Unblocks levels results, `ORIG_LEVEL`, AVC-style averages and level-value shocks on the R side |
 | `.xac` | Gragg/Euler extrapolation record (Tier B2; GEMPACK's XAC file, [GM] 26.2.3), three-pass runs only: 4 × long `{version=1, nrow=nvarele, npass=3, nsubints}`, then `3 × nrow` doubles (pass by pass, `.bin` order: each pass's solution; with subintervals, the last subinterval's pass compounded onto the extrapolated result before it, so the Richardson weights of the passes give `.bin` exactly), then `nrow × int32` accuracy codes (6 = the passes agree to 6+ figures … 1 = one or none; minimum over subintervals; their histogram is the log's accuracy summary) |
-| `.cols` + `.cols.json` | extra solution columns (Tier B2): 4 × long `{version=1, ncol, nrow, kind}`, `nrow × long` row offsets (element offsets in `.bin` order), `ncol × nrow` doubles column by column; kind 0 mixed, 1 subtotal, 2 sagem_individual, 3 approx_cumulative, 4 pass_solution. The JSON carries `version/ncol/nrow/kind` and per column `index/kind/label/shocked`. Written today for a complementarity run with both runs: the approximate (Euler) run's solution, kind 3. Subtotals, SAGEM columns and per-subinterval pass solutions use the same container when they arrive |
+| `.cols` + `.cols.json` | extra solution columns (Tier B2): 4 × long `{version=1, ncol, nrow, kind}`, `nrow × long` row offsets (element offsets in `.bin` order), `ncol × nrow` doubles column by column; kind 0 mixed, 1 subtotal, 2 sagem_individual, 3 approx_cumulative, 4 pass_solution. The JSON carries `version/ncol/nrow/kind` and per column `index/kind/label/shocked`. Written for a complementarity run with both runs (the approximate (Euler) run's solution, kind 3) and for shock-group subtotals (Tier B3, one column per group in file order, kind 1; kind 2, SAGEM individual columns, when the run is one-step Johansen; the JSON `shocked` field is the group's item list). Per-subinterval pass solutions (kind 4) are not written |
 | `.outputs.json` | completion marker (Tier B2), the run's LAST write and only after a run that printed no `Error:` line on any rank: `{version=1, solver_version, run_id, complete: true, files: [{name, path, kind, format_version}]}` listing every file rank 0 wrote (the locked five with `format_version` 0, `.cof` 1, `.cbin` 0, `.cbin0`/`.xac`/`.cols`/`.cols.json` 1, `.stats.json`/`.probe.json` 2, the CSVs). Written to a temporary name and renamed. The solver removes a previous run's `.outputs.json`, `.cbin0`, `.xac`, `.cols`, `.cols.json` before any work, so a failed run leaves no marker; a reader trusts a side-car only when this file lists it |
 | `.stats.json` | per-run ordering statistics (v2): system size, method, `netcut`, border sizes, per-block variable/equation counts (null/empty when no bordered ordering was built), plus `chain_set`/`partition_set` with `chain_source`/`partition_source` (`explicit`/`structural`/`none`) and, when the partition probe ran, the full `partition_auto` candidate table (§6). Written before the solve, so failed runs still record their ordering; feeds `matrix_method` auto-calibration |
 
@@ -371,8 +374,12 @@ Language rules enforced as in GEMPACK (Tier A, 2026-09-28):
   `stats.json` (`residual.max_residual_ratio`), an equation at or above
   1e-4 is warned as not satisfied very accurately, and more than 100
   such warnings end the run with an error after all files are written.
-  One-shot SBBD, DBBD and NDBBD release A before or during the
-  factorization: their solves are counted as `unchecked_solves`.
+  One-shot SBBD, DBBD and NDBBD (and `-fastrefac` DBBD) release A
+  before or during the factorization: by default their solves are
+  counted as `unchecked_solves`; `-residcheck 1` (Tier B3) keeps A
+  and the right-hand side through the solve so these are checked too,
+  each rank checking its own rows under DBBD/NDBBD, at the cost of
+  holding the matrix through the factorization (§11).
 Startup notes remind that intertemporal variables should be declared
 with minimal dimensionality to keep the border (netcut) small;
 element-level classification (§3 phase 7) borders only the elements a
@@ -635,6 +642,30 @@ extrapolation and per-element precision accounting, the subinterval
 loop. All class-1 spill/reload sites of §8 are here, guarded by
 `inmemory`.
 
+Factor once, solve many (Tier B3). Every solve site of every driver
+(Johansen, Gragg/Euler steps and smoothing, RK stages, the
+complementarity approximate run) brackets the matrix-method dispatch
+with `fh_step_begin` / `fh_step_end`. A consumer that needs more
+solves with the step's factorization sets `teems_fh_keep` for the
+dispatch; the method then keeps what it needs instead of freeing it
+— LU: MA48's L/U arrays plus KEEP/controls in a Fortran slot
+(`SPEC48_SSOL2LA` `INSIZE(7)`); `-fastrefac` LU and SBBD: their
+persistent factors; one-shot SBBD: the MP48 instance (no JOB=6
+teardown); DBBD (`block_solve.c` `dfh`): block factors (resident, the
+`-fastrefac` store, or the `-inmemory 0` scratch files left on disk),
+the border blocks, the interface factorization (slot 2) and the
+gather layout. `teems_fh_solve(rhs, x, nrhs)` then solves `nrhs`
+column-major right-hand sides (read on rank 0; `x` valid on every
+rank) through the same kernels and reductions as the step's own solve,
+so a column equal to the step's RHS reproduces its solution bit for bit
+(DBBD with more than one OpenMP thread: its own solve applies border
+updates with atomics, so agreement is to the system's conditioning).
+`fh_step_end` runs the consumers and releases everything; without a
+consumer nothing is kept and every method frees exactly when it did
+before. NDBBD cannot keep its factors yet: a request is a named fatal.
+Consumers: the residual check (`-residcheck 1`, which keeps A rather
+than the factors), subtotals (§5) and the `-fhtest` kit hook.
+
 ### hsl_kernels.f90 / hsl_kernels.h
 
 Fortran wrappers and kernels; factor-file paths take the
@@ -714,6 +745,66 @@ diagnostic build): extrapolated error contracts ~8× per step-count
 doubling (the h³ rate), with Euler 8-16-32 matching Gragg 2-4-8.
 teems-R maps `solution_method="Gragg"/"Euler"` → the same `-solmed`
 values; `"Johansen"` forces `-nsubints 1`.
+
+### Subtotals (Tier B3; [GM] 29, Harrison, Horridge and Pearson 1999, CoPS IP-73)
+
+The manifest's `subtotals "<path>";` names a strict file of shock groups:
+
+```
+! comments after "!"; a statement may run over lines until its ";"
+subtotal aoall(ACTS,"chn",ALLTIME) = china productivity;
+subtotal tms pop = trade and population;
+```
+
+An item is a variable (its shocked components) or `var(arg,...)` with
+each argument the declared set, a declared subset of it or a quoted
+element, as in closure and shock files; the label after `=` names the
+group (case-insensitively unique, up to 127 characters, `!` ends it).
+An item naming one component must name a shocked one; an item over
+several takes the shocked ones among them ([GM] 29.6.2) and must hold
+at least one. Groups may overlap. Named fatals: unknown statement,
+missing `;`, unknown variable, set or element, wrong argument count,
+not-a-subset, an unshocked or endogenous single component, an item or
+group with no shocked component, a missing or empty label, a label
+used twice, no statement in the file, an unreadable file, and a second
+`subtotals` statement in the manifest.
+
+At every solve the step's right-hand side `B·dz` splits by group:
+`dz_r` is the step's shock vector with every entry outside group `r`
+zeroed, and `A p_r = B dz_r` is solved with the step's kept
+factorization (8 columns at a time). Each group carries shadow copies
+of the driver's cumulative state and receives every update the driver
+makes to its own with the same weights: ordinary changes add; a
+percent-change variable's step solution is weighted by `1 + p/100`, `p`
+the MAIN solution's cumulative percent change at the start of the step
+(IP-73 eq. 7: a contribution to a percent change is `100·C/Z0`); the
+Gragg leapfrog, terminal smoothing, Richardson weights and subinterval
+compounding follow the driver's own formulas; backsolved elements are
+recovered per group from `p_r` and the group's exogenous changes; a
+shocked element's own change belongs wholly to its group. The columns
+therefore add up to `.bin` for any partition of the shocks, to
+rounding, under Johansen, Euler and Gragg alike; path dependence (IP-73
+3.4) moves how the total splits, never the sum, and the path is the
+driver's straight line. One group holding every shock reproduces
+`.bin` bit for bit. For ordinary-change variables the Gragg driver
+carries its leapfrog lag through the variable's stored value (float in
+the default binary, double in `teems-solver-f64`); the group state
+mirrors that, so on such rows a partition sums to `.bin` within that
+float rounding (measured 1e-6 to 2e-5 relative on the kit's GTAP-RE
+rig; 3e-9 with the f64 binary; percent-change rows 1e-11).
+
+Output: `.cols` kind 1 (subtotal), or kind 2 (SAGEM individual
+columns; one group per shocked component is GEMPACK's SAGEM) for a
+one-step Johansen run. Supported: LU, `-fastrefac` LU, SBBD,
+`-fastrefac` SBBD and DBBD (resident, `-inmemory 0`, `-fastrefac`) with
+Johansen, Euler and Gragg, any `-nsubints`, `-single_run`. Named
+fatals: NDBBD and `-withmc66 1` (no kept factorization yet), the
+Runge–Kutta methods (the log-chart stage combination has no settled
+subtotal convention), and models with complementarities (the
+approximate and accurate runs change the closure and states, so the
+step RHS is not the shocks alone). Memory on rank 0: three doubles
+per group per variable element for the group state, plus two for the
+group right-hand sides and solutions per condensed row.
 
 ## 6. Matrix methods (`-matsol`, `enum matrix_method`)
 
@@ -1144,6 +1235,9 @@ needs corpus calibration.
 | `-verbosity {0,1,2}` | 1 | 0 = errors/warnings + accuracy summary only; 1 = phase progress and timings; 2 = per-rank/per-block debug detail (also exported as `TEEMS_VERBOSITY` for the Fortran kernels; MA48 duplicate-entry notes appear only at 2) |
 | `-nox` | — | PETSc: no X output |
 
+| `-residcheck {0,1}` | 0 | 1 = also check the residual ratio of every one-shot SBBD, DBBD and NDBBD (and `-fastrefac` DBBD) solve (§2 solve accuracy) by keeping the LHS matrix and the right-hand side through the solve; costs holding A through the factorization (Tier B3 report: peak resident memory table). Outputs are identical with 0 or 1. teems-R does not pass it today |
+| `-fhtest {0,1}` | 0 | kit hook (Tier B3): after every solve, solve `[b, 2b]` again with the step's kept factorization and compare with the solution; the run ends with "Factor handle self-test: N solves, M extra right-hand sides, K elements not bit-identical, max abs/rel difference". Outputs are identical with 0 or 1. With NDBBD or `-withmc66 1` SBBD it is a named fatal (they cannot keep their factors yet). teems-R never passes it |
+
 **Exit status.** `0` means the run completed and no `Error:` line was
 printed. `1` means an `Error:` line was printed: either a named abort
 (option validation, TAB/closure/shock/data faults, factorization and
@@ -1246,15 +1340,25 @@ without the feature. Names are case-insensitive, as in PETSc.
   front end rewrites the supported `IF` forms into conditional
   quantifiers, helper coefficients and domain splits before
   deployment.
-- **Tier A residue** (2026-09-28): the residual-ratio check covers LU
-  and `-fastrefac` SBBD only (one-shot SBBD, DBBD and NDBBD free A
-  first; keeping a copy would double the matrix memory); zerodivide
+- **Tier A residue** (2026-09-28, updated Tier B3 2026-09-29): by
+  default the residual-ratio check covers LU and `-fastrefac` SBBD
+  only (one-shot SBBD, DBBD and NDBBD free A first); `-residcheck 1`
+  covers them by keeping A, at a measured memory cost, so it is off by
+  default; zerodivide
   reports on equation rows owned by ranks other than 0 are not printed
   under nohsl; an unknown statement keyword cannot always be told from
   a keyword-less continuation ([GM] 11.1.1): besides the named TABLO
   keywords, only the forms no continuation can take are caught (Tier
   B1); a misspelt `Read`/`Write`/`Set`/`Equation` keyword still ends in
   the continued kind's own fatal.
+- **Tier B3 residue** (2026-09-29): NDBBD cannot keep its
+  factorization for more solves (extra-solve requests and subtotals are
+  named fatals); `-withmc66 1` SBBD likewise; subtotals are not
+  available with the Runge–Kutta methods or with complementarities;
+  subtotal rows are all variable elements (no retained-row subset);
+  the Gragg ordinary-change leapfrog lag goes through the float value
+  store in the default binary (a pre-existing precision limit of those
+  rows in `.bin` itself, mirrored by the subtotal columns).
 - **Version handshake**: the solver image and the R package are
   versioned independently. The image moves 1.0.0 → 1.1.0: everything
   since 1.0.0 is additive for the package that drives it (the `hsl`

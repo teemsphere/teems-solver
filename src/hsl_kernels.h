@@ -4,7 +4,7 @@
 #include <teems_solver.h>
 
 extern void spec51m_rank_(int *INSIZE,solve_real *cntl6,int *IRN, int *JCN, solve_real *VA,int *IRNA, int *JCNA, int *KEEP,solve_real *w51, int *iw51);
-extern void spec48_ssol2la_(int *INSIZE,int *IRN, int *JCN, solve_real *VA, solve_real *B, solve_real *X);
+extern void spec48_ssol2la_(int *INSIZE,int *IRN, int *JCN, solve_real *VA, solve_real *B, solve_real *X);/* INSIZE needs 7 entries: [6] = keep slot (0 none, 1 LU, 2 DBBD interface) */
 extern void spec48_ssol2la_p_(int *INSIZE,int *IRN, int *JCN, solve_real *VA, solve_real *B, solve_real *X);/* persistent pivot sequence (-fastrefac); INSIZE[3]=LA absolute; INSIZE[4] inout: 0 full analyse, 1 fast refactorize; out 0 ok, -3 workspace too small (INSIZE[5]=suggested LA), other <0 declined */
 extern void spec48_persist_free_(void);
 extern void spec48m_ssol2la_(int *INSIZE,int *IRN, int *JCN, solve_real *VA, solve_real *B, solve_real *X);
@@ -18,7 +18,15 @@ extern void spec48_nomc66_p_(fortran_int *indata, int *jcn,solve_real *b1, solve
 extern void spec48_nomc66_pfree_(void);/* JOB=6 teardown; collective, no-op if never built */
 /* 6.15(c): staging straight from PETSc's 0-based SeqAIJ CSR (ai/aj/a) -- no C-side COO copy.  STAGE fills the host arrays (zeros dropped, indata[0] returns NE on the host, probe scope registered), the caller frees the Mat, RUN factorizes+solves+tears down.  Both collective. */
 extern void spec48_nomc66_stage_(fortran_int *indata,PetscInt *ai,PetscInt *aj,PetscScalar *a,solve_real *b1,MPI_Fint *fcomm,fortran_int *rowptrin,fortran_int *colptrin);
-extern void spec48_nomc66_run_(fortran_int *indata,solve_real *x1,MPI_Fint *fcomm);
+extern void spec48_nomc66_run_(fortran_int *indata,solve_real *x1,MPI_Fint *fcomm,int *keep);/* keep != 0: the instance stays for spec48_nomc66_osolve_ until spec48_nomc66_ofree_ (Tier B3) */
+/* Tier B3 extra right-hand sides (column-major, nrhs columns of indata[1] rows, read/written on the host; collective) */
+extern void spec48_nomc66_osolve_(fortran_int *indata,int *nrhs,solve_real *b,solve_real *x);
+extern void spec48_nomc66_ofree_(void);
+extern void spec48_nomc66_psolve_(fortran_int *indata,int *nrhs,solve_real *b,solve_real *x);
+/* Tier B3 kept MA48 factorizations: spec48_ssol2la_ with INSIZE[6] = slot keeps KEEP/controls; VA/IRN stay with the caller */
+extern void spec48_keep_solve_(int *slot,solve_real *VA,int *IRN,int *nrhs,solve_real *B,solve_real *X);
+extern void spec48_keep_free_(int *slot);
+extern void spec48_persist_solve_(int *INSIZE,int *IRN,solve_real *VA,int *nrhs,solve_real *B,solve_real *X);
 extern void spec48_nomc66_p_csr_(fortran_int *indata,PetscInt *ai,PetscInt *aj,PetscScalar *a,solve_real *b1,solve_real *x1,MPI_Fint *fcomm,fortran_int *rowptrin,fortran_int *colptrin,int *redo);/* persistent instance from the CSR; redo in: 1 values-only step (caller verified the pattern with p_same and broadcast it), 0 (re)build; out 0 ok, <0 declined (retry with 0). Collective, same redo everywhere */
 extern void spec48_nomc66_p_same_(fortran_int *indata,PetscInt *ai,PetscInt *aj,int *same);/* host-only pattern test against the persistent instance: same=1 when unchanged */
 extern void my_spar_add3l_(solve_real *vecbivi, long int *biviindx,long int *nz1,solve_real *vecbivi0,long int *biviindx0,long int *nz0,long int *nz2);

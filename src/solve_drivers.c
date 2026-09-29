@@ -107,6 +107,15 @@ void jac_mat_prealloc(Mat M,const char *what,PetscBool mpi,int count,PetscInt nr
    zero at the analyse state can become nonzero at a later step and must
    be present in the pattern.  rank_hsl only. */
 static int *fr_irn=NULL,*fr_jcn=NULL;
+static solve_real *fr_values=NULL;
+static PetscInt fr_nz=-1;
+static PetscInt *fr_pat=NULL;  /* the assembled column pattern the pivot sequence belongs to
+                                  (the staged JCN is clobbered by MA48, so it cannot be
+                                  compared): the assembly skips zero-valued entries, so the
+                                  pattern is value-dependent and an equal NE does not prove
+                                  it unchanged */
+static offset_t fr_lasize=0;   /* current LA; grows on MA48 -3 returns and stays grown */
+static int fr_ready=0;
 /* ---- solve accuracy (manual 30.1.5, 30.6.1) and arithmetic errors
    (34.3) ----------------------------------------------------------
    After a solve A y = b the residual of every equation is compared with
@@ -167,15 +176,518 @@ static void solve_residual_check(Mat A, const PetscScalar *b, const solve_real *
   teems_resid_warn+=nw;
 }
 
-static solve_real *fr_values=NULL;
-static PetscInt fr_nz=-1;
-static PetscInt *fr_pat=NULL;  /* the assembled column pattern the pivot sequence belongs to
-                                  (the staged JCN is clobbered by MA48, so it cannot be
-                                  compared): the assembly skips zero-valued entries, so the
-                                  pattern is value-dependent and an equal NE does not prove
-                                  it unchanged */
-static offset_t fr_lasize=0;   /* current LA; grows on MA48 -3 returns and stays grown */
-static int fr_ready=0;
+/* ---- factor once, solve many (Tier B3; API in teems_solver.h) ----
+   What a method keeps when teems_fh_keep is set for its dispatch:
+     LU one-shot     MA48 L/U (VA, IRN) + KEEP/controls in Fortran slot 1
+     LU -fastrefac   nothing extra: the persistent factors are the handle
+     SBBD one-shot   the MP48 instance (not torn down after its solve)
+     SBBD -fastrefac nothing extra: the persistent instance
+     DBBD            block factors, border blocks, interface factors
+                     (block_solve.c, dfh)
+   teems_resid_retain keeps the LHS matrix (a PETSc reference) and the
+   RHS for the residual check of methods that release A before their
+   solve completes (one-shot SBBD, DBBD, NDBBD). */
+int teems_fh_selftest=0,teems_resid_all=0,teems_fh_keep=0,teems_resid_retain=0;
+enum { FH_NONE=0, FH_LU, FH_LU_FR, FH_SBBD, FH_SBBD_FR, FH_DBBD };
+static int fh_kind=FH_NONE;
+static PetscInt fh_n=0;
+static int fh_mpi=0,fh_resid_pending=0;
+static int *fh_lu_irn=NULL;
+static solve_real *fh_lu_va=NULL;
+static fortran_int fh_sb_indata[5];
+static Mat fh_A=NULL;
+static solve_real *fh_b=NULL,*fh_bfull=NULL; /* RHS: this rank's rows (MPI) / whole on rank_hsl (seq); whole on rank 0 (self-test) */
+static PetscInt fh_bstart=0,fh_bend=0;
+static long fh_st_solves=0,fh_st_rhs=0,fh_st_bitdiff=0;
+static double fh_st_maxabs=0.0,fh_st_maxrel=0.0;
+
+void residual_note_skipped(PetscInt rank,PetscInt counting_rank) {
+  if(teems_resid_retain)fh_resid_pending=1;
+  else if(rank==counting_rank)teems_resid_skipped++;
+}
+
+void fh_request_check(dim_t matsol,dim_t mc66,PetscInt rank) {
+  const char *who=NULL;
+  if(!teems_fh_selftest)return;
+  if(matsol==MM_NDBBD)who="matrix_method NDBBD";
+  else if(matsol==MM_SBBD&&mc66!=0)who="SBBD with -withmc66 1";
+  if(who==NULL)return;
+  if(rank==0)errmsg("Error: this run solves extra right-hand sides with each step's factorization (-fhtest), which %s cannot keep yet; use matrix_method LU, SBBD or DBBD\n",who);
+  MPI_Barrier(PETSC_COMM_WORLD);
+  MPI_Abort(PETSC_COMM_WORLD,1);
+}
+
+/* Residual check (manual 30.1.5, 30.6.1) of a distributed solve: each
+   rank checks its own rows of A against the whole solution x (every rank
+   holds it after the bordered methods' final reduction); rank 0 prints
+   the first warnings in row-ownership order and records the solve. */
+static void solve_residual_check_mpi(Mat A,const solve_real *bloc,PetscInt bstart,PetscInt bend,const solve_real *x,PetscInt rank,PetscInt mpisize) {
+  PetscInt rs,re,i,k,nc;
+  const PetscInt *cols;
+  const PetscScalar *va;
+  double worst=0.0,gworst=0.0;
+  long nw=0,gnw=0;
+  double wbuf[4*TEEMS_RESID_WARN_PRINT];
+  int nwp=0,*cnt=NULL,*disp=NULL,tot=0;
+  double *all=NULL;
+  MatGetOwnershipRange(A,&rs,&re);
+  for(i=rs; i<re; i++) {
+    double bi=(i>=bstart&&i<bend)?(double)bloc[i-bstart]:0.0;
+    double sum=0.0,sabs=fabs(bi),r,q;
+    MatGetRow(A,i,&nc,&cols,&va);
+    for(k=0; k<nc; k++) {
+      double t=(double)va[k]*(double)x[cols[k]];
+      sum+=t;
+      sabs+=fabs(t);
+    }
+    MatRestoreRow(A,i,&nc,&cols,&va);
+    r=fabs(sum-bi);
+    q=(sabs>0.0)?r/sabs:0.0;
+    if(q>worst)worst=q;
+    if(q>=TEEMS_RESID_WARN) {
+      nw++;
+      if(nwp<TEEMS_RESID_WARN_PRINT) {
+        wbuf[4*nwp]=(double)i;
+        wbuf[4*nwp+1]=q;
+        wbuf[4*nwp+2]=sum-bi;
+        wbuf[4*nwp+3]=sabs;
+        nwp++;
+      }
+    }
+  }
+  MPI_Reduce(&worst,&gworst,1,MPI_DOUBLE,MPI_MAX,0,PETSC_COMM_WORLD);
+  MPI_Reduce(&nw,&gnw,1,MPI_LONG,MPI_SUM,0,PETSC_COMM_WORLD);
+  if(rank==0) {
+    cnt=(int *) calloc (mpisize,sizeof(int));
+    disp=(int *) calloc (mpisize,sizeof(int));
+  }
+  nwp*=4;
+  MPI_Gather(&nwp,1,MPI_INT,cnt,1,MPI_INT,0,PETSC_COMM_WORLD);
+  if(rank==0) {
+    for(i=0; i<mpisize; i++) {
+      disp[i]=tot;
+      tot+=cnt[i];
+    }
+    all=(double *) malloc ((tot>0?tot:1)*sizeof(double));
+  }
+  MPI_Gatherv(wbuf,nwp,MPI_DOUBLE,all,cnt,disp,MPI_DOUBLE,0,PETSC_COMM_WORLD);
+  if(rank==0) {
+    for(k=0; k<tot/4&&k<TEEMS_RESID_WARN_PRINT; k++) {
+      char lab[(4*MAXVARDIM+2)*NAMESIZE];
+      probe_row_label((PetscInt)all[4*k],lab,sizeof(lab));
+      printf("Warning: equation %s is not satisfied very accurately (residual ratio %.3e: the sum of its terms is %.6g while the sum of their absolute values is %.6g); this may be because the LHS matrix is not really invertible (manual 30.6.1)\n",lab,all[4*k+1],all[4*k+2],all[4*k+3]);
+    }
+    if(gnw>TEEMS_RESID_WARN_PRINT)printf("Warning: ... %ld more equations of this solve are not satisfied very accurately (manual 30.6.1)\n",gnw-TEEMS_RESID_WARN_PRINT);
+    if(gworst>teems_resid_max)teems_resid_max=gworst;
+    teems_resid_solves++;
+    teems_resid_warn+=gnw;
+    free(cnt);
+    free(disp);
+    free(all);
+  }
+}
+
+/* ---- shock-group subtotals (Tier B3; GEMPACK manual 29; Harrison,
+   Horridge and Pearson 1999, CoPS IP-73 sections 3.6, 4.2) ----
+   At every solve the right-hand side B*dz splits by group: dz_r is the
+   step's shock vector with every entry outside group r zeroed, and
+   A p_r = B dz_r is solved with the step's kept factorization (the q_r
+   sum to the step's RHS, so the p_r sum to its solution). Each group
+   carries shadow copies of the driver's cumulative state and every
+   update the driver makes to its own state is made to the group's with
+   the same weights: ordinary changes add; a percent-change variable's
+   step solution is weighted by the level at the start of the step
+   relative to the pre-simulation level (1 + p/100, the MAIN solution's
+   cumulative value; IP-73 eq. 7), the Gragg leapfrog, terminal
+   smoothing, Richardson weights and subinterval compounding follow the
+   driver's formulas. The columns therefore add up to the solution to
+   rounding for any partition of the shocks, for Johansen, Euler and
+   Gragg alike; how the total splits depends on the path (IP-73 3.4),
+   which is the solver's straight line. Backsolved elements are
+   recovered per group from p_r and the group's exogenous changes.
+   Everything accumulates on rank 0. */
+int teems_sub_active=0;
+#define SUB_CHUNK 8
+static solve_real *sub_rhs=NULL,*sub_x=NULL,*sub_bs=NULL,*sub_z=NULL;
+static solve_real **sub_c=NULL,**sub_l=NULL,**sub_f=NULL;
+static PetscInt sub_n=0;
+
+/* the group right-hand sides B*dz_r, right after the step's own
+   MatMult(B,vece,vecb) and before B is released; collective under the
+   distributed methods, rank_hsl only otherwise */
+void sub_step_rhs(Mat B,Vec vece,PetscInt VecSize,dim_t matsol,PetscInt rank,PetscInt rank_hsl) {
+  int mpi=(matsol>=MM_DBBD),r;
+  Vec tmp,out;
+  PetscInt lo,hi;
+  offset_t k;
+  if(!teems_sub_active)return;
+  if(!mpi&&rank!=rank_hsl)return;
+  sub_n=VecSize;
+  if(rank==0&&sub_rhs==NULL)sub_rhs=(solve_real *) malloc ((size_t)VecSize*teems_nsub*sizeof(solve_real));
+  VecDuplicate(vece,&tmp);
+  MatCreateVecs(B,NULL,&out);
+  VecGetOwnershipRange(vece,&lo,&hi);
+  for(r=0; r<teems_nsub; r++) {
+    const PetscScalar *ev,*ov;
+    PetscScalar *tv;
+    VecSet(tmp,0.0);
+    VecGetArrayRead(vece,&ev);
+    VecGetArray(tmp,&tv);
+    for(k=0; k<teems_subs[r].nmem; k++) {
+      PetscInt e=(PetscInt)teems_subs[r].exo[k];
+      if(e>=lo&&e<hi)tv[e-lo]=ev[e-lo];
+    }
+    VecRestoreArray(tmp,&tv);
+    VecRestoreArrayRead(vece,&ev);
+    MatMult(B,tmp,out);
+    if(!mpi) {
+      VecGetArrayRead(out,&ov);
+      memcpy(sub_rhs+(size_t)r*VecSize,ov,VecSize*sizeof(solve_real));
+      VecRestoreArrayRead(out,&ov);
+    }
+    else {
+      VecScatter sct;
+      Vec vz;
+      VecScatterCreateToZero(out,&sct,&vz);
+      VecScatterBegin(sct,out,vz,INSERT_VALUES,SCATTER_FORWARD);
+      VecScatterEnd(sct,out,vz,INSERT_VALUES,SCATTER_FORWARD);
+      if(rank==0) {
+        VecGetArrayRead(vz,&ov);
+        memcpy(sub_rhs+(size_t)r*VecSize,ov,VecSize*sizeof(solve_real));
+        VecRestoreArrayRead(vz,&ov);
+      }
+      VecScatterDestroy(&sct);
+      VecDestroy(&vz);
+    }
+  }
+  VecDestroy(&tmp);
+  VecDestroy(&out);
+}
+
+/* the group step solutions p_r, SUB_CHUNK columns at a time with the
+   kept factorization (collective); each chunk's solutions overwrite its
+   right-hand sides, so the step holds one n x G block on rank 0 */
+static void sub_step_solve(PetscInt rank,PetscInt n) {
+  int c0,nc;
+  sub_x=sub_rhs;
+  for(c0=0; c0<teems_nsub; c0+=SUB_CHUNK) {
+    solve_real *xs;
+    nc=teems_nsub-c0<SUB_CHUNK?teems_nsub-c0:SUB_CHUNK;
+    xs=(solve_real *) malloc ((size_t)n*nc*sizeof(solve_real));
+    if(teems_fh_solve(rank==0?sub_rhs+(size_t)c0*n:NULL,xs,nc)!=0) {
+      if(rank==0)errmsg("Error: the subtotal solves found no kept factorization for this step\n");
+      MPI_Abort(PETSC_COMM_WORLD,1);
+    }
+    if(rank==0)memcpy(sub_x+(size_t)c0*n,xs,(size_t)n*nc*sizeof(solve_real));
+    free(xs);
+  }
+}
+
+static void sub_alloc(offset_t nvarele,int multistep) {
+  int r;
+  if(sub_f==NULL) {
+    sub_f=(solve_real **) calloc (teems_nsub,sizeof(solve_real*));
+    for(r=0; r<teems_nsub; r++)sub_f[r]=(solve_real *) calloc (nvarele>0?nvarele:1,sizeof(solve_real));
+  }
+  if(multistep&&sub_c==NULL) {
+    sub_c=(solve_real **) calloc (teems_nsub,sizeof(solve_real*));
+    for(r=0; r<teems_nsub; r++)sub_c[r]=(solve_real *) calloc (nvarele>0?nvarele:1,sizeof(solve_real));
+  }
+  if((multistep==SUB_LEAP||multistep==SUB_SMOOTH)&&sub_l==NULL) {
+    sub_l=(solve_real **) calloc (teems_nsub,sizeof(solve_real*));
+    for(r=0; r<teems_nsub; r++)sub_l[r]=(solve_real *) calloc (nvarele>0?nvarele:1,sizeof(solve_real));
+  }
+  if(nbselems>0&&sub_bs==NULL) {
+    sub_bs=(solve_real *) calloc (nbselems,sizeof(solve_real));
+    sub_z=(solve_real *) calloc (nvarele>0?nvarele:1,sizeof(solve_real));
+  }
+}
+
+/* group r's recovered backsolved changes: backsolve_recover on p_r and
+   the step's exogenous changes restricted to group r */
+static void sub_backsolve(int r,char *tabfile,char *commsyntax,set_def *sets,dim_t nset,set_element *set_elems,array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar,elem_value *elem_vals,offset_t ncofele,closure_entry *closure_vals,offset_t nvarele,const solve_real *exo_z) {
+  offset_t k;
+  if(nbselems<=0)return;
+  memset(sub_z,0,nvarele*sizeof(solve_real));
+  if(exo_z!=NULL)for(k=0; k<teems_subs[r].nmem; k++)sub_z[teems_subs[r].mem[k]]=exo_z[teems_subs[r].mem[k]];
+  backsolve_recover(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele,closure_vals,sub_x+(size_t)r*sub_n,sub_z,sub_bs);
+}
+
+/* mirror of one driver update on every group's state (rank 0). mode:
+   SUB_JOHANSEN the one-step result, SUB_FIRST a pass's first step,
+   SUB_EULER a forward step, SUB_LEAP a Gragg leapfrog step, SUB_SMOOTH
+   Gragg's terminal smoothing. V is the driver's cumulative state before
+   its own update (the level weight of percent-change variables). The
+   exogenous members are set from the driver's state after its update
+   (sub_exo_sync): a shock belongs wholly to its own group. */
+void sub_update(int mode,char *tabfile,char *commsyntax,set_def *sets,dim_t nset,set_element *set_elems,array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar,elem_value *elem_vals,offset_t ncofele,closure_entry *closure_vals,offset_t nvarele,const solve_real *exo_z,const solve_real *V) {
+  int r;
+  offset_t i,j,k;
+  sub_alloc(nvarele,mode);
+  for(r=0; r<teems_nsub; r++) {
+    solve_real *xr=sub_x+(size_t)r*sub_n,*c=(mode==SUB_JOHANSEN)?sub_f[r]:sub_c[r],*l=(sub_l==NULL)?NULL:sub_l[r];
+    sub_backsolve(r,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele,closure_vals,nvarele,exo_z);
+    for(i=0; i<nvar; i++) {
+      int chg=vars[i].change_real?1:0;
+      for(j=vars[i].offset; j<vars[i].nelem+vars[i].offset; j++) {
+        solve_real d,t;
+        if(CL_EXO(j)) {
+          if(mode==SUB_JOHANSEN||mode==SUB_FIRST)c[j]=0;
+          continue;
+        }
+        d=CL_BS(j)?sub_bs[closure_vals[j].exo_index]:xr[closure_vals[j].exo_index];
+        switch(mode) {
+        case SUB_JOHANSEN:
+        case SUB_FIRST:
+          c[j]=d;
+          if(l!=NULL)l[j]=0;
+          break;
+        case SUB_EULER:
+          if(chg)c[j]+=d;
+          else c[j]+=d*(100+V[j])/100;
+          break;
+        case SUB_LEAP:
+          /* the driver's ordinary-change lag is the variable's stored
+             value, i.e. the cumulative change at the storage precision
+             (store_real); its percent-change lag is the double itself */
+          if(chg) {
+            t=(solve_real)(store_real)c[j];
+            c[j]=l[j]+2*d;
+          }
+          else {
+            t=c[j];
+            c[j]=l[j]+2*d*(100+V[j])/100;
+          }
+          l[j]=t;
+          break;
+        case SUB_SMOOTH:
+          if(chg)c[j]=0.5*(c[j]+l[j]+d);
+          else c[j]=0.5*(c[j]+l[j]+d*(1+V[j]/100));
+          l[j]=0;
+          break;
+        }
+      }
+    }
+    if(mode==SUB_JOHANSEN)for(k=0; k<teems_subs[r].nmem; k++)c[teems_subs[r].mem[k]]=CL_SHOCK(teems_subs[r].mem[k]);
+  }
+}
+
+void sub_exo_sync(const solve_real *varchange) {
+  int r;
+  offset_t k;
+  for(r=0; r<teems_nsub; r++)for(k=0; k<teems_subs[r].nmem; k++)sub_c[r][teems_subs[r].mem[k]]=varchange[teems_subs[r].mem[k]];
+}
+
+/* a pass's Richardson contribution and the subinterval compounding, the
+   driver's formulas on each group's pass state (xc0 = 1 + the main
+   solution's cumulative percent change at the subinterval start) */
+void sub_pass_end(int sol,dim_t subindx,array_def *vars,offset_t nvar,offset_t nvarele,const solve_real *xc0) {
+  int r;
+  offset_t i,k;
+  for(r=0; r<teems_nsub; r++) {
+    solve_real *c=sub_c[r],*f=sub_f[r];
+    if(subindx>0) {
+      for(i=0; i<nvar; i++) {
+        for(k=vars[i].offset; k<vars[i].nelem+vars[i].offset; k++) {
+          if(vars[i].change_real) {
+            if(sol==0)f[k]+=c[k]*extrap_w2;
+            if(sol==1)f[k]-=c[k]*extrap_w3;
+            if(sol==2)f[k]+=c[k]*extrap_w3;
+          }
+          else {
+            if(sol==0)f[k]+=c[k]*xc0[k]*extrap_w2;
+            if(sol==1)f[k]-=c[k]*xc0[k]*extrap_w3;
+            if(sol==2)f[k]+=c[k]*xc0[k]*extrap_w3;
+          }
+        }
+      }
+    }
+    else {
+      for(k=0; k<nvarele; k++) {
+        if(sol==0)f[k]+=c[k]*extrap_w2;
+        if(sol==1)f[k]-=c[k]*extrap_w3;
+        if(sol==2)f[k]+=c[k]*extrap_w3;
+      }
+    }
+  }
+}
+
+solve_real **sub_columns(void) {
+  return sub_f;
+}
+
+void sub_free(void) {
+  int r;
+  for(r=0; r<teems_nsub; r++) {
+    if(sub_f!=NULL)free(sub_f[r]);
+    if(sub_c!=NULL)free(sub_c[r]);
+    if(sub_l!=NULL)free(sub_l[r]);
+  }
+  free(sub_f);
+  free(sub_c);
+  free(sub_l);
+  free(sub_rhs);
+  free(sub_bs);
+  free(sub_z);
+  sub_f=sub_c=sub_l=NULL;
+  sub_rhs=sub_x=sub_bs=sub_z=NULL;
+}
+
+void fh_step_begin(Mat A,Vec vecb,dim_t matsol,dim_t mc66,PetscInt VecSize,PetscInt rank,PetscInt rank_hsl) {
+  fh_request_check(matsol,mc66,rank);
+  teems_fh_keep=teems_fh_selftest||teems_sub_active;
+  teems_resid_retain=(teems_resid_all&&matsol>=MM_SBBD);
+  fh_resid_pending=0;
+  fh_kind=FH_NONE;
+  fh_n=VecSize;
+  fh_mpi=(matsol>=MM_DBBD);
+  if(!teems_fh_keep&&!teems_resid_retain)return;
+  /* the sequential methods know the system size on rank_hsl (0) only */
+  if(teems_fh_keep)MPI_Bcast(&fh_n,1,MPIU_INT,0,PETSC_COMM_WORLD);
+  if(teems_resid_retain) {
+    PetscObjectReference((PetscObject)A);
+    fh_A=A;
+  }
+  if(fh_mpi) {
+    const PetscScalar *bv;
+    VecGetOwnershipRange(vecb,&fh_bstart,&fh_bend);
+    if(teems_resid_retain) {
+      fh_b=(solve_real *) malloc ((fh_bend>fh_bstart?fh_bend-fh_bstart:1)*sizeof(solve_real));
+      VecGetArrayRead(vecb,&bv);
+      memcpy(fh_b,bv,(fh_bend-fh_bstart)*sizeof(solve_real));
+      VecRestoreArrayRead(vecb,&bv);
+    }
+    if(teems_fh_keep) {
+      VecScatter sct;
+      Vec vz;
+      VecScatterCreateToZero(vecb,&sct,&vz);
+      VecScatterBegin(sct,vecb,vz,INSERT_VALUES,SCATTER_FORWARD);
+      VecScatterEnd(sct,vecb,vz,INSERT_VALUES,SCATTER_FORWARD);
+      if(rank==0) {
+        fh_bfull=(solve_real *) malloc (VecSize*sizeof(solve_real));
+        VecGetArrayRead(vz,&bv);
+        memcpy(fh_bfull,bv,VecSize*sizeof(solve_real));
+        VecRestoreArrayRead(vz,&bv);
+      }
+      VecScatterDestroy(&sct);
+      VecDestroy(&vz);
+    }
+  }
+  else if(rank==rank_hsl) {
+    const PetscScalar *bv;
+    fh_b=(solve_real *) malloc (VecSize*sizeof(solve_real));
+    VecGetArrayRead(vecb,&bv);
+    memcpy(fh_b,bv,VecSize*sizeof(solve_real));
+    VecRestoreArrayRead(vecb,&bv);
+    fh_bfull=fh_b;
+  }
+}
+
+int teems_fh_solve(const solve_real *rhs,solve_real *x,int nrhs) {
+  int kind=fh_kind,rank=0,mpisize=1;
+  PetscInt n=fh_n;
+  MPI_Comm_rank(PETSC_COMM_WORLD,&rank);
+  MPI_Comm_size(PETSC_COMM_WORLD,&mpisize);
+  if(kind==FH_NONE&&dbbd_fh_ready())kind=FH_DBBD;
+  MPI_Bcast(&kind,1,MPI_INT,0,PETSC_COMM_WORLD);
+  if(kind==FH_NONE||nrhs<1)return -1;
+  switch(kind) {
+  case FH_LU:
+    if(rank==0) {
+      int slot=1;
+      spec48_keep_solve_(&slot,fh_lu_va,fh_lu_irn,&nrhs,(solve_real *)rhs,x);
+    }
+    break;
+  case FH_LU_FR:
+    if(rank==0) {
+      int ins[4]={(int)n,(int)n,(int)fr_nz,(int)fr_lasize};
+      spec48_persist_solve_(ins,fr_irn,fr_values,&nrhs,(solve_real *)rhs,x);
+    }
+    break;
+  case FH_SBBD:
+    spec48_nomc66_osolve_(fh_sb_indata,&nrhs,(solve_real *)rhs,x);
+    break;
+  case FH_SBBD_FR:
+    spec48_nomc66_psolve_(fh_sb_indata,&nrhs,(solve_real *)rhs,x);
+    break;
+  case FH_DBBD:
+    dbbd_fh_solve(rhs,x,nrhs,rank,mpisize);
+    break;
+  }
+  if(kind!=FH_DBBD&&mpisize>1)MPI_Bcast(x,(int)(n*nrhs),SORD==1?MPI_DOUBLE:MPI_FLOAT,0,PETSC_COMM_WORLD);
+  return 0;
+}
+
+void teems_fh_free(void) {
+  int kind=fh_kind;
+  if(kind==FH_NONE&&dbbd_fh_ready())kind=FH_DBBD;
+  MPI_Bcast(&kind,1,MPI_INT,0,PETSC_COMM_WORLD);
+  if(kind==FH_LU) {
+    int slot=1;
+    spec48_keep_free_(&slot);
+    free(fh_lu_irn);
+    free(fh_lu_va);
+    fh_lu_irn=NULL;
+    fh_lu_va=NULL;
+  }
+  if(kind==FH_SBBD)spec48_nomc66_ofree_();
+  if(kind==FH_DBBD)dbbd_fh_free();
+  fh_kind=FH_NONE;
+}
+
+/* -fhtest: solve [b, 2b] again with the kept factorization and compare
+   with the step's own solution x and 2x (the kit's check that every
+   method can solve more right-hand sides with one factorization, at
+   every solve of every driver) */
+static void fh_selftest_run(const solve_real *x,PetscInt rank) {
+  PetscInt VecSize=fh_n,i;
+  solve_real *rhs=NULL,*xx=(solve_real *) malloc (2*VecSize*sizeof(solve_real));
+  if(rank==0) {
+    rhs=(solve_real *) malloc (2*VecSize*sizeof(solve_real));
+    for(i=0; i<VecSize; i++) {
+      rhs[i]=fh_bfull[i];
+      rhs[VecSize+i]=2.0*fh_bfull[i];
+    }
+  }
+  if(teems_fh_solve(rhs,xx,2)==0&&rank==0) {
+    for(i=0; i<2*VecSize; i++) {
+      double ref=(i<VecSize)?(double)x[i]:2.0*(double)x[i-VecSize];
+      double d=fabs((double)xx[i]-ref),rl=(fabs(ref)>0.0)?d/fabs(ref):d;
+      solve_real refr=(solve_real)ref;
+      if(memcmp(&xx[i],&refr,sizeof(solve_real))!=0)fh_st_bitdiff++;
+      if(d>fh_st_maxabs)fh_st_maxabs=d;
+      if(rl>fh_st_maxrel)fh_st_maxrel=rl;
+    }
+    fh_st_solves++;
+    fh_st_rhs+=2;
+  }
+  free(rhs);
+  free(xx);
+}
+
+void fh_step_end(PetscInt VecSize,const solve_real *x,PetscInt rank,PetscInt rank_hsl,PetscInt mpisize) {
+  if(teems_resid_retain&&fh_resid_pending) {
+    if(fh_mpi)solve_residual_check_mpi(fh_A,fh_b,fh_bstart,fh_bend,x,rank,mpisize);
+    else if(rank==rank_hsl)solve_residual_check(fh_A,fh_b,x,VecSize);
+  }
+  if(teems_sub_active)sub_step_solve(rank,fh_n);
+  if(teems_fh_selftest)fh_selftest_run(x,rank);
+  if(teems_fh_keep)teems_fh_free();
+  if(fh_A!=NULL)MatDestroy(&fh_A);
+  if(fh_bfull!=fh_b)free(fh_bfull);
+  free(fh_b);
+  fh_b=NULL;
+  fh_bfull=NULL;
+  teems_fh_keep=0;
+  teems_resid_retain=0;
+  fh_resid_pending=0;
+}
+
+void fh_selftest_summary(PetscInt rank) {
+  if(!teems_fh_selftest||rank!=0)return;
+  printf("Factor handle self-test: %ld solves, %ld extra right-hand sides, %ld elements not bit-identical, max abs difference %.3e, max rel difference %.3e\n",fh_st_solves,fh_st_rhs,fh_st_bitdiff,fh_st_maxabs,fh_st_maxrel);
+}
+
 
 static void lu_fastrefac_extract(Mat A,PetscInt VecSize,dim_t laA) {
   Mat_SeqAIJ *aa=(Mat_SeqAIJ*)A->data;
@@ -230,6 +742,7 @@ void lu_fastrefac_solve(Mat A,PetscInt VecSize,dim_t laA,solve_real *rhs,solve_r
       teems_condest_scope=0;
       probe_onfail_scope_clear();
       solve_residual_check(A,rhs,x,VecSize);
+      if(teems_fh_keep)fh_kind=FH_LU_FR;
       return;
     }
     if(insize[4]==-3) {
@@ -277,7 +790,7 @@ void lu_grow_solve(Mat A,PetscInt VecSize,dim_t laA,solve_real *rhs,solve_real *
   PetscInt i,j;
   offset_t count=0,k,lasize;
   int tries;
-  int insize[6];
+  int insize[8];
   for(i=0; i<aa->nz; i++) if(aa->a[i]!=0)count++;
   lasize=ma48_la_from_pct(laA,count);
   /* a starved -laA (<100) must still stage all NE entries; MA48 then
@@ -305,12 +818,21 @@ void lu_grow_solve(Mat A,PetscInt VecSize,dim_t laA,solve_real *rhs,solve_real *
     insize[3]=laA;
     insize[4]=0;
     insize[5]=(int)lasize;
+    insize[6]=teems_fh_keep?1:0; /* Tier B3: keep the factorization for more solves */
+    insize[7]=0;
     teems_condest_scope=teems_condest;
     spec48_ssol2la_(insize,irn,jcn,values,rhs,x);
     teems_condest_scope=0;
-    free(irn);
     free(jcn);
-    free(values);
+    if(teems_fh_keep&&insize[4]==0) {
+      fh_lu_irn=irn;
+      fh_lu_va=values;
+      fh_kind=FH_LU;
+    }
+    else {
+      free(irn);
+      free(values);
+    }
     if(insize[4]<0&&insize[4]!=-3) {
       /* soft failure (singular stage state under adaptive Runge-Kutta):
          hand the step back to the driver for a retry */
@@ -362,10 +884,17 @@ void sbbd_csr_solve(Mat *A,Vec *vecb,PetscInt VecSize,PetscInt rank,PetscInt ran
   CHKERRABORT(PETSC_COMM_WORLD,ierr);
   ierr = MatDestroy(A);
   CHKERRABORT(PETSC_COMM_WORLD,ierr);
-  spec48_nomc66_run_(indata,x,&fcomm);
+  {
+    int keep=teems_fh_keep?1:0;
+    spec48_nomc66_run_(indata,x,&fcomm,&keep);
+    if(keep) {
+      memcpy(fh_sb_indata,indata,sizeof(fh_sb_indata));
+      fh_kind=FH_SBBD;
+    }
+  }
   probe_onfail_scope_clear();
   solve_x_check(x,VecSize,rank==rank_hsl);
-  if(rank==rank_hsl) teems_resid_skipped++;
+  residual_note_skipped(rank,rank_hsl);
 }
 
 /* -fastrefac SBBD (6.15(c) form): the persistent MP48 instance is staged
@@ -422,6 +951,10 @@ void sbbd_fastrefac_solve(Mat *A,Vec *vecb,PetscInt VecSize,PetscInt rank,PetscI
   ierr = MatDestroy(A);
   CHKERRABORT(PETSC_COMM_WORLD,ierr);
   sb_ready=1;
+  if(teems_fh_keep) {
+    memcpy(fh_sb_indata,indata,sizeof(fh_sb_indata));
+    fh_kind=FH_SBBD_FR;
+  }
 }
 
 void sbbd_fastrefac_free(void) {
@@ -616,10 +1149,12 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
     CHKERRQ(ierr);
     ierr = VecAssemblyEnd(vecb);
     CHKERRQ(ierr);
+    sub_step_rhs(B,vece,VecSize,matsol,rank,rank_hsl);
     ierr = MatDestroy(&B);
     CHKERRQ(ierr);
     ierr = VecDestroy(&vece);
     CHKERRQ(ierr);
+    fh_step_begin(A,vecb,matsol,mc66,VecSize,rank,rank_hsl);
 
     if(matsol>=MM_DBBD) {
       gettimeofday(&begintime, NULL);
@@ -745,7 +1280,7 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
         if(mc66!=0)spec48_single_(ptx,irn,jcn,b1,values,x0,neleperrow,ai1,&fcomm);
         if(mc66==0)spec48_nomc66_(ptx,jcn,b1,values,x0,neleperrow,&fcomm,counteq,countvarintra1);
               solve_x_check(x0,VecSize,rank==rank_hsl);
-              if(rank==rank_hsl)teems_resid_skipped++;
+              residual_note_skipped(rank,rank_hsl);
         probe_onfail_scope_clear();
         free(irn);
         free(jcn);
@@ -780,6 +1315,7 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
       if(rank==0)logmsg(1,"Step time %.2f s\n",(endtime.tv_sec - begintime.tv_sec)+((double)(endtime.tv_usec - begintime.tv_usec))/ 1000000);
       teems_rss_probe("step");
     }
+    fh_step_end(VecSize,x0,rank,rank_hsl,mpisize);
     if(rank==rank_hsl) {
       if(!inmemory){
       if ((tempvar = teems_fopen(tempfilenam, "rb")) == NULL) {
@@ -861,6 +1397,7 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
           }
         }
       }
+      if(teems_sub_active&&rank==0)sub_update(SUB_JOHANSEN,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele,closure_vals,nvarele,exo_z,NULL);
       updates_apply(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,0);
       strcpy(commsyntax,"formula");
       IsIni=false;
@@ -1254,6 +1791,7 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
             ierr = MatMult(B,vece,vecb);
             CHKERRQ(ierr);
           }
+          sub_step_rhs(B,vece,VecSize,matsol,rank,rank_hsl);
           ierr = VecDestroy(&vece);
           CHKERRQ(ierr);
           ierr = VecAssemblyBegin(vecb);
@@ -1262,6 +1800,7 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
           CHKERRQ(ierr);
           ierr = MatDestroy(&B);
           CHKERRQ(ierr);
+          fh_step_begin(A,vecb,matsol,mc66,VecSize,rank,rank_hsl);
           if(matsol>=MM_DBBD) {
             int *row_order= (int *) calloc (VecSize,sizeof(int));
             int *col_order= (int *) calloc (VecSize,sizeof(int));
@@ -1396,7 +1935,7 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
               if(mc66!=0)spec48_single_(ptx,irn,jcn,b1,values,x1,neleperrow,ai1,&fcomm);
               if(mc66==0)spec48_nomc66_(ptx,jcn,b1,values,x1,neleperrow,&fcomm,counteq,countvarintra1);
               solve_x_check(x1,VecSize,rank==rank_hsl);
-              if(rank==rank_hsl)teems_resid_skipped++;
+              residual_note_skipped(rank,rank_hsl);
               probe_onfail_scope_clear();
               free(irn);
               ierr = PetscGetCPUTime(&time1);
@@ -1466,6 +2005,7 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
             }
             teems_rss_probe("step");
           }
+          fh_step_end(VecSize,x1,rank,rank_hsl,mpisize);
           if(rank==rank_hsl) {
             if(!inmemory){
             if ((tempvar = teems_fopen(tempfilenam, "rb")) == NULL) {
@@ -1546,6 +2086,7 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
              with this step's solution, before any update reads a
              variable's change (GEMPACK 14.1.3) */
           if(rank==rank_hsl&&nbselems>0)backsolve_recover(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele,closure_vals,x1,exo_z,bsvals);
+          if(teems_sub_active&&rank==0)sub_update(stepcount==0?SUB_FIRST:(euler?SUB_EULER:SUB_LEAP),tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele,closure_vals,nvarele,exo_z,varchange);
           if(stepcount==0) {
             for(i=0; i<nvar; i++) {
               if(vars[i].change_real) {
@@ -1702,6 +2243,7 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
               }
             }
           }
+          if(teems_sub_active&&rank==0)sub_exo_sync(varchange);
           free(x1);
           x1=NULL;
           MPI_Barrier(PETSC_COMM_WORLD);
@@ -1873,6 +2415,7 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
           ierr = MatMult(B,vece,vecb);
           CHKERRQ(ierr);
         }
+        sub_step_rhs(B,vece,VecSize,matsol,rank,rank_hsl);
         ierr = VecDestroy(&vece);
         CHKERRQ(ierr);
         ierr = VecAssemblyBegin(vecb);
@@ -1881,6 +2424,7 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
         CHKERRQ(ierr);
         ierr = MatDestroy(&B);
         CHKERRQ(ierr);
+        fh_step_begin(A,vecb,matsol,mc66,VecSize,rank,rank_hsl);
         if(matsol>=MM_DBBD) {
           int *row_order= (int *) calloc (VecSize,sizeof(int));
           int *col_order= (int *) calloc (VecSize,sizeof(int));
@@ -2015,7 +2559,7 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
             if(mc66!=0)spec48_single_(ptx,irn,jcn,b1,values,x1,neleperrow,ai1,&fcomm);
             if(mc66==0)spec48_nomc66_(ptx,jcn,b1,values,x1,neleperrow,&fcomm,counteq,countvarintra1);
               solve_x_check(x1,VecSize,rank==rank_hsl);
-              if(rank==rank_hsl)teems_resid_skipped++;
+              residual_note_skipped(rank,rank_hsl);
             probe_onfail_scope_clear();
             free(irn);
             ierr = PetscGetCPUTime(&time1);
@@ -2085,6 +2629,7 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
           }
           teems_rss_probe("step");
         }
+        fh_step_end(VecSize,x1,rank,rank_hsl,mpisize);
         if(rank==rank_hsl) {
           if(!inmemory){
           if ((tempvar = teems_fopen(tempfilenam, "rb")) == NULL) {
@@ -2171,6 +2716,7 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
           }
           updates_apply(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,2);
         }
+        if(teems_sub_active&&rank==0)sub_update(SUB_SMOOTH,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele,closure_vals,nvarele,exo_z,varchange);
         for(i=0; i<nvar; i++) {
           if(vars[i].change_real) {
             for(tindx1=vars[i].offset; tindx1<vars[i].nelem+vars[i].offset; tindx1++) {
@@ -2402,6 +2948,7 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
               }
             }
           }
+          if(teems_sub_active&&rank==0)sub_pass_end(sol,subindx,vars,nvar,nvarele,xc0);
 
           if(sol==maxsol-1){
           if(subindx==0){

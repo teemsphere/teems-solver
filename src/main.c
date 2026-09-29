@@ -100,11 +100,11 @@ static const char *blas_corename(void) {
 static const char *const cli_teems_flags[]={
   "adaptive","assertions","cmdfile","cntl_3","cntl_6","cofdump",
   "comp_do_acc","comp_do_approx","comp_redo","comp_redo_min_frac",
-  "comp_sberr_warn","comp_steps","condest","epstol","fastrefac",
+  "comp_sberr_warn","comp_steps","condest","epstol","fastrefac","fhtest",
   "gpzerodivide","inmemory","laA","laD","laDi","ma48u","matsol",
   "maxretries","maxthreads","ndcutcache","nowrites","nsbbdblocks",
   "nsubints","postsim","probefine","probepattern","random_seed",
-  "range_test_initial","range_test_updated","retryadj","rkchart",
+  "range_test_initial","range_test_updated","residcheck","retryadj","rkchart",
   "rkctrl","rkguard","rk_h0","rknorm","rkscope","single_run",
   "smllthreads","solmed","step1","step2","step3","tempdir","verbosity",
   "withmc66","version",NULL
@@ -227,10 +227,24 @@ static int coefficients_dump_phase(const char *stem, const char *ext, offset_t p
    (element offsets in .bin order), then ncol x nrow doubles, column by
    column. kind: 0 mixed (per column in the JSON), 1 subtotal,
    2 sagem_individual, 3 approx_cumulative, 4 pass_solution. Written
-   today for the complementarity approximate run (kind 3). */
+   for the complementarity approximate run (kind 3) and the shock-group
+   subtotals (kind 1; kind 2 for a one-step Johansen run, where one
+   group per shock is GEMPACK's SAGEM individual column). The JSON
+   "shocked" field is the group's item list (subtotals) or "all". */
 static const char *const cols_kind_names[]={"mixed","subtotal","sagem_individual","approx_cumulative","pass_solution"};
 
-static int cols_write(const char *stem, offset_t kind, offset_t ncol, offset_t nrow, const solve_real *const *cols, const char *const *labels) {
+static void json_string(FILE *fp,const char *s) {
+  fputc('"',fp);
+  for(; *s!='\0'; s++) {
+    unsigned char c=(unsigned char)*s;
+    if(c=='"'||c=='\\')fprintf(fp,"\\%c",c);
+    else if(c<0x20)fprintf(fp,"\\u%04x",c);
+    else fputc(c,fp);
+  }
+  fputc('"',fp);
+}
+
+static int cols_write(const char *stem, offset_t kind, offset_t ncol, offset_t nrow, const solve_real *const *cols, const char *const *labels, const char *const *shocked) {
   char path[TABREADLINE+16];
   FILE *fp;
   offset_t hdr[4],i,c;
@@ -254,7 +268,13 @@ static int cols_write(const char *stem, offset_t kind, offset_t ncol, offset_t n
     return 1;
   }
   fprintf(fp,"{\n  \"version\": 1,\n  \"ncol\": %ld,\n  \"nrow\": %ld,\n  \"kind\": \"%s\",\n  \"rows\": \"all\",\n  \"columns\": [",(long)ncol,(long)nrow,cols_kind_names[kind]);
-  for(c=0; c<ncol; c++)fprintf(fp,"%s\n    {\"index\": %ld, \"kind\": \"%s\", \"label\": \"%s\", \"shocked\": \"all\"}",c?",":"",(long)c,cols_kind_names[kind],labels[c]);
+  for(c=0; c<ncol; c++) {
+    fprintf(fp,"%s\n    {\"index\": %ld, \"kind\": \"%s\", \"label\": ",c?",":"",(long)c,cols_kind_names[kind]);
+    json_string(fp,labels[c]);
+    fprintf(fp,", \"shocked\": ");
+    json_string(fp,shocked!=NULL?shocked[c]:"all");
+    fprintf(fp,"}");
+  }
   fprintf(fp,"\n  ]\n}\n");
   if(fclose(fp)!=0) {
     errmsg("Error: cannot write %s: %s\n",path,strerror(errno));
@@ -1305,6 +1325,18 @@ int main(int argc,char **args) {
   PetscOptionsGetInt(NULL,NULL,"-laDi",&laDi,NULL);
   if(laDi==0)laDi=2;
   PetscOptionsGetInt(NULL,NULL,"-withmc66",&mc66,NULL);
+  /* Tier B3 (factor once, solve many): -residcheck 1 keeps the LHS
+     matrix of one-shot SBBD/DBBD/NDBBD solves so the residual check
+     (manual 30.1.5) covers every solve, at the cost of holding the
+     matrix through the factorization; -fhtest 1 (kit hook) solves each
+     step's right-hand side again with the kept factorization and
+     compares. A method that cannot keep its factors stops here, before
+     any work. */
+  PetscOptionsGetInt(NULL,NULL,"-residcheck",&teems_resid_all,NULL);
+  teems_resid_all=(teems_resid_all!=0);
+  PetscOptionsGetInt(NULL,NULL,"-fhtest",&teems_fh_selftest,NULL);
+  teems_fh_selftest=(teems_fh_selftest!=0);
+  fh_request_check(matsol,mc66,rank);
   /* -gpzerodivide 1: GEMPACK dual-class ZERODIVIDE semantics in formulas
      (manual 10.11/10.11.1; plan A1). Default 0 keeps the legacy single
      conflated default -- adoption is a re-anchor-class change. */
@@ -1688,12 +1720,29 @@ int main(int argc,char **args) {
     rank_hsl=0;
   }
   char *readitem=NULL;
+  char subfile[TABREADLINE]="";
+  int has_sub=0;
   if(rank==0) {
     if(manifest_check(filename)<0)MPI_Abort(PETSC_COMM_WORLD,1);
+    has_sub=cmf_subtotals_file(filename,subfile);
     niodata=cmf_count_files(filename,"iodata");
     if(niodata==-1)MPI_Abort(PETSC_COMM_WORLD,1);/* rank 0 only: the other ranks wait in the Bcast below */
     noutdata=cmf_count_files(filename,"outdata");
     nsoldata=cmf_count_files(filename,"soldata");
+  }
+  /* Tier B3 subtotals: the combinations the step accumulation does not
+     cover stop here, before any work */
+  MPI_Bcast(&has_sub,1,MPI_INT,0,PETSC_COMM_WORLD);
+  if(has_sub) {
+    const char *why=NULL;
+    if(matsol==MM_NDBBD)why="matrix_method NDBBD, which cannot keep its factorization for more solves yet";
+    else if(matsol==MM_SBBD&&mc66!=0)why="SBBD under -withmc66 1, which cannot keep its factorization for more solves";
+    else if(solmethod!=SM_JOHANSEN&&solmethod!=SM_GRAGG&&solmethod!=SM_EULER&&solmethod!=SM_PROBE)why="a Runge-Kutta method, whose stage combination in the log chart has no settled subtotal convention yet";
+    if(why!=NULL) {
+      if(rank==0)errmsg("Error: subtotals (manual 29) are not available with %s; use matrix_method LU, SBBD or DBBD with the Johansen, Euler or Gragg method\n",why);
+      MPI_Barrier(PETSC_COMM_WORLD);
+      MPI_Abort(PETSC_COMM_WORLD,1);
+    }
   }
   if(nohsl) {
     MPI_Bcast(&niodata,sizeof(int), MPI_BYTE,0, PETSC_COMM_WORLD);
@@ -2136,6 +2185,10 @@ int main(int argc,char **args) {
     nexo1=nexo;
     strcpy(commsyntax,"shock");
     if(shocks_read(shock,commsyntax,closure_vals,nvarele,vars,nvar,sets,nset,set_elems,subints)==-1)MPI_Abort(PETSC_COMM_WORLD,1);
+    if(has_sub) {
+      if(subtotals_read(subfile,vars,nvar,sets,nset,set_elems,nvarele)<0)MPI_Abort(PETSC_COMM_WORLD,1);
+      logmsg(1,"Subtotals: %d shock group(s) from %s (manual 29)\n",teems_nsub,subfile);
+    }
     /* backsolve statements: mark the eliminated elements (the flags ride
        the closure broadcast) and check the condensed system's references
        before any equation scan runs with the filter active */
@@ -2153,6 +2206,15 @@ int main(int argc,char **args) {
   }
   /* every rank dispatches on active-mode complementarities (C2) */
   MPI_Bcast(&teems_comp_active,sizeof(offset_t), MPI_BYTE,0, PETSC_COMM_WORLD);
+  if(has_sub) {
+    int hc=(teems_ncomp>0);
+    MPI_Bcast(&hc,1,MPI_INT,0,PETSC_COMM_WORLD);
+    if(hc) {
+      if(rank==0)errmsg("Error: subtotals (manual 29) are not available in a model with complementarities yet: the approximate and accurate runs change the closure and the states between steps, so the step right-hand sides are not the shocks alone (manual 52)\n");
+      MPI_Barrier(PETSC_COMM_WORLD);
+      MPI_Abort(PETSC_COMM_WORLD,1);
+    }
+  }
   /* approximate/accurate-run controls (manual 51.6 semantics, TEEMS
      command-line flags -- teems-R passes them from
      ems_complementarity(); no CMF statements). Defaults: step count
@@ -2998,6 +3060,23 @@ comp_accurate_reentry:
      with the E_$comp state machinery live; the 51.7.1 closure/shock
      modification then re-enters the pipeline and the REQUESTED method
      solves the accurate run (comp_acc_phase 1). */
+  if(has_sub&&solmethod!=SM_PROBE) {
+    int r;
+    MPI_Bcast(&teems_nsub,1,MPI_INT,0,PETSC_COMM_WORLD);
+    if(rank!=0)teems_subs=(sub_group *) calloc (teems_nsub,sizeof(sub_group));
+    for(r=0; r<teems_nsub; r++) {
+      MPI_Bcast(&teems_subs[r].nmem,sizeof(offset_t),MPI_BYTE,0,PETSC_COMM_WORLD);
+      if(rank!=0)teems_subs[r].mem=(offset_t *) malloc ((teems_subs[r].nmem>0?teems_subs[r].nmem:1)*sizeof(offset_t));
+      MPI_Bcast(teems_subs[r].mem,teems_subs[r].nmem*sizeof(offset_t),MPI_BYTE,0,PETSC_COMM_WORLD);
+      free(teems_subs[r].exo);
+      teems_subs[r].exo=(exo_idx_t *) calloc (teems_subs[r].nmem>0?teems_subs[r].nmem:1,sizeof(exo_idx_t));
+      if(rank==rank_hsl) {
+        offset_t k;
+        for(k=0; k<teems_subs[r].nmem; k++)teems_subs[r].exo[k]=closure_vals[teems_subs[r].mem[k]].exo_index;
+      }
+    }
+    teems_sub_active=1;
+  }
   bool comp_dispatch=(teems_comp_active>0&&solmethod!=SM_PROBE&&comp_acc_phase==0);
   if(comp_dispatch) {
     if(comp_do_approx) {
@@ -3224,7 +3303,30 @@ comp_accurate_reentry:
       const solve_real *cp[1]={comp_approx_col};
       const char *lp[1]={label};
       snprintf(label,sizeof(label),"complementarity approximate run (Euler, %d steps)",comp_steps);
-      cols_write(teems_sol_stem,3,1,nvarele,cp,lp);
+      cols_write(teems_sol_stem,3,1,nvarele,cp,lp,NULL);
+    }
+    if(rank==0&&teems_sub_active&&sub_columns()!=NULL&&xcf!=NULL) {
+      const char **lp=(const char **) malloc (teems_nsub*sizeof(char*));
+      const char **sp=(const char **) malloc (teems_nsub*sizeof(char*));
+      int r;
+      for(r=0; r<teems_nsub; r++) {
+        lp[r]=teems_subs[r].label;
+        sp[r]=teems_subs[r].spec;
+      }
+      cols_write(teems_sol_stem,solmethod==SM_JOHANSEN?2:1,teems_nsub,nvarele,(const solve_real *const *)sub_columns(),lp,sp);
+      free(lp);
+      free(sp);
+    }
+    sub_free();
+    if(teems_subs!=NULL) {
+      int r;
+      for(r=0; r<teems_nsub; r++) {
+        free(teems_subs[r].mem);
+        free(teems_subs[r].exo);
+      }
+      free(teems_subs);
+      teems_subs=NULL;
+      teems_nsub=0;
     }
   }
   free(comp_approx_col);
@@ -3264,6 +3366,7 @@ comp_accurate_reentry:
       if(rls[1]>100)errmsg("Error: more than 100 equations were not satisfied very accurately (%ld warnings); all files are written, but the solution may not be valid (manual 30.6.1)\n",rls[1]);
     }
   }
+  fh_selftest_summary(rank);
   if(isrk&&!comp_dispatch&&rank==0)stats_rk_patch(iodata,niodata,noutdata,nsoldata);
   /* phase resident-memory record: a last probe for the run's high-water
      mark (collective), then patch the per-phase table */

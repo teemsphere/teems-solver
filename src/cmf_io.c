@@ -299,6 +299,35 @@ int datafile_read_labels(char *varname, char *filename,dim_t d1, datafile_labels
   return 0;
 }
 
+/* the manifest's optional subtotals statement (Tier B3): subtotals
+   "<path>"; names the file of shock groups. Returns 1 and the path in
+   out when present, 0 when absent; a second statement is fatal. */
+int cmf_subtotals_file(char *filename, char *out) {
+  FILE *filehandle;
+  char line[TABREADLINE],commsyntax[NAMESIZE]="subtotals",*readitem;
+  int n=0;
+  out[0]='\0';
+  filehandle = teems_fopen(filename,"r");
+  if(filehandle==NULL)return 0;
+  while (tab_next_statement(commsyntax,filehandle,line,TABREADLINE)) {
+    readitem = strtok(line,"\"");
+    readitem = strtok(NULL,"\"");
+    if(readitem==NULL) {
+      errmsg("Error: the subtotals statement of the manifest (.cmf) file names no quoted file\n");
+      fclose(filehandle);
+      MPI_Abort(PETSC_COMM_WORLD,1);
+    }
+    if(++n>1) {
+      errmsg("Error: the manifest (.cmf) file has more than one subtotals statement; put every subtotal in one file\n");
+      fclose(filehandle);
+      MPI_Abort(PETSC_COMM_WORLD,1);
+    }
+    snprintf(out,TABREADLINE,"%s",readitem);
+  }
+  fclose(filehandle);
+  return n;
+}
+
 int cmf_read(char *filename, int niodata, cmf_file_entry *iodata, char *tabfile, char *closure, char *shock) {
   FILE * filehandle;
   char line[TABREADLINE],*readitem,commsyntax[NAMESIZE];

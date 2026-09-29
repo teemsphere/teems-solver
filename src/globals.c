@@ -119,6 +119,8 @@ long teems_laD_used = 0;
 
 /* closure side arrays (6.16(b)); see closure_entry in teems_solver.h */
 unsigned char *teems_cl_flags = NULL;
+int teems_nsub = 0;
+sub_group *teems_subs = NULL;
 store_real *teems_cl_shock = NULL;
 
 int teems_ndcutcache = 1; /* -ndcutcache: reuse the NDBBD cuts across steps */

@@ -195,6 +195,7 @@ static void rk_stage_solve(PetscBool nohsl,PetscInt VecSize,PetscInt BSize,
   ierr = VecAssemblyBegin(vecb);CHKERRV(ierr);
   ierr = VecAssemblyEnd(vecb);CHKERRV(ierr);
   ierr = MatDestroy(&B);CHKERRV(ierr);
+  fh_step_begin(A,vecb,matsol,mc66,VecSize,rank,rank_hsl);
 
   if(matsol>=MM_DBBD) {
     int *row_order= (int *) calloc (VecSize,sizeof(int));
@@ -302,7 +303,7 @@ static void rk_stage_solve(PetscBool nohsl,PetscInt VecSize,PetscInt BSize,
       free(irn);
       if(mc66==0)spec48_nomc66_(ptx,jcn,b1,values,x1,neleperrow,&fcomm,counteq,countvarintra1);
       solve_x_check(x1,VecSize,rank==rank_hsl);
-      if(rank==rank_hsl)teems_resid_skipped++;
+      residual_note_skipped(rank,rank_hsl);
       free(jcn);
       free(values);
       free(neleperrow);
@@ -331,6 +332,7 @@ static void rk_stage_solve(PetscBool nohsl,PetscInt VecSize,PetscInt BSize,
       ierr = VecDestroy(&vecb);CHKERRV(ierr);
     }
   }
+  fh_step_end(VecSize,x1,rank,rank_hsl,mpisize);
 }
 
 /* Restore the step-base state and advance it by the chart increment

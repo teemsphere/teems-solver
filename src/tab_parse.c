@@ -110,8 +110,8 @@ static char *tab_next_statement_raw(char *commsyntax, FILE *filehandle, char *re
    stop with the statement named, not run without it. Same rules as the
    closure and shock files, except that "!" and ";" inside a quoted path
    are part of the path. */
-static const char *const manifest_also[]={"iodata","outdata","soldata","tabfile","closure","shock",NULL};
-static const strict_spec manifest_strict={"manifest (.cmf)","one of iodata, outdata, soldata, tabfile, closure, shock",manifest_also};
+static const char *const manifest_also[]={"iodata","outdata","soldata","tabfile","closure","shock","subtotals",NULL};
+static const strict_spec manifest_strict={"manifest (.cmf)","one of iodata, outdata, soldata, tabfile, closure, shock, subtotals",manifest_also};
 
 static char *manifest_getline(char *line,int size,FILE *f,long *pos,int inq) {
   char *p;
@@ -3296,6 +3296,230 @@ static void shock_component_set(array_def *vars, offset_t j, offset_t e, solve_r
   }
   seen[x]=1;
   CL_SHOCK(x)=v;
+  teems_cl_flags[x]|=CL_F_SHK;
+}
+
+/* Subtotals file (Tier B3; GEMPACK manual 29.1, 35.2.15): statements
+     subtotal <item> <item> ... = <label> ;
+   with an item a variable (all its shocked components) or
+   var(arg,...) whose arguments are the declared set, a declared subset
+   of it, or a quoted element, as in closure and shock files. A group is
+   the set of shocked exogenous components its items name. Same file
+   rules as the closure and shock files (strict: comments after "!", ";"
+   ends a statement, anything else stops by name). An item that names
+   one component must name a shocked one; an item over several
+   components takes the shocked ones among them (29.6.2) and must hold
+   at least one. Empty groups and a label used twice are fatal. */
+static const char *const subtotal_also[]={NULL};
+static const strict_spec subtotal_strict={"subtotals","a \"subtotal\" statement",subtotal_also};
+
+static void sub_fatal(FILE *f,const char *fmt,const char *a,const char *b,const char *c) {
+  errmsg(fmt,a,b,c);
+  if (f!=NULL) fclose(f);
+  MPI_Abort(PETSC_COMM_WORLD,1);
+}
+
+/* the components one item names: marks mark[] and returns the count of
+   shocked ones; single != 0 when the item names exactly one component */
+static offset_t sub_item(FILE *f,const char *label,char *item,array_def *vars,offset_t nvar,set_def *sets,dim_t nset,set_element *set_elems,unsigned char *mark,offset_t *nnamed) {
+  char name[TABREADLINE],args[TABREADLINE],*p,*q,lab[4*NAMESIZE];
+  offset_t j,e,nshk=0,total=1;
+  dim_t d,nd=0,k;
+  offset_t cnt[MAXVARDIM],idx[MAXVARDIM];
+  offset_t *pos[MAXVARDIM];
+  p=strchr(item,'(');
+  if (p==NULL) {
+    strcpy(name,item);
+    args[0]='\0';
+  } else {
+    q=strrchr(item,')');
+    if (q==NULL||q<p||q[1]!='\0') {
+      sub_fatal(f,"Error: malformed item %s in subtotal \"%s\" (subtotals file)%s\n",item,label,"");
+      return 0;
+    }
+    memcpy(name,item,p-item);
+    name[p-item]='\0';
+    memcpy(args,p+1,q-p-1);
+    args[q-p-1]='\0';
+  }
+  j=closure_var_find(name,vars,nvar);
+  if (j<0) {
+    sub_fatal(f,"Error: %s in subtotal \"%s\" is not a declared variable (subtotals file)%s\n",name,label,"");
+    return 0;
+  }
+  if (args[0]=='\0') {
+    for (e=0; e<vars[j].nelem; e++) {
+      offset_t x=vars[j].offset+e;
+      if (CL_EXO(x)&&CL_SHOCKED(x)) {
+        mark[x]=1;
+        nshk++;
+      }
+    }
+    *nnamed=vars[j].nelem;
+    if (nshk==0) sub_fatal(f,"Error: subtotal \"%s\" names %s, which has no shocked components; a subtotal is made of shocked exogenous components (manual 29.1; subtotals file)%s\n",label,vars[j].cofname,"");
+    return nshk;
+  }
+  p=strtok(args,",");
+  for (d=0; d<vars[j].size; d++) {
+    dim_t vs=vars[j].setid[d];
+    if (p==NULL) {
+      sub_fatal(f,"Error: wrong number of arguments for variable %s in subtotal \"%s\" (subtotals file)%s\n",vars[j].cofname,label,"");
+      return 0;
+    }
+    if (*p=='"') {
+      size_t L=strlen(p);
+      offset_t l1;
+      if (L<3||p[L-1]!='"') {
+        sub_fatal(f,"Error: %s in variable %s is not a quoted set element (subtotal \"%s\"; subtotals file)\n",p,vars[j].cofname,label);
+        return 0;
+      }
+      p[L-1]='\0';
+      p++;
+      for (l1=0; l1<sets[vs].size; l1++) if (strcmp(p,set_elems[sets[vs].offset+l1].setele)==0) break;
+      if (l1==sets[vs].size) {
+        errmsg("Error: element %s is not in set %s (in %s; subtotal \"%s\"; subtotals file)\n",p,sets[vs].setname,vars[j].cofname,label);
+        if (f!=NULL) fclose(f);
+        MPI_Abort(PETSC_COMM_WORLD,1);
+        return 0;
+      }
+      pos[d]=(offset_t *) malloc (sizeof(offset_t));
+      pos[d][0]=l1;
+      cnt[d]=1;
+    } else {
+      dim_t ks=-1,slot;
+      for (k=0; k<nset; k++) if (strcmp(p,sets[k].setname)==0) {
+          ks=k;
+          break;
+        }
+      if (ks<0) {
+        sub_fatal(f,"Error: set %s is not declared (in %s; subtotal \"%s\"; subtotals file)\n",p,vars[j].cofname,label);
+        return 0;
+      }
+      slot=set_supset_slot(sets,ks,vs);
+      if (slot<0) set_supset_fatal(NULL,vars[j].cofname,"subtotals file",sets,ks,vs);
+      cnt[d]=sets[ks].size;
+      pos[d]=(offset_t *) malloc ((cnt[d]>0?cnt[d]:1)*sizeof(offset_t));
+      for (e=0; e<cnt[d]; e++) pos[d][e]=(ks==vs)?e:set_elems[sets[ks].offset+e].superset_pos[slot];
+    }
+    total*=cnt[d];
+    nd++;
+    p=strtok(NULL,",");
+  }
+  if (p!=NULL) {
+    for (d=0; d<nd; d++) free(pos[d]);
+    sub_fatal(f,"Error: wrong number of arguments for variable %s in subtotal \"%s\" (subtotals file)%s\n",vars[j].cofname,label,"");
+    return 0;
+  }
+  *nnamed=total;
+  for (d=0; d<nd; d++) idx[d]=0;
+  for (e=0; e<total; e++) {
+    offset_t x=vars[j].offset;
+    for (d=0; d<nd; d++) x+=pos[d][idx[d]]*vars[j].strides[d];
+    if (CL_EXO(x)&&CL_SHOCKED(x)) {
+      mark[x]=1;
+      nshk++;
+    } else if (total==1) {
+      array_element_label(&vars[j],x-vars[j].offset,lab,sizeof(lab));
+      for (d=0; d<nd; d++) free(pos[d]);
+      errmsg("Error: subtotal \"%s\" names %s, which is %s; a subtotal is made of shocked exogenous components (manual 29.1; subtotals file)\n",label,lab,CL_EXO(x)?"exogenous but not shocked":"not exogenous");
+      if (f!=NULL) fclose(f);
+      MPI_Abort(PETSC_COMM_WORLD,1);
+      return 0;
+    }
+    for (d=0; d<nd; d++) {
+      if (++idx[d]<cnt[d]) break;
+      idx[d]=0;
+    }
+  }
+  for (d=0; d<nd; d++) free(pos[d]);
+  if (nshk==0) sub_fatal(f,"Error: subtotal \"%s\" names %s over components none of which is shocked; a subtotal is made of shocked exogenous components (manual 29.1; subtotals file)%s\n",label,item,"");
+  return nshk;
+}
+
+int subtotals_read(char *fname, array_def *vars, offset_t nvar, set_def *sets, dim_t nset, set_element *set_elems, offset_t nvarele) {
+  FILE *f;
+  char line[DATREADLINE],items[DATREADLINE],kw[16]="subtotal",*eq,*semi,*lab,*p,*tok;
+  unsigned char *mark;
+  offset_t x,nnamed;
+  int g;
+  size_t L;
+  if ((f=fopen(fname,"r"))==NULL) {
+    errmsg("Error: cannot open subtotals file %s: %s\n",fname,strerror(errno));
+    MPI_Abort(PETSC_COMM_WORLD,1);
+    return -1;
+  }
+  mark=(unsigned char *) calloc (nvarele>0?nvarele:1,sizeof(unsigned char));
+  while (tab_next_statement_raw(kw,f,line,DATREADLINE,&subtotal_strict)) {
+    sub_group *sg;
+    str_replace_char_all(line,'\r',' ');
+    str_replace_char_all(line,'\n',' ');
+    semi=strrchr(line,';');
+    if (semi!=NULL) *semi='\0';
+    p=line+strlen(kw);
+    eq=strchr(p,'=');
+    if (eq==NULL) {
+      sub_fatal(f,"Error: subtotal statement has no \"= <label>\" (subtotals file): subtotal%s%s%s\n",p,"","");
+      return -1;
+    }
+    *eq='\0';
+    lab=eq+1;
+    while (*lab==' '||*lab=='\t') lab++;
+    L=strlen(lab);
+    while (L>0&&(lab[L-1]==' '||lab[L-1]=='\t')) lab[--L]='\0';
+    if (L==0) sub_fatal(f,"Error: subtotal statement has an empty label (subtotals file): subtotal%s =%s%s\n",p,"","");
+    if (L>=SUB_LABEL) {
+      char shown[SUB_LABEL];
+      snprintf(shown,sizeof(shown),"%s",lab);
+      sub_fatal(f,"Error: subtotal label is longer than %s characters (subtotals file): %s%s\n","127",shown,"");
+    }
+    for (g=0; g<teems_nsub; g++) if (strcasecmp(teems_subs[g].label,lab)==0) sub_fatal(f,"Error: subtotal \"%s\" is defined twice (subtotals file)%s%s\n",lab,"","");
+    teems_subs=(sub_group *) realloc (teems_subs,(teems_nsub+1)*sizeof(sub_group));
+    sg=&teems_subs[teems_nsub];
+    memset(sg,0,sizeof(sub_group));
+    snprintf(sg->label,sizeof(sg->label),"%s",lab);
+    /* items: lowercase, no blanks inside argument lists (closure rules) */
+    snprintf(items,sizeof(items),"%s",p);
+    for (x=0; items[x]!='\0'; x++) items[x]=tolower((int)items[x]);
+    while (str_replace_all(items,"  "," "));
+    while (str_replace_all(items," ,",","));
+    while (str_replace_all(items,", ",","));
+    while (str_replace_all(items," )",")"));
+    while (str_replace_all(items," (","("));
+    while (str_replace_all(items,"( ","("));
+    if (items[0]!='\0') {
+      char *t=items;
+      while (*t==' ') t++;
+      L=strlen(t);
+      while (L>0&&t[L-1]==' ') t[--L]='\0';
+      snprintf(sg->spec,sizeof(sg->spec),"%s",t);
+      if (L>=sizeof(sg->spec)) memcpy(sg->spec+sizeof(sg->spec)-4,"...",4);
+      memset(mark,0,nvarele>0?nvarele:1);
+      if (L==0) sub_fatal(f,"Error: subtotal \"%s\" lists no components (empty group; subtotals file)%s%s\n",lab,"","");
+      {
+        char work[DATREADLINE],*save=NULL;
+        snprintf(work,sizeof(work),"%s",t);
+        for (tok=strtok_r(work," ",&save); tok!=NULL; tok=strtok_r(NULL," ",&save)) {
+          char it[TABREADLINE];
+          snprintf(it,sizeof(it),"%s",tok);
+          sub_item(f,lab,it,vars,nvar,sets,nset,set_elems,mark,&nnamed);
+        }
+      }
+    }
+    for (x=0; x<nvarele; x++) if (mark[x]) sg->nmem++;
+    if (sg->nmem==0) sub_fatal(f,"Error: subtotal \"%s\" lists no components (empty group; subtotals file)%s%s\n",lab,"","");
+    sg->mem=(offset_t *) malloc ((sg->nmem>0?sg->nmem:1)*sizeof(offset_t));
+    sg->nmem=0;
+    for (x=0; x<nvarele; x++) if (mark[x]) sg->mem[sg->nmem++]=x;
+    teems_nsub++;
+  }
+  fclose(f);
+  free(mark);
+  if (teems_nsub==0) {
+    errmsg("Error: the subtotals file %s holds no subtotal statement\n",fname);
+    MPI_Abort(PETSC_COMM_WORLD,1);
+    return -1;
+  }
+  return teems_nsub;
 }
 
 offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,offset_t nvarele, array_def *vars,offset_t nvar,set_def *sets,dim_t nset, set_element *set_elems,dim_t subints) {
