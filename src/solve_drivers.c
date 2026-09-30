@@ -133,6 +133,20 @@ double teems_resid_max=0.0;
 long teems_resid_solves=0,teems_resid_warn=0,teems_resid_skipped=0;
 #define TEEMS_RESID_WARN 1e-4
 #define TEEMS_RESID_WARN_PRINT 10
+/* A row whose terms all sit at rounding level (e.g. ps - po = 0 with
+   both near 1e-14) has a residual as large as its terms and so a ratio
+   of 1 whatever the solve's accuracy. The ratio's denominator is
+   therefore at least TEEMS_RESID_FLOOR x the row's largest coefficient
+   x the solution's largest magnitude: a residual below 1e-12 of that
+   normwise scale (TEEMS_RESID_WARN x the floor) never warns. */
+#define TEEMS_RESID_FLOOR 1e-8
+
+static double resid_xmax(const solve_real *x, PetscInt n) {
+  PetscInt i;
+  double m=0.0;
+  for(i=0; i<n; i++) if(fabs((double)x[i])>m) m=fabs((double)x[i]);
+  return m;
+}
 
 void solve_x_check(const solve_real *x, PetscInt n, int doit) {
   PetscInt i;
@@ -148,18 +162,22 @@ void solve_x_check(const solve_real *x, PetscInt n, int doit) {
 static void solve_residual_check(Mat A, const PetscScalar *b, const solve_real *x, PetscInt n) {
   Mat_SeqAIJ *aa=(Mat_SeqAIJ*)A->data;
   PetscInt i,k;
-  double worst=0.0;
+  double worst=0.0,xmax;
   long nw=0;
   solve_x_check(x,n,1);
+  xmax=resid_xmax(x,n);
   for(i=0; i<n; i++) {
-    double sum=0.0,sabs=fabs((double)b[i]),r,q;
+    double sum=0.0,sabs=fabs((double)b[i]),r,q,amax=0.0,den;
     for(k=aa->i[i]; k<aa->i[i+1]; k++) {
       double t=(double)aa->a[k]*(double)x[aa->j[k]];
       sum+=t;
       sabs+=fabs(t);
+      if(fabs((double)aa->a[k])>amax) amax=fabs((double)aa->a[k]);
     }
     r=fabs(sum-(double)b[i]);
-    q=(sabs>0.0)?r/sabs:0.0;
+    den=TEEMS_RESID_FLOOR*amax*xmax;
+    if(sabs>den) den=sabs;
+    q=(den>0.0)?r/den:0.0;
     if(q>worst) worst=q;
     if(q>=TEEMS_RESID_WARN) {
       nw++;
@@ -225,24 +243,28 @@ static void solve_residual_check_mpi(Mat A,const solve_real *bloc,PetscInt bstar
   PetscInt rs,re,i,k,nc;
   const PetscInt *cols;
   const PetscScalar *va;
-  double worst=0.0,gworst=0.0;
+  double worst=0.0,gworst=0.0,xmax;
   long nw=0,gnw=0;
   double wbuf[4*TEEMS_RESID_WARN_PRINT];
   int nwp=0,*cnt=NULL,*disp=NULL,tot=0;
   double *all=NULL;
   MatGetOwnershipRange(A,&rs,&re);
+  xmax=resid_xmax(x,A->cmap->N);
   for(i=rs; i<re; i++) {
     double bi=(i>=bstart&&i<bend)?(double)bloc[i-bstart]:0.0;
-    double sum=0.0,sabs=fabs(bi),r,q;
+    double sum=0.0,sabs=fabs(bi),r,q,amax=0.0,den;
     MatGetRow(A,i,&nc,&cols,&va);
     for(k=0; k<nc; k++) {
       double t=(double)va[k]*(double)x[cols[k]];
       sum+=t;
       sabs+=fabs(t);
+      if(fabs((double)va[k])>amax) amax=fabs((double)va[k]);
     }
     MatRestoreRow(A,i,&nc,&cols,&va);
     r=fabs(sum-bi);
-    q=(sabs>0.0)?r/sabs:0.0;
+    den=TEEMS_RESID_FLOOR*amax*xmax;
+    if(sabs>den) den=sabs;
+    q=(den>0.0)?r/den:0.0;
     if(q>worst)worst=q;
     if(q>=TEEMS_RESID_WARN) {
       nw++;

@@ -369,8 +369,10 @@ Language rules enforced as in GEMPACK (Tier A, 2026-09-28):
   (Formula, Update, Equation) with its count.
 - solve accuracy ([GM] 30.1.5, 30.6.1): after each solve on the LU
   paths and `-fastrefac` SBBD the residual ratio of every equation
-  (|residual| over the sum of the absolute values of its terms) is
-  computed; the maximum across the run is logged and written to
+  (|residual| over the sum of the absolute values of its terms, that
+  sum floored at 1e-8 x the row's largest coefficient x the solution's
+  largest magnitude, so a row whose terms are all at rounding level is
+  not reported at ratio 1) is computed; the maximum across the run is logged and written to
   `stats.json` (`residual.max_residual_ratio`), an equation at or above
   1e-4 is warned as not satisfied very accurately, and more than 100
   such warnings end the run with an error after all files are written.
@@ -612,7 +614,10 @@ structurally singular matrix). The nonlinear form belongs in
 (intertemporal, nested) permute rows and columns into bordered block
 form: per-block orders in `row_order`/`col_order`, block sizes in
 `block_sizes`, block rank/singularity detection via `spec51m_rank_`
-(MA51). With `-presol`, orderings persist in `_rank/_row/_col` scratch
+(MA51). The rank probe is staged without the entries whose value is
+exactly zero, so the partition depends on values only and is the same
+with or without `-fastrefac` (which assembles with its zeros kept); the
+block factorizations keep the full stored pattern. With `-presol`, orderings persist in `_rank/_row/_col` scratch
 files for reuse across runs.
 
 ### block_solve.c

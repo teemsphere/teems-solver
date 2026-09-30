@@ -1,6 +1,28 @@
 #include <teems_solver.h>
 #include <hsl_kernels.h>
 
+/* Stage a block's CSR as 1-based COO for the rank probe, without the
+   entries whose value is exactly zero. -fastrefac assembles with its
+   zeros kept (a fixed pattern for the kept pivot sequences); staged,
+   they steer MA48's Markowitz choice and so which columns make the
+   diagonal block, and the block chosen that way can be far worse
+   conditioned. The probe now sees values only, with or without
+   -fastrefac. A block with no nonzero value keeps its full pattern. */
+static int rank_probe_stage(PetscInt nrow,PetscInt nz,const PetscInt *ai,const PetscInt *aj,const PetscScalar *vals,int *irn,int *jcn,solve_real *values) {
+  PetscInt i,j;
+  int k=0,keepall=0;
+  for(j=0; j<nz; j++)if(vals[j]!=0)break;
+  if(j==nz)keepall=1;
+  for(i=0; i<nrow; i++)for(j=ai[i]; j<(i==nrow-1?nz:ai[i+1]); j++) {
+      if(!keepall&&vals[j]==0)continue;
+      irn[k]=i+1;
+      jcn[k]=aj[j]+1;
+      values[k]=vals[j];
+      k++;
+    }
+  return k;
+}
+
 int dbbd_order(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscInt Istart, PetscInt Iend, offset_t nvarele, PetscInt *eq_addr,int *row_order,int *col_order, offset_t ndblock,int *block_sizes, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,solve_real cntl6) {
   IS *rowindices,*colindices;//,isrow,iscol;
   PetscInt bfirst,bend,nmatin,nrowcolin;
@@ -88,20 +110,10 @@ int dbbd_order(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscIn
     for(tries=0; tries<6; tries++) {
     insize[0]=nrow;
     insize[1]=ncol;
-    insize[2]=nz;
+    insize[2]=rank_probe_stage(nrow,nz,ai,aj,vals,irn,jcn,values);
     insize[4]=laA;
     insize[5]=lasize;
     insize[6]=0;
-    for(i=0; i<nrow-1; i++)for(j=ai[i]; j<ai[i+1]; j++) {
-        irn[j]=i+1;
-        jcn[j]=aj[j]+1;
-        values[j]=vals[j];
-      }
-    for(j=ai[nrow-1]; j<nz; j++) {
-      irn[j]=nrow;
-      jcn[j]=aj[j]+1;
-      values[j]=vals[j];
-    }
     j=0;
     spec51m_rank_(insize,&cntl6,irn,jcn,values,irn1,jcn1,keep,w51,iw51);
     if(insize[6]!=-3)break;
@@ -384,22 +396,10 @@ int ndbbd_order_presolve(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt ran
       for(tries=0; tries<6; tries++) {
       insize[0]=nrow;
       insize[1]=ncol;
-      insize[2]=nz;
+      insize[2]=rank_probe_stage(nrow,nz,ai,aj,vals,irn,jcn,values);
       insize[4]=laA;
       insize[5]=lasize;
       insize[6]=0;
-      for(i=0; i<nrow-1; i++) {
-        for(j=ai[i]; j<ai[i+1]; j++) {
-          irn[j]=i+1;
-          jcn[j]=aj[j]+1;
-          values[j]=vals[j];
-        }
-      }
-      for(j=ai[nrow-1]; j<nz; j++) {
-        irn[j]=nrow;
-        jcn[j]=aj[j]+1;
-        values[j]=vals[j];
-      }
       spec51m_rank_(insize,&cntl6in,irn,jcn,values,irn1,jcn1,keep,w51,iw51);
       if(insize[6]!=-3)break;
       {
