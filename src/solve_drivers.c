@@ -127,8 +127,9 @@ static int fr_ready=0;
    error after all files are written, as GEMPACK does (30.6.1). The check
    needs A and b after the solve: the LU paths and -fastrefac SBBD keep
    them; one-shot SBBD, DBBD and NDBBD release A before or during the
-   factorization, so their solves are counted as skipped. Every method's
-   solution is scanned for NaN/Inf. */
+   factorization, so their solves are counted as skipped unless A is
+   kept (-residcheck 1, or the DBBD refinement step, which checks the
+   refined solution). Every method's solution is scanned for NaN/Inf. */
 double teems_resid_max=0.0;
 long teems_resid_solves=0,teems_resid_warn=0,teems_resid_skipped=0;
 #define TEEMS_RESID_WARN 1e-4
@@ -206,6 +207,11 @@ static void solve_residual_check(Mat A, const PetscScalar *b, const solve_real *
    RHS for the residual check of methods that release A before their
    solve completes (one-shot SBBD, DBBD, NDBBD). */
 int teems_fh_selftest=0,teems_resid_all=0,teems_fh_keep=0,teems_resid_retain=0;
+int teems_refine=1;
+static int fh_refine_now=0;
+static long fh_rf_solves=0;
+static double fh_rf_before=0.0,fh_rf_after=0.0,fh_rf_secs=0.0;
+static void fh_refine_cols(const solve_real *bloc,solve_real *x,int nc,PetscInt rank,PetscInt mpisize,double *before);
 enum { FH_NONE=0, FH_LU, FH_LU_FR, FH_SBBD, FH_SBBD_FR, FH_DBBD };
 static int fh_kind=FH_NONE;
 static PetscInt fh_n=0;
@@ -239,7 +245,7 @@ void fh_request_check(dim_t matsol,dim_t mc66,PetscInt rank) {
    rank checks its own rows of A against the whole solution x (every rank
    holds it after the bordered methods' final reduction); rank 0 prints
    the first warnings in row-ownership order and records the solve. */
-static void solve_residual_check_mpi(Mat A,const solve_real *bloc,PetscInt bstart,PetscInt bend,const solve_real *x,PetscInt rank,PetscInt mpisize) {
+static double solve_residual_check_mpi(Mat A,const solve_real *bloc,PetscInt bstart,PetscInt bend,const solve_real *x,PetscInt rank,PetscInt mpisize) {
   PetscInt rs,re,i,k,nc;
   const PetscInt *cols;
   const PetscScalar *va;
@@ -307,6 +313,7 @@ static void solve_residual_check_mpi(Mat A,const solve_real *bloc,PetscInt bstar
     free(disp);
     free(all);
   }
+  return gworst;
 }
 
 /* ---- shock-group subtotals (Tier B3; GEMPACK manual 29; Harrison,
@@ -386,11 +393,41 @@ void sub_step_rhs(Mat B,Vec vece,PetscInt VecSize,dim_t matsol,PetscInt rank,Pet
   VecDestroy(&out);
 }
 
+/* rank 0's full columns (n x nc, column-major) to this rank's rows of
+   the kept A (nl x nc); collective */
+static solve_real *fh_rows_scatter(const solve_real *full0,int nc,PetscInt rank,PetscInt mpisize) {
+  const PetscInt *rng;
+  PetscInt rs,re,n=fh_n;
+  int *cnt=NULL,*disp=NULL,k,j;
+  solve_real *loc;
+  MatGetOwnershipRange(fh_A,&rs,&re);
+  loc=(solve_real *) malloc ((re>rs?(size_t)(re-rs)*nc:1)*sizeof(solve_real));
+  if(rank==0) {
+    MatGetOwnershipRanges(fh_A,&rng);
+    cnt=(int *) calloc (mpisize,sizeof(int));
+    disp=(int *) calloc (mpisize,sizeof(int));
+    for(j=0; j<mpisize; j++) {
+      cnt[j]=(int)(rng[j+1]-rng[j]);
+      disp[j]=(int)rng[j];
+    }
+  }
+  for(k=0; k<nc; k++)MPI_Scatterv(rank==0?full0+(size_t)k*n:NULL,cnt,disp,SORD==1?MPI_DOUBLE:MPI_FLOAT,loc+(size_t)k*(re-rs),(int)(re-rs),SORD==1?MPI_DOUBLE:MPI_FLOAT,0,PETSC_COMM_WORLD);
+  free(cnt);
+  free(disp);
+  return loc;
+}
+
 /* the group step solutions p_r, SUB_CHUNK columns at a time with the
    kept factorization (collective); each chunk's solutions overwrite its
-   right-hand sides, so the step holds one n x G block on rank 0 */
+   right-hand sides, so the step holds one n x G block on rank 0. Under
+   -refine (DBBD) every column gets the same refinement step as the
+   step's own solution: the step is linear in the right-hand side
+   (x + A^-1 (b - A x) with x = A^-1 b), so the refined columns still sum
+   to the refined solution, and a group of every shock reproduces it bit
+   for bit (same kernels, same row sums) */
 static void sub_step_solve(PetscInt rank,PetscInt n) {
-  int c0,nc;
+  int c0,nc,mpisize;
+  MPI_Comm_size(PETSC_COMM_WORLD,&mpisize);
   sub_x=sub_rhs;
   for(c0=0; c0<teems_nsub; c0+=SUB_CHUNK) {
     solve_real *xs;
@@ -399,6 +436,11 @@ static void sub_step_solve(PetscInt rank,PetscInt n) {
     if(teems_fh_solve(rank==0?sub_rhs+(size_t)c0*n:NULL,xs,nc)!=0) {
       if(rank==0)errmsg("Error: the subtotal solves found no kept factorization for this step\n");
       MPI_Abort(PETSC_COMM_WORLD,1);
+    }
+    if(fh_refine_now) {
+      solve_real *bl=fh_rows_scatter(rank==0?sub_rhs+(size_t)c0*n:NULL,nc,rank,mpisize);
+      fh_refine_cols(bl,xs,nc,rank,mpisize,NULL);
+      free(bl);
     }
     if(rank==0)memcpy(sub_x+(size_t)c0*n,xs,(size_t)n*nc*sizeof(solve_real));
     free(xs);
@@ -557,8 +599,10 @@ void sub_free(void) {
 
 void fh_step_begin(Mat A,Vec vecb,dim_t matsol,dim_t mc66,PetscInt VecSize,PetscInt rank,PetscInt rank_hsl) {
   fh_request_check(matsol,mc66,rank);
-  teems_fh_keep=teems_fh_selftest||teems_sub_active;
-  teems_resid_retain=(teems_resid_all&&matsol>=MM_SBBD);
+  /* -refine (DBBD): the refinement step needs the factors and A */
+  fh_refine_now=(teems_refine&&matsol==MM_DBBD);
+  teems_fh_keep=teems_fh_selftest||teems_sub_active||fh_refine_now;
+  teems_resid_retain=(teems_resid_all&&matsol>=MM_SBBD)||fh_refine_now;
   fh_resid_pending=0;
   fh_kind=FH_NONE;
   fh_n=VecSize;
@@ -579,7 +623,7 @@ void fh_step_begin(Mat A,Vec vecb,dim_t matsol,dim_t mc66,PetscInt VecSize,Petsc
       memcpy(fh_b,bv,(fh_bend-fh_bstart)*sizeof(solve_real));
       VecRestoreArrayRead(vecb,&bv);
     }
-    if(teems_fh_keep) {
+    if(teems_fh_selftest) {
       VecScatter sct;
       Vec vz;
       VecScatterCreateToZero(vecb,&sct,&vz);
@@ -657,6 +701,82 @@ void teems_fh_free(void) {
   fh_kind=FH_NONE;
 }
 
+/* ---- one step of iterative refinement (DBBD; -refine, default on) ----
+   A DBBD solve is only as accurate as its diagonal blocks, which are
+   square subsets of ill-conditioned rectangular region blocks: its
+   componentwise backward error (the residual ratio) is 1e-9 to 1e-5 on
+   real shocks, against about 1e-15 for LU, and a multi-step run carries
+   those residuals into its updates (teems-dev fastrefac_dbbd_fix_report
+   section 5). One step x += A^-1 (b - A x), the residual formed in
+   double from the kept A and solved with the step's kept factors, brings
+   it to LU's level. For nc columns (column-major; x valid on every rank,
+   bloc = this rank's rows of b): each rank forms its rows of the
+   residual, rank 0 gathers them, one teems_fh_solve takes all columns,
+   and every rank adds the correction. *before (when given) receives this
+   rank's worst residual ratio of the first column before the step, with
+   the floor of the residual check. Collective. */
+static void fh_refine_cols(const solve_real *bloc,solve_real *x,int nc,PetscInt rank,PetscInt mpisize,double *before) {
+  PetscInt rs,re,n=fh_n,i,k,nc1;
+  const PetscInt *rng,*cols;
+  const PetscScalar *va;
+  int *cnt=NULL,*disp=NULL,j,c;
+  solve_real *rl,*rfull=NULL,*d;
+  double worst=0.0;
+  MatGetOwnershipRange(fh_A,&rs,&re);
+  rl=(solve_real *) malloc ((re>rs?(size_t)(re-rs)*nc:1)*sizeof(solve_real));
+  for(c=0; c<nc; c++) {
+    const solve_real *xc=x+(size_t)c*n,*bc=bloc+(size_t)c*(re-rs);
+    double xmax=(c==0&&before!=NULL)?resid_xmax(xc,n):0.0;
+    for(i=rs; i<re; i++) {
+      double sum=0.0,sabs=fabs((double)bc[i-rs]),amax=0.0,den;
+      MatGetRow(fh_A,i,&nc1,&cols,&va);
+      for(k=0; k<nc1; k++) {
+        double t=(double)va[k]*(double)xc[cols[k]];
+        sum+=t;
+        sabs+=fabs(t);
+        if(fabs((double)va[k])>amax)amax=fabs((double)va[k]);
+      }
+      MatRestoreRow(fh_A,i,&nc1,&cols,&va);
+      rl[(size_t)c*(re-rs)+(i-rs)]=(solve_real)((double)bc[i-rs]-sum);
+      if(c==0&&before!=NULL) {
+        den=TEEMS_RESID_FLOOR*amax*xmax;
+        if(sabs>den)den=sabs;
+        if(den>0.0&&fabs((double)bc[i-rs]-sum)/den>worst)worst=fabs((double)bc[i-rs]-sum)/den;
+      }
+    }
+  }
+  if(before!=NULL)*before=worst;
+  if(rank==0) {
+    MatGetOwnershipRanges(fh_A,&rng);
+    cnt=(int *) calloc (mpisize,sizeof(int));
+    disp=(int *) calloc (mpisize,sizeof(int));
+    for(j=0; j<mpisize; j++) {
+      cnt[j]=(int)(rng[j+1]-rng[j]);
+      disp[j]=(int)rng[j];
+    }
+    rfull=(solve_real *) malloc ((size_t)n*nc*sizeof(solve_real));
+  }
+  for(c=0; c<nc; c++)MPI_Gatherv(rl+(size_t)c*(re-rs),(int)(re-rs),SORD==1?MPI_DOUBLE:MPI_FLOAT,rank==0?rfull+(size_t)c*n:NULL,cnt,disp,SORD==1?MPI_DOUBLE:MPI_FLOAT,0,PETSC_COMM_WORLD);
+  free(rl);
+  free(cnt);
+  free(disp);
+  d=(solve_real *) malloc ((size_t)n*nc*sizeof(solve_real));
+  if(teems_fh_solve(rfull,d,nc)!=0) {
+    if(rank==0)errmsg("Error: the refinement step found no kept DBBD factorization for this solve\n");
+    MPI_Abort(PETSC_COMM_WORLD,1);
+  }
+  for(i=0; i<(PetscInt)((size_t)n*nc); i++)x[i]+=d[i];
+  free(d);
+  free(rfull);
+}
+
+void fh_refine_totals(long *solves,double *before,double *after,double *secs) {
+  *solves=fh_rf_solves;
+  *before=fh_rf_before;
+  *after=fh_rf_after;
+  *secs=fh_rf_secs;
+}
+
 /* -fhtest: solve [b, 2b] again with the kept factorization and compare
    with the step's own solution x and 2x (the kit's check that every
    method can solve more right-hand sides with one factorization, at
@@ -665,7 +785,7 @@ static void fh_selftest_run(const solve_real *x,PetscInt rank) {
   PetscInt VecSize=fh_n,i;
   solve_real *rhs=NULL,*xx=(solve_real *) malloc (2*VecSize*sizeof(solve_real));
   if(rank==0) {
-    rhs=(solve_real *) malloc (2*VecSize*sizeof(solve_real));
+    rhs=(solve_real *) calloc (2*VecSize,sizeof(solve_real));
     for(i=0; i<VecSize; i++) {
       rhs[i]=fh_bfull[i];
       rhs[VecSize+i]=2.0*fh_bfull[i];
@@ -687,13 +807,33 @@ static void fh_selftest_run(const solve_real *x,PetscInt rank) {
   free(xx);
 }
 
-void fh_step_end(PetscInt VecSize,const solve_real *x,PetscInt rank,PetscInt rank_hsl,PetscInt mpisize) {
+/* the consumers, in order: the self-test (on the step's own solution),
+   the refinement step (DBBD), the residual check (of the refined
+   solution, which gives the ratio after the step), the subtotal solves
+   (refined the same way); then everything kept is released */
+void fh_step_end(PetscInt VecSize,solve_real *x,PetscInt rank,PetscInt rank_hsl,PetscInt mpisize) {
+  double before=0.0,gbefore=0.0,after=-1.0;
+  struct timeval t0= {0,0},t1= {0,0};
+  if(teems_fh_selftest)fh_selftest_run(x,rank);
+  if(fh_refine_now) {
+    gettimeofday(&t0,NULL);
+    fh_refine_cols(fh_b,x,1,rank,mpisize,&before);
+    MPI_Reduce(&before,&gbefore,1,MPI_DOUBLE,MPI_MAX,0,PETSC_COMM_WORLD);
+    gettimeofday(&t1,NULL);
+  }
   if(teems_resid_retain&&fh_resid_pending) {
-    if(fh_mpi)solve_residual_check_mpi(fh_A,fh_b,fh_bstart,fh_bend,x,rank,mpisize);
+    if(fh_mpi)after=solve_residual_check_mpi(fh_A,fh_b,fh_bstart,fh_bend,x,rank,mpisize);
     else if(rank==rank_hsl)solve_residual_check(fh_A,fh_b,x,VecSize);
   }
+  if(fh_refine_now&&rank==0) {
+    fh_rf_solves++;
+    fh_rf_secs+=(t1.tv_sec-t0.tv_sec)+1e-6*(t1.tv_usec-t0.tv_usec);
+    if(gbefore>fh_rf_before)fh_rf_before=gbefore;
+    if(after>fh_rf_after)fh_rf_after=after;
+    if(after>=0.0)logmsg(1,"Refinement step (DBBD): residual ratio %.3e before, %.3e after\n",gbefore,after);
+    else logmsg(1,"Refinement step (DBBD): residual ratio %.3e before\n",gbefore);
+  }
   if(teems_sub_active)sub_step_solve(rank,fh_n);
-  if(teems_fh_selftest)fh_selftest_run(x,rank);
   if(teems_fh_keep)teems_fh_free();
   if(fh_A!=NULL)MatDestroy(&fh_A);
   if(fh_bfull!=fh_b)free(fh_bfull);
@@ -703,6 +843,7 @@ void fh_step_end(PetscInt VecSize,const solve_real *x,PetscInt rank,PetscInt ran
   teems_fh_keep=0;
   teems_resid_retain=0;
   fh_resid_pending=0;
+  fh_refine_now=0;
 }
 
 void fh_selftest_summary(PetscInt rank) {

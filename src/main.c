@@ -104,7 +104,7 @@ static const char *const cli_teems_flags[]={
   "gpzerodivide","inmemory","laA","laD","laDi","ma48u","matsol",
   "maxretries","maxthreads","ndcutcache","nowrites","nsbbdblocks",
   "nsubints","postsim","probefine","probepattern","random_seed",
-  "range_test_initial","range_test_updated","residcheck","retryadj","rkchart",
+  "range_test_initial","range_test_updated","refine","residcheck","retryadj","rkchart",
   "rkctrl","rkguard","rk_h0","rknorm","rkscope","single_run",
   "smllthreads","solmed","step1","step2","step3","tempdir","verbosity",
   "withmc66","version",NULL
@@ -401,6 +401,7 @@ static void ordering_stats_write(cmf_file_entry *iodata, int niodata, int noutda
     fprintf(fp,"    \"store_precision\": \"%s\",\n",TEEMS_STORE_PRECISION);
     fprintf(fp,"    \"blas_core\": \"%s\",\n",blas_corename());
     fprintf(fp,"    \"fastrefac\": %s,\n",frchk?"true":"false");
+    fprintf(fp,"    \"refine\": %s,\n",(teems_refine&&matsol==MM_DBBD)?"true":"false");
     if(teems_ma48u_opt>0)fprintf(fp,"    \"ma48u\": %g,\n",teems_ma48u_opt);
     else fprintf(fp,"    \"ma48u\": null,\n");
     fprintf(fp,"    \"ndcutcache\": %d,\n",teems_ndcutcache);
@@ -693,6 +694,48 @@ static void stats_resid_patch(cmf_file_entry *iodata, int niodata, int noutdata,
   }
   if(solves>0)fprintf(fp,"%s,\n  \"residual\": {\"max_residual_ratio\": %.6e, \"solves\": %ld, \"warnings\": %ld, \"unchecked_solves\": %ld}\n}\n",buf,rmax,solves,warns,skipped);
   else fprintf(fp,"%s,\n  \"residual\": {\"max_residual_ratio\": null, \"solves\": 0, \"warnings\": 0, \"unchecked_solves\": %ld}\n}\n",buf,skipped);
+  fclose(fp);
+  free(buf);
+}
+
+/* DBBD refinement record (-refine): solves refined, the worst residual
+   ratio before and after the step, and the seconds it took, patched into
+   stats.json like the residual record */
+static void stats_refine_patch(cmf_file_entry *iodata, int niodata, int noutdata, int nsoldata,
+                               long solves, double before, double after, double secs) {
+  char statspath[TABREADLINE+16];
+  int i;
+  for (i=niodata+noutdata; i<niodata+noutdata+nsoldata; i++) {
+    if (strcmp("solfiles",iodata[i].logname)==0)break;
+  }
+  if(i<niodata+noutdata+nsoldata)strcpy(statspath,iodata[i].filname);
+  else strcpy(statspath,"solution");
+  strcat(statspath,".stats.json");
+  FILE *fp=teems_fopen_opt(statspath,"r");
+  if (fp==NULL)return;
+  fseek(fp,0,SEEK_END);
+  long len=ftell(fp);
+  fseek(fp,0,SEEK_SET);
+  char *buf=(char *) malloc (len+1);
+  size_t rd=fread(buf,1,len,fp);
+  fclose(fp);
+  if((long)rd!=len) {
+    free(buf);
+    return;
+  }
+  buf[len]='\0';
+  char *end=strrchr(buf,'}');
+  if(end==NULL) {
+    free(buf);
+    return;
+  }
+  *end='\0';
+  fp=fopen(statspath,"w");
+  if (fp==NULL) {
+    free(buf);
+    return;
+  }
+  fprintf(fp,"%s,\n  \"refine\": {\"solves\": %ld, \"residual_ratio_before_max\": %.6e, \"residual_ratio_after_max\": %.6e, \"seconds\": %.3f}\n}\n",buf,solves,before,after,secs);
   fclose(fp);
   free(buf);
 }
@@ -1337,6 +1380,20 @@ int main(int argc,char **args) {
   PetscOptionsGetInt(NULL,NULL,"-fhtest",&teems_fh_selftest,NULL);
   teems_fh_selftest=(teems_fh_selftest!=0);
   fh_request_check(matsol,mc66,rank);
+  /* -refine {0,1} (default 1): one step of iterative refinement after
+     every DBBD solve, with the kept factors and the kept LHS matrix
+     (solve_drivers.c fh_refine_cols). The other methods are not refined:
+     LU and SBBD are backward-stable already, and NDBBD cannot keep its
+     factors yet. */
+  {
+    PetscBool rfset=PETSC_FALSE;
+    PetscOptionsGetInt(NULL,NULL,"-refine",&teems_refine,&rfset);
+    teems_refine=(teems_refine!=0);
+    if(rfset&&teems_refine&&matsol!=MM_DBBD&&rank==0) {
+      if(matsol==MM_NDBBD)logmsg(1,"Note: -refine 1 is ignored under NDBBD, which cannot keep its factorization for a refinement step yet; its solves are not refined\n");
+      else logmsg(1,"Note: -refine applies to matrix_method DBBD only; this run's solves are not refined\n");
+    }
+  }
   /* -gpzerodivide 1: GEMPACK dual-class ZERODIVIDE semantics in formulas
      (manual 10.11/10.11.1; plan A1). Default 0 keeps the legacy single
      conflated default -- adoption is a re-anchor-class change. */
@@ -3364,6 +3421,18 @@ comp_accurate_reentry:
       /* GEMPACK finishes and saves every file, then ends with an error
          (30.6.1); errmsg sets the exit status without aborting */
       if(rls[1]>100)errmsg("Error: more than 100 equations were not satisfied very accurately (%ld warnings); all files are written, but the solution may not be valid (manual 30.6.1)\n",rls[1]);
+    }
+  }
+  {
+    long rfs=0;
+    double rfb=0.0,rfa=0.0,rfsec=0.0;
+    fh_refine_totals(&rfs,&rfb,&rfa,&rfsec);
+    if(rank==0&&matsol==MM_DBBD) {
+      if(rfs>0) {
+        logmsg(1,"Refinement (DBBD, one step per solve): %ld solves refined; worst residual ratio %.3e before the step, %.3e after; %.2f s\n",rfs,rfb,rfa,rfsec);
+        stats_refine_patch(iodata,niodata,noutdata,nsoldata,rfs,rfb,rfa,rfsec);
+      }
+      else if(!teems_refine)logmsg(1,"Refinement off (-refine 0): DBBD solves are not refined\n");
     }
   }
   fh_selftest_summary(rank);

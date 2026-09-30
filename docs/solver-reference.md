@@ -376,12 +376,15 @@ Language rules enforced as in GEMPACK (Tier A, 2026-09-28):
   `stats.json` (`residual.max_residual_ratio`), an equation at or above
   1e-4 is warned as not satisfied very accurately, and more than 100
   such warnings end the run with an error after all files are written.
-  One-shot SBBD, DBBD and NDBBD (and `-fastrefac` DBBD) release A
-  before or during the factorization: by default their solves are
-  counted as `unchecked_solves`; `-residcheck 1` (Tier B3) keeps A
-  and the right-hand side through the solve so these are checked too,
-  each rank checking its own rows under DBBD/NDBBD, at the cost of
-  holding the matrix through the factorization (§11).
+  One-shot SBBD and NDBBD release A before or during the
+  factorization: by default their solves are counted as
+  `unchecked_solves`; `-residcheck 1` (Tier B3) keeps A and the
+  right-hand side through the solve so these are checked too, each
+  rank checking its own rows under NDBBD, at the cost of holding the
+  matrix through the factorization (§11). DBBD (one-shot and
+  `-fastrefac`) keeps A for its refinement step (§6, on by default),
+  so its solves are checked after the step; with `-refine 0` they are
+  unchecked unless `-residcheck 1` is given.
 Startup notes remind that intertemporal variables should be declared
 with minimal dimensionality to keep the border (netcut) small;
 element-level classification (§3 phase 7) borders only the elements a
@@ -668,8 +671,13 @@ updates with atomics, so agreement is to the system's conditioning).
 `fh_step_end` runs the consumers and releases everything; without a
 consumer nothing is kept and every method frees exactly when it did
 before. NDBBD cannot keep its factors yet: a request is a named fatal.
-Consumers: the residual check (`-residcheck 1`, which keeps A rather
-than the factors), subtotals (§5) and the `-fhtest` kit hook.
+Consumers, in the order `fh_step_end` runs them: the `-fhtest` kit
+hook (on the step's own solution), the DBBD refinement step
+(`fh_refine_cols`, §6; keeps the factors and A), the residual check
+(`-residcheck 1`, which keeps A rather than the factors; under
+refinement it checks the refined solution and supplies the ratio
+after the step), and subtotals (§5; each group column refined like
+the step's solution).
 
 ### hsl_kernels.f90 / hsl_kernels.h
 
@@ -807,7 +815,13 @@ fatals: NDBBD and `-withmc66 1` (no kept factorization yet), the
 Runge–Kutta methods (the log-chart stage combination has no settled
 subtotal convention), and models with complementarities (the
 approximate and accurate runs change the closure and states, so the
-step RHS is not the shocks alone). Memory on rank 0: three doubles
+step RHS is not the shocks alone). Under the DBBD refinement step
+(§6) every group column is refined with the same step as the
+solution: the refined solve `x + A⁻¹(b − A x)` with `x = A⁻¹b` is
+linear in the right-hand side, so the refined columns still sum to the
+refined `.bin` to solve rounding, and a group of every shock still
+reproduces it bit for bit at one thread (the column and the step go
+through the same `fh_refine_cols` arithmetic). Memory on rank 0: three doubles
 per group per variable element for the group state, plus two for the
 group right-hand sides and solutions per condensed row.
 
@@ -817,7 +831,7 @@ group right-hand sides and solutions per condensed row.
 |---|---|---|---|
 | 0 `MM_LU` | serial MA48 LU | any | single rank does the factorization |
 | 1 `MM_SBBD` | singly bordered block diagonal via HSL_MP48 [HK16] | **intertemporal** | blocks by time period; MC66 ordering optional (`-withmc66`), direct ordering by default; factors held in MP48 memory (sized by `-laA/-laDi`) |
-| 2 `MM_DBBD` | doubly bordered block diagonal [KH19] | **static** (regional blocks) | C-side block factorization (MA48 kernels), factor handoff via scratch files |
+| 2 `MM_DBBD` | doubly bordered block diagonal [KH19] | **static** (regional blocks) | C-side block factorization (MA48 kernels), factor handoff via scratch files; one refinement step per solve by default (`-refine`) |
 | 3 `MM_NDBBD` | nested DBBD [KH19] | **intertemporal, T ≫ R** | partition blocks nested inside chain blocks; nested ordering auto-enabled |
 
 Production guidance (measured, see §9): SBBD is the primary intertemporal
@@ -929,6 +943,47 @@ results shift only within factorization rounding (the analyse-state
 pivot sequences applied at other step states), bounded by the usual
 cross-method noise floors — on the DBBD and NDBBD acceptance rigs the
 flag-on solutions came out exactly identical.
+
+**`-fastrefac` under DBBD is for small rigs only.** DBBD reuses its
+per-block extraction and pivot sequences only while every block's
+ordering repeats from step to step, and the block orderings come from a
+value-dependent rank probe. On the toy GTAP-RE rig 7 of 17 Gragg solves
+reused them; on the 1.4M-equation GTAPv7 aoall+20 rig 0 of 17 did, so
+every block was re-extracted and re-analysed at every step and the run
+was slower than one-shot DBBD (748 s against 587 s, Gragg 2-4-8, 2
+ranks), holding more memory. The option stays; it is not a default and
+teems-R does not recommend it for DBBD (fastrefac_dbbd_fix_report.md).
+
+**DBBD refinement step (`-refine`, on by default).** A DBBD solve is
+only as accurate as its diagonal blocks, square subsets of
+ill-conditioned rectangular region blocks (equilibrated κ 1e7 on the
+toy rig, 1e9–1e13 at 1.4M): its componentwise backward error (the
+residual ratio, §2) is 1e-10 to 1e-5 on real shocks against about
+1e-15 for LU, and a multi-step run carries those residuals into its
+updates (1.4M rig, Gragg 2-4-8: 41,985 elements more than 1e-2 off LU
+one-shot, 498,987 under `-fastrefac`). After every DBBD solve —
+Johansen, Euler and Gragg steps, the Gragg smoothing solve, RK stages,
+the complementarity runs — `fh_step_end` therefore takes one step of
+iterative refinement: each rank forms its rows of `r = b − A·x` in
+double from the kept LHS matrix, rank 0 gathers `r`, one
+`teems_fh_solve` with the kept block and interface factors gives `d`,
+and every rank sets `x += d`. The residual check then runs on the
+refined solution. It brings DBBD to LU's level, one-shot and
+`-fastrefac` alike: residual ratio after the step ≤ 3e-16 (toy) and
+1e-15 to 6e-13 (1.4M); one Johansen solve of the 1.4M rig within
+3.4e-8 of LU (unrefined 8.1e-6 one-shot, 2.7e-4 `-fastrefac`), its
+Gragg 2-4-8 run within 1.2e-7. Cost: one extra solve with the kept
+factors per step (under 1 % of the wall), but A and the block factors
+are held through the step, which raises per-rank peak memory (see the
+F3 report's table; teems-R's memory model carries the term and turns
+the step off when it would not fit). Group columns of subtotals (§5)
+get the same step. `-refine 0` restores the unrefined solve bit for
+bit; it is off for the other methods (LU and SBBD are backward-stable
+already) and **NDBBD is not refined**: it cannot keep its
+factorization for a second solve yet (§13). The log prints each
+solve's residual ratio before and after the step and a summary line;
+`stats.json` records `options.refine` and a `refine` object (`solves`,
+`residual_ratio_before_max`, `residual_ratio_after_max`, `seconds`).
 
 ## 7. Parallelism
 
@@ -1209,7 +1264,7 @@ needs corpus calibration.
 | `-random_seed n` | 1 | seed of RANDOM(a,b) ([GM] 11.5.2); the same seed reproduces every draw (GEMPACK's `randomize = yes`, a new sequence per run, is not the default); `stats.json` records `"random_seed"` |
 | `-nsubints n` | 1 | shock subintervals |
 | `-laA/-laDi/-laD n` | 2 (teems-R: 300/500/200) | workspace sizing, % of nnz |
-| `-fastrefac {0,1}` | 0 | all matrix methods: analyse once, fast refactorize per step (MA48 JOB=2 / MP48 FACT_JOB=2); LU auto-grows `laA` (§6) |
+| `-fastrefac {0,1}` | 0 | all matrix methods: analyse once, fast refactorize per step (MA48 JOB=2 / MP48 FACT_JOB=2); LU auto-grows `laA` (§6). DBBD: small rigs only — at 1.4M equations no step reused its extraction and the run was slower than one-shot (§6) |
 | `-ma48u x` | library defaults | MA48 / HSL_MP48 pivot threshold `CNTL(2)`, 0 < x ≤ 1, applied at every factorization site (sequential LU, DBBD/NDBBD blocks and rank probes, SBBD's MP48 instance). Absent = each library's own default (MA48 0.1, MP48 0.01), bit-identical to builds without the option; recorded in `stats.json` (`ma48u`, null when default). A calibration knob, not a tuning recommendation |
 | `-cntl_3 x` | — | HSL iterative-refinement threshold |
 | `-cntl_6 x` | 0 | MA50 ordering control |
@@ -1240,7 +1295,8 @@ needs corpus calibration.
 | `-verbosity {0,1,2}` | 1 | 0 = errors/warnings + accuracy summary only; 1 = phase progress and timings; 2 = per-rank/per-block debug detail (also exported as `TEEMS_VERBOSITY` for the Fortran kernels; MA48 duplicate-entry notes appear only at 2) |
 | `-nox` | — | PETSc: no X output |
 
-| `-residcheck {0,1}` | 0 | 1 = also check the residual ratio of every one-shot SBBD, DBBD and NDBBD (and `-fastrefac` DBBD) solve (§2 solve accuracy) by keeping the LHS matrix and the right-hand side through the solve; costs holding A through the factorization (Tier B3 report: peak resident memory table). Outputs are identical with 0 or 1. teems-R does not pass it today |
+| `-refine {0,1}` | 1 | DBBD only (one-shot and `-fastrefac`): one step of iterative refinement after every solve with the kept factors and LHS matrix (§6); holds A and the block factors through each step (memory). 0 = the unrefined solve, bit-identical to builds before the step. Given as 1 with another method it is noted and ignored; NDBBD is not refined. teems-R passes it for every DBBD run (option `refine`, on by default; its memory estimate counts the step) |
+| `-residcheck {0,1}` | 0 | 1 = also check the residual ratio of every one-shot SBBD and NDBBD solve, and of DBBD under `-refine 0` (§2 solve accuracy), by keeping the LHS matrix and the right-hand side through the solve; costs holding A through the factorization (Tier B3 report: peak resident memory table). Outputs are identical with 0 or 1. teems-R does not pass it today |
 | `-fhtest {0,1}` | 0 | kit hook (Tier B3): after every solve, solve `[b, 2b]` again with the step's kept factorization and compare with the solution; the run ends with "Factor handle self-test: N solves, M extra right-hand sides, K elements not bit-identical, max abs/rel difference". Outputs are identical with 0 or 1. With NDBBD or `-withmc66 1` SBBD it is a named fatal (they cannot keep their factors yet). teems-R never passes it |
 
 **Exit status.** `0` means the run completed and no `Error:` line was
@@ -1346,8 +1402,8 @@ without the feature. Names are case-insensitive, as in PETSc.
   quantifiers, helper coefficients and domain splits before
   deployment.
 - **Tier A residue** (2026-09-28, updated Tier B3 2026-09-29): by
-  default the residual-ratio check covers LU and `-fastrefac` SBBD
-  only (one-shot SBBD, DBBD and NDBBD free A first); `-residcheck 1`
+  default the residual-ratio check covers LU, `-fastrefac` SBBD and
+  refined DBBD only (one-shot SBBD and NDBBD free A first); `-residcheck 1`
   covers them by keeping A, at a measured memory cost, so it is off by
   default; zerodivide
   reports on equation rows owned by ranks other than 0 are not printed
@@ -1358,7 +1414,8 @@ without the feature. Names are case-insensitive, as in PETSc.
   the continued kind's own fatal.
 - **Tier B3 residue** (2026-09-29): NDBBD cannot keep its
   factorization for more solves (extra-solve requests and subtotals are
-  named fatals); `-withmc66 1` SBBD likewise; subtotals are not
+  named fatals), so its solves get no refinement step (DBBD's `-refine`,
+  §6) and keep their block-conditioning-limited accuracy; `-withmc66 1` SBBD likewise; subtotals are not
   available with the Runge–Kutta methods or with complementarities;
   subtotal rows are all variable elements (no retained-row subset);
   the Gragg ordinary-change leapfrog lag goes through the float value

@@ -916,18 +916,21 @@ void sbbd_csr_solve(Mat *A,Vec *vecb,PetscInt VecSize,PetscInt rank,PetscInt ran
      <dispatch>                  the method keeps what was asked for
      fh_step_end(...)            the consumers run, then everything kept
                                  is released (collective)
-   Consumers today: the residual check on one-shot SBBD/DBBD/NDBBD
-   (-residcheck 1: the LHS matrix is kept) and the -fhtest self-test
-   (factors kept, the step's RHS solved again).  Later: subtotals, SAGEM,
-   Jacobian work.  NDBBD and -withmc66 SBBD cannot keep their factors yet:
-   a request is a named fatal (fh_step_begin). */
+   Consumers today: one step of iterative refinement of every DBBD solve
+   (-refine, on by default: factors and A kept), the residual check on
+   one-shot SBBD/DBBD/NDBBD (-residcheck 1: the LHS matrix is kept), the
+   shock-group subtotals and the -fhtest self-test (factors kept, the
+   step's RHS solved again).  Later: SAGEM, Jacobian work.  NDBBD and
+   -withmc66 SBBD cannot keep their factors yet: a request is a named
+   fatal (fh_step_begin); NDBBD solves are not refined. */
 extern int teems_fh_selftest;   /* -fhtest: solve [b, 2b] again after every solve */
 extern int teems_resid_all;     /* -residcheck 1: keep A so every solve is checked */
+extern int teems_refine;        /* -refine: one refinement step per DBBD solve (default 1) */
 extern int teems_fh_keep;       /* set for the current dispatch: the method keeps its factors */
 extern int teems_resid_retain;  /* set for the current dispatch: A is kept for the residual check */
 void fh_request_check(dim_t matsol,dim_t mc66,PetscInt rank); /* named fatal when a consumer needs factors a method cannot keep */
 void fh_step_begin(Mat A,Vec vecb,dim_t matsol,dim_t mc66,PetscInt VecSize,PetscInt rank,PetscInt rank_hsl);
-void fh_step_end(PetscInt VecSize,const solve_real *x,PetscInt rank,PetscInt rank_hsl,PetscInt mpisize);
+void fh_step_end(PetscInt VecSize,solve_real *x,PetscInt rank,PetscInt rank_hsl,PetscInt mpisize); /* refines x in place under -refine (DBBD) */
 /* nrhs more right-hand sides with the current step's kept factorization:
    rhs = nrhs columns of VecSize (condensed row order, column-major), read
    on rank 0; x = the same shape, valid on every rank on return.
@@ -935,6 +938,9 @@ void fh_step_end(PetscInt VecSize,const solve_real *x,PetscInt rank,PetscInt ran
 int teems_fh_solve(const solve_real *rhs,solve_real *x,int nrhs);
 void teems_fh_free(void);       /* collective; no-op when nothing is kept */
 void fh_selftest_summary(PetscInt rank); /* end-of-run log line (-fhtest) */
+/* end-of-run refinement record (DBBD, -refine): solves refined, worst
+   residual ratio before and after the step, seconds; collective */
+void fh_refine_totals(long *solves,double *before,double *after,double *secs);
 void residual_note_skipped(PetscInt rank,PetscInt counting_rank); /* the skip sites of one-shot bordered solves */
 /* shock-group subtotals on the kept factorizations (solve_drivers.c;
    manual 29, IP-73): teems_sub_active is set by main when the manifest
