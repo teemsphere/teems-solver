@@ -5,6 +5,16 @@
    (set per assembly from the effective option; see the insertion site) */
 static int jac_keep_zero=0;
 
+/* -jacdump sink (Tier B5): while jacobian_dump runs, every nonzero
+   coefficient of every linear-variable occurrence is recorded as
+   (natural equation position, variable element, value) -- endogenous,
+   exogenous shocked or not -- instead of going to A and B */
+typedef struct { offset_t row, col; double val; } jac_trip;
+static int jd_on=0;
+static jac_trip *jd_buf=NULL;
+static offset_t jd_n=0, jd_cap=0;
+static int jd_oom=0;
+
 /* ===== compiled equation programs (roadmap 6.2, small-model lever) =====
  *
  * jacobian_fill used to re-derive every equation's parse artifacts --
@@ -328,12 +338,15 @@ static void stmt_prog_execute(stmt_prog *st, offset_t matrow, PetscInt *eq_addr,
       PetscInt *jcn= (PetscInt *) calloc (lv->nloopsfac,sizeof(PetscInt));
       solve_real *valueb= (solve_real *) calloc (lv->nloopsfac,sizeof(solve_real));
       PetscInt *jcnb= (PetscInt *) calloc (lv->nloopsfac,sizeof(PetscInt));
+      jac_trip *jdrow= jd_on ? (jac_trip *) malloc (lv->nloopsfac*sizeof(jac_trip)) : NULL;
+      offset_t jdk=0;
     #pragma omp for
       for (i5=0; i5<nloops; i5++) {
         Jindx=eq_addr[matrow+i5];
         if(Jindx>=Istart1&&Jindx<Iend1) {
           i3=0;
           sj=0;
+          jdk=0;
           for (lj=i5*lv->nloopsfac; lj<(i5+1)*lv->nloopsfac; lj++) {
           l2=lj;
           for (dcount=0; dcount<lv->fdimlin; dcount++) {
@@ -366,6 +379,15 @@ static void stmt_prog_execute(stmt_prog *st, offset_t matrow, PetscInt *eq_addr,
             }
           }
           vval=formula_eval(elem_vals,sets,set_elems,st->sum_vals,ops1,lv->nops,arSet1,lv->fdimlin,st->zerodivide);
+          if (jdrow!=NULL) {
+            if (vval!=0) {
+              jdrow[jdk].row=matrow+i5;
+              jdrow[jdk].col=vars[lv->LinVarIndx].offset+li3;
+              jdrow[jdk].val=(double)vval;
+              jdk++;
+            }
+            continue;
+          }
           Iindx=closure_vals[vars[lv->LinVarIndx].offset+li3].exo_index;
           /* zero-valued entries are skipped, so the stored pattern is the
              REALIZED one and drifts as values cross zero between steps
@@ -389,6 +411,28 @@ static void stmt_prog_execute(stmt_prog *st, offset_t matrow, PetscInt *eq_addr,
             sj++;
           }
         }
+        if(jdrow!=NULL) {
+          if(jdk>0) {
+            #pragma omp critical(jacdump_sink)
+            {
+              if(jd_n+jdk>jd_cap) {
+                offset_t cap=jd_cap?2*jd_cap:(1<<16);
+                while(cap<jd_n+jdk)cap*=2;
+                jac_trip *p=(jac_trip *) realloc (jd_buf,cap*sizeof(jac_trip));
+                if(p==NULL)jd_oom=1;
+                else {
+                  jd_buf=p;
+                  jd_cap=cap;
+                }
+              }
+              if(!jd_oom) {
+                memcpy(jd_buf+jd_n,jdrow,jdk*sizeof(jac_trip));
+                jd_n+=jdk;
+              }
+            }
+          }
+          continue;
+        }
         if(i3>0)MatSetValues(A,1,&Jindx,i3,jcn,value,ADD_VALUES);
         if(sj>0)MatSetValues(B,1,&Jindx,sj,jcnb,valueb,ADD_VALUES);
         }
@@ -397,6 +441,7 @@ static void stmt_prog_execute(stmt_prog *st, offset_t matrow, PetscInt *eq_addr,
       free(jcn);
       free(valueb);
       free(jcnb);
+      free(jdrow);
     if(omp_get_thread_num()!=0){
       free(arSet1);
       arSet1=NULL;
@@ -1306,15 +1351,12 @@ static void eq_stmt_name(const char *line, char *out) {
   out[k]='\0';
 }
 
+static int jacobian_fill_rows(char *fname, char *commsyntax,set_def *sets,offset_t nset, set_element *set_elems, array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar, elem_value *elem_vals,offset_t ncofele,closure_entry *closure_vals,PetscInt *eq_addr,PetscInt Istart1,PetscInt Iend1,PetscMPIInt mpisize1,bool force_all,Mat A,Mat B);
+
 int jacobian_fill(char *fname, char *commsyntax,set_def *sets,offset_t nset, set_element *set_elems, array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar, elem_value *elem_vals,offset_t ncofvar,offset_t ncofele,closure_entry *closure_vals,offset_t ndblock,offset_t alltimeset,offset_t allregset,PetscInt *eq_addr,offset_t *counteq,offset_t nintraeq,Mat A,Mat B) {
-  FILE * filehandle;
-  char line[TABREADLINE];
-  PetscInt Istart1,Iend1,matrow;
+  PetscInt Istart1,Iend1;
   PetscErrorCode ierr;
-  solve_real zerodivide=0;
   PetscMPIInt  mpisize1;
-  stmt_prog *stp=NULL;
-  offset_t eqindx=0;
   {
     dim_t fr=0;
     PetscOptionsGetInt(NULL,NULL,"-fastrefac",&fr,NULL); /* post force-clear = effective */
@@ -1323,6 +1365,16 @@ int jacobian_fill(char *fname, char *commsyntax,set_def *sets,offset_t nset, set
   ierr = MatGetOwnershipRange(A,&Istart1,&Iend1);
   MPI_Comm_size(PETSC_COMM_WORLD,&mpisize1);
   CHKERRQ(ierr);
+  return jacobian_fill_rows(fname,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele,closure_vals,eq_addr,Istart1,Iend1,mpisize1,false,A,B);
+}
+
+static int jacobian_fill_rows(char *fname, char *commsyntax,set_def *sets,offset_t nset, set_element *set_elems, array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar, elem_value *elem_vals,offset_t ncofele,closure_entry *closure_vals,PetscInt *eq_addr,PetscInt Istart1,PetscInt Iend1,PetscMPIInt mpisize1,bool force_all,Mat A,Mat B) {
+  FILE * filehandle;
+  char line[TABREADLINE];
+  PetscInt matrow;
+  solve_real zerodivide=0;
+  stmt_prog *stp=NULL;
+  offset_t eqindx=0;
 
   filehandle = teems_fopen(fname,"r");
   matrow=0;
@@ -1359,7 +1411,7 @@ int jacobian_fill(char *fname, char *commsyntax,set_def *sets,offset_t nset, set
         eq_stmt_name(line,en);
         strcpy(lc,line);
         zdiv_default_hits=0;
-        stmt_prog_build_one(line,stp,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,ncofele,eq_addr,matrow,Istart1,Iend1,mpisize1,false);
+        stmt_prog_build_one(line,stp,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,ncofele,eq_addr,matrow,Istart1,Iend1,mpisize1,force_all);
         stmt_prog_execute(stp,matrow,eq_addr,stp->nloops,sets,set_elems,elem_vals,closure_vals,vars,Istart1,Iend1,A,B);
         zdiv_default_report("Equation",en,lc,zerodivide);
       }
@@ -1372,6 +1424,155 @@ int jacobian_fill(char *fname, char *commsyntax,set_def *sets,offset_t nset, set
   stmt_cache_Iend=Iend1;
   fclose(filehandle);
   return 1;
+}
+
+/* ===== Jacobian export (-jacdump, Tier B5) ============================
+ *
+ * The base-point linearized system C.z = 0 over every variable element
+ * (manual 57.4 homogeneity checks, ch 15 SUMEQ-style views): the same
+ * compiled statement programs as the solve's fill, run once before any
+ * step with every row owned, every nonzero entry kept whatever the
+ * closure (endogenous, exogenous, shocked or not), and the solve's
+ * A/B/-B split undone (every entry carries the equation's own sign).
+ * Rows: the condensed system's equation elements (backsolved defining
+ * equations excluded), equations in TAB order, elements in GEMPACK
+ * order within each (first index fastest). Columns: variable elements
+ * in .bin order. Repeated (row, column) insertions are summed.
+ *
+ * <stem>.jac: int64 {version 1, nrow, ncol, nnz}, nnz int64 rows, nnz
+ * int64 columns, nnz doubles, sorted by row then column.
+ * <stem>.jac.json: the row map (per equation: name, first row, rows,
+ * quantifier sets) and the conventions above. */
+static int jac_trip_cmp(const void *a, const void *b) {
+  const jac_trip *x=(const jac_trip *)a,*y=(const jac_trip *)b;
+  if(x->row!=y->row)return x->row<y->row?-1:1;
+  if(x->col!=y->col)return x->col<y->col?-1:1;
+  return 0;
+}
+
+static void jd_json_str(FILE *fp,const char *s) {
+  fputc('"',fp);
+  for(; *s!='\0'; s++) {
+    unsigned char c=(unsigned char)*s;
+    if(c=='"'||c=='\\')fprintf(fp,"\\%c",c);
+    else if(c<0x20)fprintf(fp,"\\u%04x",c);
+    else fputc(c,fp);
+  }
+  fputc('"',fp);
+}
+
+int jacobian_dump(const char *stem, char *fname, char *commsyntax,set_def *sets,offset_t nset, set_element *set_elems, array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar, elem_value *elem_vals,offset_t ncofele,offset_t nvarele,closure_entry *closure_vals,PetscInt *eq_addr,PetscInt VecSize,eq_probe_meta *eqmeta,offset_t neqmeta) {
+  char path[TABREADLINE+16];
+  FILE *fp;
+  offset_t i,k,m,hdr[4];
+  struct timeval t0,t1;
+  gettimeofday(&t0,NULL);
+  jacobian_cache_free();
+  jd_n=0;
+  jd_oom=0;
+  jd_on=1;
+  jac_keep_zero=0;
+  jacobian_fill_rows(fname,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele,closure_vals,eq_addr,0,VecSize,1,true,NULL,NULL);
+  jd_on=0;
+  jacobian_cache_free();
+  if(jd_oom) {
+    errmsg("Error: -jacdump: out of memory collecting the Jacobian entries (%ld collected, 24 bytes each); the solve continues without the export\n",(long)jd_n);
+    free(jd_buf);
+    jd_buf=NULL;
+    jd_n=jd_cap=0;
+    return 1;
+  }
+  /* natural position (quantifier space first index slowest) -> GEMPACK
+     order within the equation */
+  {
+    offset_t *rowmap=(offset_t *) malloc ((VecSize>0?VecSize:1)*sizeof(offset_t));
+    if(rowmap==NULL) {
+      errmsg("Error: -jacdump: out of memory for the %ld-row map; the solve continues without the export\n",(long)VecSize);
+      free(jd_buf);
+      jd_buf=NULL;
+      jd_n=jd_cap=0;
+      return 1;
+    }
+    for(i=0; i<VecSize; i++)rowmap[i]=i;
+    for(k=0; k<neqmeta; k++) {
+      eq_probe_meta *em=&eqmeta[k];
+      offset_t sz[4*MAXVARDIM],w[4*MAXVARDIM],r,rem,g,mul;
+      dim_t d;
+      if(em->nrows<=0||em->fdim<2)continue;
+      for(d=0; d<em->fdim; d++)sz[d]=sets[em->setid[d]].size;
+      for(r=0; r<em->nrows&&em->base+r<VecSize; r++) {
+        rem=r;
+        for(d=em->fdim-1; d>=0; d--) {
+          w[d]=rem%sz[d];
+          rem/=sz[d];
+        }
+        g=0;
+        mul=1;
+        for(d=0; d<em->fdim; d++) {
+          g+=w[d]*mul;
+          mul*=sz[d];
+        }
+        rowmap[em->base+r]=em->base+g;
+      }
+    }
+    for(i=0; i<jd_n; i++)jd_buf[i].row=rowmap[jd_buf[i].row];
+    free(rowmap);
+  }
+  qsort(jd_buf,jd_n,sizeof(jac_trip),jac_trip_cmp);
+  m=0;
+  for(i=0; i<jd_n; i++) {
+    if(m>0&&jd_buf[m-1].row==jd_buf[i].row&&jd_buf[m-1].col==jd_buf[i].col)jd_buf[m-1].val+=jd_buf[i].val;
+    else jd_buf[m++]=jd_buf[i];
+  }
+  snprintf(path,sizeof(path),"%s.jac",stem);
+  if((fp=fopen(path,"wb"))==NULL) {
+    errmsg("Error: cannot open %s for writing: %s (the solver runs as uid %d)\n",path,strerror(errno),(int)getuid());
+    free(jd_buf);
+    jd_buf=NULL;
+    jd_n=jd_cap=0;
+    return 1;
+  }
+  hdr[0]=1; hdr[1]=(offset_t)VecSize; hdr[2]=nvarele; hdr[3]=m;
+  fwrite(hdr,sizeof(offset_t),4,fp);
+  for(i=0; i<m; i++)fwrite(&jd_buf[i].row,sizeof(offset_t),1,fp);
+  for(i=0; i<m; i++)fwrite(&jd_buf[i].col,sizeof(offset_t),1,fp);
+  for(i=0; i<m; i++)fwrite(&jd_buf[i].val,sizeof(double),1,fp);
+  free(jd_buf);
+  jd_buf=NULL;
+  jd_n=jd_cap=0;
+  if(fclose(fp)!=0) {
+    errmsg("Error: cannot write %s: %s\n",path,strerror(errno));
+    return 1;
+  }
+  outputs_note(path,"jacobian",1);
+  snprintf(path,sizeof(path),"%s.jac.json",stem);
+  if((fp=fopen(path,"w"))==NULL) {
+    errmsg("Error: cannot open %s for writing: %s (the solver runs as uid %d)\n",path,strerror(errno),(int)getuid());
+    return 1;
+  }
+  fprintf(fp,"{\n  \"version\": 1,\n  \"point\": \"base\",\n  \"nrow\": %ld,\n  \"ncol\": %ld,\n  \"nnz\": %ld,\n",(long)VecSize,(long)nvarele,(long)m);
+  fprintf(fp,"  \"rows\": \"equation elements of the condensed system, equations in TAB order, GEMPACK order within each (first index fastest)\",\n");
+  fprintf(fp,"  \"columns\": \"variable elements in .bin order, every closure class\",\n  \"equations\": [");
+  for(k=0; k<neqmeta; k++) {
+    dim_t d;
+    fprintf(fp,"%s\n    {\"name\": ",k?",":"");
+    jd_json_str(fp,eqmeta[k].eqname);
+    fprintf(fp,", \"first_row\": %ld, \"nrows\": %ld, \"sets\": [",(long)eqmeta[k].base,(long)eqmeta[k].nrows);
+    for(d=0; d<eqmeta[k].fdim; d++) {
+      if(d)fputs(", ",fp);
+      jd_json_str(fp,sets[eqmeta[k].setid[d]].setname);
+    }
+    fputs("]}",fp);
+  }
+  fprintf(fp,"\n  ]\n}\n");
+  if(fclose(fp)!=0) {
+    errmsg("Error: cannot write %s: %s\n",path,strerror(errno));
+    return 1;
+  }
+  outputs_note(path,"jacobian_index",1);
+  gettimeofday(&t1,NULL);
+  logmsg(1,"Jacobian export: %ld x %ld, %ld entries at the base point to %s.jac in %.2f s\n",(long)VecSize,(long)nvarele,(long)m,stem,(t1.tv_sec-t0.tv_sec)+((double)(t1.tv_usec-t0.tv_usec))/1000000);
+  return 0;
 }
 
 /* ===== backsolve recovery (GEMPACK manual 14.1.3, roadmap 6.2) ========

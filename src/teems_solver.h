@@ -101,7 +101,7 @@ typedef float store_real;
 enum matrix_method { MM_LU=0, MM_SBBD=1, MM_DBBD=2, MM_NDBBD=3 };
 /* -solmed solution method (GEMPACK manual; Pearson 1991; Schiffmann
    2022 / GEMPACK 26.5 for the Runge-Kutta flavors) */
-enum solution_method { SM_GRAGG=1, SM_EULER=2, SM_RK2=3, SM_RK4=4, SM_BOSHA32=5, SM_DOPRI54=6, SM_HEUN=7, SM_JOHANSEN=10, SM_PROBE=100 };
+enum solution_method { SM_GRAGG=1, SM_EULER=2, SM_RK2=3, SM_RK4=4, SM_BOSHA32=5, SM_DOPRI54=6, SM_HEUN=7, SM_JOHANSEN=10, SM_PROBE=100, SM_NOSIM=101 };
 /* array_def.gltype: bound imposed on levels values */
 enum bound_type { BT_NONE=0, BT_GE=1, BT_GT=2, BT_LE=3, BT_LT=4 };
 /* formula_op.Oper: compiled formula operation */
@@ -890,6 +890,7 @@ extern int teems_upd_pathuse;
 int eq_sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifier *arSet,set_def *sets,dim_t nset,dim_t fdim,int j);
 int eq_sum_replace(char *formulain, char *commsyntax,int LinIndx, eq_var_ref *LinVars,array_def *vars);
 int jacobian_fill(char *fname, char *commsyntax,set_def *sets,offset_t nset, set_element *set_elems, array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar, elem_value *elem_vals,offset_t ncofvar,offset_t ncofele,closure_entry *closure_vals,offset_t ndblock,offset_t alltimeset,offset_t allregset,PetscInt *eq_addr,offset_t *counteq,offset_t nintraeq,Mat A,Mat B);
+int jacobian_dump(const char *stem, char *fname, char *commsyntax,set_def *sets,offset_t nset, set_element *set_elems, array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar, elem_value *elem_vals,offset_t ncofele,offset_t nvarele,closure_entry *closure_vals,PetscInt *eq_addr,PetscInt VecSize,eq_probe_meta *eqmeta,offset_t neqmeta);
 void jacobian_cache_free(void); /* release the per-rank compiled-statement cache */
 /* -fastrefac sequential-LU persistent refactorize (solve_drivers.c): the
    COO pattern and MA48 pivot sequence persist across steps/stages, later

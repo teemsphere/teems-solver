@@ -435,7 +435,7 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
   } while (index--);
 
   index=nvar-1;
-  do {
+  if(nvar>0) do {
     if (strcmp(vars[index].cofname,p)==0) {
       if((int)vars[index].size!=nargs_tok) {
         errmsg("Error: variable %s is declared with %d %s but is referenced with %d in %s; a reference must carry exactly the declared indices (manual 10.3, 11.4.10)\n",vars[index].cofname,(int)vars[index].size,vars[index].size==1?"index":"indices",nargs_tok,tokcopy);
@@ -2813,7 +2813,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
         } while (index--);
         if (check10) {
           index=nvar-1;
-          do {
+          if(nvar>0) do {
             if (strcmp(vars[index].cofname,p)==0) {
               offset=ncofele+vars[index].offset;
               varsize=vars[index].size;
@@ -2933,7 +2933,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
             if(b==0) {
               index=nvar-1;
               p=strtok(condvar[i1],"(");
-              do {
+              if(nvar>0) do {
                 if (strcmp(vars[index].cofname,condvar[i1])==0) {
                 if(!vars[index].suplval)warn_no_values(vars[index].cofname,index,1);
                   logivarindx[i1]=index;
@@ -3808,7 +3808,7 @@ offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_el
         } while (index--);
         if (check10) {
           index=nvar-1;
-          do {
+          if(nvar>0) do {
             if (strcmp(vars[index].cofname,p)==0) {
               offset=ncofele+vars[index].offset;
               varsize=vars[index].size;
@@ -4129,7 +4129,7 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
         } while (index--);
         if (check10) {
           index=nvar-1;
-          do {
+          if(nvar>0) do {
             if (strcmp(vars[index].cofname,p)==0) {
               offset=ncofele+vars[index].offset;
               varsize=vars[index].size;

@@ -9,7 +9,8 @@ static char help[] = "teems-solver " TEEMS_SOLVER_VERSION ": solves a CGE model 
   -version              print the solver version and exit 0\n\
   -cmdfile <path>       CMF file manifest (default ./reg.cmf)\n\
   -matsol {0,1,2,3}     matrix method LU/SBBD/DBBD/NDBBD\n\
-  -solmed <name>        Gragg|Euler|RK2|Heun|RK4|BoSha32|DoPri54|Johansen|probe\n\
+  -solmed <name>        Gragg|Euler|RK2|Heun|RK4|BoSha32|DoPri54|Johansen|probe|nosim\n\
+  -jacdump 1            write the base-point Jacobian (<solfiles>.jac + .jac.json)\n\
   -step1/-step2/-step3  step counts; -nsubints n; -verbosity {0,1,2}\n\
   Full option table: docs/solver-reference.md section 11.\n\
   Exit status: 0 = completed with no Error line; 1 = an Error line was\n\
@@ -101,7 +102,7 @@ static const char *const cli_teems_flags[]={
   "adaptive","assertions","cmdfile","cntl_3","cntl_6","cofdump",
   "comp_do_acc","comp_do_approx","comp_redo","comp_redo_min_frac",
   "comp_sberr_warn","comp_steps","condest","epstol","fastrefac","fhtest",
-  "gpzerodivide","inmemory","laA","laD","laDi","ma48u","matsol",
+  "gpzerodivide","inmemory","jacdump","laA","laD","laDi","ma48u","matsol",
   "maxretries","maxthreads","ndcutcache","nowrites","nsbbdblocks",
   "nsubints","postsim","probefine","probepattern","random_seed",
   "range_test_initial","range_test_updated","refine","residcheck","retryadj","rkchart",
@@ -160,7 +161,7 @@ static int cli_options_check(PetscInt rank) {
    removed before any work, so a run that fails leaves none of them and
    no completion marker behind. The locked five and the .cof/.cbin dump
    keep their existing rules. */
-static const char *const sidecar_exts[]={".outputs.json",".outputs.json.tmp",".cols",".cols.json",".cbin0",".xac",NULL};
+static const char *const sidecar_exts[]={".outputs.json",".outputs.json.tmp",".cols",".cols.json",".cbin0",".xac",".jac",".jac.json",NULL};
 
 static void sidecars_clear_stale(const char *cmfname) {
   FILE *f;
@@ -281,6 +282,46 @@ static int cols_write(const char *stem, offset_t kind, offset_t ncol, offset_t n
     return 1;
   }
   outputs_note(path,"cols_index",1);
+  return 0;
+}
+
+/* The model-description files every run leaves next to its solution
+   (the locked .var/.set/.sel/.mds of teems-R's parse_solution.cpp):
+   variable declarations, set declarations, set elements and the four
+   counts. Written by the solve path and by the no-simulation path. */
+static int structure_files_write(const char *stem, array_def *vars, offset_t nvar, set_def *sets, dim_t nset, set_element *set_elems, offset_t nsetspace, offset_t nvarele) {
+  char solchar[TABREADLINE+8];
+  FILE *solution;
+  const char *ext[3]={".var",".set",".sel"};
+  const char *kind[3]={"variable_declarations","set_declarations","set_elements"};
+  const void *data[3]={vars,sets,set_elems};
+  size_t size[3]={sizeof(array_def),sizeof(set_def),sizeof(set_element)};
+  size_t count[3]={(size_t)nvar,(size_t)nset,(size_t)nsetspace};
+  offset_t modeldes[4];
+  int f;
+  for(f=0; f<3; f++) {
+    snprintf(solchar,sizeof(solchar),"%s%s",stem,ext[f]);
+    logmsg(2,"solchar %s\n",solchar);
+    if ( (solution = fopen(solchar, "wb")) == NULL ) {
+      errmsg("Error: cannot open %s for writing: %s (the solver runs as uid %d)\n",solchar,strerror(errno),(int)getuid());
+      return 1;
+    }
+    fwrite(data[f],size[f],count[f],solution);
+    fclose(solution);
+    outputs_note(solchar,kind[f],0);
+  }
+  modeldes[0]=nsetspace;
+  modeldes[1]=nvar;
+  modeldes[2]=nvarele;
+  modeldes[3]=(offset_t)nset;
+  snprintf(solchar,sizeof(solchar),"%s.mds",stem);
+  if ( (solution = fopen(solchar, "wb")) == NULL ) {
+    errmsg("Error: cannot open %s for writing: %s (the solver runs as uid %d)\n",solchar,strerror(errno),(int)getuid());
+    return 1;
+  }
+  fwrite(modeldes, sizeof(offset_t),4, solution);
+  fclose(solution);
+  outputs_note(solchar,"model_description",0);
   return 0;
 }
 
@@ -1317,7 +1358,7 @@ int main(int argc,char **args) {
   //**************************************************************************************
   //****************************** READ SET ELEMENT***************************************
   //**************************************************************************************
-  char tabfile[TABREADLINE],newtabfile[TABREADLINE]="_temp_tab_file",newtabfile1[TABREADLINE]="_temp_tab_new_file",closure[TABREADLINE],shock[TABREADLINE],filename[TABREADLINE],longname[TABREADLINE],vname[NAMESIZE],copyline[TABREADLINE];
+  char tabfile[TABREADLINE],newtabfile[TABREADLINE]="_temp_tab_file",newtabfile1[TABREADLINE]="_temp_tab_new_file",closure[TABREADLINE]="",shock[TABREADLINE]="",filename[TABREADLINE],longname[TABREADLINE],vname[NAMESIZE],copyline[TABREADLINE];
   char psfile[TABREADLINE]="\0";
   int npostsim=0,postsim_on=1;
   char tempchar[255],solmed[NAMESIZE],solchar[255];
@@ -1548,8 +1589,9 @@ int main(int argc,char **args) {
   if(strcmp(solmed,"DoPri54")==0)solmethod=SM_DOPRI54;
   if(strcmp(solmed,"Johansen")==0)solmethod=SM_JOHANSEN;
   if(strcmp(solmed,"probe")==0)solmethod=SM_PROBE;
+  if(strcmp(solmed,"nosim")==0)solmethod=SM_NOSIM;
   if(solmethod==0) {
-    if(rank==0)errmsg("Error: unknown -solmed %s (valid: Gragg, Euler, RK2, Heun, RK4, BoSha32, DoPri54, Johansen, probe)\n",solmed);
+    if(rank==0)errmsg("Error: unknown -solmed %s (valid: Gragg, Euler, RK2, Heun, RK4, BoSha32, DoPri54, Johansen, probe, nosim)\n",solmed);
     PetscFinalize();
     return 1;
   }
@@ -1572,13 +1614,23 @@ int main(int argc,char **args) {
       PetscFinalize();
       return 1;
     }
-    if(solmethod==SM_JOHANSEN||solmethod==SM_PROBE) teems_single_run=0;
+    if(solmethod==SM_JOHANSEN||solmethod==SM_PROBE||solmethod==SM_NOSIM) teems_single_run=0;
     else if(rank==0) printf("Single-pass %s run: %d steps, no extrapolation (-single_run 1)\n",solmed,(int)steps1);
   }
   /* -probefine: with -solmed probe, add the MC79 fine Dulmage-Mendelsohn
      report (strongly connected components of the well-determined block) */
   dim_t probefine=0;
   PetscOptionsGetInt(NULL,NULL,"-probefine",&probefine,NULL);
+  /* -jacdump 1 (Tier B5): the base-point Jacobian of the condensed
+     system over every variable element, written before the first step
+     (jacobian.c jacobian_dump); the run then goes on as asked */
+  dim_t jacdump=0;
+  PetscOptionsGetInt(NULL,NULL,"-jacdump",&jacdump,NULL);
+  if(jacdump!=0&&jacdump!=1) {
+    if(rank==0)errmsg("Error: -jacdump must be 0 (off) or 1 (write <solfiles>.jac), got %ld\n",(long)jacdump);
+    PetscFinalize();
+    return 1;
+  }
   /* -condest: opt-in per-solve quality diagnostics (MA60 iterative
      refinement + Arioli-Demmel-Duff backward/forward error and scaled
      condition numbers) on the sequential LU path.  Diagnostic-only:
@@ -1794,6 +1846,7 @@ int main(int argc,char **args) {
     const char *why=NULL;
     if(matsol==MM_NDBBD)why="matrix_method NDBBD, which cannot keep its factorization for more solves yet";
     else if(matsol==MM_SBBD&&mc66!=0)why="SBBD under -withmc66 1, which cannot keep its factorization for more solves";
+    else if(solmethod==SM_NOSIM)why="-solmed nosim, which runs no simulation";
     else if(solmethod!=SM_JOHANSEN&&solmethod!=SM_GRAGG&&solmethod!=SM_EULER&&solmethod!=SM_PROBE)why="a Runge-Kutta method, whose stage combination in the log chart has no settled subtotal convention yet";
     if(why!=NULL) {
       if(rank==0)errmsg("Error: subtotals (manual 29) are not available with %s; use matrix_method LU, SBBD or DBBD with the Johansen, Euler or Gragg method\n",why);
@@ -1871,6 +1924,32 @@ int main(int argc,char **args) {
 
   strcpy(tabfile,newtabfile);
   if(rank==0)nset=sets_count(tabfile);
+  /* Tier B4: a TAB without equations is a data program (manual 5.1.2,
+     6.3; GEMPACK runs it without a simulation), and -solmed nosim runs
+     any TAB that way (CMF "simulation = no;", 25.1.8): reads, formulas
+     and assertions, then the writes and dumps, with no closure, shocks
+     or solve */
+  {
+    long neqstmt=0;
+    if(rank==0)neqstmt=(long)tab_count_statements(tabfile,"equation");
+    MPI_Bcast(&neqstmt,1,MPI_LONG,0,PETSC_COMM_WORLD);
+    if(neqstmt==0&&solmethod!=SM_NOSIM) {
+      if(rank==0)logmsg(1,"The TAB has no equations: running it as a data program (reads, formulas, assertions and writes; no closure, shocks or solve; manual 5.1.2)\n");
+      solmethod=SM_NOSIM;
+      strcpy(solmed,"nosim");
+    }
+    if(solmethod==SM_NOSIM) {
+      const char *why=NULL;
+      if(has_sub)why="subtotals";
+      else if(jacdump)why="-jacdump";
+      if(why!=NULL) {
+        if(rank==0)errmsg("Error: %s needs a simulation, and this run has none (%s); drop %s or give the TAB its equations and a closure\n",why,neqstmt==0?"the TAB has no equations":"-solmed nosim",why);
+        MPI_Barrier(PETSC_COMM_WORLD);
+        MPI_Abort(PETSC_COMM_WORLD,1);
+      }
+      if(rank==0&&neqstmt>0)logmsg(1,"No-simulation run (-solmed nosim): %ld equation statement(s) are not solved; reads, formulas, assertions and writes only (manual 25.1.8)\n",neqstmt);
+    }
+  }
   if(nohsl) {
     MPI_Bcast(iodata,niodata*sizeof(cmf_file_entry), MPI_BYTE,0, PETSC_COMM_WORLD);
     MPI_Bcast(closure,TABREADLINE*sizeof(char), MPI_BYTE,0, PETSC_COMM_WORLD);
@@ -2235,7 +2314,7 @@ int main(int argc,char **args) {
   /* element-level border marks (6.5 E3), populated by the ordering scan
      alongside var_inter on the same ranks */
   bool *ele_inter= (bool *) calloc (nvarele,sizeof(bool));
-  if(rank==0) {
+  if(rank==0&&solmethod!=SM_NOSIM) {
     strcpy(commsyntax,"exogenous");
     nexo=closure_read(closure,commsyntax,closure_vals,vars,nvar,sets,nset,set_elems);
     if(nexo==-1)MPI_Abort(PETSC_COMM_WORLD,1);
@@ -2378,6 +2457,54 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
       MPI_Bcast(maps[i].values,sets[maps[i].fromset].size*sizeof(dim_t), MPI_BYTE,0, PETSC_COMM_WORLD);
       MPI_Bcast(maps[i].assigned,sets[maps[i].fromset].size*sizeof(unsigned char), MPI_BYTE,0, PETSC_COMM_WORLD);
     }
+  }
+  /* Tier B4 no-simulation finish: the values after the Reads, Formulas
+     and Assertions are the run's values, written the way a solve writes
+     its post-simulation ones (structure files, the .cof/.cbin dump, the
+     TAB's Writes); no .bin, no stats.json. PostSim needs a simulation
+     and is not run. */
+  if(solmethod==SM_NOSIM) {
+    if(rank==0) {
+      if(npostsim>0||tab_has_postsim_assertions(tabfile))
+        printf("Warning: PostSim statements and assertions are not run without a simulation (manual 12.1); %d PostSim statement(s) skipped\n",npostsim);
+      if(structure_files_write(teems_sol_stem,vars,nvar,sets,nset,set_elems,nsetspace,nvarele)==0) {
+        if(cofdump&&elem_vals!=NULL) {
+          if(coefficients_dump(teems_sol_stem,coefs,ncof,ncofele,elem_vals)==0)
+            logmsg(1,"Wrote coefficient dump (%ld coefficients, %ld elements)\n",(long)ncof,(long)ncofele);
+        }
+        if(nowrites==0)for(i=0; i<noutdata; i++) {
+          if(outputs_write_csv(tabfile,iodata[i+niodata].logname,iodata[i+niodata].filname,sets,nset,set_elems,coefs,ncof,ncofele,vars,nvar,nvarele,elem_vals)!=-1) {
+            logmsg(1,"Wrote %s\n",iodata[i+niodata].logname);
+            outputs_note(iodata[i+niodata].filname,"csv",0);
+          }
+        }
+      }
+      gettimeofday(&endtime, NULL);
+      logmsg(1,"No-simulation run complete in %.2f s\n",(endtime.tv_sec - begintime.tv_sec)+((double)(endtime.tv_usec - begintime.tv_usec))/ 1000000);
+    }
+    {
+      int nerr=teems_error_count,nerrsum=0;
+      MPI_Allreduce(&nerr,&nerrsum,1,MPI_INT,MPI_SUM,PETSC_COMM_WORLD);
+      if(rank==0&&nerrsum==0)outputs_json_write(teems_sol_stem,run_id);
+    }
+    free(iodata);
+    free(sets);
+    free(set_elems);
+    free(coefs);
+    free(vars);
+    free(var_inter);
+    free(ele_inter);
+    free(closure_vals);
+    free(elem_vals);
+    free(teems_cl_flags);
+    free(teems_cl_shock);
+    free(teems_set_isprod);
+    free(teems_set_prod1);
+    free(teems_set_prod2);
+    MPI_Comm_free(&node_comm);
+    MPI_Comm_free(&node_tail_comm);
+    PetscFinalize();
+    return teems_error_count>0?1:0;
   }
   gettimeofday(&endtime, NULL);
   if(rank==0)logmsg(1,"Variable calculation time %.2f s\n",(endtime.tv_sec - begintime.tv_sec)+((double)(endtime.tv_usec - begintime.tv_usec))/ 1000000);
@@ -3047,6 +3174,28 @@ comp_accurate_reentry:
     jacobian_preallocate(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,nexo,closure_vals,ndblock,alltimeset,allregset,eq_intertemp,eq_addr,eq_time,eq_reg,counteq,nintraeq,&sbbd_overrid,VecSize,Istart,Iend,Cstart,Cend,&dnz,dnnz,&onz,onnz,&dnzB,dnnzB,&onzB,onnzB,nesteddbbd,eqmeta,&neqmeta);
     probe_onfail_context(sets,set_elems,vars,nvar,closure_vals,nvarele,eq_addr,eqmeta,neqmeta,VecSize);
   }
+  /* -jacdump (Tier B5): the base point is now -- after the Reads and
+     Formulas, before the first step. The complementarity rows take their
+     pre-simulation state branch, as in the probe. Reported, not fatal. */
+  if(jacdump&&comp_acc_phase==0&&rank==0) {
+    elem_value *cvsave=NULL;
+    if(teems_ncomp>0) {
+      /* the state weights are written into coefficient slots; the solve
+         must find the slots as the formulas left them */
+      cvsave=(elem_value *) malloc ((ncofele>0?ncofele:1)*sizeof(elem_value));
+      if(cvsave!=NULL) {
+        memcpy(cvsave,elem_vals,ncofele*sizeof(elem_value));
+        comp_states_set(sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals);
+      }
+      else printf("Warning: -jacdump: no memory to protect the complementarity state coefficients; the E_$comp rows are exported with their formula values\n");
+    }
+    jacobian_dump(teems_sol_stem,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele,nvarele,closure_vals,eq_addr,VecSize,eqmeta,neqmeta);
+    if(cvsave!=NULL) {
+      comp_states_free();
+      memcpy(elem_vals,cvsave,ncofele*sizeof(elem_value));
+      free(cvsave);
+    }
+  }
   if(rank==0&&sbbd_overrid&&alltimeset<0) {
     printf("Warning: the equations reference intertemporal sets but this run's ordering ignores that structure; a bordered matrix method (-matsol 1/2/3) would detect and exploit it\n");
   }
@@ -3313,48 +3462,7 @@ comp_accurate_reentry:
       fclose(solution);
       outputs_note(solchar,"rk_error_estimate",0);
     }
-    strcpy(solchar,tempchar);
-    strcat(solchar,".var");
-    logmsg(2,"solchar %s\n",solchar);
-    if ( (solution = fopen(solchar, "wb")) == NULL ) {
-      errmsg("Error: cannot open %s for writing: %s (the solver runs as uid %d)\n",solchar,strerror(errno),(int)getuid());
-      return 1;
-    }
-    fwrite(vars, sizeof(array_def),nvar, solution);
-    fclose(solution);
-    outputs_note(solchar,"variable_declarations",0);
-    strcpy(solchar,tempchar);
-    strcat(solchar,".set");
-    if ( (solution = fopen(solchar, "wb")) == NULL ) {
-      errmsg("Error: cannot open %s for writing: %s (the solver runs as uid %d)\n",solchar,strerror(errno),(int)getuid());
-      return 1;
-    }
-    fwrite(sets, sizeof(set_def),nset, solution);
-    fclose(solution);
-    outputs_note(solchar,"set_declarations",0);
-    strcpy(solchar,tempchar);
-    strcat(solchar,".sel");
-    if ( (solution = fopen(solchar, "wb")) == NULL ) {
-      errmsg("Error: cannot open %s for writing: %s (the solver runs as uid %d)\n",solchar,strerror(errno),(int)getuid());
-      return 1;
-    }
-    fwrite(set_elems, sizeof(set_element),nsetspace, solution);
-    fclose(solution);
-    outputs_note(solchar,"set_elements",0);
-    offset_t modeldes[4];
-    modeldes[0]=nsetspace;
-    modeldes[1]=nvar;
-    modeldes[2]=nvarele;
-    modeldes[3]=(offset_t)nset;
-    strcpy(solchar,tempchar);
-    strcat(solchar,".mds");
-    if ( (solution = fopen(solchar, "wb")) == NULL ) {
-      errmsg("Error: cannot open %s for writing: %s (the solver runs as uid %d)\n",solchar,strerror(errno),(int)getuid());
-      return 1;
-    }
-    fwrite(modeldes, sizeof(offset_t),4, solution);
-    fclose(solution);
-    outputs_note(solchar,"model_description",0);
+    if(structure_files_write(tempchar,vars,nvar,sets,nset,set_elems,nsetspace,nvarele))return 1;
     if(rank==0&&comp_approx_col!=NULL&&xcf!=NULL) {
       char label[96];
       const solve_real *cp[1]={comp_approx_col};
