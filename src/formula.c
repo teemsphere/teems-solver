@@ -1066,6 +1066,13 @@ static int zdiv_enabled = 0;
    reported once per statement per run (manual 10.11, 34.3) so the
    substitution is visible; the values are unchanged */
 long zdiv_default_hits=0;
+/* -zdivshift x: every zero-divide default substitution returns
+   default + x*(1+|default|). Comparing two runs shows which results
+   depend on a default, i.e. sit on a zero flow (ems_homogeneity) */
+double teems_zdiv_shift=0.0;
+static inline solve_real zdiv_shifted(solve_real v) {
+  return teems_zdiv_shift==0.0?v:(solve_real)((double)v+teems_zdiv_shift*(1.0+fabs((double)v)));
+}
 static uint64_t *zdiv_warned=NULL;
 static int zdiv_nwarned=0,zdiv_capwarned=0;
 
@@ -1308,20 +1315,20 @@ solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,
       if(eval2==0) {
         if(zdiv_enabled) {
           if(eval1==0) {
-            if(zdiv_active.zbz_on)ops[i].TmpVarVal=zdiv_active.zbz_val;
+            if(zdiv_active.zbz_on)ops[i].TmpVarVal=zdiv_shifted(zdiv_active.zbz_val);
             else {
               errmsg("Error: zero divided by zero in a formula while Zerodivide (zero_by_zero) is off\n");
               MPI_Abort(PETSC_COMM_WORLD,1);
             }
           } else {
-            if(zdiv_active.nbz_on)ops[i].TmpVarVal=zdiv_active.nbz_val;
+            if(zdiv_active.nbz_on)ops[i].TmpVarVal=zdiv_shifted(zdiv_active.nbz_val);
             else {
               errmsg("Error: division by zero in a formula; Zerodivide (nonzero_by_zero) is off (GEMPACK default) -- set a default or guard with ID01\n");
               MPI_Abort(PETSC_COMM_WORLD,1);
             }
           }
         } else {
-          ops[i].TmpVarVal=zerodivide;
+          ops[i].TmpVarVal=zdiv_shifted(zerodivide);
           if(eval1!=0) {
             #pragma omp atomic
             zdiv_default_hits++;
@@ -1427,7 +1434,7 @@ solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,
       if(ops[i].Var2Type==OT_CONST) eval2=ops[i].Var2Val;
       if(ops[i].Var2Type==OT_CHANGE) eval2=record[ops[i].Var2BegAdd+l1].substep_base;
       if(eval1==0&&eval2<0) {
-        ops[i].TmpVarVal=zerodivide;
+        ops[i].TmpVarVal=zdiv_shifted(zerodivide);
         #pragma omp atomic
         zdiv_default_hits++;
       } else {

@@ -102,7 +102,7 @@ static const char *const cli_teems_flags[]={
   "nsubints","postsim","probefine","probepattern","random_seed",
   "range_test_initial","range_test_updated","refine","residcheck","retryadj","rkchart",
   "rkctrl","rkguard","rk_h0","rknorm","rkscope","single_run",
-  "smllthreads","solmed","step1","step2","step3","tempdir","verbosity",
+  "smllthreads","solmed","step1","step2","step3","tempdir","verbosity","zdivshift",
   "withmc66","version",NULL
 };
 /* sent by earlier teems releases or read by earlier solvers, no longer
@@ -1434,6 +1434,13 @@ int main(int argc,char **args) {
      (manual 10.11/10.11.1; plan A1). Default 0 keeps the legacy single
      conflated default -- adoption is a re-anchor-class change. */
   PetscOptionsGetInt(NULL,NULL,"-gpzerodivide",&teems_gpzerodivide,NULL);
+  /* -zdivshift x: shift every zero-divide default by x*(1+|default|),
+     so a second run shows what depends on one (formula.c zdiv_shifted) */
+  {
+    PetscReal zs=0;
+    PetscOptionsGetReal(NULL,NULL,"-zdivshift",&zs,NULL);
+    teems_zdiv_shift=(double)zs;
+  }
   PetscOptionsGetInt(NULL,NULL,"-step1",&steps1,NULL);
   if(steps1==0)steps1=2;
   PetscOptionsGetInt(NULL,NULL,"-step2",&steps2,NULL);

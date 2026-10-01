@@ -859,6 +859,7 @@ int parse_index_leadlag(char *p,int *leadlag);
 void offset_range_check(dim_t frame_setid, dim_t ss, dim_t arg_setid, int leadlag, const char *idx, const char *symname);
 void array_element_label(array_def *a, offset_t k, char *out, size_t cap);
 extern long zdiv_default_hits;
+extern double teems_zdiv_shift;
 void probe_col_label(PetscInt col, char *out, size_t cap);
 void probe_row_label(PetscInt row, char *out, size_t cap);
 void solve_x_check(const solve_real *x, PetscInt n, int doit);
