@@ -195,6 +195,39 @@ static int pos_lower(char *f, set_def *sets, quantifier *arSet, dim_t fdim, form
     }
     if (arg1[0]=='\0') { errmsg("Error: $POS needs an index, element or index expression argument (manual 11.5.6): %s\n",f); return 0; }
     dim_t setS=-1;
+    /* internal form from a lowered index comparison (manual 11.4.11):
+       "=other" / "<other" -- the position in the common set of this
+       side and the other, the larger of the two sets; "<" orders, so
+       that set must be intertemporal */
+    if (arg2[0]=='='||arg2[0]=='<') {
+      dim_t bs[2];
+      int sd,quoted[2];
+      char *sx[2]={arg1,arg2+1};
+      for (sd=0; sd<2; sd++) {
+        char *at=strchr(sx[sd],MAPMARK),*ix=sx[sd];
+        dim_t l;
+        quoted[sd]=(sx[sd][0]=='"');
+        if (quoted[sd]) continue;
+        if (at!=NULL) ix=at+1;
+        for (l=0; l<fdim; l++) if (strcmp(ix,arSet[l].index_name)==0) break;
+        if (l==fdim) { errmsg("Error: %s in a condition is not an index of the statement's quantifiers or sums (manual 11.4.11): %s\n",ix,f); return 0; }
+        bs[sd]=(dim_t)arSet[l].setid;
+        if (at!=NULL) {
+          dim_t m;
+          for (m=0; m<teems_nmap; m++) if ((size_t)(at-sx[sd])==strlen(teems_maps[m].mapname)&&strncmp(sx[sd],teems_maps[m].mapname,at-sx[sd])==0) break;
+          if (m==teems_nmap) { errmsg("Error: unknown mapping in the condition index expression %s\n",sx[sd]); return 0; }
+          bs[sd]=(dim_t)teems_maps[m].toset;
+        }
+      }
+      if (quoted[0]&&quoted[1]) { errmsg("Error: a condition compares two elements %s and %s (manual 11.4.11)\n",arg1,arg2+1); return 0; }
+      if (quoted[0]) setS=bs[1];
+      else if (quoted[1]) setS=bs[0];
+      else if (bs[0]==bs[1]||set_supset_slot(sets,bs[0],bs[1])>=0) setS=bs[1];
+      else if (set_supset_slot(sets,bs[1],bs[0])>=0) setS=bs[0];
+      else { errmsg("Error: a condition compares %s, over set %s, with %s, over set %s; one set must equal or be a declared subset of the other (manual 11.4.11)\n",arg1,sets[bs[0]].setname,arg2+1,sets[bs[1]].setname); return 0; }
+      if (arg2[0]=='<'&&!sets[setS].intertemp) { errmsg("Error: a condition orders %s and %s by position in set %s, which is not intertemporal; indices compare by <, >, <= and >= only over intertemporal sets (manual 11.4.11)\n",arg1,arg2+1,sets[setS].setname); return 0; }
+      strcpy(arg2,sets[setS].setname);
+    }
     if (arg2[0]!='\0') {
       for (setS=0; setS<teems_nset; setS++) if (strcmp(arg2,teems_sets[setS].setname)==0) break;
       if (setS==teems_nset) { errmsg("Error: $POS: %s is not a declared set (manual 11.5.6)\n",arg2); return 0; }
@@ -1528,6 +1561,19 @@ solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,
 
 
 
+/* end of the operand that opens s: the first operator in `stops`, or a
+   comma, outside argument braces. A comma ends it too: inside an IF or
+   MAX group the operand "4" of "x>y*4,1" ran on to swallow ",1". */
+static char *operand_stop(char *s, const char *stops) {
+  int d=0;
+  for (; *s!='\0'; s++) {
+    if (*s=='{') d++;
+    else if (*s=='}') d--;
+    else if (d==0&&(*s==','||strchr(stops,*s)!=NULL)) return s;
+  }
+  return NULL;
+}
+
 int formula_compile_pow(char *fomulain, set_def *sets,int npow,int ipar,array_def *coefs,offset_t ncof, array_def *vars,offset_t nvar,offset_t ncofele,sum_def *sum_cof,int totalsum,formula_op *ops,int *nops,quantifier *arSet,dim_t fdim) {
   int i,i1,ibar=0,index,j,j1,i5,p1;
   char *p=NULL;//,*p1=NULL,*p2=NULL,*p3=NULL,*p4=NULL;
@@ -1572,7 +1618,7 @@ int formula_compile_pow(char *fomulain, set_def *sets,int npow,int ipar,array_de
     while (fpart3[ibar] != '\0') {
       ibar++;
     }
-    p=strpbrk(fpart3,"^*/+-=<>");
+    p=operand_stop(fpart3,"^*/+-=<>");
     if(p==NULL)index=ibar;
     else index=p-fpart3;
     strncpy(var2, fpart3, index);
@@ -1668,7 +1714,7 @@ int formula_compile_muldiv(char *fomulain, set_def *sets,int nmul,int ipar,array
     while (fpart3[ibar] != '\0') {
       ibar++;
     }
-    p=strpbrk(fpart3,"*/+-=<>");
+    p=operand_stop(fpart3,"*/+-=<>");
     if(p==NULL)index=ibar;
     else index=p-fpart3;
     strncpy(var2, fpart3, index);
@@ -1764,7 +1810,7 @@ int formula_compile_addsub(char *fomulain, set_def *sets,int nplu,int ipar,array
     while (fpart3[ibar] != '\0') {
       ibar++;
     }
-    p=strpbrk(fpart3,"+-=<>");
+    p=operand_stop(fpart3,"+-=<>");
     if(p==NULL)index=ibar;
     else index=p-fpart3;
     strncpy(var2, fpart3, index);
@@ -1821,7 +1867,7 @@ int formula_compile_addsub(char *fomulain, set_def *sets,int nplu,int ipar,array
 
 int formula_compile_if(char *fomulain, set_def *sets,int nif,int ipar,array_def *coefs,offset_t ncof, array_def *vars,offset_t nvar,offset_t ncofele,sum_def *sum_cof,int totalsum,formula_op *ops,int *nops,quantifier *arSet,dim_t fdim) {
   char *p=NULL,*p1,*p3,var1[NAMESIZE],var2[NAMESIZE],var3[NAMESIZE];
-  int i,j1,j2,j3,l;//,varindex;
+  int i,j1,j2,l;//,varindex;
   p1=fomulain;
   p=strpbrk(p1,"=<>");
   if(p==NULL){
@@ -1850,14 +1896,14 @@ int formula_compile_if(char *fomulain, set_def *sets,int nif,int ipar,array_def 
           if(*p=='<')ops[*nops].Oper=OP_IF_LT;
           p++;
         }
+  /* the value follows the first comma outside the comparison's own
+     argument lists: X(i) > Y(i,j) read "j}" as the value */
   l=strlen(p);
-  j1=-1;j2=-1;j3=-1;
-  for(i=0;i<l;i++){
-    if(*(p+i)==',')j1=i;
-    if(*(p+i)=='}')j2=i;
-    if(*(p+i)=='{')j3=i;
-    if(j3>-1){ if(j1>-1&&j1>j2)break;
-    else if(j1>-1)break; }
+  j1=-1;
+  for(i=0,j2=0;i<l;i++){
+    if(p[i]=='{'||p[i]=='(')j2++;
+    else if(p[i]=='}'||p[i]==')')j2--;
+    else if(p[i]==','&&j2==0){ j1=i; break; }
   }
   if(j1<0){
     errmsg("Error: malformed if() in formula (missing comma before value): %s\n",fomulain);
@@ -2425,7 +2471,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
   char vname[NAMESIZE],sumsyntax[NAMESIZE],argu[NAMESIZE],tempset[NAMESIZE];
   char *readitem=NULL,*p=NULL;
   offset_t i,i1,i3,i4,l,l2=0,j=0,nsumele,dcountdim1[4*MAXVARDIM],ncond,nloops,logioper[MAXVARDIM],logi,logiantidim[MAXVARDIM][MAXVARDIM],logisup[MAXVARDIM][MAXVARDIM],logivarindx[MAXVARDIM],logivartype[MAXVARDIM];//m,
-  dim_t fdim,dcount,neqsign=0,varsupsetid[MAXVARDIM];
+  dim_t fdim,dcount,varsupsetid[MAXVARDIM];
   int nops=0,totalsum,sumcount=1,npow,nmul,ndiv,nplu,nmin,npar,sumindx,b=0;
   offset_t varantidim[MAXVARDIM],varsubset[MAXVARDIM],vararset[MAXVARDIM],varll[MAXVARDIM];
   solve_real zerodivide=0,cond[MAXVARDIM],eval;
@@ -2514,10 +2560,9 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
         strcpy(linecopy,line);
         teems_rand_statement(linecopy);
         totalsum=str_count_ci(line, "sum(");
-        neqsign=str_count_char(line, '=');
-        readitem = strtok(line,"=");
-        for(i=1; i<neqsign; i++)readitem = strtok(NULL,"=");
-        readitem = strtok(NULL,";");
+        /* operator counts size the op buffer: the whole statement, as
+           an IF or a lowered condition carries '=' of its own */
+        readitem=line;
         npow=str_count_char(readitem, '^');
         nmul=str_count_char(readitem, '*');
         ndiv=str_count_char(readitem, '/');
@@ -2606,6 +2651,18 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
               if (cc-c2-1>=NAMESIZE) { errmsg("Error: malformed quantifier (%s) in Formula: %s\n",grp,linecopy); MPI_Abort(PETSC_COMM_WORLD,1); }
               memcpy(tempset,c2+1,cc-c2-1);
               tempset[cc-c2-1]='\0';
+              /* AND/OR/NOT and index comparisons (manual 11.4.5, 11.4.11):
+                 one numeric test, (E)<>0 */
+              char qlow[TABREADLINE];
+              cond_unwrap(cond_s);
+              if (cond_needs_lower(cond_s,arSet,(dim_t)(i+1))) {
+                char ctx[TABREADLINE];
+                snprintf(ctx,sizeof(ctx),"Formula %.200s",linecopy);
+                qlow[0]='(';
+                if (!cond_lower_numeric(cond_s,qlow+1,sizeof(qlow)-8,arSet,(dim_t)(i+1),ctx)) MPI_Abort(PETSC_COMM_WORLD,1);
+                strcat(qlow,")<>0");
+                cond_s=qlow;
+              }
               /* the top-level comparison of the condition (manual 11.4.11) */
               for (p=cond_s; *p!='\0'; p++) {
                 if (*p=='('||*p=='{'||*p=='[') od++;
@@ -2688,6 +2745,14 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
                     while (isalnum((unsigned char)*q)||*q=='_'||*q=='@') q++;
                     if (*q=='\0') simple=1;
                     else if (*q=='('&&strchr(q+1,'(')==NULL&&strchr(q,')')==q+strlen(q)-1) simple=1;
+                  }
+                  /* the fast form reads a coefficient; a variable (PostSim)
+                     or anything else is evaluated as an expression */
+                  if (simple) {
+                    offset_t ci;
+                    size_t nl=(size_t)(q-lhs_s);
+                    for (ci=0; ci<ncof; ci++) if (strlen(coefs[ci].cofname)==nl&&strncmp(coefs[ci].cofname,lhs_s,nl)==0) break;
+                    if (ci==ncof) simple=0;
                   }
                 }
                 if (simple) {
@@ -3450,6 +3515,8 @@ static void upd_cond_extract(char *line, upd_conds *uc) {
       char *c;
       for (c=colon+1; c<close&&k<TABREADLINE-1; c++) if (*c!=' ') cond[k++]=*c;
       cond[k]='\0';
+      cond_unwrap(cond);
+      if (!cond_lower_stmt(cond,sizeof(cond),line,"an Update quantifier condition")) MPI_Abort(PETSC_COMM_WORLD,1);
       for (c=cond; *c!='\0'; c++) {
         if (*c=='('||*c=='['||*c=='{') od++;
         else if (*c==')'||*c==']'||*c=='}') od--;
@@ -4262,14 +4329,35 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
 /* general sum condition (tab_parse.c sum_cond_parse): compile both
    sides over the sum's frame (carried dims + the summed index last) */
 void sum_cond_general_compile(sum_def *sc, sum_cofcond *out, quantifier *frame, dim_t nframe, set_def *sets, array_def *coefs, offset_t ncof, array_def *vars, offset_t nvar, offset_t ncofele, sum_def *sum_cof, int totalsum) {
-  int sd;
+  int sd,op=sc->cond_genop;
+  char sidetext[2][TABREADLINE];
   out->gen=0;
+  out->ic=NULL;
   if (sc->cond_genop==0) return;
+  strcpy(sidetext[0],sc->cond_gen[0]);
+  strcpy(sidetext[1],sc->cond_gen[1]);
+  if (op==COND_DEFERRED) {
+    /* compound or index condition (manual 11.4.5, 11.4.11): positions
+       only when every side is an index, else one numeric expression */
+    char ctx[NAMESIZE+32];
+    icond ic;
+    snprintf(ctx,sizeof(ctx),"sum over %s",sc->sumindx);
+    if (icond_compile(sc->cond_gen[0],frame,nframe,sets,teems_set_elems,&ic,ctx)) {
+      out->ic=malloc(sizeof(icond));
+      memcpy(out->ic,&ic,sizeof(icond));
+      return;
+    }
+    if (!cond_lower_numeric(sc->cond_gen[0],sidetext[0]+1,sizeof(sidetext[0])-2,frame,nframe,ctx)) MPI_Abort(PETSC_COMM_WORLD,1);
+    sidetext[0][0]='(';
+    strcat(sidetext[0],")");
+    strcpy(sidetext[1],"0");
+    op=2;
+  }
   for (sd=0; sd<2; sd++) {
     char ctext[TABREADLINE];
     int cn;
     dim_t nops=0;
-    strcpy(ctext,sc->cond_gen[sd]);
+    strcpy(ctext,sidetext[sd]);
     /* the statement text was normalized as a set token: braces back to
        parentheses, then the expression normalization the body got */
     while (str_replace_char(ctext,'{','('));
@@ -4281,12 +4369,12 @@ void sum_cond_general_compile(sum_def *sc, sum_cofcond *out, quantifier *frame, 
     out->gops[sd]=calloc(cn,sizeof(formula_op));
     out->gcap[sd]=cn;
     if (!formula_compile(ctext,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,(formula_op *)out->gops[sd],&nops,frame,nframe)) {
-      errmsg("Error: cannot evaluate the sum condition side %s\n",sc->cond_gen[sd]);
+      errmsg("Error: cannot evaluate the sum condition side %s\n",sidetext[sd]);
       MPI_Abort(PETSC_COMM_WORLD,1);
     }
     out->gnops[sd]=nops;
   }
-  out->op=sc->cond_genop;
+  out->op=op;
   out->gen=1;
 }
 
@@ -4311,6 +4399,8 @@ void sum_cond_general_thread_free(const sum_cofcond *cc, void *own[2], int maste
 }
 
 void sum_cond_general_free(sum_cofcond *cc) {
+  free(cc->ic);
+  cc->ic=NULL;
   if (!cc->gen) return;
   free(cc->gops[0]); free(cc->gops[1]);
   cc->gops[0]=cc->gops[1]=NULL;
@@ -4428,6 +4518,7 @@ int sum_eval(char *formulain, char *commsyntax,set_def *sets,dim_t nset, set_ele
             /* coefficient-comparison condition (11.4.11; IF-survey gap 2) */
             if (cofcond.cofid>=0&&!sum_cofcond_test(&cofcond,elem_vals,arSet2,l1)) continue;
             arSet2[sum_cof[j].size].indx=l1;
+            if (cofcond.ic!=NULL&&!icond_eval((const icond *)cofcond.ic,arSet2,sets,set_elems)) continue;
             if (cofcond.gen&&!sum_cond_general_test(&cofcond,gown,elem_vals,sets,set_elems,sum_vals,arSet2,fdimsumcof,zerodivide)) continue;
             vval+=formula_eval(elem_vals,sets,set_elems,sum_vals,ops1,nops,arSet2,fdimsumcof,zerodivide);
           }
@@ -4538,6 +4629,7 @@ int sum_eval(char *formulain, char *commsyntax,set_def *sets,dim_t nset, set_ele
             /* coefficient-comparison condition (11.4.11; IF-survey gap 2) */
             if (cofcond.cofid>=0&&!sum_cofcond_test(&cofcond,elem_vals,arSet2,l1)) continue;
             arSet2[sum_cof[j].size].indx=l1;
+            if (cofcond.ic!=NULL&&!icond_eval((const icond *)cofcond.ic,arSet2,sets,set_elems)) continue;
             if (cofcond.gen&&!sum_cond_general_test(&cofcond,gown,elem_vals,sets,set_elems,sum_vals,arSet2,fdimsumcof,zerodivide)) continue;
             vval+=formula_eval(elem_vals,sets,set_elems,sum_vals,ops1,nops,arSet2,fdimsumcof,zerodivide);
           }
@@ -4714,6 +4806,8 @@ offset_t assertions_execute(char *fname,set_def *sets,dim_t nset,set_element *se
           break;
         }
         strcpy(condtxt,c);
+        cond_unwrap(condtxt);
+        if(!cond_lower_stmt(condtxt,sizeof(condtxt),linecopy,"an Assertion quantifier condition"))MPI_Abort(PETSC_COMM_WORLD,1);
         /* top-level comparison operator of the condition */
         {
           char *cq,*cright;
@@ -4746,7 +4840,7 @@ offset_t assertions_execute(char *fname,set_def *sets,dim_t nset,set_element *se
           leadlag_encode(resid);
           {
             int cnpow=str_count_char(resid,'^'),cnmul=str_count_char(resid,'*')+str_count_char(resid,'/');
-            int cnplu=str_count_char(resid,'+')+str_count_char(resid,'-'),cnpar=str_count_char(resid,'(')+str_count_char(resid,',');
+            int cnplu=str_count_char(resid,'+')+str_count_char(resid,'-'),cnpar=str_count_char(resid,'(')+str_count_char(resid,',')+str_count_ci(resid,"$pos");
             cond_ops[nq]=(formula_op *) calloc (cnpow+cnmul+cnplu+2*(cnpar+2),sizeof(formula_op));
           }
           cond_nops[nq]=0;

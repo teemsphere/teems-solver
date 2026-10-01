@@ -206,7 +206,10 @@ int formula_normalize(char *fomulain) {
   index=p1-fpart1;//ha_cgerevfind(fpart1,"(");
   fpart1[index]='\0';
   for(i=index-1; i>-1; i--) {
-    if(fpart1[i]=='+'||fpart1[i]=='-'||fpart1[i]=='*'||fpart1[i]=='/'||fpart1[i]=='['||fpart1[i]=='('||fpart1[i]==','||fpart1[i]=='^') {
+    /* a comparison or logical operator also opens a grouping bracket:
+       "x>(a*b)" read (a*b) as the argument list of a call named "" */
+    if(fpart1[i]=='+'||fpart1[i]=='-'||fpart1[i]=='*'||fpart1[i]=='/'||fpart1[i]=='['||fpart1[i]=='('||fpart1[i]==','||fpart1[i]=='^'
+       ||fpart1[i]=='<'||fpart1[i]=='>'||fpart1[i]=='='||fpart1[i]==COND_AND||fpart1[i]==COND_OR||fpart1[i]==COND_NOT) {
       break;
     }
   }
@@ -1685,7 +1688,7 @@ offset_t sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
              follows; a quoted element is not an index; and $POS(i,S)
              carries one index, its second argument names a set (TERM
              SIND2COM; potential-models round 3) */
-          if (strchr(p,'{')!=NULL||*p=='\"') continue;
+          if (strchr(p,'{')!=NULL||*p=='\"'||(strpbrk(p,"<>=&|`")!=NULL&&!(p-line2>=5&&str_ncmp_ci(p-5,"$pos",4)==0))) continue;
           if (p-line2>=5&&str_ncmp_ci(p-5,"$pos",4)==0) { char *cm=strchr(p,','); if (cm!=NULL) *cm='\0'; }
           strcpy(argu,p);
           strcat(argu,",");
@@ -1773,6 +1776,7 @@ offset_t sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
           }
         }
         l3=sum_cond_carry_rhs(&sum_cof[j],arSet,fdim,l3,interchar,sets);
+        l3=sum_cond_carry_idx(&sum_cof[j],arSet,fdim,l3,interchar,formulain,readitem,sets,nset);
         /* the token's index list is rebuilt from dimnames: the incremental
            appends above dropped the comma after a single-index group and
            wrote the sum index on the first branch ({dc,i0} for d,c,i0), and
@@ -1854,7 +1858,7 @@ offset_t sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
              follows; a quoted element is not an index; and $POS(i,S)
              carries one index, its second argument names a set (TERM
              SIND2COM; potential-models round 3) */
-          if (strchr(p,'{')!=NULL||*p=='\"') continue;
+          if (strchr(p,'{')!=NULL||*p=='\"'||(strpbrk(p,"<>=&|`")!=NULL&&!(p-line2>=5&&str_ncmp_ci(p-5,"$pos",4)==0))) continue;
           if (p-line2>=5&&str_ncmp_ci(p-5,"$pos",4)==0) { char *cm=strchr(p,','); if (cm!=NULL) *cm='\0'; }
           strcpy(argu,p);
           strcat(argu,",");
@@ -1942,6 +1946,7 @@ offset_t sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
           }
         }
         l3=sum_cond_carry_rhs(&sum_cof[j],arSet,fdim,l3,interchar,sets);
+        l3=sum_cond_carry_idx(&sum_cof[j],arSet,fdim,l3,interchar,formulain,readitem,sets,nset);
         /* the token's index list is rebuilt from dimnames: the incremental
            appends above dropped the comma after a single-index group and
            wrote the sum index on the first branch ({dc,i0} for d,c,i0), and
@@ -2615,6 +2620,32 @@ void sum_cond_parse(char *settok, const char *sumindx, int *cond_mapid, char *co
   if (colon==NULL) return;
   *colon='\0';
   lhs=colon+1;
+  cond_unwrap(lhs);
+  /* AND/OR/NOT and index comparisons (s<>d, MAP(h)<>c; manual 11.4.5,
+     11.4.11) keep their text and resolve against the frame: an index
+     condition when every side is an index, a mapped index or an
+     element, else one numeric expression */
+  if (cond_is_deferred(lhs,sumindx)) {
+    if (sc==NULL) {
+      if (strlen(lhs)>=NAMESIZE) {
+        errmsg("Error: sum condition '%s' on a sum containing variables is too long (at most %d characters)\n",lhs,NAMESIZE-1);
+        MPI_Abort(PETSC_COMM_WORLD,1);
+        return;
+      }
+      *cond_mapid=-1;
+      strcpy(cond_rhs,lhs);
+      return;
+    }
+    if (strlen(lhs)>=sizeof(sc->cond_gen[0])) {
+      errmsg("Error: sum condition '%s' is too long\n",lhs);
+      MPI_Abort(PETSC_COMM_WORLD,1);
+      return;
+    }
+    strcpy(sc->cond_gen[0],lhs);
+    sc->cond_gen[1][0]='\0';
+    sc->cond_genop=COND_DEFERRED;
+    return;
+  }
   eq=strchr(lhs,'=');
   if (eq!=NULL) {
     char lhscpy[NAMESIZE*2];
@@ -2750,6 +2781,7 @@ void sum_cond_coef_resolve(sum_def *sc, quantifier *frame, dim_t nframe, set_def
   out->cofid=-1;
   out->gen=0;
   out->gops[0]=out->gops[1]=NULL;
+  out->ic=NULL;
   if (sc->cond_coef[0]=='\0') return;
   for (ci=0; ci<ncof; ci++) if (strcmp(coefs[ci].cofname,sc->cond_coef)==0) break;
   if (ci==ncof) {
@@ -2845,7 +2877,7 @@ void sum_cond_rhs_resolve(int cond_mapid, const char *cond_rhs, quantifier *fram
   *condpos=-1;
   *condfix=-1;
   *condss=0;
-  if (cond_mapid==0) return;
+  if (cond_mapid<=0) return;
   for (l=0; l<nframe; l++) if (strcmp(cond_rhs,frame[l].index_name)==0) {
       /* the quantifier may range over the codomain or a declared
          subset of it (GTAP-AEZ: (all,a,FORSLCOV) against a mapping
@@ -2874,7 +2906,7 @@ void sum_cond_rhs_resolve(int cond_mapid, const char *cond_rhs, quantifier *fram
    summed set must be the mapping's domain exactly (the M2 exact-match
    contract). */
 void sum_cond_domain_check(sum_def *sc, set_def *sets) {
-  if (sc->cond_mapid==0) return;
+  if (sc->cond_mapid<=0) return;
   if ((offset_t)teems_maps[sc->cond_mapid-1].fromset!=sc->sumsetid) {
     errmsg("Error: the condition on mapping %s sums over set %s, not the mapping's domain set %s\n",teems_maps[sc->cond_mapid-1].mapname,sets[sc->sumsetid].setname,sets[teems_maps[sc->cond_mapid-1].fromset].setname);
     MPI_Abort(PETSC_COMM_WORLD,1);
@@ -2890,7 +2922,7 @@ void sum_cond_domain_check(sum_def *sc, set_def *sets) {
    carried-dim count. */
 dim_t sum_cond_carry_rhs(sum_def *sc, quantifier *arSet, dim_t fdim, dim_t l3, char *interchar, set_def *sets) {
   dim_t l4,l5;
-  if (sc->cond_mapid==0) return l3;
+  if (sc->cond_mapid<=0) return l3;
   for (l5=0; l5<fdim-1; l5++) if (strcmp(sc->cond_rhs,arSet[l5].index_name)==0) break;
   if (l5>=fdim-1) return l3; /* not a quantifier (scalar statements have fdim 0): codomain element, resolved at eval */
   if (set_supset_slot(sets,arSet[l5].setid,(dim_t)teems_maps[sc->cond_mapid-1].toset)<0) {
@@ -2903,6 +2935,706 @@ dim_t sum_cond_carry_rhs(sum_def *sc, quantifier *arSet, dim_t fdim, dim_t l3, c
   sc->setid[l3]=arSet[l5].setid;
   strcat(interchar,sc->cond_rhs);
   return l3+1;
+}
+
+/* Logical operators AND, OR and NOT (manual 11.4.5) become the single
+   characters COND_AND, COND_OR and COND_NOT while the statement still has
+   its spaces: every reader strips blanks, after which "x>0 and y>0"
+   cannot be split. Whole words outside quotes only. */
+static int logic_namec(char c) {
+  return isalnum((unsigned char)c)||c=='_'||c=='@'||c==MAPMARK||c=='$'||c=='?'||c=='.';
+}
+
+int tab_logicops_normalize(char *line, size_t cap) {
+  char out[TABREADLINE];
+  size_t o=0,n=strlen(line),i;
+  int inq=0;
+  if (n>=sizeof(out)) return -1;
+  for (i=0; i<n; ) {
+    char c=line[i];
+    if (c=='"') { inq=!inq; out[o++]=c; i++; continue; }
+    if (!inq&&(i==0||!logic_namec(line[i-1]))) {
+      static const char *w[3]={"and","or","not"};
+      static const char sym[3]={COND_AND,COND_OR,COND_NOT};
+      int k;
+      for (k=0; k<3; k++) {
+        size_t wl=strlen(w[k]);
+        if (strncasecmp(line+i,w[k],wl)==0&&!logic_namec(line[i+wl])) break;
+      }
+      if (k<3) {
+        if (o+3>=sizeof(out)) return -1;
+        out[o++]=' ';
+        out[o++]=sym[k];
+        out[o++]=' ';
+        i+=strlen(w[k]);
+        continue;
+      }
+    }
+    if (o+1>=sizeof(out)) return -1;
+    out[o++]=c;
+    i++;
+  }
+  out[o]='\0';
+  if (o>=cap) return -1;
+  strcpy(line,out);
+  return 0;
+}
+
+/* the boolean structure of a condition (spaces stripped): RPN over leaf
+   spans, NOT binding like unary minus, AND like '*', OR like '+' */
+typedef struct {
+  const char *s;
+  int pos,err,nleaf,nprog;
+  int lb[ICOND_MAXLEAF],le[ICOND_MAXLEAF];
+  signed char prog[ICOND_MAXPROG];
+} cond_tree;
+
+static int ct_open(char c) { return c=='('||c=='['||c=='{'; }
+static int ct_shut(char c) { return c==')'||c==']'||c=='}'; }
+
+static int ct_match(const char *s, int i) {
+  int d=0,q=0;
+  for (; s[i]!='\0'; i++) {
+    if (s[i]=='"') { q=!q; continue; }
+    if (q) continue;
+    if (ct_open(s[i])) d++;
+    else if (ct_shut(s[i])) { d--; if (d==0) return i; }
+  }
+  return -1;
+}
+
+/* a top-level comparison or logical operator in s[b,e) */
+static int ct_is_cond(const char *s, int b, int e) {
+  int d=0,q=0,i;
+  for (i=b; i<e; i++) {
+    if (s[i]=='"') { q=!q; continue; }
+    if (q) continue;
+    if (ct_open(s[i])) d++;
+    else if (ct_shut(s[i])) d--;
+    else if (d==0&&strchr("<>=&|`",s[i])!=NULL) return 1;
+  }
+  return 0;
+}
+
+static void ct_emit(cond_tree *t, int v) {
+  if (t->nprog>=ICOND_MAXPROG) { t->err=1; return; }
+  t->prog[t->nprog++]=(signed char)v;
+}
+
+static void ct_or(cond_tree *t);
+
+static void ct_prim(cond_tree *t) {
+  const char *s=t->s;
+  int i=t->pos,j,d=0,q=0;
+  if (ct_open(s[i])) {
+    int c=ct_match(s,i);
+    if (c>0&&(s[c+1]=='\0'||s[c+1]==COND_AND||s[c+1]==COND_OR||ct_shut(s[c+1]))&&ct_is_cond(s,i+1,c)) {
+      t->pos=i+1;
+      ct_or(t);
+      if (t->pos!=c) t->err=1;
+      t->pos=c+1;
+      return;
+    }
+  }
+  for (j=i; s[j]!='\0'; j++) {
+    if (s[j]=='"') { q=!q; continue; }
+    if (q) continue;
+    if (ct_open(s[j])) d++;
+    else if (ct_shut(s[j])) { if (d==0) break; d--; }
+    else if (d==0&&(s[j]==COND_AND||s[j]==COND_OR)) break;
+  }
+  if (j==i||t->nleaf>=ICOND_MAXLEAF) { t->err=1; t->pos=j; return; }
+  t->lb[t->nleaf]=i;
+  t->le[t->nleaf]=j;
+  ct_emit(t,t->nleaf);
+  t->nleaf++;
+  t->pos=j;
+}
+
+static void ct_not(cond_tree *t) {
+  if (t->s[t->pos]==COND_NOT) {
+    t->pos++;
+    ct_not(t);
+    ct_emit(t,-3);
+  } else ct_prim(t);
+}
+
+static void ct_and(cond_tree *t) {
+  ct_not(t);
+  while (!t->err&&t->s[t->pos]==COND_AND) {
+    t->pos++;
+    ct_not(t);
+    ct_emit(t,-1);
+  }
+}
+
+static void ct_or(cond_tree *t) {
+  ct_and(t);
+  while (!t->err&&t->s[t->pos]==COND_OR) {
+    t->pos++;
+    ct_and(t);
+    ct_emit(t,-2);
+  }
+}
+
+static int ct_parse(const char *s, cond_tree *t, const char *ctx) {
+  memset(t,0,sizeof(*t));
+  t->s=s;
+  ct_or(t);
+  if (t->err||s[t->pos]!='\0') {
+    errmsg("Error: malformed condition '%s' (AND, OR and NOT join comparisons; at most %d comparisons; manual 11.4.5) in %s\n",s,ICOND_MAXLEAF,ctx);
+    MPI_Abort(PETSC_COMM_WORLD,1);
+    return -1;
+  }
+  return 0;
+}
+
+/* the RPN of a condition for callers outside this file (set builders) */
+int cond_tree_rpn(const char *s, int *nleaf, int *lb, int *le, signed char *prog, int *nprog, const char *ctx) {
+  cond_tree t;
+  if (ct_parse(s,&t,ctx)<0) return -1;
+  *nleaf=t.nleaf;
+  *nprog=t.nprog;
+  memcpy(lb,t.lb,t.nleaf*sizeof(int));
+  memcpy(le,t.le,t.nleaf*sizeof(int));
+  memcpy(prog,t.prog,t.nprog);
+  return 0;
+}
+
+/* a condition written inside one more pair of brackets, "(MAP(k)=r)" or
+   "((A=t) and (B=r))", is that condition (manual 11.4.5) */
+void cond_unwrap(char *s) {
+  for (;;) {
+    size_t n=strlen(s);
+    int c;
+    while (n>0&&s[n-1]==' ') s[--n]='\0';
+    while (s[0]==' ') { memmove(s,s+1,n); n--; }
+    if (n<2||!ct_open(s[0])) return;
+    c=ct_match(s,0);
+    if (c!=(int)n-1||!ct_is_cond(s,1,c)) return;
+    s[n-1]='\0';
+    memmove(s,s+1,n-1);
+  }
+}
+
+/* split leaf s[b,e) at its top-level comparison: sides in a and c */
+static int ct_leaf_split(const char *s, int b, int e, char *a, char *c, size_t cap, int *op) {
+  int d=0,q=0,i,ol;
+  for (i=b; i<e; i++) {
+    if (s[i]=='"') { q=!q; continue; }
+    if (q) continue;
+    if (ct_open(s[i])) d++;
+    else if (ct_shut(s[i])) d--;
+    else if (d==0&&(s[i]=='<'||s[i]=='>'||s[i]=='=')) break;
+  }
+  if (i>=e||i==b) return -1;
+  if (s[i]=='<'&&s[i+1]=='>') { *op=2; ol=2; }
+  else if (s[i]=='>'&&s[i+1]=='=') { *op=5; ol=2; }
+  else if (s[i]=='<'&&s[i+1]=='=') { *op=6; ol=2; }
+  else if (s[i]=='=') { *op=1; ol=1; }
+  else if (s[i]=='>') { *op=3; ol=1; }
+  else { *op=4; ol=1; }
+  if (i+ol>=e||(size_t)(i-b)>=cap||(size_t)(e-i-ol)>=cap) return -1;
+  memcpy(a,s+b,i-b);
+  a[i-b]='\0';
+  memcpy(c,s+i+ol,e-i-ol);
+  c[e-i-ol]='\0';
+  return 0;
+}
+
+enum { CS_NUM=0, CS_IDX, CS_MAP, CS_QUOTE };
+
+/* what one side of a comparison is: a quantifier index of the frame,
+   a mapping of one, a quoted element, or a numeric expression */
+static int cond_side_kind(const char *x, quantifier *frame, dim_t nframe, int *slot, int *mp) {
+  char nm[NAMESIZE],ix[NAMESIZE];
+  const char *at;
+  size_t n=strlen(x);
+  dim_t l,m;
+  *slot=-1;
+  *mp=0;
+  if (n>=2&&x[0]=='"'&&x[n-1]=='"'&&strchr(x+1,'"')==x+n-1) return CS_QUOTE;
+  at=strchr(x,MAPMARK);
+  if (at==NULL) at=strpbrk(x,"({[");
+  if (at!=NULL) {
+    size_t k=at-x,e;
+    if (k==0||k>=NAMESIZE) return CS_NUM;
+    memcpy(nm,x,k);
+    nm[k]='\0';
+    if (*at==MAPMARK) e=strlen(at+1);
+    else { if (!ct_shut(x[n-1])||ct_match(x,(int)k)!=(int)n-1) return CS_NUM; e=n-k-2; }
+    if (e==0||e>=NAMESIZE) return CS_NUM;
+    memcpy(ix,at+1,e);
+    ix[e]='\0';
+    for (m=0; m<teems_nmap; m++) if (strcmp(nm,teems_maps[m].mapname)==0) break;
+    if (m==teems_nmap) return CS_NUM;
+    for (l=0; l<nframe; l++) if (strcmp(ix,frame[l].index_name)==0) break;
+    if (l==nframe) return CS_NUM;
+    *slot=(int)l;
+    *mp=(int)m+1;
+    return CS_MAP;
+  }
+  for (l=0; l<nframe; l++) if (strcmp(x,frame[l].index_name)==0) {
+      *slot=(int)l;
+      return CS_IDX;
+    }
+  return CS_NUM;
+}
+
+/* a bare name compared with an index that is not itself an index is an
+   element: the preprocess unquotes `= "ele"` in conditions, and an index
+   compares only with an index or an element (manual 11.4.11) */
+static void cond_bare_element(char *x, size_t cap, int *k, int other) {
+  size_t n=strlen(x),i;
+  if (*k!=CS_NUM||(other!=CS_IDX&&other!=CS_MAP)||n==0||n+3>cap) return;
+  for (i=0; i<n; i++) if (!isalnum((unsigned char)x[i])&&x[i]!='_'&&x[i]!='@') return;
+  if (isdigit((unsigned char)x[0])) return;
+  memmove(x+1,x,n+1);
+  x[0]='"';
+  x[n+1]='"';
+  x[n+2]='\0';
+  *k=CS_QUOTE;
+}
+
+static void cond_leaf_kinds(char *a, char *c, size_t cap, quantifier *frame, dim_t nframe, int *ka, int *kc, int *sa, int *sc2, int *ma, int *mc) {
+  *ka=cond_side_kind(a,frame,nframe,sa,ma);
+  *kc=cond_side_kind(c,frame,nframe,sc2,mc);
+  cond_bare_element(a,cap,ka,*kc);
+  cond_bare_element(c,cap,kc,*ka);
+}
+
+/* the common set of a comparison (manual 11.4.11): one side's set must
+   equal, or be a declared subset of, the other side's */
+static dim_t cond_common_set(dim_t a, dim_t b, set_def *sets, const char *cond, const char *ctx) {
+  if (a==b||set_supset_slot(sets,a,b)>=0) return b;
+  if (set_supset_slot(sets,b,a)>=0) return a;
+  errmsg("Error: the condition %s compares an index over set %s with one over set %s; one set must equal or be a declared subset of the other (manual 11.4.11) in %s\n",cond,sets[a].setname,sets[b].setname,ctx);
+  MPI_Abort(PETSC_COMM_WORLD,1);
+  return a;
+}
+
+static void quote_strip(const char *x, char *el) {
+  int k=0;
+  for (; *x!='\0'&&k<NAMESIZE-1; x++) if (*x!='"') el[k++]=(char)tolower((unsigned char)*x);
+  el[k]='\0';
+}
+
+/* Compile an index condition against an evaluation frame. Returns 1 when
+   every comparison is between indices, mapped indices and elements, 0
+   when some side is a numeric expression (the caller evaluates it as
+   numbers); contract violations are named fatals. */
+int icond_compile(const char *cond, quantifier *frame, dim_t nframe, set_def *sets, set_element *set_elems, icond *out, const char *ctx) {
+  cond_tree t;
+  int k,sd;
+  char side[2][TABREADLINE];
+  if (ct_parse(cond,&t,ctx)<0) return 0;
+  memset(out,0,sizeof(*out));
+  for (k=0; k<t.nleaf; k++) {
+    int op,kind[2],slot[2],mp[2];
+    if (ct_leaf_split(cond,t.lb[k],t.le[k],side[0],side[1],sizeof(side[0]),&op)<0) {
+      errmsg("Error: the condition %.*s has no comparison (=, <>, <, >, <=, >=; manual 11.4.5) in %s\n",t.le[k]-t.lb[k],cond+t.lb[k],ctx);
+      MPI_Abort(PETSC_COMM_WORLD,1);
+      return 0;
+    }
+    cond_leaf_kinds(side[0],side[1],sizeof(side[0]),frame,nframe,&kind[0],&kind[1],&slot[0],&slot[1],&mp[0],&mp[1]);
+    if (kind[0]==CS_NUM||kind[1]==CS_NUM) return 0;
+  }
+  for (k=0; k<t.nleaf; k++) {
+    icond_leaf *lf=&out->leaf[k];
+    int op,kind[2],slot[2],mp[2];
+    dim_t base[2]={0,0},S;
+    ct_leaf_split(cond,t.lb[k],t.le[k],side[0],side[1],sizeof(side[0]),&op);
+    cond_leaf_kinds(side[0],side[1],sizeof(side[0]),frame,nframe,&kind[0],&kind[1],&slot[0],&slot[1],&mp[0],&mp[1]);
+    if (kind[0]==CS_QUOTE&&kind[1]==CS_QUOTE) {
+      errmsg("Error: the condition %s=%s compares two elements (manual 11.4.11) in %s\n",side[0],side[1],ctx);
+      MPI_Abort(PETSC_COMM_WORLD,1);
+      return 0;
+    }
+    lf->op=op;
+    for (sd=0; sd<2; sd++) {
+      lf->slot[sd]=-1;
+      lf->map[sd]=0;
+      lf->dss[sd]=0;
+      lf->ss[sd]=0;
+      if (kind[sd]==CS_QUOTE) continue;
+      lf->slot[sd]=slot[sd];
+      lf->st0[sd]=(dim_t)frame[slot[sd]].setid;
+      lf->st1[sd]=lf->st0[sd];
+      if (kind[sd]==CS_MAP) {
+        map_def *md=&teems_maps[mp[sd]-1];
+        dim_t ds=set_supset_slot(sets,lf->st0[sd],(dim_t)md->fromset);
+        if (ds<0) {
+          errmsg("Error: the index of mapping %s in the condition %s ranges over set %s, which is not the mapping's domain set %s or a declared subset of it, in %s\n",md->mapname,cond,sets[lf->st0[sd]].setname,sets[md->fromset].setname,ctx);
+          MPI_Abort(PETSC_COMM_WORLD,1);
+          return 0;
+        }
+        if (!md->has_values) {
+          errmsg("Error: mapping %s is used (in a condition) before a Formula has assigned all of its values (manual 10.13.1/11.9.1) in %s\n",md->mapname,ctx);
+          MPI_Abort(PETSC_COMM_WORLD,1);
+          return 0;
+        }
+        md->used=true;
+        lf->map[sd]=mp[sd];
+        lf->dss[sd]=ds;
+        lf->st1[sd]=(dim_t)md->toset;
+      }
+      base[sd]=lf->st1[sd];
+    }
+    if (kind[0]!=CS_QUOTE&&kind[1]!=CS_QUOTE) S=cond_common_set(base[0],base[1],sets,cond,ctx);
+    else S=(kind[0]==CS_QUOTE)?base[1]:base[0];
+    if (op>2&&!sets[S].intertemp) {
+      errmsg("Error: the condition %s orders positions in set %s, which is not intertemporal; indices compare by <, >, <= and >= only over intertemporal sets (manual 11.4.11) in %s\n",cond,sets[S].setname,ctx);
+      MPI_Abort(PETSC_COMM_WORLD,1);
+      return 0;
+    }
+    for (sd=0; sd<2; sd++) {
+      if (kind[sd]==CS_QUOTE) {
+        char el[NAMESIZE];
+        dim_t e;
+        quote_strip(side[sd],el);
+        for (e=0; e<sets[S].size; e++) if (strcmp(el,set_elems[sets[S].offset+e].setele)==0) break;
+        if (e==sets[S].size) {
+          errmsg("Error: %s in the condition %s is not an element of set %s (manual 11.4.11) in %s\n",el,cond,sets[S].setname,ctx);
+          MPI_Abort(PETSC_COMM_WORLD,1);
+          return 0;
+        }
+        lf->fix[sd]=(offset_t)e;
+      } else lf->ss[sd]=set_supset_slot(sets,lf->st1[sd],S);
+    }
+  }
+  out->nleaf=t.nleaf;
+  out->nprog=t.nprog;
+  memcpy(out->prog,t.prog,t.nprog);
+  return 1;
+}
+
+static inline offset_t icond_side(const icond_leaf *lf, int sd, const quantifier *frame, const set_def *sets, const set_element *set_elems) {
+  offset_t p;
+  if (lf->slot[sd]<0) return lf->fix[sd];
+  p=(offset_t)frame[lf->slot[sd]].indx;
+  if (lf->map[sd]>0) {
+    if (lf->dss[sd]>0) p=(offset_t)set_elems[sets[lf->st0[sd]].offset+p].superset_pos[lf->dss[sd]];
+    p=(offset_t)teems_maps[lf->map[sd]-1].values[p];
+  }
+  if (lf->ss[sd]>0) p=(offset_t)set_elems[sets[lf->st1[sd]].offset+p].superset_pos[lf->ss[sd]];
+  return p;
+}
+
+int icond_eval(const icond *ic, const quantifier *frame, const set_def *sets, const set_element *set_elems) {
+  int st[ICOND_MAXPROG],n=0,k;
+  for (k=0; k<ic->nprog; k++) {
+    int v=ic->prog[k];
+    if (v>=0) {
+      const icond_leaf *lf=&ic->leaf[v];
+      offset_t a=icond_side(lf,0,frame,sets,set_elems),b=icond_side(lf,1,frame,sets,set_elems);
+      int r=0;
+      switch (lf->op) {
+      case 1: r=(a==b); break;
+      case 2: r=(a!=b); break;
+      case 3: r=(a>b); break;
+      case 4: r=(a<b); break;
+      case 5: r=(a>=b); break;
+      case 6: r=(a<=b); break;
+      }
+      st[n++]=r;
+    } else if (v==-3) st[n-1]=!st[n-1];
+    else {
+      n--;
+      st[n-1]=(v==-1)?(st[n-1]&&st[n]):(st[n-1]||st[n]);
+    }
+  }
+  return st[0];
+}
+
+/* an expression that is more than one operand: an operator at depth 0
+   (a leading sign included) */
+static int ct_compound(const char *x) {
+  int d=0,q=0,i;
+  for (i=0; x[i]!='\0'; i++) {
+    if (x[i]=='"') { q=!q; continue; }
+    if (q) continue;
+    if (ct_open(x[i])) d++;
+    else if (ct_shut(x[i])) d--;
+    else if (d==0&&strchr("+-*/^",x[i])!=NULL) {
+      if ((x[i]=='+'||x[i]=='-')&&i>0&&(x[i-1]=='e'||x[i-1]=='E')&&isdigit((unsigned char)x[0])) continue;
+      return 1;
+    }
+  }
+  return 0;
+}
+
+/* A condition as one number, 1 where it holds and 0 elsewhere, for the
+   formula engine: a comparison is IF(a op b,1), AND a product, OR MAX,
+   NOT 1-x. A comparison of indices compares their positions in the
+   common set ($POS with the internal second argument =other or <other
+   for an ordering, resolved by pos_lower against the frame). */
+int cond_lower_numeric(const char *cond, char *out, size_t cap, quantifier *frame, dim_t nframe, const char *ctx) {
+  cond_tree t;
+  char *stk[ICOND_MAXPROG];
+  int n=0,k,ok=1;
+  static const char *ops[7]={"","=","<>",">","<",">=","<="};
+  if (ct_parse(cond,&t,ctx)<0) return 0;
+  for (k=0; k<t.nprog&&ok; k++) {
+    int v=t.prog[k];
+    char *e=(char *)malloc(TABREADLINE);
+    if (e==NULL) { ok=0; break; }
+    if (v>=0) {
+      char a[TABREADLINE],c[TABREADLINE];
+      int op,ka,kc,sa,sc2,ma,mc,w;
+      if (ct_leaf_split(cond,t.lb[v],t.le[v],a,c,sizeof(a),&op)<0) {
+        errmsg("Error: the condition %.*s has no comparison (=, <>, <, >, <=, >=; manual 11.4.5) in %s\n",t.le[v]-t.lb[v],cond+t.lb[v],ctx);
+        MPI_Abort(PETSC_COMM_WORLD,1);
+      }
+      cond_leaf_kinds(a,c,sizeof(a),frame,nframe,&ka,&kc,&sa,&sc2,&ma,&mc);
+      if (ka!=CS_NUM&&kc!=CS_NUM) {
+        char m=(op>2)?'<':'=';
+        w=snprintf(e,TABREADLINE,"if($pos(%s,%c%s)%s$pos(%s,%c%s),1)",a,m,c,ops[op],c,m,a);
+      } else {
+        int pa=ct_compound(a),pc=ct_compound(c);
+        w=snprintf(e,TABREADLINE,"if(%s%s%s%s%s%s%s,1)",pa?"(":"",a,pa?")":"",ops[op],pc?"(":"",c,pc?")":"");
+      }
+      if (w>=TABREADLINE) ok=0;
+    } else if (v==-3) {
+      if (snprintf(e,TABREADLINE,"(1-%s)",stk[n-1])>=TABREADLINE) ok=0;
+      free(stk[n-1]);
+      n--;
+    } else {
+      if (snprintf(e,TABREADLINE,(v==-1)?"(%s*%s)":"max(%s,%s)",stk[n-2],stk[n-1])>=TABREADLINE) ok=0;
+      free(stk[n-2]);
+      free(stk[n-1]);
+      n-=2;
+    }
+    stk[n++]=e;
+  }
+  if (ok&&n==1&&strlen(stk[0])<cap) strcpy(out,stk[0]);
+  else ok=0;
+  for (k=0; k<n; k++) free(stk[k]);
+  if (!ok) {
+    errmsg("Error: the condition %s is too long to evaluate in %s\n",cond,ctx);
+    MPI_Abort(PETSC_COMM_WORLD,1);
+  }
+  return ok;
+}
+
+/* does a condition need the condition-tree route: AND/OR/NOT, or a
+   comparison whose sides are bare names (an index compared with an
+   index or element, s<>d, MAP(i)<>c) that the single-comparison forms
+   do not cover */
+int cond_is_deferred(const char *cond, const char *sumindx) {
+  cond_tree t;
+  char a[TABREADLINE],c[TABREADLINE],*endp;
+  int op,mp=0;
+  if (strchr(cond,COND_AND)!=NULL||strchr(cond,COND_OR)!=NULL||strchr(cond,COND_NOT)!=NULL) return 1;
+  {
+    /* an IF in the condition (IF[X>0,1] > 0) is an expression, not a
+       coefficient with an argument list */
+    const char *f=cond;
+    while ((f=strstr(f,"if"))!=NULL) {
+      if ((f==cond||!logic_namec(f[-1]))&&ct_open(f[2])) return 1;
+      f+=2;
+    }
+  }
+  memset(&t,0,sizeof(t));
+  if (ct_leaf_split(cond,0,(int)strlen(cond),a,c,sizeof(a),&op)<0) return 0;
+  strtod(c,&endp);
+  if (endp!=c&&*endp=='\0') return 0;
+  if (strpbrk(a,"({[")!=NULL||strpbrk(c,"({[")!=NULL) return 0;
+  if (op==1&&strchr(a,MAPMARK)!=NULL) {
+    char cp[TABREADLINE];
+    strcpy(cp,a);
+    if (strcmp(mapping_token_split(cp,&mp),sumindx)==0) return 0;
+  }
+  return 1;
+}
+
+/* a condition the single-comparison readers cannot take: AND/OR/NOT,
+   or a comparison of two indices or of an index with an element */
+int cond_needs_lower(const char *cond, quantifier *frame, dim_t nframe) {
+  char a[TABREADLINE],c[TABREADLINE];
+  int op,ka,kc,sa,sc2,ma,mc;
+  if (strchr(cond,COND_AND)!=NULL||strchr(cond,COND_OR)!=NULL||strchr(cond,COND_NOT)!=NULL) return 1;
+  if (ct_leaf_split(cond,0,(int)strlen(cond),a,c,sizeof(a),&op)<0) return 0;
+  cond_leaf_kinds(a,c,sizeof(a),frame,nframe,&ka,&kc,&sa,&sc2,&ma,&mc);
+  return ka!=CS_NUM&&kc!=CS_NUM;
+}
+
+/* the index names a statement declares: quantifiers (all,i,S) and the
+   indices of SUM/PROD/MAXS/MINS (manual 11.3, 11.4.3) */
+static dim_t stmt_index_names(const char *t, quantifier *names, dim_t cap) {
+  static const char *kw[5]={"(all","sum","prod","maxs","mins"};
+  dim_t n=0;
+  const char *p;
+  int k;
+  for (k=0; k<5; k++) {
+    size_t kl=strlen(kw[k]);
+    for (p=t; (p=strstr(p,kw[k]))!=NULL; p+=kl) {
+      const char *q=p+kl;
+      int j=0;
+      if (k>0&&p>t&&logic_namec(p[-1])) continue;
+      while (*q==' ') q++;
+      if (k==0) { if (*q!=',') continue; }
+      else if (!ct_open(*q)) continue;
+      q++;
+      while (*q==' ') q++;
+      if (n>=cap) return n;
+      while (logic_namec(*q)&&*q!=MAPMARK&&j<NAMESIZE-1) names[n].index_name[j++]=*q++;
+      names[n].index_name[j]='\0';
+      if (j>0) n++;
+    }
+  }
+  return n;
+}
+
+/* lower one cut-out condition in place to (E)<>0 when it needs it,
+   the statement text supplying the index names */
+int cond_lower_stmt(char *cond, size_t cap, const char *stmt, const char *ctx) {
+  quantifier names[4*MAXVARDIM];
+  dim_t n=stmt_index_names(stmt,names,4*MAXVARDIM);
+  char e[TABREADLINE];
+  if (!cond_needs_lower(cond,names,n)) return 1;
+  if (!cond_lower_numeric(cond,e,sizeof(e),names,n,ctx)) return 0;
+  if (strlen(e)+6>=cap) { errmsg("Error: condition too long after lowering (%s): %s\n",ctx,cond); return 0; }
+  sprintf(cond,"(%s)<>0",e);
+  return 1;
+}
+
+/* Lower the IF conditions of one statement line that are compound or
+   compare indices (manual 11.4.5, 11.4.7, 11.4.11) to (E)<>0, E the
+   condition as one number (cond_lower_numeric); the statement's index
+   names stand in for the frame, which pos_lower resolves later. Other
+   IFs are left to formula_compile_if. Runs on the preprocessed TAB,
+   before any reader sizes its op buffers from the text. */
+int cond_text_lower(char *text, size_t cap, quantifier *frame, dim_t nframe, const char *ctx) {
+  quantifier names[4*MAXVARDIM];
+  char *p=text;
+  if (frame==NULL) {
+    frame=names;
+    nframe=stmt_index_names(text,names,4*MAXVARDIM);
+  }
+  while ((p=strstr(p,"if"))!=NULL) {
+    int b=(int)(p-text),o=b+2,c,d=0,q=0,i,k=0;
+    char cond[TABREADLINE],e[TABREADLINE];
+    if (b>0&&logic_namec(text[b-1])) { p+=2; continue; }
+    while (text[o]==' ') o++;
+    if (!ct_open(text[o])) { p+=2; continue; }
+    c=ct_match(text,o);
+    if (c<0) return 1;
+    for (i=o+1; i<c; i++) {
+      if (text[i]=='"') { q=!q; continue; }
+      if (q) continue;
+      if (ct_open(text[i])) d++;
+      else if (ct_shut(text[i])) d--;
+      else if (d==0&&text[i]==',') break;
+    }
+    if (i>=c||i-o-1>=(int)sizeof(cond)) { p+=2; continue; }
+    {
+      /* IF(condition, value): a second comma at depth 0 is a third
+         argument (manual 11.4.6) */
+      int dd=0,qq=0,j2;
+      for (j2=i+1; j2<c; j2++) {
+        if (text[j2]=='"') { qq=!qq; continue; }
+        if (qq) continue;
+        if (ct_open(text[j2])) dd++;
+        else if (ct_shut(text[j2])) dd--;
+        else if (dd==0&&text[j2]==',') {
+          errmsg("Error: IF takes a condition and one value, IF(condition, value) (manual 11.4.6), in %s: %.200s\n",ctx,text);
+          return 0;
+        }
+      }
+    }
+    for (q=0,d=o+1; d<i; d++) {
+      if (text[d]=='"') q=!q;
+      if (text[d]!=' '||q) cond[k++]=text[d];
+    }
+    cond[k]='\0';
+    cond_unwrap(cond);
+    if (!cond_needs_lower(cond,frame,nframe)) {
+      /* one comparison: a side with operators of its own is grouped,
+         so the IF reads two operands ("-X < -4", "X > Y*4") */
+      char a[TABREADLINE],cc[TABREADLINE];
+      int op,pa,pc2;
+      static const char *ops[7]={"","=","<>",">","<",">=","<="};
+      if (ct_leaf_split(cond,0,(int)strlen(cond),a,cc,sizeof(a),&op)<0) { p+=2; continue; }
+      pa=ct_compound(a);
+      pc2=ct_compound(cc);
+      if (!pa&&!pc2) { p+=2; continue; }
+      if (snprintf(e,sizeof(e),"%s%s%s%s%s%s%s",pa?"(":"",a,pa?")":"",ops[op],pc2?"(":"",cc,pc2?")":"")>=(int)sizeof(e)) {
+        errmsg("Error: IF condition too long (%s): %.120s\n",ctx,cond);
+        return 0;
+      }
+      {
+        char tail[TABREADLINE];
+        strcpy(tail,text+i);
+        if ((size_t)(o+1)+strlen(e)+strlen(tail)>=cap) { errmsg("Error: statement too long after grouping an IF condition (%s): %.120s\n",ctx,text); return 0; }
+        sprintf(text+o+1,"%s%s",e,tail);
+      }
+      p=text+o+1;
+      continue;
+    }
+    if (!cond_lower_numeric(cond,e,sizeof(e),frame,nframe,ctx)) return 0;
+    {
+      char tail[TABREADLINE];
+      size_t nl;
+      strcpy(tail,text+i);
+      nl=(size_t)(o+1)+strlen(e)+6+strlen(tail);
+      if (nl>=cap) { errmsg("Error: statement too long after lowering an IF condition (%s): %.120s\n",ctx,text); return 0; }
+      sprintf(text+o+1,"(%s)<>0%s",e,tail);
+    }
+    p=text+o+1;
+  }
+  return 1;
+}
+
+/* Carry the frame indices a deferred sum condition names (s<>d needs one
+   sum slot per d), as sum_cond_carry_rhs does for a mapping RHS: a
+   quantifier index, or the index of an enclosing sum (its set read from
+   the enclosing sum's text, as the carried-dim scan does) */
+static dim_t sum_enclosing_set(const char *nm, const char *formulain, const char *readitem, set_def *sets, dim_t nset) {
+  char key[NAMESIZE+8],head[TABREADLINE],sn[NAMESIZE];
+  long k,n;
+  dim_t l;
+  if (readitem<=formulain||readitem-formulain>=(long)sizeof(head)) return -1;
+  memcpy(head,formulain,readitem-formulain);
+  head[readitem-formulain]='\0';
+  snprintf(key,sizeof(key),"sum(%s,",nm);
+  k=str_rfind_ci(head,key);
+  if (k<0) return -1;
+  k++;
+  for (n=0; head[k+n]!='\0'&&head[k+n]!=','&&head[k+n]!=':'&&n<NAMESIZE-1; n++) sn[n]=head[k+n];
+  sn[n]='\0';
+  for (l=0; l<nset; l++) if (strcmp(sn,sets[l].setname)==0) return l;
+  return -1;
+}
+
+dim_t sum_cond_carry_idx(sum_def *sc, quantifier *arSet, dim_t fdim, dim_t l3, char *interchar, const char *formulain, const char *readitem, set_def *sets, dim_t nset) {
+  const char *s=sc->cond_gen[0];
+  int q=0;
+  if (sc->cond_genop!=COND_DEFERRED) return l3;
+  while (*s!='\0') {
+    char nm[NAMESIZE];
+    int k=0;
+    dim_t l4,l5;
+    if (*s=='"') { q=!q; s++; continue; }
+    if (q||!logic_namec(*s)||*s==MAPMARK||*s=='$'||*s=='.') { s++; continue; }
+    while (logic_namec(*s)&&*s!=MAPMARK&&*s!='$'&&k<NAMESIZE-1) nm[k++]=*s++;
+    nm[k]='\0';
+    if (*s==MAPMARK||ct_open(*s)||isdigit((unsigned char)nm[0])||strcmp(nm,sc->sumindx)==0) continue;
+    {
+      dim_t es=-1;
+      for (l5=0; l5+1<fdim; l5++) if (strcmp(nm,arSet[l5].index_name)==0) break;
+      if (l5+1>=fdim) {
+        es=sum_enclosing_set(nm,formulain,readitem,sets,nset);
+        if (es<0) continue;
+      }
+      for (l4=0; l4<l3; l4++) if (strcmp(nm,sc->dimnames[l4])==0) break;
+      if (l4<l3||l3>=MAXVARDIM) continue;
+      strcpy(sc->dimnames[l3],nm);
+      sc->setid[l3]=(es>=0)?es:arSet[l5].setid;
+    }
+    strcat(interchar,nm);
+    l3++;
+  }
+  return l3;
 }
 
 /* named fatal for statement kinds that cannot carry mapping calls yet
@@ -5325,6 +6057,77 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
   return 0;
 }
 
+/* element range abbreviations in a fixed element list (manual 11.2.2):
+   "grain1 - grain4" lists grain1..grain4; a number part with a leading
+   zero ("ind008 - ind112") keeps its width, and then both ends must
+   have the same number of digits. Other items are copied trimmed. */
+static int elem_range_split(const char *t, char *pre, const char **dig) {
+  size_t n=strlen(t),k=n;
+  while (k>0&&isdigit((unsigned char)t[k-1])) k--;
+  if (k==n||k==0||k>=NAMESIZE) return -1;
+  memcpy(pre,t,k);
+  pre[k]='\0';
+  *dig=t+k;
+  return 0;
+}
+
+static int elem_list_expand(const char *in, char *out, size_t cap, const char *setname) {
+  char buf[TABREADLINE],*item,*save=NULL;
+  size_t o=0;
+  if (strlen(in)>=sizeof(buf)) return -1;
+  strcpy(buf,in);
+  out[0]='\0';
+  for (item=strtok_r(buf,",",&save); item!=NULL; item=strtok_r(NULL,",",&save)) {
+    char a[NAMESIZE],b[NAMESIZE],pa[NAMESIZE],pb[NAMESIZE],*dash,*t;
+    const char *da,*db;
+    long lo,hi,v;
+    int width=0;
+    while (*item==' ') item++;
+    for (t=item+strlen(item); t>item&&t[-1]==' '; t--) {}
+    *t='\0';
+    dash=strchr(item,'-');
+    if (dash==NULL) {
+      if (o+strlen(item)+2>=cap) goto toolong;
+      o+=sprintf(out+o,"%s%s",o?",":"",item);
+      continue;
+    }
+    *dash='\0';
+    if (sscanf(item," %255s",a)!=1||sscanf(dash+1," %255s",b)!=1||strchr(dash+1,'-')!=NULL) {
+      errmsg("Error: malformed element range '%s-%s' in set %s (manual 11.2.2: name1 - name9)\n",item,dash+1,setname);
+      return -1;
+    }
+    if (elem_range_split(a,pa,&da)<0||elem_range_split(b,pb,&db)<0||strcmp(pa,pb)!=0) {
+      errmsg("Error: element range '%s - %s' in set %s needs two names with the same stem and a number at the end (manual 11.2.2)\n",a,b,setname);
+      return -1;
+    }
+    if ((strlen(da)>1&&da[0]=='0')||(strlen(db)>1&&db[0]=='0')) {
+      if (strlen(da)!=strlen(db)) {
+        errmsg("Error: element range '%s - %s' in set %s: a zero-padded range needs the same number of digits at both ends (manual 11.2.2)\n",a,b,setname);
+        return -1;
+      }
+      width=(int)strlen(da);
+    }
+    if (strlen(da)>9||strlen(db)>9) {
+      errmsg("Error: element range '%s - %s' in set %s: number part too long\n",a,b,setname);
+      return -1;
+    }
+    lo=strtol(da,NULL,10);
+    hi=strtol(db,NULL,10);
+    if (hi<lo) {
+      errmsg("Error: element range '%s - %s' in set %s runs backwards (manual 11.2.2)\n",a,b,setname);
+      return -1;
+    }
+    for (v=lo; v<=hi; v++) {
+      if (o+strlen(pa)+width+24>=cap) goto toolong;
+      o+=sprintf(out+o,"%s%s%0*ld",o?",":"",pa,width,v);
+    }
+  }
+  return 0;
+toolong:
+  errmsg("Error: the element list of set %s is too long after expanding element ranges\n",setname);
+  return -1;
+}
+
 int sets_read(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,dim_t nset) {
   FILE * filehandle;//, *fileout;
   char line[TABREADLINE]="\0",linecopy[TABREADLINE],line1[TABREADLINE],line2[TABREADLINE];
@@ -5341,6 +6144,17 @@ int sets_read(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,
     /* audit A5: the explicit default qualifier must not substring-match
        the intertemporal route */
     str_replace_first(line,"(non_intertemporal)","");
+    /* an intertemporal set with fixed elements, "(p0 - p10)" or a
+       list, has no [ ] (manual 16.2): an ordinary element list that
+       keeps the intertemporal flag */
+    {
+      int fixed_it=0;
+      if (strchr(line,'[')==NULL&&str_find_ci(line,"(intertemporal)")>-1) {
+        str_replace_first(line,"(intertemporal)","");
+        fixed_it=1;
+      }
+      record[j].intertemp=fixed_it;
+    }
     strcpy(linecopy,line);
     k2=str_find_ci(line,"intertemporal");
     if(k2>-1) {
@@ -5657,10 +6471,9 @@ int sets_read(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,
             return -1;
           }
           if (strchr(readitem,'-')!=NULL) {
-            errmsg("Error: element range abbreviation '(first - last)' in set %s is not supported; list the elements explicitly\n",record[j].setname);
-            return -1;
-          }
-          strcpy(record[j].readele,readitem);
+            if (elem_list_expand(readitem,record[j].readele,sizeof(record[j].readele),record[j].setname)<0) return -1;
+            readitem=record[j].readele;
+          } else strcpy(record[j].readele,readitem);
           dim1=str_count_char(readitem, ',');
           record[j].size=dim1+1;
         }

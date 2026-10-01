@@ -3227,7 +3227,13 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
         }
         }
         xc24[i]/=pow(10,j);
-        j=abs(floor((xc12[i]-xc24[i])*100000));
+        /* in double, clamped at the last bucket: two passes of different
+           magnitude (one near zero) overflowed int, and the undefined
+           conversion could land in the 5-digit bucket */
+        {
+          double dj=fabs(floor((xc12[i]-xc24[i])*100000));
+          j=(dj<10000)?(int)dj:10000;
+        }
         if(j!=0){//}else {
           if(j<10){
             if(xc124[i]>5)xc124[i]=5;

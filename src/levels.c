@@ -73,7 +73,7 @@ typedef struct {
   bool param;
 } lv_coefrec;
 
-typedef enum { LN_NUM, LN_REF, LN_ADD, LN_SUB, LN_MUL, LN_DIV, LN_POW, LN_NEG, LN_SUM, LN_FUNC } lv_kind;
+typedef enum { LN_NUM, LN_REF, LN_ADD, LN_SUB, LN_MUL, LN_DIV, LN_POW, LN_NEG, LN_SUM, LN_FUNC, LN_IF } lv_kind;
 /* REF classification */
 typedef enum { LR_CHANGE, LR_PERCENT, LR_PARAM } lv_refkind;
 
@@ -391,10 +391,43 @@ static int lv_parse_primary(lv_cur *cur) {
           return n;
         }
       }
+      if (nmlen == 2 && strncmp(nm, "if", 2) == 0) {
+        /* if(cond,A) (manual 11.4.6): the condition reads values, A is
+           differentiated under it; the condition span rides in set */
+        const char *g = cur->p + 1, *gend = cur->p + ge, *cm = NULL, *q;
+        int depth = 0, inq = 0;
+        for (q = g; q < gend; q++) {
+          if (*q == '"') { inq = !inq; continue; }
+          if (inq) continue;
+          if (*q == '(') depth++;
+          else if (*q == ')') depth--;
+          else if (*q == ',' && depth == 0) { cm = q; break; }
+        }
+        if (cm == NULL || cm == g) { cur->fail = 1; lv_err(c, "malformed if(condition, value)"); return -1; }
+        n = lv_newnode(c, LN_IF);
+        if (n < 0) { cur->fail = 1; lv_err(c, "expression too large"); return -1; }
+        c->nodes[n].set = g; c->nodes[n].setlen = (int)(cm - g);
+        {
+          lv_cur inner = { 0 };
+          char save;
+          int b;
+          inner.c = c; inner.p = cm + 1;
+          save = *gend; *(char *)gend = '\0';
+          b = lv_parse_expr(&inner);
+          *(char *)gend = save;
+          if (b < 0 || inner.fail) { cur->fail = 1; return -1; }
+          if (inner.p != gend) { cur->fail = 1; lv_err(c, "trailing text inside if()"); return -1; }
+          c->nodes[n].b = b;
+        }
+        cur->p += ge + 1;
+        c->nodes[n].s = start; c->nodes[n].slen = (int)(cur->p - start);
+        return n;
+      }
       for (f = 4; lv_funcs[f] != NULL; f++) {
+        if (f == 7) continue;
         if ((int)strlen(lv_funcs[f]) == nmlen && strncmp(nm, lv_funcs[f], nmlen) == 0) {
           cur->fail = 1;
-          lv_err(c, "only SQRT, EXP, LOGE and LOG10 may appear in levels equations (manual 11.4.10); linearize this one by hand");
+          lv_err(c, "only SQRT, EXP, LOGE, LOG10 and IF may appear in levels equations (manual 11.4.10); linearize this one by hand");
           return -1;
         }
       }
@@ -619,6 +652,14 @@ static int lv_diff(lv_ctx *c, int id, int sign, const char *factors, const lv_su
       if (lv_strcat_b(fbuf, "(1/(", LV_TERMBUF) < 0 || lv_factor_span(c, fbuf, nd->a) < 0 || lv_strcat_b(fbuf, "*loge(10)))", LV_TERMBUF) < 0) return lv_err(c, "term too large");
     }
     return lv_diff(c, nd->a, sign, fbuf, ss);
+  case LN_IF:
+    /* d if(C,A) = if(C,1)*dA */
+    strcpy(fbuf, factors);
+    if (fbuf[0] != '\0' && lv_strcat_b(fbuf, "*", LV_TERMBUF) < 0) return lv_err(c, "term too large");
+    if (lv_strcat_b(fbuf, "(if(", LV_TERMBUF) < 0 ||
+        lv_ncat_b(fbuf, nd->set, nd->setlen, LV_TERMBUF) < 0 ||
+        lv_strcat_b(fbuf, ",1))", LV_TERMBUF) < 0) return lv_err(c, "term too large");
+    return lv_diff(c, nd->b, sign, fbuf, ss);
   case LN_SUM: {
     lv_sumstack ss2 = *ss;
     const char *colon = memchr(nd->set, ':', nd->setlen);

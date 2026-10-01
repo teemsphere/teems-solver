@@ -308,7 +308,39 @@ typedef struct
   void *gops[2];
   dim_t gnops[2];
   int gcap[2];
+  void *ic;                    /* index condition (icond *), NULL = none */
 } sum_cofcond ;
+
+/* An index condition (manual 11.4.5, 11.4.11): comparisons of indices,
+   mapped indices and elements joined by AND/OR/NOT, evaluated from the
+   frame's positions alone.  Each side of a leaf is a position in the
+   leaf's common set: the larger of the two sides' sets. */
+#define ICOND_MAXLEAF 16
+#define ICOND_MAXPROG 48
+typedef struct
+{
+  int op;                      /* 1..6 = eq/ne/gt/lt/ge/le */
+  int slot[2];                 /* frame position, -1 = fixed */
+  int map[2];                  /* mapping id+1 applied to the index, 0 = none */
+  dim_t st0[2];                /* set the frame index ranges over */
+  dim_t st1[2];                /* set of the (mapped) value */
+  dim_t dss[2];                /* superset_pos slot into the mapping's domain, 0 = none */
+  dim_t ss[2];                 /* superset_pos slot into the common set, 0 = none */
+  offset_t fix[2];             /* fixed position in the common set */
+} icond_leaf;
+
+typedef struct
+{
+  int nleaf;
+  int nprog;
+  icond_leaf leaf[ICOND_MAXLEAF];
+  signed char prog[ICOND_MAXPROG]; /* RPN: >=0 leaf, -1 AND, -2 OR, -3 NOT */
+} icond;
+
+#define COND_AND '&'
+#define COND_OR '|'
+#define COND_NOT '`'
+#define COND_DEFERRED 7          /* cond_genop: raw condition text, resolved against the frame */
 
 typedef struct
 {
@@ -754,6 +786,18 @@ void sum_cond_general_thread(const sum_cofcond *cc, void *own[2], int master);
 void sum_cond_general_thread_free(const sum_cofcond *cc, void *own[2], int master);
 void sum_cond_general_free(sum_cofcond *cc);
 void sum_cond_domain_check(sum_def *sc, set_def *sets);
+/* compound and index conditions (manual 11.4.5, 11.4.11) */
+int tab_logicops_normalize(char *line, size_t cap);
+int cond_is_deferred(const char *cond, const char *sumindx);
+void cond_unwrap(char *s);
+int cond_tree_rpn(const char *s, int *nleaf, int *lb, int *le, signed char *prog, int *nprog, const char *ctx);
+int cond_needs_lower(const char *cond, quantifier *frame, dim_t nframe);
+int icond_compile(const char *cond, quantifier *frame, dim_t nframe, set_def *sets, set_element *set_elems, icond *out, const char *ctx);
+int icond_eval(const icond *ic, const quantifier *frame, const set_def *sets, const set_element *set_elems);
+int cond_lower_numeric(const char *cond, char *out, size_t cap, quantifier *frame, dim_t nframe, const char *ctx);
+int cond_text_lower(char *text, size_t cap, quantifier *frame, dim_t nframe, const char *ctx);
+int cond_lower_stmt(char *cond, size_t cap, const char *stmt, const char *ctx);
+dim_t sum_cond_carry_idx(sum_def *sc, quantifier *arSet, dim_t fdim, dim_t l3, char *interchar, const char *formulain, const char *readitem, set_def *sets, dim_t nset);
 dim_t sum_cond_carry_rhs(sum_def *sc, quantifier *arSet, dim_t fdim, dim_t l3, char *interchar, set_def *sets);
 void sum_cond_rhs_resolve(int cond_mapid, const char *cond_rhs, quantifier *frame, dim_t nframe, set_def *sets, set_element *set_elems, int *condpos, offset_t *condfix, dim_t *condss);
 /* codomain position a mapping-equality condition compares against:

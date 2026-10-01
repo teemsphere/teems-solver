@@ -1006,7 +1006,9 @@ static long unary_operand_end(const char *s, long i) {
    raised first and negated after, so -X^2 was -(X^2) there and +(X)^2
    in the levels half of the same model. A signed operand next to a ^
    -- -X^2, 2*-3^2, X^-1 -- is bracketed here, before either engine
-   reads the text, so both see (-X)^2 and X^(-1). */
+   reads the text, so both see (-X)^2 and X^(-1). A signed operand
+   after * or / (A*-B, A/-B, 11.4.1) is bracketed the same way; the
+   engines took the sign as an empty operand there. */
 static int unary_pow_bracket(char *s, size_t cap) {
   long i,n;
   int inq=0;
@@ -1024,7 +1026,7 @@ static int unary_pow_bracket(char *s, size_t cap) {
     {
       long f=e;
       while (s[f]==' ') f++;
-      if (pc!='^'&&s[f]!='^') continue;
+      if (pc!='^'&&pc!='*'&&pc!='/'&&s[f]!='^') continue;
     }
     n=(long)strlen(s);
     if ((size_t)(n+3)>=cap) return -1;
@@ -1063,6 +1065,182 @@ static int kwless_unknown(const char *s,const char *sticky,char *word,int cap) {
   return decl&&sp&&isalpha((unsigned char)*s);
 }
 
+/* IF(i IN S, v) (manual 11.4.7) becomes SUM(j, S intersect T: j = i, v)
+   with j renamed for i in v: T is the set i ranges over where the IF
+   stands (rule 1), j ranges over a subset of S inside v as rule 2
+   requires, and the one-element sum is v where i is in S and 0
+   elsewhere, in any position of a formula, update, assertion or
+   equation. The intersection set and its subset statements go to
+   `pre`, written ahead of the statement. Returns -1 on a named error. */
+static int ifin_namec(char c) {
+  return isalnum((unsigned char)c)||c=='_'||c=='@';
+}
+
+static int ifin_word_at(const char *s, long k, const char *w) {
+  size_t n=strlen(w);
+  return strncmp(s+k,w,n)==0&&(k==0||!ifin_namec(s[k-1]))&&!ifin_namec(s[k+n]);
+}
+
+static int if_in_lower(char *s, size_t cap, char *pre, size_t precap, int *seq) {
+  long k;
+  int inq=0;
+  for (k=0; s[k]!='\0'; k++) {
+    long o,c,cm,b,d,j;
+    char idx[NAMESIZE],set[NAMESIZE],rng[NAMESIZE],nidx[NAMESIZE],jidx[NAMESIZE+16],nset[NAMESIZE],cond[TABREADLINE];
+    int n;
+    if (s[k]=='"') { inq=!inq; continue; }
+    if (inq||!ifin_word_at(s,k,"if")) continue;
+    for (o=k+2; s[o]==' '; o++) {}
+    if (s[o]!='(') continue;
+    for (c=o,d=0,cm=-1; s[c]!='\0'; c++) {
+      if (s[c]=='(') d++;
+      else if (s[c]==')') { d--; if (d==0) break; }
+      else if (s[c]==','&&d==1&&cm<0) cm=c;
+    }
+    if (s[c]=='\0'||cm<0||cm-o-1>=(long)sizeof(cond)) continue;
+    memcpy(cond,s+o+1,cm-o-1);
+    cond[cm-o-1]='\0';
+    if (sscanf(cond," %255[a-z0-9_@] in %255[a-z0-9_@] %n",idx,set,&n)<2||cond[n]!='\0') {
+      if (strstr(cond," in ")!=NULL&&strpbrk(cond,"&|`")!=NULL) {
+        errmsg("Error: a condition \"index IN set\" cannot be combined with AND, OR or NOT (manual 11.4.7 rule 5): %.200s\n",cond);
+        return -1;
+      }
+      continue;
+    }
+    /* the set the index ranges over: its nearest quantifier or sum
+       before the IF */
+    rng[0]='\0';
+    for (b=k-1; b>=0&&rng[0]=='\0'; b--) {
+      long p;
+      if (strncmp(s+b,"(all",4)==0) p=b+4;
+      else if (ifin_word_at(s,b,"sum")) {
+        for (p=b+3; s[p]==' '; p++) {}
+        if (s[p]!='(') continue;
+      } else continue;
+      p++;
+      while (s[p]==' '||(s[p]==','&&s[b]=='(')) p++;
+      if (sscanf(s+p,"%255[a-z0-9_@]",nidx)!=1||strcmp(nidx,idx)!=0) continue;
+      p+=(long)strlen(nidx);
+      while (s[p]==' ') p++;
+      if (s[p]!=',') continue;
+      for (p++; s[p]==' '; p++) {}
+      if (sscanf(s+p,"%255[a-z0-9_@]",rng)!=1) rng[0]='\0';
+    }
+    if (rng[0]=='\0') {
+      errmsg("Error: index %s in \"%s in %s\" is not active where the IF stands; it must come from an ALL quantifier or an enclosing SUM (manual 11.4.7 rule 1)\n",idx,idx,set);
+      return -1;
+    }
+    (*seq)++;
+    snprintf(nset,sizeof(nset),"if_in%d",*seq);
+    snprintf(jidx,sizeof(jidx),"%s@in%d",idx,*seq);
+    {
+      char val[TABREADLINE],out[TABREADLINE],tail[TABREADLINE];
+      size_t vo=0;
+      long v;
+      int vq=0;
+      for (v=cm+1; v<c&&vo+NAMESIZE<sizeof(val); v++) {
+        if (s[v]=='"') vq=!vq;
+        if (!vq&&ifin_word_at(s,v,idx)) {
+          vo+=snprintf(val+vo,sizeof(val)-vo,"%s",jidx);
+          v+=(long)strlen(idx)-1;
+          continue;
+        }
+        val[vo++]=s[v];
+      }
+      val[vo]='\0';
+      strcpy(tail,s+c+1);
+      s[k]='\0';
+      if ((size_t)snprintf(out,sizeof(out),"%ssum(%s,%s: %s = %s,%s)%s",s,jidx,nset,jidx,idx,val,tail)>=cap) {
+        errmsg("Error: statement too long after rewriting \"%s in %s\" (manual 11.4.7)\n",idx,set);
+        return -1;
+      }
+      strcpy(s,out);
+    }
+    j=(long)strlen(pre);
+    if ((size_t)snprintf(pre+j,precap-j,"set %s = %s intersect %s;\nsubset %s is subset of %s;\nsubset %s is subset of %s;\n",nset,set,rng,nset,set,nset,rng)>=precap-j) {
+      errmsg("Error: too many \"index IN set\" conditions in one statement\n");
+      return -1;
+    }
+    k=-1;
+    inq=0;
+  }
+  return 0;
+}
+
+/* In an equation, a sum condition naming the index of an enclosing sum
+   (sum(s,S, sum(j,T: j = s, w(j))) -- the IN rewrite's shape, and any
+   index condition of that form, manual 11.4.11) cannot gate the columns
+   of the inner sum's variables: the enclosing index is summed inside
+   their coefficient, not looped with the column. The condition moves
+   into the coefficient, sum(j,T, if(cond,1)*(body)), where both indices
+   are in scope; other sums keep their text. */
+static int eq_sumcond_outer(char *s, size_t cap) {
+  long k;
+  int changed=1,guard=0;
+  while (changed&&guard++<256) {
+    changed=0;
+    for (k=0; s[k]!='\0'&&!changed; k++) {
+      long o,c,d,colon=-1,c1=-1,c2=-1,b;
+      char cond[TABREADLINE],outer[64][NAMESIZE];
+      int nout=0,q=0,hit=0;
+      if (!ifin_word_at(s,k,"sum")) continue;
+      for (o=k+3; s[o]==' '; o++) {}
+      if (s[o]!='(') continue;
+      for (c=o,d=0; s[c]!='\0'; c++) {
+        if (s[c]=='"') { q=!q; continue; }
+        if (q) continue;
+        if (s[c]=='(') d++;
+        else if (s[c]==')') { d--; if (d==0) break; }
+        else if (d==1&&s[c]==':'&&colon<0&&c1>=0&&c2<0) colon=c;
+        else if (d==1&&s[c]==',') { if (c1<0) c1=c; else if (c2<0) c2=c; }
+      }
+      if (s[c]=='\0'||colon<0||c2<0||c2-colon-1>=(long)sizeof(cond)) continue;
+      memcpy(cond,s+colon+1,c2-colon-1);
+      cond[c2-colon-1]='\0';
+      /* the indices of the sums enclosing this one */
+      for (b=0; b<k&&nout<64; b++) {
+        long bo,bc,bd=0;
+        int bq=0;
+        if (!ifin_word_at(s,b,"sum")) continue;
+        for (bo=b+3; s[bo]==' '; bo++) {}
+        if (s[bo]!='(') continue;
+        for (bc=bo; s[bc]!='\0'; bc++) {
+          if (s[bc]=='"') { bq=!bq; continue; }
+          if (bq) continue;
+          if (s[bc]=='(') bd++;
+          else if (s[bc]==')') { bd--; if (bd==0) break; }
+        }
+        if (bc<c) continue;
+        if (sscanf(s+bo+1," %255[a-z0-9_@]",outer[nout])==1) nout++;
+      }
+      {
+        int i;
+        for (i=0; i<nout&&!hit; i++) {
+          long v;
+          int vq=0;
+          for (v=0; cond[v]!='\0'; v++) {
+            if (cond[v]=='"') { vq=!vq; continue; }
+            if (!vq&&ifin_word_at(cond,v,outer[i])) { hit=1; break; }
+          }
+        }
+      }
+      if (!hit) continue;
+      {
+        char out[TABREADLINE];
+        long n;
+        n=snprintf(out,sizeof(out),"%.*s, if(%s,1)*(%.*s))%s",(int)colon,s,cond,(int)(c-c2-1),s+c2+1,s+c+1);
+        if (n<0||(size_t)n>=cap) {
+          errmsg("Error: equation too long after moving a sum condition into its coefficient: %.120s\n",s);
+          return -1;
+        }
+        strcpy(s,out);
+        changed=1;
+      }
+    }
+  }
+  return 0;
+}
+
 #define MAXLITDEDUP 64
 static int tab_preprocess_run(char *filename, char *newtabfile) {
   FILE * filehandle,*fout;
@@ -1072,6 +1250,8 @@ static int tab_preprocess_run(char *filename, char *newtabfile) {
   char setname[NAMESIZE],newset[NAMESIZE],varname[NAMESIZE],*n1,setelement[TABREADLINE];//,*ne,*np;//,*n2;
   char assertmsg[TABREADLINE],*am1,*am2;
   char rawline[TABLINESIZE],*rawpos;
+  char ifin_pre[TABREADLINE]="";
+  int ifin_seq=0;
   filehandle = teems_fopen(filename,"r");
   if(filehandle==NULL){
     errmsg("Error: cannot open %s\n",filename);
@@ -1095,6 +1275,12 @@ static int tab_preprocess_run(char *filename, char *newtabfile) {
   while (rawpos!=NULL||fgets(rawline,TABLINESIZE,filehandle)) {
     if (rawpos==NULL) {
       rawno++;
+      /* a DOS end-of-file mark (Ctrl-Z) after the last statement read
+         as a keyword-less statement continuing the previous kind */
+      {
+        char *z;
+        for (z=rawline; *z!='\0'; z++) if (*z=='\032') *z=' ';
+      }
       if (strong_comment_strip(rawline,&sdepth)<0) {
         errmsg("Error: '!]]!' at line %ld of the TAB file closes a strong comment that was never opened (manual 11.1.5)\n",rawno);
         fclose(filehandle);
@@ -1338,6 +1524,31 @@ static int tab_preprocess_run(char *filename, char *newtabfile) {
         readline[0]='\0';
         continue;
       }
+      /* word operators (manual 11.4.5): comparisons to symbols and
+         AND/OR/NOT to single characters while the blanks still
+         delimit them; every reader strips blanks */
+      if (strcmp(commsyntax,"formula")==0||strcmp(commsyntax,"equation")==0||strcmp(commsyntax,"update")==0||strcmp(commsyntax,"assertion")==0
+          ||(strcmp(commsyntax,"set")==0&&strchr(readline,':')!=NULL)) {
+        tab_wordops_normalize(readline);
+        if (tab_logicops_normalize(readline,sizeof(readline))<0) {
+          errmsg("Error: TAB statement too long after normalizing AND/OR/NOT: %.120s ...\n",readline);
+          fclose(filehandle);
+          fclose(fout);
+          return -1;
+        }
+        if (strcmp(commsyntax,"set")!=0&&strchr(readline,';')!=NULL&&strstr(readline," in ")!=NULL
+            &&if_in_lower(readline,sizeof(readline),ifin_pre,sizeof(ifin_pre),&ifin_seq)<0) {
+          fclose(filehandle);
+          fclose(fout);
+          return -1;
+        }
+        if (strcmp(commsyntax,"equation")==0&&strchr(readline,';')!=NULL&&strchr(readline,':')!=NULL
+            &&eq_sumcond_outer(readline,sizeof(readline))<0) {
+          fclose(filehandle);
+          fclose(fout);
+          return -1;
+        }
+      }
       /* exponent constants and signed operands of ^ (manual 11.4.9,
          11.4.1) are rewritten once here, for every later reader */
       if (strcmp(commsyntax,"formula")==0||strcmp(commsyntax,"equation")==0||strcmp(commsyntax,"update")==0||strcmp(commsyntax,"assertion")==0
@@ -1349,8 +1560,8 @@ static int tab_preprocess_run(char *filename, char *newtabfile) {
           return -1;
         }
         if (strcmp(commsyntax,"coefficient")!=0&&strcmp(commsyntax,"variable")!=0&&strcmp(commsyntax,"zerodivide")!=0&&strcmp(commsyntax,"complementarity")!=0
-            &&strchr(readline,'^')!=NULL&&unary_pow_bracket(readline,sizeof(readline))<0) {
-          errmsg("Error: TAB statement too long after bracketing signed powers: %.120s ...\n",readline);
+            &&strpbrk(readline,"^*/")!=NULL&&unary_pow_bracket(readline,sizeof(readline))<0) {
+          errmsg("Error: TAB statement too long after bracketing signed operands: %.120s ...\n",readline);
           fclose(filehandle);
           fclose(fout);
           return -1;
@@ -1374,6 +1585,10 @@ static int tab_preprocess_run(char *filename, char *newtabfile) {
           fclose(filehandle);
           fclose(fout);
           return -1;
+        }
+        if (ifin_pre[0]!='\0') {
+          fprintf(fout,"%s",ifin_pre);
+          ifin_pre[0]='\0';
         }
         if (check==1) {
           if (readline[0]==' ') fprintf(fout,"%s\n",readline+1);
@@ -1627,6 +1842,25 @@ static int tab_preprocess_run(char *filename, char *newtabfile) {
               if (l3==0&&str_count_ci(line1,"\"")<3) n=NULL;
               i++;
               continue;
+            }
+          }
+          /* a qualifier glued to the quantifiers, "formula
+             (initial)(all,c,comm)(all,r,reg: ...)", was one token: the
+             synthesized quantifier landed inside the condition */
+          {
+            char *g=line;
+            while ((g=strstr(g,")(all,"))!=NULL) {
+              char *o=g;
+              int d=0;
+              for (; o>=line; o--) {
+                if (*o==')') d++;
+                else if (*o=='(') { d--; if (d==0) break; }
+              }
+              if (o>=line&&strncmp(o,"(all,",5)!=0&&strlen(line)+2<TABREADLINE) {
+                memmove(g+2,g+1,strlen(g+1)+1);
+                g[1]=' ';
+              }
+              g+=2;
             }
           }
           readitem1=strtok(line," ");
@@ -1892,6 +2126,39 @@ int outputs_write_csv(char *filename, char *newdatlogname, char *newdatfile,set_
   return 1;
 }
 
+/* an IF condition may read coefficients and levels variables, not
+   linear variables (manual 11.4.5): in an equation or update the
+   condition would be evaluated on the substituted columns. The linear
+   references carry their p_ prefix by now. */
+static int if_cond_linear_var(const char *line, array_def *vars, offset_t nvar, char *bad) {
+  const char *p=line;
+  while ((p=strstr(p,"if"))!=NULL) {
+    const char *o=p+2,*c;
+    int d=0,q=0;
+    if ((p>line&&ifin_namec(p[-1]))) { p+=2; continue; }
+    while (*o==' ') o++;
+    if (*o!='('&&*o!='['&&*o!='{') { p+=2; continue; }
+    for (c=o; *c!='\0'; c++) {
+      if (*c=='"') { q=!q; continue; }
+      if (q) continue;
+      if (*c=='('||*c=='['||*c=='{') d++;
+      else if (*c==')'||*c==']'||*c=='}') { d--; if (d==0) break; }
+      else if (*c==','&&d==1) break;
+      if (strncmp(c,"p_",2)==0&&(c==o||!ifin_namec(c[-1]))) {
+        char nm[NAMESIZE];
+        int k=0;
+        offset_t v;
+        const char *t=c+2;
+        while (ifin_namec(*t)&&k<NAMESIZE-1) nm[k++]=*t++;
+        nm[k]='\0';
+        for (v=0; v<nvar; v++) if (strcmp(nm,vars[v].cofname)==0) { strcpy(bad,nm); return 1; }
+      }
+    }
+    p+=2;
+  }
+  return 0;
+}
+
 int tab_write_variables(char *filename, char *newtabfile,array_def *vars,offset_t nvar) {
   FILE * filehandle,*fout;
   char line[TABREADLINE+1]="\0",*p;//,nvarname[nvar][NAMESIZE+2],*p;//,line1[DATREADLINE];//,*ne,*np;//,*n2;
@@ -1966,6 +2233,27 @@ int tab_write_variables(char *filename, char *newtabfile,array_def *vars,offset_
             }
           }
         }
+      }
+    }
+    /* compound and index IF conditions (manual 11.4.5, 11.4.11) become
+       one numeric test here, ahead of every reader */
+    int fopos=str_find_ci(line,"formula"),aspos=str_find_ci(line,"assertion");
+    if ((eqpos==0||eqpos==1||updpos==0||updpos==1)&&strstr(line,"if")!=NULL) {
+      char badv[NAMESIZE];
+      if (if_cond_linear_var(line,vars,nvar,badv)) {
+        errmsg("Error: an IF condition reads variable %s; conditions take coefficients and levels variables, not linear variables (manual 11.4.5): %.200s\n",badv,line);
+        fclose(filehandle);
+        fclose(fout);
+        MPI_Abort(PETSC_COMM_WORLD,1);
+        return -1;
+      }
+    }
+    if (strstr(line,"if")!=NULL&&(eqpos==0||eqpos==1||updpos==0||updpos==1||fopos==0||fopos==1||aspos==0||aspos==1)) {
+      if (!cond_text_lower(line,TABREADLINE,NULL,0,"an IF condition")) {
+        fclose(filehandle);
+        fclose(fout);
+        MPI_Abort(PETSC_COMM_WORLD,1);
+        return -1;
       }
     }
     fprintf(fout,"%s",line);
@@ -2904,63 +3192,38 @@ static int sb_indicator_eval(char *tabfile, cmf_file_entry *iodata, int niodata,
   return 1;
 }
 
-int tab_setbuilder_transform(char *fname, cmf_file_entry *iodata, int niodata) {
-  FILE *f,*fout;
-  char line[TABREADLINE],tmpname[TABREADLINE];
-  int any=0,rc=0;
-  f=teems_fopen(fname,"r");
-  if (f==NULL) { errmsg("Error: cannot open %s\n",fname); return -1; }
-  while (fgets(line,TABREADLINE,f)) {
-    if (strncmp(line,"set",3)==0&&strstr(line,"(all,")!=NULL&&strchr(line,':')!=NULL&&strchr(line,'=')!=NULL) any=1;
-  }
-  fclose(f);
-  if (!any) return 0;
-  f=teems_fopen(fname,"r");
-  strcpy(tmpname,fname);
-  strcat(tmpname,"_sb");
-  fout=f==NULL?NULL:teems_fopen(tmpname,"w");
-  if (f==NULL||fout==NULL) {
-    if (f!=NULL) fclose(f);
-    errmsg("Error: cannot open set-builder scratch file\n");
-    return -1;
-  }
-  while (rc==0&&fgets(line,TABREADLINE,f)) {
-    char name[NAMESIZE],idx[NAMESIZE],src[NAMESIZE],op[8],cond[TABREADLINE];
-    char *p,*q;
-    int tl;
-    double cval;
-    if (!(strncmp(line,"set",3)==0&&(p=strstr(line,"="))!=NULL&&(q=strstr(line,"(all,"))!=NULL&&q>p&&strchr(q,':')!=NULL)) {
-      fputs(line,fout);
-      continue;
-    }
-    /* set NAME [# label #] = (all,idx,SRC: cond) ; */
-    p=line+3;
-    while (*p==' ') p++;
-    tl=0;
-    while (*p!='\0'&&*p!=' '&&*p!='='&&*p!='#'&&tl<NAMESIZE-1) name[tl++]=*p++;
-    name[tl]='\0';
-    q=strstr(line,"(all,")+5;
-    tl=0;
-    while (*q!='\0'&&*q!=','&&tl<NAMESIZE-1) { if (*q!=' ') idx[tl++]=*q; q++; }
-    idx[tl]='\0';
-    if (*q==',') q++;
-    tl=0;
-    while (*q!='\0'&&*q!=':'&&tl<NAMESIZE-1) { if (*q!=' ') src[tl++]=*q; q++; }
-    src[tl]='\0';
-    if (*q!=':') { errmsg("Error: malformed set-builder statement: %s",line); rc=-1; break; }
-    q++;
-    /* condition text up to the builder's closing ')' (depth-aware) */
-    {
-      int depth=0;
-      tl=0;
-      for (; *q!='\0'; q++) {
-        if (*q=='('||*q=='{'||*q=='[') depth++;
-        else if (*q==')'||*q=='}'||*q==']') { if (depth==0) break; depth--; }
-        if (tl<TABREADLINE-1) cond[tl++]=*q;
+/* one comparison of a set builder's condition: keep[k] for each source
+   element. An index compared with a quoted element (r <> "usa", manual
+   11.4.11) selects by name; the other forms are listed above. */
+static int sb_leaf_keep(char *fname, cmf_file_entry *iodata, int niodata, const char *name, const char *idx, const char *src, char (*srcele)[NAMESIZE], int nsrc, char *cond, char *keep) {
+  char op[8],*p,*q;
+  int tl;
+  double cval;
+  memset(keep,0,SB_MAXELE);
+  {
+    char a[TABREADLINE],c[TABREADLINE],*o;
+    int k=0,ci,cq=0,ol;
+    for (ci=0; cond[ci]!='\0'&&k<TABREADLINE-1; ci++) { if (cond[ci]=='"') cq=!cq; if (cond[ci]!=' '||cq) a[k++]=cond[ci]; }
+    a[k]='\0';
+    o=strpbrk(a,"<>=");
+    if (o!=NULL&&o>a) {
+      ol=(o[0]=='<'&&o[1]=='>')?2:1;
+      if ((o[0]=='='||ol==2)&&o[ol]!='\0') {
+        int eq=(o[0]=='=');
+        strcpy(c,o+ol);
+        *o='\0';
+        if ((sb_eqi(a,idx)&&c[0]=='"')||(sb_eqi(c,idx)&&a[0]=='"')) {
+          char el[NAMESIZE],*e=(a[0]=='"')?a+1:c+1;
+          int n=0;
+          while (*e!='\0'&&*e!='"'&&n<NAMESIZE-1) el[n++]=*e++;
+          el[n]='\0';
+          for (k=0; k<nsrc; k++) keep[k]=(char)(sb_eqi(srcele[k],el)==eq);
+          return 0;
+        }
       }
-      cond[tl]='\0';
     }
-    {
+  }
+  {
       /* split <operand> <op> <const>: find the comparison at depth 0,
          word ops need surrounding blanks stripped later */
       char opnd[TABREADLINE];
@@ -2979,8 +3242,7 @@ int tab_setbuilder_transform(char *fname, cmf_file_entry *iodata, int niodata) {
       }
       if (oi<0) {
         errmsg("Error: set builder %s: unsupported condition '%s' (supported: COEF(...) <op> const, or a mapping-conditional sum <op> const; manual 10.1.2)\n",name,cond);
-        rc=-1;
-        break;
+        return -1;
       }
       strncpy(op,cond+oi,olen);
       op[olen]='\0';
@@ -2990,8 +3252,7 @@ int tab_setbuilder_transform(char *fname, cmf_file_entry *iodata, int niodata) {
         while (endp!=NULL&&*endp==' ') endp++;
         if (endp==cond+oi+olen||endp==NULL||*endp!='\0') {
           errmsg("Error: set builder %s: unsupported condition '%s' (a single comparison against a numeric constant; compound conditions are not supported; manual 10.1.2)\n",name,cond);
-          rc=-1;
-          break;
+          return -1;
         }
       }
       strncpy(opnd,cond,oi);
@@ -3003,20 +3264,8 @@ int tab_setbuilder_transform(char *fname, cmf_file_entry *iodata, int niodata) {
         while (e>0&&(opnd[e-1]==' ')) opnd[--e]='\0';
         memmove(opnd,s,strlen(s)+1);
       }
-      /* SRC elements */
       {
-        char (*srcele)[NAMESIZE]=calloc(SB_MAXELE,NAMESIZE);
-        char keep[SB_MAXELE];
-        int nsrc,k,nkept=0;
-        if (srcele==NULL) { rc=-1; break; }
-        nsrc=sb_elements(fname,iodata,niodata,src,srcele);
-        if (nsrc<=0) {
-          errmsg("Error: set builder %s: cannot resolve the elements of source set %s (explicit list or read-elements declarations only)\n",name,src);
-          free(srcele);
-          rc=-1;
-          break;
-        }
-        memset(keep,0,sizeof(keep));
+        int k;
         if (str_find_ci(opnd,"$pos")==0) {
           /* $POS(i) or $POS(i,S) (manual 11.5.6): the position of each
              source element in the source set, or in S -- which must hold
@@ -3061,7 +3310,7 @@ int tab_setbuilder_transform(char *fname, cmf_file_entry *iodata, int niodata) {
             keep[k]=(char)sb_op_test(pos,op,cval);
           }
           free(sele);
-          if (!ok) { free(srcele); rc=-1; break; }
+          if (!ok) return -1;
         }
         else if (strncmp(opnd,"sum",3)==0) {
           /* sum{j,S2: MAP(j) = idx, COEF2(j)} */
@@ -3129,9 +3378,7 @@ int tab_setbuilder_transform(char *fname, cmf_file_entry *iodata, int niodata) {
           free(v2);
           if (!ok) {
             errmsg("Error: set builder %s: cannot evaluate the mapping-conditional sum '%s' (the mapping must be file-Read and the summed coefficient file-Read or an indicator assigned only constants; manual 10.1.2)\n",name,opnd);
-            free(srcele);
-            rc=-1;
-            break;
+            return -1;
           }
         }
         else {
@@ -3169,9 +3416,7 @@ int tab_setbuilder_transform(char *fname, cmf_file_entry *iodata, int niodata) {
               ok=2;
             } else {
               errmsg("Error: set builder %s: condition coefficient %s must be Read from an input file or be an indicator assigned only constants (formula-computed operands cannot drive set resolution; manual 10.1.2)\n",name,coef);
-              free(srcele);
-              rc=-1;
-              break;
+              return -1;
             }
           }
           if (ok==1) {
@@ -3227,13 +3472,113 @@ int tab_setbuilder_transform(char *fname, cmf_file_entry *iodata, int niodata) {
             free(ldele);
             free(cv);
           }
-          if (!ok&&rc==0) {
+          if (!ok) {
             errmsg("Error: set builder %s: cannot evaluate condition '%s' (declaration/read/dimension resolution failed; manual 10.1.2)\n",name,cond);
-            free(srcele);
-            rc=-1;
-            break;
+            return -1;
           }
         }
+      }
+  }
+  return 0;
+}
+
+int tab_setbuilder_transform(char *fname, cmf_file_entry *iodata, int niodata) {
+  FILE *f,*fout;
+  char line[TABREADLINE],tmpname[TABREADLINE];
+  int any=0,rc=0;
+  f=teems_fopen(fname,"r");
+  if (f==NULL) { errmsg("Error: cannot open %s\n",fname); return -1; }
+  while (fgets(line,TABREADLINE,f)) {
+    if (strncmp(line,"set",3)==0&&strstr(line,"(all,")!=NULL&&strchr(line,':')!=NULL&&strchr(line,'=')!=NULL) any=1;
+  }
+  fclose(f);
+  if (!any) return 0;
+  f=teems_fopen(fname,"r");
+  strcpy(tmpname,fname);
+  strcat(tmpname,"_sb");
+  fout=f==NULL?NULL:teems_fopen(tmpname,"w");
+  if (f==NULL||fout==NULL) {
+    if (f!=NULL) fclose(f);
+    errmsg("Error: cannot open set-builder scratch file\n");
+    return -1;
+  }
+  while (rc==0&&fgets(line,TABREADLINE,f)) {
+    char name[NAMESIZE],idx[NAMESIZE],src[NAMESIZE],cond[TABREADLINE];
+    char *p,*q;
+    int tl;
+    if (!(strncmp(line,"set",3)==0&&(p=strstr(line,"="))!=NULL&&(q=strstr(line,"(all,"))!=NULL&&q>p&&strchr(q,':')!=NULL)) {
+      fputs(line,fout);
+      continue;
+    }
+    /* set NAME [# label #] = (all,idx,SRC: cond) ; */
+    p=line+3;
+    while (*p==' ') p++;
+    tl=0;
+    while (*p!='\0'&&*p!=' '&&*p!='='&&*p!='#'&&tl<NAMESIZE-1) name[tl++]=*p++;
+    name[tl]='\0';
+    q=strstr(line,"(all,")+5;
+    tl=0;
+    while (*q!='\0'&&*q!=','&&tl<NAMESIZE-1) { if (*q!=' ') idx[tl++]=*q; q++; }
+    idx[tl]='\0';
+    if (*q==',') q++;
+    tl=0;
+    while (*q!='\0'&&*q!=':'&&tl<NAMESIZE-1) { if (*q!=' ') src[tl++]=*q; q++; }
+    src[tl]='\0';
+    if (*q!=':') { errmsg("Error: malformed set-builder statement: %s",line); rc=-1; break; }
+    q++;
+    /* condition text up to the builder's closing ')' (depth-aware) */
+    {
+      int depth=0;
+      tl=0;
+      for (; *q!='\0'; q++) {
+        if (*q=='('||*q=='{'||*q=='[') depth++;
+        else if (*q==')'||*q=='}'||*q==']') { if (depth==0) break; depth--; }
+        if (tl<TABREADLINE-1) cond[tl++]=*q;
+      }
+      cond[tl]='\0';
+    }
+    cond_unwrap(cond);
+    {
+      /* the condition's boolean structure (manual 11.4.5): one keep
+         vector per comparison, combined by AND/OR/NOT */
+      char (*srcele)[NAMESIZE]=calloc(SB_MAXELE,NAMESIZE);
+      char *keep=calloc(SB_MAXELE,1),*lk=NULL,cs[TABREADLINE];
+      int nsrc,k,nkept=0,ci,cq=0,nleaf=0,nprog=0,lb[ICOND_MAXLEAF],le[ICOND_MAXLEAF];
+      signed char prog[ICOND_MAXPROG];
+      if (srcele==NULL||keep==NULL) { free(srcele); free(keep); rc=-1; break; }
+      nsrc=sb_elements(fname,iodata,niodata,src,srcele);
+      if (nsrc<=0) {
+        errmsg("Error: set builder %s: cannot resolve the elements of source set %s (explicit list or read-elements declarations only)\n",name,src);
+        free(srcele);
+        free(keep);
+        rc=-1;
+        break;
+      }
+      for (ci=0,k=0; cond[ci]!='\0'&&k<TABREADLINE-1; ci++) { if (cond[ci]=='"') cq=!cq; if (cond[ci]!=' '||cq) cs[k++]=cond[ci]; }
+      cs[k]='\0';
+      if (strchr(cs,COND_AND)==NULL&&strchr(cs,COND_OR)==NULL&&strchr(cs,COND_NOT)==NULL) rc=sb_leaf_keep(fname,iodata,niodata,name,idx,src,srcele,nsrc,cond,keep);
+      else if (cond_tree_rpn(cs,&nleaf,lb,le,prog,&nprog,name)<0||(lk=calloc((size_t)nleaf*SB_MAXELE,1))==NULL) rc=-1;
+      else {
+        int lf,st[ICOND_MAXPROG];
+        for (lf=0; rc==0&&lf<nleaf; lf++) {
+          char leaf[TABREADLINE];
+          memcpy(leaf,cs+lb[lf],le[lf]-lb[lf]);
+          leaf[le[lf]-lb[lf]]='\0';
+          rc=sb_leaf_keep(fname,iodata,niodata,name,idx,src,srcele,nsrc,leaf,lk+(size_t)lf*SB_MAXELE);
+        }
+        for (k=0; rc==0&&k<nsrc; k++) {
+          int n=0,j;
+          st[0]=0;
+          for (j=0; j<nprog; j++) {
+            if (prog[j]>=0) st[n++]=lk[(size_t)prog[j]*SB_MAXELE+k];
+            else if (prog[j]==-3) st[n-1]=!st[n-1];
+            else { n--; st[n-1]=(prog[j]==-1)?(st[n-1]&&st[n]):(st[n-1]||st[n]); }
+          }
+          keep[k]=(char)st[0];
+        }
+      }
+      free(lk);
+      if (rc!=0) { free(srcele); free(keep); break; }
         for (k=0; k<nsrc; k++) if (keep[k]) nkept++;
         /* an empty selection is a legal empty set (manual 11.7.9):
            statements over it have no tuples, sums over it are zero */
@@ -3246,7 +3591,7 @@ int tab_setbuilder_transform(char *fname, cmf_file_entry *iodata, int niodata) {
         fprintf(fout,"subset %s is subset of %s ;\n",name,src);
         printf("set builder %s: %d of %d elements of %s selected\n",name,nkept,nsrc,src);
         free(srcele);
-      }
+        free(keep);
     }
   }
   fclose(f);
