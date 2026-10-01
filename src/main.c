@@ -1,8 +1,3 @@
-// Pham Van Ha & Tom Kompas
-// Ensure that sum over time involves only intertemporal variables
-// If otherwise switch back to normal MC66
-// Currently no sub-reg set, can try different varreg to get opt: comment break in nestedmatvarread
-// Currently logic fdim <> only in formula
 #include <teems_solver.h>
 
 static char help[] = "teems-solver " TEEMS_SOLVER_VERSION ": solves a CGE model (TABLO/CMF) in parallel.\n\
@@ -10,7 +5,7 @@ static char help[] = "teems-solver " TEEMS_SOLVER_VERSION ": solves a CGE model 
   -cmdfile <path>       CMF file manifest (default ./reg.cmf)\n\
   -matsol {0,1,2,3}     matrix method LU/SBBD/DBBD/NDBBD\n\
   -solmed <name>        Gragg|Euler|RK2|Heun|RK4|BoSha32|DoPri54|Johansen|probe|nosim\n\
-  -jacdump 1            write the base-point Jacobian (<solfiles>.jac + .jac.json)\n\
+  -jacdump {1,2}        write the base-point Jacobian (<solfiles>.jac + .jac.json); 2 = and stop before the solve\n\
   -step1/-step2/-step3  step counts; -nsubints n; -verbosity {0,1,2}\n\
   Full option table: docs/solver-reference.md section 11.\n\
   Exit status: 0 = completed with no Error line; 1 = an Error line was\n\
@@ -1623,11 +1618,14 @@ int main(int argc,char **args) {
   PetscOptionsGetInt(NULL,NULL,"-probefine",&probefine,NULL);
   /* -jacdump 1 (Tier B5): the base-point Jacobian of the condensed
      system over every variable element, written before the first step
-     (jacobian.c jacobian_dump); the run then goes on as asked */
+     (jacobian.c jacobian_dump); the run then goes on as asked. -jacdump
+     2 stops after the export, as a probe without its diagnosis: the
+     homogeneity check needs the matrix, not a solution */
   dim_t jacdump=0;
+  bool jac_only=false;
   PetscOptionsGetInt(NULL,NULL,"-jacdump",&jacdump,NULL);
-  if(jacdump!=0&&jacdump!=1) {
-    if(rank==0)errmsg("Error: -jacdump must be 0 (off) or 1 (write <solfiles>.jac), got %ld\n",(long)jacdump);
+  if(jacdump<0||jacdump>2) {
+    if(rank==0)errmsg("Error: -jacdump must be 0 (off), 1 (write <solfiles>.jac) or 2 (write it and stop before the solve), got %ld\n",(long)jacdump);
     PetscFinalize();
     return 1;
   }
@@ -3196,6 +3194,11 @@ comp_accurate_reentry:
       free(cvsave);
     }
   }
+  if(jacdump==2&&comp_acc_phase==0) {
+    if(rank==0)logmsg(1,"Jacobian export only (-jacdump 2): the solve is skipped\n");
+    jac_only=true;
+    solmethod=SM_PROBE;
+  }
   if(rank==0&&sbbd_overrid&&alltimeset<0) {
     printf("Warning: the equations reference intertemporal sets but this run's ordering ignores that structure; a bordered matrix method (-matsol 1/2/3) would detect and exploit it\n");
   }
@@ -3391,11 +3394,11 @@ comp_accurate_reentry:
     /* realize the pre-simulation complementarity states so the
        E_$comp rows probe with their genuine (state-branch) pattern
        rather than the all-zero weights */
-    if(rank==rank_hsl&&teems_ncomp>0) {
+    if(!jac_only&&rank==rank_hsl&&teems_ncomp>0) {
       comp_states_set(sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals);
       comp_states_free();
     }
-    probe_structural(VecSize,nvarele,ncofele,dnz,dnnz,dnzB,dnnzB,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,closure_vals,ndblock,alltimeset,allregset,eq_addr,counteq,nintraeq,eqmeta,neqmeta,iodata,niodata,noutdata,nsoldata,probefine,mpisize,rank);
+    if(!jac_only)probe_structural(VecSize,nvarele,ncofele,dnz,dnnz,dnzB,dnnzB,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,closure_vals,ndblock,alltimeset,allregset,eq_addr,counteq,nintraeq,eqmeta,neqmeta,iodata,niodata,noutdata,nsoldata,probefine,mpisize,rank);
     VecDestroy(&vece); /* the skipped solve driver would have destroyed it */
   }
   free(eqmeta);
