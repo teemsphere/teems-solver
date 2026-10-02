@@ -593,6 +593,7 @@ int tab_postsim_split(char *newtabfile, char *psfile);
    mapping_complementarity_design.md section 5); no-op when the TAB
    has no levels statements; -1 on error */
 int tab_levels_transform(char *fname);
+const char *levels_linear_of(const char *name);
 /* C1: one Complementarity statement (manual 10.17/11.14; design doc
    section 7): parsed at transform time, set matching validated after
    set elements exist, closure integration after closure_read. Bound

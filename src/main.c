@@ -32,7 +32,13 @@ static int coefficients_dump(const char *stem, array_def *coefs, offset_t ncof, 
   }
   hdr[0]=1; hdr[1]=ncof; hdr[2]=ncofele; hdr[3]=0;
   fwrite(hdr,sizeof(offset_t),4,fp);
-  fwrite(coefs,sizeof(array_def),ncof,fp);
+  for(i=0; i<ncof; i++) {
+    /* a p_NAME coefficient runs as p@NAME (pcoef_rename): report the
+       declared name */
+    array_def rec=coefs[i];
+    if(rec.cofname[0]=='p'&&rec.cofname[1]=='@')rec.cofname[1]='_';
+    fwrite(&rec,sizeof(array_def),1,fp);
+  }
   for(i=0; i<ncof; i++) {
     unsigned char kind=0;
     if(teems_coef_is_ps!=NULL&&teems_coef_is_ps[i])kind|=1;
@@ -289,22 +295,30 @@ static int structure_files_write(const char *stem, array_def *vars, offset_t nva
   FILE *solution;
   const char *ext[3]={".var",".set",".sel"};
   const char *kind[3]={"variable_declarations","set_declarations","set_elements"};
-  const void *data[3]={vars,sets,set_elems};
+  offset_t f;
+  /* a p_NAME linear variable runs as p@NAME (pcoef_rename): the
+     declarations carry the declared name */
+  array_def *vout=(array_def *)malloc((nvar>0?nvar:1)*sizeof(array_def));
+  if (vout==NULL) return 1;
+  memcpy(vout,vars,(size_t)nvar*sizeof(array_def));
+  for (f=0; f<nvar; f++) if (vout[f].cofname[0]=='p'&&vout[f].cofname[1]=='@') vout[f].cofname[1]='_';
+  const void *data[3]={vout,sets,set_elems};
   size_t size[3]={sizeof(array_def),sizeof(set_def),sizeof(set_element)};
   size_t count[3]={(size_t)nvar,(size_t)nset,(size_t)nsetspace};
   offset_t modeldes[4];
-  int f;
   for(f=0; f<3; f++) {
     snprintf(solchar,sizeof(solchar),"%s%s",stem,ext[f]);
     logmsg(2,"solchar %s\n",solchar);
     if ( (solution = fopen(solchar, "wb")) == NULL ) {
       errmsg("Error: cannot open %s for writing: %s (the solver runs as uid %d)\n",solchar,strerror(errno),(int)getuid());
+      free(vout);
       return 1;
     }
     fwrite(data[f],size[f],count[f],solution);
     fclose(solution);
     outputs_note(solchar,kind[f],0);
   }
+  free(vout);
   modeldes[0]=nsetspace;
   modeldes[1]=nvar;
   modeldes[2]=nvarele;

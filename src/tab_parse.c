@@ -2045,14 +2045,25 @@ int names_validate(set_def *sets, dim_t nset, array_def *coefs, offset_t ncof, a
         errmsg("Error: coefficient name %s is a reserved word (manual 11.2.1)\n",coefs[i].cofname);
         return -1;
       }
+    /* a levels variable X brings the linear variable p_X (percent
+       change) or c_X (change), and only that name is taken (manual
+       9.2.2); beside a linear variable X both are free. A p_NAME
+       coefficient runs as p@NAME. */
+    if((coefs[i].cofname[0]=='c'&&coefs[i].cofname[1]=='_')||(coefs[i].cofname[0]=='p'&&coefs[i].cofname[1]=='@')) {
+      int ischg=(coefs[i].cofname[0]=='c');
+      for(j=0; j<nvar; j++)if(vars[j].level_par&&(vars[j].change_real?1:0)==ischg&&strcmp(vars[j].cofname,coefs[i].cofname+2)==0) {
+          errmsg("Error: coefficient %c_%s has the name of the linear variable of levels variable %s (manual 9.2.2); rename the coefficient\n",coefs[i].cofname[0],coefs[i].cofname+2,vars[j].cofname);
+          return -1;
+        }
+    }
   }
   for(i=0; i<nvar; i++) {
-    /* declared p_-/c_-leading names are legal (hand-linearized pairs,
-       design doc section 6) UNLESS the bare name is also a variable:
-       then the reference token p_<bare> is ambiguous */
+    /* a variable p_X / c_X takes the name of the linear variable of a
+       percent-change / change levels variable X (manual 9.2.2); beside
+       any other X the name is free */
     if((vars[i].cofname[0]=='p'||vars[i].cofname[0]=='c')&&vars[i].cofname[1]=='_') {
-      for(j=0; j<nvar; j++)if(strcmp(vars[j].cofname,vars[i].cofname+2)==0) {
-          errmsg("Error: variables %s and %s cannot coexist: the reference p_%s is ambiguous (manual 11.2.1)\n",vars[i].cofname,vars[j].cofname,vars[i].cofname+2);
+      for(j=0; j<nvar; j++)if(vars[j].level_par&&(vars[j].change_real?'c':'p')==vars[i].cofname[0]&&strcmp(vars[j].cofname,vars[i].cofname+2)==0) {
+          errmsg("Error: variable %s has the name of the linear variable of levels variable %s (manual 9.2.2); rename it\n",vars[i].cofname,vars[j].cofname);
           return -1;
         }
     }
@@ -3765,8 +3776,30 @@ static offset_t closure_var_find(char *vname, array_def *vars, offset_t nvar) {
     MPI_Abort(PETSC_COMM_WORLD,1);
   }
   for (j=0; j<nvar; j++) if (strcmp(vname,vars[j].cofname)==0) return j;
+  /* a p_NAME linear variable runs as p@NAME (pcoef_rename) */
+  if (vname[0]=='p'&&vname[1]=='_') for (j=0; j<nvar; j++)
+      if (vars[j].cofname[0]=='p'&&vars[j].cofname[1]=='@'&&strcmp(vname+2,vars[j].cofname+2)==0) return j;
+  /* the levels name of a LINEAR_NAME=/LINEAR_VAR= levels variable
+     stands for its linear variable (manual 24.13) */
+  {
+    const char *lin=levels_linear_of(vname);
+    if (lin!=NULL) for (j=0; j<nvar; j++) if (strcmp(lin,vars[j].cofname)==0) return j;
+  }
+  /* p_X / c_X name the linear variable of levels variable X, by its
+     kind (manual 9.2.2); a linear variable is named by itself */
   if ((vname[0]=='p'||vname[0]=='c')&&vname[1]=='_') {
-    for (j=0; j<nvar; j++) if (strcmp(vname+2,vars[j].cofname)==0) return j;
+    const char *lin=levels_linear_of(vname+2);
+    if (lin!=NULL) {
+      errmsg("Error: %s names no variable: the linear variable of levels variable %s is %s (LINEAR_NAME/LINEAR_VAR, manual 9.2.2)\n",vname,vname+2,lin);
+      MPI_Abort(PETSC_COMM_WORLD,1);
+    }
+    for (j=0; j<nvar; j++) if (strcmp(vname+2,vars[j].cofname)==0) {
+        if (vars[j].level_par&&(vars[j].change_real?'c':'p')==vname[0]) return j;
+        errmsg("Error: %s names no variable: %s is %s, named %s%s (manual 9.2.2)\n",vname,vars[j].cofname,
+               !vars[j].level_par?"a linear variable":vars[j].change_real?"a change levels variable":"a percentage-change levels variable",
+               !vars[j].level_par?"":vars[j].change_real?"c_":"p_",vars[j].cofname);
+        MPI_Abort(PETSC_COMM_WORLD,1);
+      }
   }
   return -1;
 }
@@ -5019,27 +5052,6 @@ offset_t set_find_alltime(set_def *sets,dim_t nset) {
 }
 
 
-/* does the TAB declare a variable of this name (case-insensitive)? */
-static int tab_declares_variable(char *fname, const char *name) {
-  FILE *f=teems_fopen(fname,"r");
-  char line[TABREADLINE];
-  int found=0;
-  while (!found&&tab_next_statement("variable",f,line,TABREADLINE)) {
-    char *p=line+8,nm[NAMESIZE];
-    int k=0;
-    for (;;) {
-      int d=0;
-      while (*p==' ') p++;
-      if (*p!='(') break;
-      for (; *p!='\0'; p++) { if (*p=='(') d++; else if (*p==')') { d--; if (d==0) { p++; break; } } }
-    }
-    while ((isalnum((unsigned char)*p)||*p=='_'||*p=='@')&&k<NAMESIZE-1) nm[k++]=*p++;
-    nm[k]='\0';
-    if (str_cmp_ci(nm,name)==0) found=1;
-  }
-  fclose(f);
-  return found;
-}
 
 offset_t coefficients_read(char *fname, char *commsyntax, array_def *record, offset_t ncof, set_def *sets,offset_t nset) {
   FILE * filehandle;
@@ -5167,12 +5179,6 @@ offset_t coefficients_read(char *fname, char *commsyntax, array_def *record, off
           return -1;
         }
         strcpy(record[j].cofname,readitem);
-        /* c_NAME collides only when a variable NAME exists: then c_NAME
-           is its change column (vetting dynamic G8: Melitz C_* data) */
-        if(record[j].cofname[0]=='c'&&record[j].cofname[1]=='_'&&tab_declares_variable(fname,record[j].cofname+2)){
-          errmsg("Error: coefficient %s collides with the change column c_%s of variable %s; rename the coefficient\n",record[j].cofname,record[j].cofname+2,record[j].cofname+2);
-          return -1;
-        }
         readitem = strtok(NULL,")");
         if (readitem==NULL||strlen(readitem)+2>sizeof(vname)) {
           errmsg("Error: malformed %s declaration in TAB file\n",commsyntax);
@@ -5228,10 +5234,6 @@ offset_t coefficients_read(char *fname, char *commsyntax, array_def *record, off
             return -1;
           }
           strcpy(record[j].cofname,setname);
-          if(record[j].cofname[0]=='c'&&record[j].cofname[1]=='_'&&tab_declares_variable(fname,record[j].cofname+2)){
-            errmsg("Error: coefficient %s collides with the change column c_%s of variable %s; rename the coefficient\n",record[j].cofname,record[j].cofname+2,record[j].cofname+2);
-            return -1;
-          }
           record[j].offset=addi;
           record[j].size=0;
           record[j].nelem=1;
@@ -7626,10 +7628,14 @@ offset_t backsolve_read(char *fname, array_def *vars, offset_t nvar, closure_ent
         break;
       }
     }
-    /* GEMPACK 10.16: the linear name p_X/c_X may stand for the variable */
+    if (j==-1&&levels_linear_of(vname)!=NULL) {
+      for (i=0; i<nvar; i++) if (strcmp(vars[i].cofname,levels_linear_of(vname))==0) { j=i; break; }
+    }
+    /* GEMPACK 10.16: the linear name p_X/c_X of a levels variable X
+       may stand for it (9.2.2: p_ for percent change, c_ for change) */
     if (j==-1&&(strncmp(vname,"p_",2)==0||strncmp(vname,"c_",2)==0)) {
       for (i=0; i<nvar; i++) {
-        if (strcmp(vars[i].cofname,vname+2)==0) {
+        if (strcmp(vars[i].cofname,vname+2)==0&&vars[i].level_par&&(vars[i].change_real?'c':'p')==vname[0]) {
           j=i;
           break;
         }

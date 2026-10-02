@@ -62,9 +62,14 @@
 #define LV_TERMBUF 4096
 
 typedef struct {
-  char name[NAMESIZE];      /* declared name (variable keeps it) */
+  char name[NAMESIZE];      /* the linear variable (column): the declared
+                               name, or LINEAR_NAME=/LINEAR_VAR= */
   char valname[NAMESIZE];   /* pair-coefficient name: == name unless
-                               p_/c_-leading, then gen_lvN (C1a) */
+                               p_/c_-leading, then gen_lvN (C1a); the
+                               declared name under LINEAR_NAME/VAR */
+  char decl[NAMESIZE];      /* the name the declaration statement uses */
+  int kind;                 /* 0 plain, 1 gen_lv-renamed (C1a),
+                               2 LINEAR_NAME=, 3 LINEAR_VAR= (9.2.2) */
   bool change;
 } lv_pair;
 
@@ -103,6 +108,7 @@ typedef struct {
   int nrenamed;                 /* gen_lvN counter (C1a) */
   lv_coefrec cf[LV_MAXNAMES]; int ncf;
   char linvar[LV_MAXNAMES][NAMESIZE]; int nlinvar; /* non-levels variables */
+  char linsets[LV_MAXNAMES][NAMESIZE];              /* their argument sets, comma-joined */
   /* per-statement expression workspace */
   lv_node nodes[LV_MAXNODES]; int nnodes;
   lv_term terms[LV_MAXTERMS]; int nterms;
@@ -143,7 +149,7 @@ static int lv_find_lv(lv_ctx *c, const char *name, int len) {
 static int lv_find_lv_decl(lv_ctx *c, const char *name, int len) {
   int i;
   for (i = 0; i < c->nlv; i++)
-    if ((int)strlen(c->lv[i].name) == len && strncmp(c->lv[i].name, name, len) == 0) return i;
+    if ((int)strlen(c->lv[i].decl) == len && strncmp(c->lv[i].decl, name, len) == 0) return i;
   return -1;
 }
 static int lv_find_cf(lv_ctx *c, const char *name, int len) {
@@ -167,6 +173,8 @@ static int lv_find_linvar(lv_ctx *c, const char *name, int len) {
    the declared name and optional index group. Returns 0 on success. */
 typedef struct {
   bool has_levels, has_linear, has_change, has_percent;
+  char linname[NAMESIZE], linvar[NAMESIZE]; /* LINEAR_NAME= / LINEAR_VAR= */
+  char extra[NAMESIZE];                    /* other qualifier tokens, comma-joined */
   const char *quants; int quantslen;   /* verbatim quantifier span */
   const char *name; int namelen;
   const char *args; int argslen;       /* incl. parens, "" if none */
@@ -204,6 +212,12 @@ static int lv_parse_head(const char *after_kw, lv_head *h) {
           else if (strcmp(tok, "linear") == 0) h->has_linear = true;
           else if (strcmp(tok, "change") == 0) h->has_change = true;
           else if (strcmp(tok, "percent_change") == 0) h->has_percent = true;
+          else if (strncmp(tok, "linear_name=", 12) == 0) strcpy(h->linname, tok + 12);
+          else if (strncmp(tok, "linear_var=", 11) == 0) strcpy(h->linvar, tok + 11);
+          else if (tok[0] != '\0' && strlen(h->extra) + strlen(tok) + 2 < sizeof(h->extra)) {
+            if (h->extra[0] != '\0') strcat(h->extra, ",");
+            strcat(h->extra, tok);
+          }
           /* everything else (orig_level=, vpqtype=, bounds...) is
              validated by tab_qualifiers_parse downstream */
           ti = 0;
@@ -237,6 +251,39 @@ static int lv_parse_head(const char *after_kw, lv_head *h) {
     h->args = p; h->argslen = ge + 1;
   }
   return 0;
+}
+
+/* the sets of a declaration's arguments in order, comma-joined, read
+   from its quantifiers: "(all,c,com)(all,s,src) x(c,s)" -> "com,src" */
+static void lv_arg_sets(const lv_head *h, char *out, size_t cap) {
+  const char *a = h->args;
+  int k = 0;
+  out[0] = '\0';
+  if (h->argslen < 2) return;
+  for (a = h->args + 1; a < h->args + h->argslen - 1; ) {
+    char idx[NAMESIZE], key[NAMESIZE + 8], set[NAMESIZE];
+    const char *q, *f;
+    int n = 0;
+    while (*a == ' ' || *a == ',') a++;
+    while (lv_isnamec(*a) && n < NAMESIZE - 1) idx[n++] = *a++;
+    idx[n] = '\0';
+    while (*a != ',' && a < h->args + h->argslen - 1) a++;
+    if (n == 0) break;
+    set[0] = '\0';
+    snprintf(key, sizeof(key), ",%s,", idx);
+    for (q = h->quants; q < h->quants + h->quantslen; q++) {
+      if (strncmp(q, key, strlen(key)) == 0) {
+        f = q + strlen(key);
+        n = 0;
+        while (lv_isnamec(*f) && n < NAMESIZE - 1) set[n++] = *f++;
+        set[n] = '\0';
+        break;
+      }
+    }
+    if (strlen(out) + strlen(set) + 2 >= cap) return;
+    if (k++ > 0) strcat(out, ",");
+    strcat(out, set[0] ? set : idx);
+  }
 }
 
 /* separate parameter-ish token scan for coefficient statements (the
@@ -740,7 +787,9 @@ static int lv_diff_side(lv_ctx *c, const char *expr, char *out, size_t outcap) {
     /* the column text is p_ + DECLARED name (differs from the value
        token for gen_lv-renamed pairs); linvar_resolve resolves
        p_<p_-leading name> tokens (section 6) */
-    if (lv_strcat_b(out, "p_", outcap) < 0) return lv_err(c, "output too large");
+    /* a LINEAR_NAME/LINEAR_VAR column is an ordinary linear variable,
+       written by its own name (the variable pass prefixes it) */
+    if (c->lv[v->pairidx].kind < 2 && lv_strcat_b(out, "p_", outcap) < 0) return lv_err(c, "output too large");
     if (lv_strcat_b(out, c->lv[v->pairidx].name, outcap) < 0) return lv_err(c, "output too large");
     if (lv_ncat_b(out, v->args, v->argslen, outcap) < 0) return lv_err(c, "output too large");
     for (j = 0; j < t->nsum; j++)
@@ -775,12 +824,70 @@ static int lv_scan(lv_ctx *c, char *fname, bool *any) {
         if (h.has_linear) lv = false;
         if (h.has_change) ch = true;
         if (h.has_percent) ch = false;
-        if (lv) {
+        if (!lv && (h.linname[0] != '\0' || h.linvar[0] != '\0')) {
+          errmsg("Error: variable %.*s: LINEAR_NAME= and LINEAR_VAR= qualify levels variables only (manual 9.2.2)\n", h.namelen, h.name);
+          fclose(f);
+          return -1;
+        }
+        if (lv && (h.linname[0] != '\0' || h.linvar[0] != '\0')) {
+          /* the associated linear variable is named, or already
+             declared (manual 9.2.2): the declared name is only the
+             value coefficient */
+          lv_pair *e;
+          int l = h.namelen < NAMESIZE - 1 ? h.namelen : NAMESIZE - 1, k;
+          char sig[NAMESIZE];
+          if (c->nlv >= LV_MAXLV) { errmsg("Error: too many levels variables\n"); fclose(f); return -1; }
+          e = &c->lv[c->nlv];
+          strncpy(e->decl, h.name, l);
+          e->decl[l] = '\0';
+          strcpy(e->valname, e->decl);
+          e->change = ch;
+          if (h.linname[0] != '\0' && h.linvar[0] != '\0') {
+            errmsg("Error: levels variable %s takes LINEAR_NAME= or LINEAR_VAR=, not both (manual 9.2.2)\n", e->decl);
+            fclose(f);
+            return -1;
+          }
+          lv_arg_sets(&h, sig, sizeof(sig));
+          if (h.linname[0] != '\0') {
+            bool taken = lv_find_linvar(c, h.linname, (int)strlen(h.linname)) >= 0 || lv_find_cf(c, h.linname, (int)strlen(h.linname)) >= 0;
+            for (k = 0; k < c->nlv && !taken; k++) if (strcmp(c->lv[k].name, h.linname) == 0 || strcmp(c->lv[k].decl, h.linname) == 0) taken = true;
+            if (taken) {
+              errmsg("Error: LINEAR_NAME=%s of levels variable %s: a variable or coefficient %s is already declared (manual 9.2.2)\n", h.linname, e->decl, h.linname);
+              fclose(f);
+              return -1;
+            }
+            strcpy(e->name, h.linname);
+            e->kind = 2;
+            if (c->nlinvar < LV_MAXNAMES) {
+              strcpy(c->linvar[c->nlinvar], h.linname);
+              strcpy(c->linsets[c->nlinvar], sig);
+              c->nlinvar++;
+            }
+          } else {
+            k = lv_find_linvar(c, h.linvar, (int)strlen(h.linvar));
+            if (k < 0) {
+              errmsg("Error: LINEAR_VAR=%s of levels variable %s: no linear variable %s is declared before it (manual 9.2.2)\n", h.linvar, e->decl, h.linvar);
+              fclose(f);
+              return -1;
+            }
+            if (strcmp(c->linsets[k], sig) != 0) {
+              errmsg("Error: LINEAR_VAR=%s of levels variable %s: its arguments range over (%s), the levels variable's over (%s); they must match (manual 9.2.2)\n", h.linvar, e->decl, c->linsets[k], sig);
+              fclose(f);
+              return -1;
+            }
+            strcpy(e->name, h.linvar);
+            e->kind = 3;
+          }
+          c->nlv++;
+          *any = true;
+        } else if (lv) {
           if (c->nlv >= LV_MAXLV) { errmsg("Error: too many levels variables\n"); fclose(f); return -1; }
           {
             int l = h.namelen < NAMESIZE - 1 ? h.namelen : NAMESIZE - 1;
             strncpy(c->lv[c->nlv].name, h.name, l);
             c->lv[c->nlv].name[l] = '\0';
+            strcpy(c->lv[c->nlv].decl, c->lv[c->nlv].name);
+            c->lv[c->nlv].kind = 0;
             c->lv[c->nlv].change = ch;
             /* p_-leading declared name: the pair coefficient gets a
                generated name and value references are rewritten to it
@@ -795,8 +902,10 @@ static int lv_scan(lv_ctx *c, char *fname, bool *any) {
               fclose(f);
               return -1;
             }
-            if (l >= 2 && c->lv[c->nlv].name[0] == 'p' && c->lv[c->nlv].name[1] == '_')
+            if (l >= 2 && c->lv[c->nlv].name[0] == 'p' && c->lv[c->nlv].name[1] == '_') {
               sprintf(c->lv[c->nlv].valname, "gen_lv%d", c->nrenamed++);
+              c->lv[c->nlv].kind = 1;
+            }
             else strcpy(c->lv[c->nlv].valname, c->lv[c->nlv].name);
             c->nlv++;
           }
@@ -806,6 +915,7 @@ static int lv_scan(lv_ctx *c, char *fname, bool *any) {
             int l = h.namelen < NAMESIZE - 1 ? h.namelen : NAMESIZE - 1;
             strncpy(c->linvar[c->nlinvar], h.name, l);
             c->linvar[c->nlinvar][l] = '\0';
+            lv_arg_sets(&h, c->linsets[c->nlinvar], sizeof(c->linsets[0]));
             c->nlinvar++;
           }
         }
@@ -870,7 +980,7 @@ static int lv_rename_line(lv_ctx *c, char *line, size_t cap) {
       tl = 0;
       while (lv_isnamec(line[i + tl])) tl++;
       for (k = 0; k < c->nlv; k++)
-        if (strcmp(c->lv[k].name, c->lv[k].valname) != 0 &&
+        if (c->lv[k].kind == 1 &&
             (int)strlen(c->lv[k].name) == tl &&
             strncmp(c->lv[k].name, line + i, tl) == 0) break;
       if (k < c->nlv) {
@@ -1998,6 +2108,34 @@ offset_t comp_verify_states(set_def *sets, dim_t nset, set_element *set_elems, a
   return nbad;
 }
 
+char (*teems_lv_alias)[2][NAMESIZE] = NULL;
+int teems_lv_nalias = 0;
+
+static void lv_alias_store(lv_ctx *c) {
+  int i, n = 0;
+  free(teems_lv_alias);
+  teems_lv_alias = NULL;
+  teems_lv_nalias = 0;
+  for (i = 0; i < c->nlv; i++) if (c->lv[i].kind >= 2) n++;
+  if (n == 0) return;
+  teems_lv_alias = calloc(n, sizeof(*teems_lv_alias));
+  if (teems_lv_alias == NULL) return;
+  for (i = 0; i < c->nlv; i++) if (c->lv[i].kind >= 2) {
+      strcpy(teems_lv_alias[teems_lv_nalias][0], c->lv[i].decl);
+      strcpy(teems_lv_alias[teems_lv_nalias][1], c->lv[i].name);
+      teems_lv_nalias++;
+    }
+}
+
+/* levels name of a LINEAR_NAME=/LINEAR_VAR= levels variable -> its
+   linear variable, for Command-file references (manual 24.13); NULL
+   when name is not such a levels variable */
+const char *levels_linear_of(const char *name) {
+  int i;
+  for (i = 0; i < teems_lv_nalias; i++) if (strcmp(teems_lv_alias[i][0], name) == 0) return teems_lv_alias[i][1];
+  return NULL;
+}
+
 int tab_levels_transform(char *fname) {
   lv_ctx *c;
   FILE *f, *fout;
@@ -2009,6 +2147,7 @@ int tab_levels_transform(char *fname) {
   if (c == NULL) { errmsg("Error: out of memory in tab_levels_transform\n"); return -1; }
   if (lv_scan(c, fname, &any) < 0) { free(c); return -1; }
   if (!any) { free(c); return 0; }
+  lv_alias_store(c);
   f = teems_fopen(fname, "r");
   if (f == NULL) { errmsg("Error: cannot open %s\n", fname); free(c); return -1; }
   strcpy(tmpname, fname);
@@ -2038,6 +2177,26 @@ int tab_levels_transform(char *fname) {
     if (strncmp(stmt, "variable", 8) == 0 && !tab_default_value(stmt, defval)) {
       if (lv_parse_head(stmt + 8, &h) == 0 && lv_find_lv_decl(c, h.name, h.namelen) >= 0) {
         int k = lv_find_lv_decl(c, h.name, h.namelen);
+        if (c->lv[k].kind >= 2) {
+          /* GEMPACK's expansion (9.2.2): LINEAR_NAME= declares the
+             linear variable under that name; LINEAR_VAR= uses the one
+             declared before. The declared name is the value
+             coefficient, updated from the linear variable. */
+          if (c->lv[k].kind == 2) {
+            const char *lb = strchr(h.name + h.namelen, '#'), *le = (lb != NULL) ? strchr(lb + 1, '#') : NULL;
+            fprintf(fout, "variable (linear,%s%s%s) %.*s %s%.*s %.*s;\n",
+                    c->lv[k].change ? "change" : "percent_change", h.extra[0] ? "," : "", h.extra,
+                    h.quantslen, h.quants, c->lv[k].name, h.argslen, h.args,
+                    (lb != NULL && le != NULL) ? (int)(le - lb + 1) : 0, lb != NULL ? lb : "");
+          }
+          fprintf(fout, "coefficient (non_parameter) %.*s %s%.*s ;\n",
+                  h.quantslen, h.quants, c->lv[k].valname, h.argslen, h.args);
+          fprintf(fout, "update %s%.*s %s%.*s = %s%.*s ;\n",
+                  c->lv[k].change ? "(change) " : "",
+                  h.quantslen, h.quants, c->lv[k].valname, h.argslen, h.args,
+                  c->lv[k].name, h.argslen, h.args);
+          continue;
+        }
         /* declaration passes through verbatim (variables_read
            re-derives level_par/change_real from the same statement);
            append the value coefficient and its update (9.2.2). The

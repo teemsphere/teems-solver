@@ -835,9 +835,236 @@ static int decl_coef_declared(char *tabfile, const char *tok) {
   return 0;
 }
 
+/* p_/c_ names (manual 9.2.2): a levels variable X brings one linear
+   variable, p_X (percent change) or c_X (change), or the LINEAR_NAME=
+   it is given; a linear variable is referred to by its own name. The
+   variables' kinds are read once from the declarations, with Variable
+   (default=...) statements applied in order. */
+typedef struct { char name[NAMESIZE]; int kind; char lin[NAMESIZE]; } pc_var; /* kind 1 linear, 2 levels percent, 3 levels change, 4 levels with LINEAR_NAME/VAR (its linear variable in lin) */
+static pc_var *pc_vars=NULL;
+static int n_pc_vars=0;
+
+static int pc_kinds_build(const char *tabfile) {
+  FILE *f=teems_fopen((char *)tabfile,"r");
+  char line[TABREADLINE+1],defval[NAMESIZE];
+  int lev=0,chg=0,cap=0;
+  n_pc_vars=0;
+  if (f==NULL) return -1;
+  while (fgets(line,TABREADLINE,f)) {
+    char *p,name[NAMESIZE],linname[NAMESIZE]="",linvarnm[NAMESIZE]="";
+    int l=0,c=chg,linvar=0,k;
+    if (strncmp(line,"variable",8)!=0) continue;
+    if (tab_default_value(line,defval)) {
+      if (strcmp(defval,"levels")==0) lev=1;
+      else if (strcmp(defval,"linear")==0) lev=0;
+      else if (strcmp(defval,"change")==0) chg=1;
+      else if (strcmp(defval,"percent_change")==0) chg=0;
+      continue;
+    }
+    l=lev;
+    for (p=line+8; *p==' '; p++) {}
+    while (*p=='('&&strncmp(p,"(all,",5)!=0&&strncmp(p,"(all ",5)!=0) {
+      char tok[NAMESIZE];
+      int t=0;
+      for (p++; *p!='\0'&&*p!=')'; p++) {
+        if (*p==','||*p==' ') {
+          tok[t]='\0';
+          if (strcmp(tok,"levels")==0) l=1;
+          else if (strcmp(tok,"linear")==0) l=0;
+          else if (strcmp(tok,"change")==0) c=1;
+          else if (strcmp(tok,"percent_change")==0) c=0;
+          else if (strncmp(tok,"linear_name=",12)==0) strcpy(linname,tok+12);
+          else if (strncmp(tok,"linear_var=",11)==0) { linvar=1; strcpy(linvarnm,tok+11); }
+          t=0;
+          continue;
+        }
+        if (t<NAMESIZE-1) tok[t++]=*p;
+      }
+      tok[t]='\0';
+      if (strcmp(tok,"levels")==0) l=1;
+      else if (strcmp(tok,"linear")==0) l=0;
+      else if (strcmp(tok,"change")==0) c=1;
+      else if (strcmp(tok,"percent_change")==0) c=0;
+      else if (strncmp(tok,"linear_name=",12)==0) strcpy(linname,tok+12);
+      else if (strncmp(tok,"linear_var=",11)==0) { linvar=1; strcpy(linvarnm,tok+11); }
+      if (*p==')') p++;
+      while (*p==' ') p++;
+    }
+    while (strncmp(p,"(all",4)==0) {
+      int d=0;
+      for (; *p!='\0'; p++) { if (*p=='(') d++; else if (*p==')') { d--; if (d==0) { p++; break; } } }
+      while (*p==' ') p++;
+    }
+    for (k=0; cond_is_namec(*p)&&k<NAMESIZE-1; p++) name[k++]=*p;
+    name[k]='\0';
+    if (k==0) continue;
+    if (n_pc_vars+2>cap) {
+      pc_var *g;
+      cap=cap?2*cap:128;
+      g=(pc_var *)realloc(pc_vars,cap*sizeof(pc_var));
+      if (g==NULL) { fclose(f); return -1; }
+      pc_vars=g;
+    }
+    /* LINEAR_NAME/LINEAR_VAR: the declared name is a coefficient, the
+       linear variable is the named one */
+    if (l&&(linname[0]!='\0'||linvar)) {
+      if (linname[0]!='\0') {
+        strcpy(pc_vars[n_pc_vars].name,linname);
+        pc_vars[n_pc_vars++].kind=1;
+      }
+      strcpy(pc_vars[n_pc_vars].name,name);
+      strcpy(pc_vars[n_pc_vars].lin,linname[0]!='\0'?linname:linvarnm);
+      pc_vars[n_pc_vars++].kind=4;
+      continue;
+    }
+    strcpy(pc_vars[n_pc_vars].name,name);
+    pc_vars[n_pc_vars++].kind=l?(c?3:2):1;
+  }
+  fclose(f);
+  return 0;
+}
+
+static int pc_find(const char *nm, size_t len) {
+  int i;
+  for (i=0; i<n_pc_vars; i++) if (strlen(pc_vars[i].name)==len&&strncmp(pc_vars[i].name,nm,len)==0) return i;
+  return -1;
+}
+
+static int pc_kind(const char *nm, size_t len) {
+  int i=pc_find(nm,len);
+  return (i<0||pc_vars[i].kind==4)?0:pc_vars[i].kind;
+}
+
+/* check (and, in equations and updates, rewrite c_X to the p_X column
+   token) every p_/c_ reference of one statement line; -1 on a named
+   error */
+static int pc_tokens_line(char *line, const char *tabfile, int rewrite) {
+  char *n;
+  int q=0;
+  for (n=line; *n!='\0'; n++) {
+    char tok[NAMESIZE];
+    int k=0,kind;
+    if (*n=='"') { q=!q; continue; }
+    if (q||(n[0]!='p'&&n[0]!='c')||n[1]!='_'||(n>line&&cond_is_namec(n[-1]))) continue;
+    while (cond_is_namec(n[k])&&k<NAMESIZE-1) { tok[k]=n[k]; k++; }
+    tok[k]='\0';
+    if (pc_kind(tok,strlen(tok))>0||decl_coef_declared((char *)tabfile,n)) { n+=k-1; continue; }
+    kind=pc_kind(tok+2,strlen(tok+2));
+    {
+      int w=pc_find(tok+2,strlen(tok+2));
+      if (w>=0&&pc_vars[w].kind==4) {
+        errmsg("Error: %s names no variable: the linear variable of levels variable %s is %s (LINEAR_NAME/LINEAR_VAR, manual 9.2.2): %.200s\n",tok,tok+2,pc_vars[w].lin,line);
+        return -1;
+      }
+    }
+    if (kind==1) {
+      errmsg("Error: %s refers to linear variable %s; a linear variable is named by itself (p_/c_ names belong to levels variables, manual 9.2.2): %.200s\n",tok,tok+2,line);
+      return -1;
+    }
+    if (kind==2&&tok[0]=='c') {
+      errmsg("Error: %s: levels variable %s is a percentage-change variable; its linear variable is p_%s (manual 9.2.2): %.200s\n",tok,tok+2,tok+2,line);
+      return -1;
+    }
+    if (kind==3&&tok[0]=='p') {
+      errmsg("Error: %s: levels variable %s is a change variable; its linear variable is c_%s (manual 9.2.2): %.200s\n",tok,tok+2,tok+2,line);
+      return -1;
+    }
+    if (kind==3&&rewrite) n[0]='p';
+    n+=k-1;
+  }
+  return 0;
+}
+
+/* A coefficient named p_NAME (legal beside a linear variable NAME,
+   manual 9.2.2) reads like the p_ column token every linear variable
+   reference becomes, so formulas bound it to the variable and equations
+   took it for a column. Its tokens become p@NAME throughout -- '@'
+   cannot begin a declared name -- and the coefficient dump reports the
+   declared name. A linear variable p_NAME beside a change levels
+   variable NAME, whose c_NAME references become p_NAME column tokens,
+   is renamed the same way; the structure files, closures and shocks
+   use the declared name. Runs before the c_ -> p_ rewrite. */
+static int pcoef_rename(const char *tabfile) {
+  FILE *f=teems_fopen((char *)tabfile,"r"),*fo;
+  char line[TABREADLINE+1],tmp[TABREADLINE],out[TABREADLINE+64];
+  char (*nm)[NAMESIZE]=NULL;
+  int n=0,cap=0,i;
+  if (f==NULL) return -1;
+  while (fgets(line,TABREADLINE,f)) {
+    char *p,name[NAMESIZE];
+    int k=0,isvar=strncmp(line,"variable",8)==0;
+    if (strncmp(line,"coefficient",11)!=0&&!isvar) continue;
+    for (p=line+(isvar?8:11); *p==' '; p++) {}
+    while (*p=='(') {
+      int d=0;
+      for (; *p!='\0'; p++) { if (*p=='(') d++; else if (*p==')') { d--; if (d==0) { p++; break; } } }
+      while (*p==' ') p++;
+    }
+    while (cond_is_namec(*p)&&k<NAMESIZE-1) name[k++]=*p++;
+    name[k]='\0';
+    if (k<3||name[0]!='p'||name[1]!='_') continue;
+    if (isvar) {
+      if (n_pc_vars==0&&pc_vars==NULL&&pc_kinds_build(tabfile)<0) { free(nm); fclose(f); return -1; }
+      if (pc_kind(name+2,strlen(name+2))!=3) continue;
+    }
+    if (n==cap) {
+      char (*g)[NAMESIZE];
+      cap=cap?2*cap:16;
+      g=realloc(nm,cap*sizeof(*nm));
+      if (g==NULL) { free(nm); fclose(f); return -1; }
+      nm=g;
+    }
+    strcpy(nm[n++],name);
+  }
+  fclose(f);
+  if (n==0) { free(nm); return 0; }
+  snprintf(tmp,sizeof(tmp),"%s_pc",tabfile);
+  f=teems_fopen((char *)tabfile,"r");
+  fo=teems_fopen(tmp,"w");
+  if (f==NULL||fo==NULL) { if (f) fclose(f); if (fo) fclose(fo); free(nm); return -1; }
+  while (fgets(line,TABREADLINE,f)) {
+    size_t o=0;
+    int q=0;
+    char *c;
+    for (c=line; *c!='\0'; ) {
+      if (*c=='"') q=!q;
+      if (!q&&c[0]=='p'&&c[1]=='_'&&(c==line||!cond_is_namec(c[-1]))) {
+        int k=0;
+        while (cond_is_namec(c[k])) k++;
+        for (i=0; i<n; i++) if ((int)strlen(nm[i])==k&&strncmp(nm[i],c,k)==0) break;
+        if (i<n) {
+          if (o+k+2>=sizeof(out)) { errmsg("Error: statement too long after renaming coefficient %s\n",nm[i]); fclose(f); fclose(fo); free(nm); return -1; }
+          out[o++]='p';
+          out[o++]='@';
+          memcpy(out+o,c+2,k-2);
+          o+=k-2;
+          c+=k;
+          continue;
+        }
+      }
+      if (o+2>=sizeof(out)) { fclose(f); fclose(fo); free(nm); errmsg("Error: statement too long after renaming p_ coefficients\n"); return -1; }
+      out[o++]=*c++;
+    }
+    out[o]='\0';
+    fputs(out,fo);
+  }
+  fclose(f);
+  fclose(fo);
+  free(nm);
+  if (rename(tmp,tabfile)!=0) { errmsg("Error: cannot rename %s\n",tmp); return -1; }
+  return 0;
+}
+
 int tab_preprocess(char *filename, char *newtabfile) {
-  int r=tab_preprocess_run(filename,newtabfile);
+  int r;
+  free(pc_vars);
+  pc_vars=NULL;
+  n_pc_vars=0;
+  r=tab_preprocess_run(filename,newtabfile);
   tab_decl_index_free();
+  free(pc_vars);
+  pc_vars=NULL;
+  n_pc_vars=0;
   return r;
 }
 
@@ -1610,6 +1837,10 @@ static int tab_preprocess_run(char *filename, char *newtabfile) {
   }
   fclose(filehandle);
   fclose(fout);
+  if (pcoef_rename(newtabfile1)<0) return -1;
+  free(pc_vars);
+  pc_vars=NULL;
+  n_pc_vars=0;
   filehandle = teems_fopen(newtabfile1,"r");
   if (filehandle==NULL) return -1;
   fout = teems_fopen(newtabfile,"w");
@@ -1626,17 +1857,13 @@ static int tab_preprocess_run(char *filename, char *newtabfile) {
     l5=str_find_ci(line,"assertion");
     if (l3==0&&str_count_ci(line,"\"")<3) l3=-1;
     if (l1==0||l2==0||l3==0||l4==0||l5==0) {
-      if (l1==0||l4==0) {
-        n=strstr(line,"c_");
-        while (n!=NULL) {
-          /* a declared coefficient named c_... is itself, not the change
-             column of a variable (vetting dynamic G8 / small S11) */
-          if (n>line&&!cond_is_namec(line[n-line-1])&&decl_coef_declared(newtabfile1,n)) { n=strstr(n+1,"c_"); continue; }
-          if (line[n-line-1]==' '||line[n-line-1]=='+'||line[n-line-1]=='-'||line[n-line-1]=='*'||line[n-line-1]=='/'||line[n-line-1]=='^'||line[n-line-1]==','||line[n-line-1]=='=') {
-            line[n-line]='p';
-            n=strstr(line,"c_");
-          } else n=strstr(n+1,"c_");
-        }
+      /* p_X and c_X name the linear variable of a levels variable X
+         only (manual 9.2.2); in equations and updates c_X becomes the
+         p_X column token. A declared coefficient or variable of that
+         name is itself (vetting dynamic G8 / small S11). */
+      if ((l1==0||l2==0||l4==0||l5==0)&&(strstr(line,"p_")!=NULL||strstr(line,"c_")!=NULL)) {
+        if (n_pc_vars==0&&pc_vars==NULL&&pc_kinds_build(newtabfile1)<0) { fclose(filehandle); fclose(fout); return -1; }
+        if (pc_tokens_line(line,newtabfile1,l1==0||l4==0)<0) { fclose(filehandle); fclose(fout); return -1; }
       }
       /* normalize `:`-condition segments (manual 11.4.11) BEFORE the
          singleton-subset transform below: the GEMPACK `EQ` spelling
@@ -2159,6 +2386,12 @@ static int if_cond_linear_var(const char *line, array_def *vars, offset_t nvar, 
   return 0;
 }
 
+static int pfx_depth(const char *nm) {
+  int d=0;
+  while (nm[0]=='p'&&nm[1]=='_') { d++; nm+=2; }
+  return d;
+}
+
 int tab_write_variables(char *filename, char *newtabfile,array_def *vars,offset_t nvar) {
   FILE * filehandle,*fout;
   char line[TABREADLINE+1]="\0",*p;//,nvarname[nvar][NAMESIZE+2],*p;//,line1[DATREADLINE];//,*ne,*np;//,*n2;
@@ -2166,6 +2399,15 @@ int tab_write_variables(char *filename, char *newtabfile,array_def *vars,offset_
   offset_t i,n,j,l,l1,linelght;
   int lvar;
   if (filehandle==NULL) return -1;
+  /* every linear variable gets the p_ column marker, p_-leading names
+     too (a linear zz and a linear p_zz are distinct, manual 9.2.2);
+     the deepest p_ nesting goes first so a freshly marked zz is never
+     taken for a declared p_zz */
+  offset_t *ord=(offset_t *)malloc((nvar>0?nvar:1)*sizeof(offset_t)),oi;
+  int dmax=0,dd;
+  if (ord==NULL) { fclose(filehandle); return -1; }
+  for (i=0; i<nvar; i++) if ((dd=pfx_depth(vars[i].cofname))>dmax) dmax=dd;
+  for (oi=0,dd=dmax; dd>=0; dd--) for (i=0; i<nvar; i++) if (pfx_depth(vars[i].cofname)==dd) ord[oi++]=i;
   fout = teems_fopen(newtabfile,"w");
   while (fgets(line,TABREADLINE,filehandle)) {
     int eqpos=str_find_ci(line,"equation ");
@@ -2174,7 +2416,8 @@ int tab_write_variables(char *filename, char *newtabfile,array_def *vars,offset_
        (vetting S9; this used to be a fatal) */
     if(eqpos>-1||updpos>-1) {
       linelght=strlen(line);
-      for (i=0; i<nvar; i++) {
+      for (oi=0; oi<nvar; oi++) {
+        i=ord[oi];
         p=strchr(line,';');
         if(p==NULL) break;
         line[p-line+1]='\n';
@@ -2188,7 +2431,7 @@ int tab_write_variables(char *filename, char *newtabfile,array_def *vars,offset_
           if(l1<0) break;
           l=l+l1;
           /* a scalar variable closing a group, "... - pxwwld)", was not prefixed: the term was bound as a value (its column dropped) -- ')' and '}' close the follower set (2026-09-06) */
-          if(strncmp(vars[i].cofname,"p_",2)!=0&&vars[i].level_par==false) if(line[l+lvar]==')'||line[l+lvar]=='}'||line[l+lvar]==' '||line[l+lvar]=='('||line[l+lvar]=='+'||line[l+lvar]=='-'||line[l+lvar]=='*'||line[l+lvar]=='/'||line[l+lvar]=='^'||line[l+lvar]==']'||line[l+lvar]==','||line[l+lvar]==';'||line[l+lvar]=='=')if(l==0||line[l-1]==' '||line[l-1]=='+'||line[l-1]=='-'||line[l-1]=='*'||line[l-1]=='/'||line[l-1]=='^'||line[l-1]=='['||line[l-1]=='('||line[l-1]==')'||line[l-1]==','||line[l-1]=='=') { /* ')' : a quantifier written flush against the body, "(all,c,com)p(c)" (2026-09-24) */
+          if(vars[i].level_par==false) if(line[l+lvar]==')'||line[l+lvar]=='}'||line[l+lvar]==' '||line[l+lvar]=='('||line[l+lvar]=='+'||line[l+lvar]=='-'||line[l+lvar]=='*'||line[l+lvar]=='/'||line[l+lvar]=='^'||line[l+lvar]==']'||line[l+lvar]==','||line[l+lvar]==';'||line[l+lvar]=='=')if(l==0||line[l-1]==' '||line[l-1]=='+'||line[l-1]=='-'||line[l-1]=='*'||line[l-1]=='/'||line[l-1]=='^'||line[l-1]=='['||line[l-1]=='('||line[l-1]==')'||line[l-1]==','||line[l-1]=='=') { /* ')' : a quantifier written flush against the body, "(all,c,com)p(c)" (2026-09-24) */
                 /* each p_ prefix grows the statement by 2 and nothing
                    bounded the growth (fuzz batch 13 stack overflow);
                    the move carries the terminator along */
@@ -2260,6 +2503,7 @@ int tab_write_variables(char *filename, char *newtabfile,array_def *vars,offset_
   }
   fclose(filehandle);
   fclose(fout);
+  free(ord);
   return 1;
 }
 

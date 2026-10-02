@@ -729,7 +729,11 @@ int probe_structural(PetscInt VecSize,offset_t nvarele,offset_t ncofele,PetscInt
       fprintf(fp,"    {\"eq\": \"%s\", \"rows\": %ld, \"dims\": [",eqmeta[k].eqname,(long)eqmeta[k].nrows);
       for(d=0; d<eqmeta[k].fdim; d++)fprintf(fp,"%s\"%s\"",(d>0)?", ":"",sets[eqmeta[k].setid[d]].setname);
       fprintf(fp,"], \"vars\": [");
-      for(d=0; d<eqmeta[k].nvars_ref; d++)fprintf(fp,"%s{\"v\": \"%s\", \"w\": %ld}",(d>0)?", ":"",vars[eqmeta[k].var_ref[d]].cofname,(long)eqmeta[k].var_w[d]);
+      for(d=0; d<eqmeta[k].nvars_ref; d++) {
+        const char *vn=vars[eqmeta[k].var_ref[d]].cofname;
+        int pat=(vn[0]=='p'&&vn[1]=='@');
+        fprintf(fp,"%s{\"v\": \"%s%s\", \"w\": %ld}",(d>0)?", ":"",pat?"p_":"",pat?vn+2:vn,(long)eqmeta[k].var_w[d]);
+      }
       fprintf(fp,"]}%s\n",(k<neqmeta-1)?",":"");
     }
     fprintf(fp,"  ],\n");
