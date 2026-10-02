@@ -1043,8 +1043,8 @@ static int reduce_linvar_check(const char *line) {
 static int pcoef_rename(const char *tabfile) {
   FILE *f=teems_fopen((char *)tabfile,"r"),*fo;
   char line[TABREADLINE+1],tmp[TABREADLINE],out[TABREADLINE+64];
-  char (*nm)[NAMESIZE]=NULL;
-  int n=0,cap=0,i;
+  char (*nm)[NAMESIZE]=NULL,(*both)[NAMESIZE]=NULL,*bothvar=NULL;
+  int n=0,cap=0,i,nb=0,capb=0;
   if (f==NULL) return -1;
   while (fgets(line,TABREADLINE,f)) {
     char *p,name[NAMESIZE];
@@ -1059,20 +1059,44 @@ static int pcoef_rename(const char *tabfile) {
     while (cond_is_namec(*p)&&k<NAMESIZE-1) name[k++]=*p++;
     name[k]='\0';
     if (k<3||name[0]!='p'||name[1]!='_') continue;
+    /* every p_-leading declaration, to leave a coefficient and a
+       variable of one name to the name check (11.2.1) */
+    if (nb==capb) {
+      char (*g)[NAMESIZE],*gv;
+      capb=capb?2*capb:16;
+      g=realloc(both,capb*sizeof(*both));
+      if (g!=NULL) both=g;
+      gv=realloc(bothvar,capb);
+      if (gv!=NULL) bothvar=gv;
+      if (g==NULL||gv==NULL) { free(nm); free(both); free(bothvar); fclose(f); return -1; }
+    }
+    strcpy(both[nb],name);
+    bothvar[nb++]=(char)isvar;
     if (isvar) {
-      if (n_pc_vars==0&&pc_vars==NULL&&pc_kinds_build(tabfile)<0) { free(nm); fclose(f); return -1; }
+      if (n_pc_vars==0&&pc_vars==NULL&&pc_kinds_build(tabfile)<0) { free(nm); free(both); free(bothvar); fclose(f); return -1; }
       if (pc_kind(name+2,strlen(name+2))!=3) continue;
     }
     if (n==cap) {
       char (*g)[NAMESIZE];
       cap=cap?2*cap:16;
       g=realloc(nm,cap*sizeof(*nm));
-      if (g==NULL) { free(nm); fclose(f); return -1; }
+      if (g==NULL) { free(nm); free(both); free(bothvar); fclose(f); return -1; }
       nm=g;
     }
     strcpy(nm[n++],name);
   }
   fclose(f);
+  {
+    int a,b,w=0;
+    for (a=0; a<n; a++) {
+      int cf=0,vr=0;
+      for (b=0; b<nb; b++) if (strcmp(both[b],nm[a])==0) { if (bothvar[b]) vr=1; else cf=1; }
+      if (!(cf&&vr)) strcpy(nm[w++],nm[a]);
+    }
+    n=w;
+  }
+  free(both);
+  free(bothvar);
   if (n==0) { free(nm); return 0; }
   snprintf(tmp,sizeof(tmp),"%s_pc",tabfile);
   f=teems_fopen((char *)tabfile,"r");
