@@ -777,6 +777,20 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
        mapping_values_read; the numeric reader must not see them
        (the "(" would route them into the indexed-read branch) */
     if (str_find_ci(line,"by_elements")>-1) continue;
+    /* an integer Read of a mapping (11.9.1c, 11.9.11) is consumed by
+       mapping_values_read too */
+    {
+      const char *t=line+4;
+      char nm[NAMESIZE];
+      int n=0;
+      dim_t mm;
+      while (*t==' ') t++;
+      if (strncmp(t,"(all,",5)==0) { t=strchr(t,')'); t=(t==NULL)?line:t+1; while (*t==' ') t++; }
+      while ((isalnum((unsigned char)*t)||*t=='_'||*t=='@')&&n<NAMESIZE-1) nm[n++]=*t++;
+      nm[n]='\0';
+      for (mm=0; mm<teems_nmap; mm++) if (strcmp(nm,teems_maps[mm].mapname)==0) break;
+      if (n>0&&mm<teems_nmap) continue;
+    }
     /* Read (IfHeaderExists) qualifier (manual 10.6/11.11.8; plan 3.9):
        the read runs only when the header is on the file; an absent
        header is NOT an error -- values set up by earlier statements
@@ -1664,7 +1678,8 @@ offset_t sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
         strcpy(line,line1);
         p = strtok(line,"(");
         p = strtok(NULL,",");
-        strcpy(sum_cof[j].sumindx,p);
+        sum_cof[j].fold=sum_mark_fold(p[0]);
+        strcpy(sum_cof[j].sumindx,p+(sum_cof[j].fold!=SUM_FOLD_SUM));
         p = strtok(NULL,",");
         { char *st_sc=sum_settok_extract(line1); if (st_sc!=NULL) p=st_sc; }
         sum_cond_parse(p,sum_cof[j].sumindx,&sum_cof[j].cond_mapid,sum_cof[j].cond_rhs,&sum_cof[j]);
@@ -1834,7 +1849,8 @@ offset_t sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
         strcpy(line,line1);
         p = strtok(line,"(");
         p = strtok(NULL,",");
-        strcpy(sum_cof[j].sumindx,p);
+        sum_cof[j].fold=sum_mark_fold(p[0]);
+        strcpy(sum_cof[j].sumindx,p+(sum_cof[j].fold!=SUM_FOLD_SUM));
         p = strtok(NULL,",");
         { char *st_sc=sum_settok_extract(line1); if (st_sc!=NULL) p=st_sc; }
         sum_cond_parse(p,sum_cof[j].sumindx,&sum_cof[j].cond_mapid,sum_cof[j].cond_rhs,&sum_cof[j]);
@@ -2300,55 +2316,107 @@ int mappings_read(char *fname, map_def *maps, dim_t nmap, set_def *sets, dim_t n
   return 0;
 }
 
-/* Mapping values via Read (by_elements) (manual 11.9.1a): CHARACTER
-   data, one codomain element NAME per domain element, resolved to
-   codomain positions here. Also the guard sweep for the deferred
-   mapping forms: integer reads of a mapping (11.9.1c), formulas
-   assigning a mapping (11.9.1b/d/e), and writes of a mapping
-   (11.9.10) are named fatals, not silent mis-binds. */
-int mapping_values_read(char *fname, int niodata, cmf_file_entry *iodata, map_def *maps, dim_t nmap, set_def *sets, set_element *set_elems) {
+/* Mapping values via Read (manual 11.9.1a/c, 11.9.11): with
+   (by_elements) CHARACTER data, one codomain element NAME per domain
+   element; without it INTEGER data, one codomain element NUMBER
+   (1-based). Either may cover a subset of the domain,
+       Read [(by_elements)] (all,i,S) MAP(i) from file F header "H";
+   with S the domain or a subset of it. Positions are stored per
+   domain element; the mapping has its values once every element has
+   one (a Formula may assign the rest, 11.9.1). Formulas assigning a
+   mapping and Writes of a mapping are handled elsewhere. */
+static dim_t map_read_dom_pos(dim_t sub, dim_t dom, dim_t k, set_def *sets, set_element *set_elems) {
+  dim_t sup;
+  if (sub==dom) return k;
+  for (sup=0; sup<MAXSUPSET; sup++) if (sets[sub].subsetid[sup]==dom) return set_elems[sets[sub].offset+k].superset_pos[sup];
+  return -1;
+}
+
+int mapping_values_read(char *fname, int niodata, cmf_file_entry *iodata, map_def *maps, dim_t nmap, set_def *sets, dim_t nset, set_element *set_elems) {
   FILE *filehandle;
-  char line[TABREADLINE]="\0",linecopy[TABREADLINE],line1[TABREADLINE],longname[TABREADLINE];
-  char *readitem=NULL;
-  dim_t j,i,vsize,dim1;
+  char line[TABREADLINE]="\0",linecopy[TABREADLINE],line1[TABREADLINE],longname[TABREADLINE],target[TABREADLINE];
+  char *readitem=NULL,*q;
+  dim_t j,i,vsize,dim1,sub;
   int k0,k1,nj;
+  const char *kind;
   filehandle = teems_fopen(fname,"r");
   while (tab_next_statement("read",filehandle,line,TABREADLINE)) {
+    char qidx[NAMESIZE]="",qset[NAMESIZE]="";
     strcpy(linecopy,line);
     int byele=(str_find_ci(line,"by_elements")>-1);
     if (byele) {
       str_replace_first(line,"(by_elements)","");
       while (str_replace_all(line,"  "," "));
     }
-    readitem = strtok(line," ");   /* "read" */
-    readitem = strtok(NULL," ");
-    if (readitem==NULL) continue;
-    for (j=0; j<nmap; j++) if (strcmp(readitem,maps[j].mapname)==0) break;
+    q=line+4;
+    while (*q==' ') q++;
+    if (strncmp(q,"(all,",5)==0) {
+      char *e=strchr(q,')'),*c1,*c2;
+      if (e==NULL) continue;
+      *e='\0';
+      c1=strchr(q+5,',');
+      if (c1==NULL||c1-(q+5)>=NAMESIZE||strlen(c1+1)>=NAMESIZE) continue;
+      snprintf(qidx,sizeof(qidx),"%.*s",(int)(c1-(q+5)),q+5);
+      c2=c1+1;
+      snprintf(qset,sizeof(qset),"%s",c2);
+      str_delete_char(qidx,' ');
+      str_delete_char(qset,' ');
+      q=e+1;
+      while (*q==' ') q++;
+    }
+    snprintf(target,sizeof(target),"%s",q);
+    for (nj=0; target[nj]!='\0'&&target[nj]!=' '&&target[nj]!='('; nj++) {}
+    target[nj]='\0';
+    if (target[0]=='\0') continue;
+    for (j=0; j<nmap; j++) if (strcmp(target,maps[j].mapname)==0) break;
     if (j==nmap) {
       if (byele) {
-        errmsg("Error: Read (by_elements) target %s is not a declared mapping (manual 11.9.1)\n",readitem);
+        errmsg("Error: Read (by_elements) target %s is not a declared mapping (manual 11.9.1)\n",target);
         fclose(filehandle);
         MPI_Abort(PETSC_COMM_WORLD,1);
         return -1;
       }
       continue;
     }
-    if (!byele) {
-      errmsg("Error: integer Read of mapping %s is not supported; use Read (by_elements) (manual 11.9.1)\n",maps[j].mapname);
-      fclose(filehandle);
-      MPI_Abort(PETSC_COMM_WORLD,1);
-      return -1;
+    kind=byele?"Read (by_elements)":"Read";
+    sub=maps[j].fromset;
+    if (qset[0]!='\0') {
+      char want[NAMESIZE+2];
+      for (sub=0; sub<nset; sub++) if (strcmp(sets[sub].setname,qset)==0) break;
+      if (sub==nset) {
+        errmsg("Error: %s for mapping %s: %s is not a declared set\n",kind,maps[j].mapname,qset);
+        fclose(filehandle);
+        MPI_Abort(PETSC_COMM_WORLD,1);
+        return -1;
+      }
+      if (sub!=maps[j].fromset) {
+        dim_t sup;
+        for (sup=0; sup<MAXSUPSET; sup++) if (sets[sub].subsetid[sup]==maps[j].fromset) break;
+        if (sup==MAXSUPSET) {
+          errmsg("Error: %s for mapping %s: set %s is not the domain %s or a declared subset of it (manual 11.9.11)\n",kind,maps[j].mapname,qset,sets[maps[j].fromset].setname);
+          fclose(filehandle);
+          MPI_Abort(PETSC_COMM_WORLD,1);
+          return -1;
+        }
+      }
+      snprintf(want,sizeof(want),"(%s)",qidx);
+      if (strstr(q,want)==NULL) {
+        errmsg("Error: %s for mapping %s: its argument must be the quantifier index %s (manual 11.9.11)\n",kind,maps[j].mapname,qidx);
+        fclose(filehandle);
+        MPI_Abort(PETSC_COMM_WORLD,1);
+        return -1;
+      }
     }
     k0=str_find_ci(linecopy,"from file ");
     if (k0<0) {
-      errmsg("Error: Read (by_elements) for mapping %s has no file clause\n",maps[j].mapname);
+      errmsg("Error: %s for mapping %s has no file clause\n",kind,maps[j].mapname);
       fclose(filehandle);
       MPI_Abort(PETSC_COMM_WORLD,1);
       return -1;
     }
     k1=str_find_ci(linecopy+k0+10," ");
     if (k1<0||k1>=(int)sizeof(line1)) {
-      errmsg("Error: malformed Read (by_elements) statement for mapping %s\n",maps[j].mapname);
+      errmsg("Error: malformed %s statement for mapping %s\n",kind,maps[j].mapname);
       fclose(filehandle);
       MPI_Abort(PETSC_COMM_WORLD,1);
       return -1;
@@ -2362,57 +2430,82 @@ int mapping_values_read(char *fname, int niodata, cmf_file_entry *iodata, map_de
       MPI_Abort(PETSC_COMM_WORLD,1);
       return -1;
     }
-    readitem = strtok(NULL,"\"");
-    readitem = strtok(NULL,"\"");
-    if (readitem==NULL||strlen(readitem)>=HEADERSIZE) {
-      errmsg("Error: Read (by_elements) for mapping %s needs a header (manual 11.9.1)\n",maps[j].mapname);
-      fclose(filehandle);
-      MPI_Abort(PETSC_COMM_WORLD,1);
-      return -1;
+    {
+      char *h1=strchr(linecopy+str_find_ci(linecopy,"from file "),'"'),*h2=(h1==NULL)?NULL:strchr(h1+1,'"');
+      if (h1==NULL||h2==NULL||h2-h1-1>=HEADERSIZE||h2==h1+1) {
+        errmsg("Error: %s for mapping %s needs a header (manual 11.9.1)\n",kind,maps[j].mapname);
+        fclose(filehandle);
+        MPI_Abort(PETSC_COMM_WORLD,1);
+        return -1;
+      }
+      snprintf(line1,sizeof(line1),"%.*s",(int)(h2-h1-1),h1+1);
+      readitem=line1;
     }
     datafile_read_header_info(readitem,iodata[k0].filname,&vsize,longname,&dim1);
-    if (dim1!=sets[maps[j].fromset].size) {
-      errmsg("Error: Read (by_elements) for mapping %s supplies %ld values for the %ld elements of set %s\n",maps[j].mapname,(long)dim1,(long)sets[maps[j].fromset].size,sets[maps[j].fromset].setname);
+    if (dim1!=sets[sub].size) {
+      errmsg("Error: %s for mapping %s supplies %ld values for the %ld elements of set %s\n",kind,maps[j].mapname,(long)dim1,(long)sets[sub].size,sets[sub].setname);
       fclose(filehandle);
       MPI_Abort(PETSC_COMM_WORLD,1);
       return -1;
     }
-    datafile_labels *matvar1= (datafile_labels *) calloc (dim1,sizeof(datafile_labels));
+    datafile_labels *matvar1= (datafile_labels *) calloc (dim1>0?dim1:1,sizeof(datafile_labels));
     datafile_read_labels(readitem,iodata[k0].filname,dim1,matvar1);
     for (i=0; i<dim1; i++) {
+      dim_t k,dp;
       nj=0;
       while (matvar1[i].ch[nj]!='\0') {
         matvar1[i].ch[nj]=tolower((int)matvar1[i].ch[nj]);
         nj++;
       }
-      dim_t k;
-      for (k=0; k<sets[maps[j].toset].size; k++)
-        if (strcmp(matvar1[i].ch,set_elems[sets[maps[j].toset].offset+k].setele)==0) break;
-      if (k==sets[maps[j].toset].size) {
-        errmsg("Error: %s in the data for mapping %s is not an element of set %s (manual 11.9.2)\n",matvar1[i].ch,maps[j].mapname,sets[maps[j].toset].setname);
+      if (byele) {
+        for (k=0; k<sets[maps[j].toset].size; k++)
+          if (strcmp(matvar1[i].ch,set_elems[sets[maps[j].toset].offset+k].setele)==0) break;
+        if (k==sets[maps[j].toset].size) {
+          errmsg("Error: %s in the data for mapping %s is not an element of set %s (manual 11.9.2)\n",matvar1[i].ch,maps[j].mapname,sets[maps[j].toset].setname);
+          free(matvar1);
+          fclose(filehandle);
+          MPI_Abort(PETSC_COMM_WORLD,1);
+          return -1;
+        }
+      } else {
+        char *end=NULL,*t=matvar1[i].ch;
+        double v;
+        while (*t==' ') t++;
+        v=strtod(t,&end);
+        while (end!=NULL&&*end==' ') end++;
+        if (end==t||end==NULL||*end!='\0'||v!=floor(v)||v<1||v>(double)sets[maps[j].toset].size) {
+          errmsg("Error: value %s in the data for mapping %s is not an element number of set %s (1 to %ld; manual 11.9.1c, 11.9.2)\n",matvar1[i].ch,maps[j].mapname,sets[maps[j].toset].setname,(long)sets[maps[j].toset].size);
+          free(matvar1);
+          fclose(filehandle);
+          MPI_Abort(PETSC_COMM_WORLD,1);
+          return -1;
+        }
+        k=(dim_t)v-1;
+      }
+      dp=map_read_dom_pos(sub,maps[j].fromset,i,sets,set_elems);
+      if (dp<0) {
         free(matvar1);
         fclose(filehandle);
         MPI_Abort(PETSC_COMM_WORLD,1);
         return -1;
       }
-      maps[j].values[i]=k;
+      maps[j].values[dp]=k;
+      if (!maps[j].assigned[dp]) { maps[j].assigned[dp]=1; maps[j].nassigned++; }
     }
     free(matvar1);
-    maps[j].has_values=true;
+    if (maps[j].nassigned==sets[maps[j].fromset].size) maps[j].has_values=true;
   }
   fclose(filehandle);
   return 0;
 }
 
 /* Deferred-form guards (run AFTER names_validate so a name clash gets
-   its own message first): a formula whose LHS is a mapping
-   (11.9.1b/d/e) or a write of a mapping (11.9.10) would otherwise
-   mis-bind silently */
+   its own message first): a mapping on the left-hand side of an
+   Update would otherwise mis-bind silently */
 int mapping_use_guards(char *fname, map_def *maps, dim_t nmap) {
   FILE *filehandle;
   char line[TABREADLINE]="\0",linecopy[TABREADLINE];
   char *readitem=NULL;
-  dim_t j;
   filehandle = teems_fopen(fname,"r");
   while (tab_next_statement("formula",filehandle,line,TABREADLINE)) {
     strcpy(linecopy,line);
@@ -2453,20 +2546,6 @@ int mapping_use_guards(char *fname, map_def *maps, dim_t nmap) {
         return -1;
       }
     }
-  }
-  fclose(filehandle);
-  filehandle = teems_fopen(fname,"r");
-  while (tab_next_statement("write",filehandle,line,TABREADLINE)) {
-    readitem = strtok(line," ");
-    readitem = strtok(NULL," ");
-    if (readitem!=NULL&&readitem[0]=='(') readitem = strtok(NULL," ");
-    if (readitem==NULL) continue;
-    for (j=0; j<nmap; j++) if (strcmp(readitem,maps[j].mapname)==0) {
-        errmsg("Error: writing mapping %s is not supported (manual 11.9.10)\n",maps[j].mapname);
-        fclose(filehandle);
-        MPI_Abort(PETSC_COMM_WORLD,1);
-        return -1;
-      }
   }
   fclose(filehandle);
   return 0;
@@ -3738,6 +3817,12 @@ int mappings_validate(map_def *maps, dim_t nmap, set_def *sets, set_element *set
   for (j=0; j<nmap; j++) {
     if (!maps[j].has_values) {
       if (maps[j].formula_assigned) continue;
+      if (maps[j].nassigned>0) {
+        for (i=0; i<sets[maps[j].fromset].size&&maps[j].assigned[i]; i++) {}
+        errmsg("Error: mapping %s has values for %ld of the %ld elements of set %s; element %s gets none (manual 11.9.1, 11.9.11)\n",maps[j].mapname,(long)maps[j].nassigned,(long)sets[maps[j].fromset].size,sets[maps[j].fromset].setname,set_elems[sets[maps[j].fromset].offset+i].setele);
+        MPI_Abort(PETSC_COMM_WORLD,1);
+        return -1;
+      }
       errmsg("Error: mapping %s is never given values (manual 11.9.1)\n",maps[j].mapname);
       MPI_Abort(PETSC_COMM_WORLD,1);
       return -1;
@@ -4062,6 +4147,37 @@ static void shock_component_set(array_def *vars, offset_t j, offset_t e, solve_r
   seen[x]=1;
   CL_SHOCK(x)=v;
   teems_cl_flags[x]|=CL_F_SHK;
+}
+
+/* A percentage-change shock of -100 percent takes the levels value to
+   zero and anything below it turns the value negative, which no
+   method can take; Gragg's final pass carries the exogenous variables
+   past their end point, so it cannot take -100 percent either (manual
+   30.2: use the midpoint or Euler method). The shocks are stored per
+   subinterval. */
+int shocks_check_floor(array_def *vars, offset_t nvar, dim_t subints, int solmethod) {
+  offset_t i,e,x;
+  char lab[4*NAMESIZE];
+  for (i=0; i<nvar; i++) {
+    if (vars[i].change_real) continue;
+    for (e=0; e<vars[i].nelem; e++) {
+      double tot;
+      x=vars[i].offset+e;
+      if (!CL_EXO(x)||!CL_SHOCKED(x)) continue;
+      tot=(double)CL_SHOCK(x)*subints;
+      if (tot<-100-1e-9) {
+        array_element_label(&vars[i],e,lab,sizeof(lab));
+        errmsg("Error: %s is shocked by %g percent; a percentage change below -100 would make its levels value negative (manual 30.2; shock file)\n",lab,tot);
+        return -1;
+      }
+      if (tot<=-100+1e-9&&solmethod==SM_GRAGG) {
+        array_element_label(&vars[i],e,lab,sizeof(lab));
+        errmsg("Error: %s is shocked by -100 percent, which Gragg's method cannot take: its final pass carries the variable past its end point, through zero (manual 30.2); use the midpoint or Euler method\n",lab);
+        return -1;
+      }
+    }
+  }
+  return 0;
 }
 
 /* Subtotals file (Tier B3; GEMPACK manual 29.1, 35.2.15): statements
@@ -5298,7 +5414,7 @@ static void set_maxsize_excise(char *line) {
 int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,dim_t nset) {
   FILE * filehandle;//, *fileout;
   char line[TABREADLINE]="\0",linecopy[TABREADLINE];//,line1[TABREADLINE];longname[TABREADLINE],
-  char header[HEADERSIZE],floginame[NAMESIZE];
+  char header[HEADERSIZE]="",floginame[NAMESIZE]="";
   char commsyntax[TABREADLINE],varname[NAMESIZE];
   dim_t j=0,i,intindx[4],sign[2],intvar[2];//,inttype[4]
   int k0,k1=0;
@@ -5341,6 +5457,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               return -1;
             }
             strcpy(varname,readitem);
+            k1=-1;
             strcpy(commsyntax,"read ");
             strcat(commsyntax,readitem);
             filehandle = teems_fopen(fname,"r");
@@ -5374,6 +5491,10 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               break;
             }
             fclose(filehandle);
+            if (k1<0) {
+              errmsg("Error: the size of intertemporal set %s comes from coefficient %s, which no Read statement reads from a file; give the count by a Read, or write the elements out (manual 10.1)\n",record[j].setname,varname);
+              return -1;
+            }
             if (k1>=niodata) {
               errmsg("Error: intertemporal set declaration reads elements from logical file %s, which the command file does not declare\n",floginame);
               return -1;
@@ -5415,6 +5536,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               return -1;
             }
             strcpy(varname,readitem);
+            k1=-1;
             strcpy(commsyntax,"read ");
             strcat(commsyntax,readitem);
             filehandle = teems_fopen(fname,"r");
@@ -5448,6 +5570,10 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               break;
             }
             fclose(filehandle);
+            if (k1<0) {
+              errmsg("Error: the size of intertemporal set %s comes from coefficient %s, which no Read statement reads from a file; give the count by a Read, or write the elements out (manual 10.1)\n",record[j].setname,varname);
+              return -1;
+            }
             if (k1>=niodata) {
               errmsg("Error: intertemporal set declaration reads elements from logical file %s, which the command file does not declare\n",floginame);
               return -1;
@@ -5486,6 +5612,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               return -1;
             }
             strcpy(varname,readitem);
+            k1=-1;
             strcpy(commsyntax,"read ");
             strcat(commsyntax,readitem);
             filehandle = teems_fopen(fname,"r");
@@ -5519,6 +5646,10 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               break;
             }
             fclose(filehandle);
+            if (k1<0) {
+              errmsg("Error: the size of intertemporal set %s comes from coefficient %s, which no Read statement reads from a file; give the count by a Read, or write the elements out (manual 10.1)\n",record[j].setname,varname);
+              return -1;
+            }
             if (k1>=niodata) {
               errmsg("Error: intertemporal set declaration reads elements from logical file %s, which the command file does not declare\n",floginame);
               return -1;
@@ -5584,6 +5715,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               return -1;
             }
             strcpy(varname,readitem);
+            k1=-1;
             strcpy(commsyntax,"read ");
             strcat(commsyntax,readitem);
             filehandle = teems_fopen(fname,"r");
@@ -5617,6 +5749,10 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               break;
             }
             fclose(filehandle);
+            if (k1<0) {
+              errmsg("Error: the size of intertemporal set %s comes from coefficient %s, which no Read statement reads from a file; give the count by a Read, or write the elements out (manual 10.1)\n",record[j].setname,varname);
+              return -1;
+            }
             if (k1>=niodata) {
               errmsg("Error: intertemporal set declaration reads elements from logical file %s, which the command file does not declare\n",floginame);
               return -1;
@@ -5658,6 +5794,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               return -1;
             }
             strcpy(varname,readitem);
+            k1=-1;
             strcpy(commsyntax,"read ");
             strcat(commsyntax,readitem);
             filehandle = teems_fopen(fname,"r");
@@ -5691,6 +5828,10 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               break;
             }
             fclose(filehandle);
+            if (k1<0) {
+              errmsg("Error: the size of intertemporal set %s comes from coefficient %s, which no Read statement reads from a file; give the count by a Read, or write the elements out (manual 10.1)\n",record[j].setname,varname);
+              return -1;
+            }
             if (k1>=niodata) {
               errmsg("Error: intertemporal set declaration reads elements from logical file %s, which the command file does not declare\n",floginame);
               return -1;
@@ -5729,6 +5870,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               return -1;
             }
             strcpy(varname,readitem);
+            k1=-1;
             strcpy(commsyntax,"read ");
             strcat(commsyntax,readitem);
             filehandle = teems_fopen(fname,"r");
@@ -5762,6 +5904,10 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               break;
             }
             fclose(filehandle);
+            if (k1<0) {
+              errmsg("Error: the size of intertemporal set %s comes from coefficient %s, which no Read statement reads from a file; give the count by a Read, or write the elements out (manual 10.1)\n",record[j].setname,varname);
+              return -1;
+            }
             if (k1>=niodata) {
               errmsg("Error: intertemporal set declaration reads elements from logical file %s, which the command file does not declare\n",floginame);
               return -1;
@@ -5824,6 +5970,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               return -1;
             }
             strcpy(varname,readitem);
+            k1=-1;
             strcpy(commsyntax,"read ");
             strcat(commsyntax,readitem);
             filehandle = teems_fopen(fname,"r");
@@ -5857,6 +6004,10 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               break;
             }
             fclose(filehandle);
+            if (k1<0) {
+              errmsg("Error: the size of intertemporal set %s comes from coefficient %s, which no Read statement reads from a file; give the count by a Read, or write the elements out (manual 10.1)\n",record[j].setname,varname);
+              return -1;
+            }
             if (k1>=niodata) {
               errmsg("Error: intertemporal set declaration reads elements from logical file %s, which the command file does not declare\n",floginame);
               return -1;
@@ -5899,6 +6050,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               return -1;
             }
             strcpy(varname,readitem);
+            k1=-1;
             strcpy(commsyntax,"read ");
             strcat(commsyntax,readitem);
             filehandle = teems_fopen(fname,"r");
@@ -5932,6 +6084,10 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               break;
             }
             fclose(filehandle);
+            if (k1<0) {
+              errmsg("Error: the size of intertemporal set %s comes from coefficient %s, which no Read statement reads from a file; give the count by a Read, or write the elements out (manual 10.1)\n",record[j].setname,varname);
+              return -1;
+            }
             if (k1>=niodata) {
               errmsg("Error: intertemporal set declaration reads elements from logical file %s, which the command file does not declare\n",floginame);
               return -1;
@@ -5970,6 +6126,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               return -1;
             }
             strcpy(varname,readitem);
+            k1=-1;
             strcpy(commsyntax,"read ");
             strcat(commsyntax,readitem);
             filehandle = teems_fopen(fname,"r");
@@ -6003,6 +6160,10 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
               break;
             }
             fclose(filehandle);
+            if (k1<0) {
+              errmsg("Error: the size of intertemporal set %s comes from coefficient %s, which no Read statement reads from a file; give the count by a Read, or write the elements out (manual 10.1)\n",record[j].setname,varname);
+              return -1;
+            }
             if (k1>=niodata) {
               errmsg("Error: intertemporal set declaration reads elements from logical file %s, which the command file does not declare\n",floginame);
               return -1;
@@ -6204,7 +6365,7 @@ int sets_read(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,
            '+', '-' and '\' over already-declared sets and quoted
            single elements, with '(' ')' grouping, evaluated left to
            right. Normalized here (UNION -> '^', INTERSECT -> '&',
-           '\' -> '-', spaces stripped) and stored as "@<expr>" for
+           relative complement '\' -> '%', spaces stripped) and stored as "@<expr>" for
            set_expr_build(). The single-operator unbracketed forms keep
            the legacy pairwise encodings below byte-for-byte. NB the
            keyword rewrite is substring-based (as the legacy path
@@ -6220,7 +6381,7 @@ int sets_read(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,
              becomes the operator '*' while spaces still delimit it */
           set_expr_mark_product(exprbuf);
           str_delete_char(exprbuf,' ');
-          str_replace_char(exprbuf,'\\','-');
+          while (str_replace_char(exprbuf,'\\','%'));
           char *crhs=strchr(exprbuf,'=');
           if (crhs!=NULL) {
             crhs++;
@@ -6228,7 +6389,7 @@ int sets_read(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,
             int nops=0,special=0;
             for (p=crhs; *p!='\0'&&*p!=';'; p++) {
               if (*p=='+'||*p=='-'||*p=='^') nops++;
-              if (*p=='&'||*p=='('||*p=='"') special=1;
+              if (*p=='&'||*p=='('||*p=='"'||*p=='%') special=1;
               if (*p=='&') nops++;
               if (*p=='*') { nops++; special=1; }
             }
@@ -6788,7 +6949,7 @@ static dim_t set_expr_bound_depth(char **pp, set_def *record, dim_t nset, const 
   while (*p!='\0'&&*p!=';'&&*p!=')') {
     if (!first) {
       op=*p;
-      if (op!='+'&&op!='-'&&op!='^'&&op!='&'&&op!='*') {
+      if (op!='+'&&op!='-'&&op!='%'&&op!='^'&&op!='&'&&op!='*') {
         errmsg("Error: malformed set expression in the definition of %s\n",owner);
         *err=1;
         return 0;
@@ -6809,7 +6970,7 @@ static dim_t set_expr_bound_depth(char **pp, set_def *record, dim_t nset, const 
       char nm[NAMESIZE];
       int k=0;
       dim_t i;
-      while (*p!='\0'&&*p!='+'&&*p!='-'&&*p!='^'&&*p!='&'&&*p!='*'&&*p!='('&&*p!=')'&&*p!='"'&&*p!=';'&&k<NAMESIZE-1) nm[k++]=*p++;
+      while (*p!='\0'&&*p!='+'&&*p!='-'&&*p!='%'&&*p!='^'&&*p!='&'&&*p!='*'&&*p!='('&&*p!=')'&&*p!='"'&&*p!=';'&&k<NAMESIZE-1) nm[k++]=*p++;
       nm[k]='\0';
       for (i=0; i<nset; i++) if (strcmp(nm,record[i].setname)==0) break;
       if (i==nset) {
@@ -6823,7 +6984,7 @@ static dim_t set_expr_bound_depth(char **pp, set_def *record, dim_t nset, const 
     if (first) acc=rhs;
     else if (op=='+'||op=='^') acc+=rhs;
     else if (op=='*') acc*=rhs;
-    /* '-' and '&': the left bound stands */
+    /* '-', '%' and '&': the left bound stands */
     first=0;
   }
   *pp=p;
@@ -6918,7 +7079,7 @@ static dim_t set_expr_term(char **pp, set_element *se, set_def *sets, dim_t nset
   {
     char nm[NAMESIZE];
     k=0;
-    while (*p!='\0'&&*p!='+'&&*p!='-'&&*p!='^'&&*p!='&'&&*p!='*'&&*p!='('&&*p!=')'&&*p!='"'&&k<NAMESIZE-1) nm[k++]=*p++;
+    while (*p!='\0'&&*p!='+'&&*p!='-'&&*p!='%'&&*p!='^'&&*p!='&'&&*p!='*'&&*p!='('&&*p!=')'&&*p!='"'&&k<NAMESIZE-1) nm[k++]=*p++;
     nm[k]='\0';
     *pp=p;
     for (l=0; l<nset; l++) if (strcmp(nm,sets[l].setname)==0) break;
@@ -6948,7 +7109,7 @@ static dim_t set_expr_eval(char **pp, set_element *se, set_def *sets, dim_t nset
   }
   n=set_expr_term(pp,se,sets,nset,out,cap,owner,depth);
   strcpy(accname,set_expr_termname);
-  while (**pp=='+'||**pp=='-'||**pp=='^'||**pp=='&'||**pp=='*') {
+  while (**pp=='+'||**pp=='-'||**pp=='%'||**pp=='^'||**pp=='&'||**pp=='*') {
     op=**pp;
     (*pp)++;
     tmp=malloc((size_t)cap*NAMESIZE);
@@ -6983,9 +7144,12 @@ static dim_t set_expr_eval(char **pp, set_element *se, set_def *sets, dim_t nset
         for (a=0; a<n; a++) if (strcmp(out[a],tmp[b])==0) break;
         if (a==n&&n<cap) strcpy(out[n++],tmp[b]);
       }
-    } else if (op=='-') {
+    } else if (op=='-'||op=='%') {
+      /* '\' (relative complement, 11.7.4) skips elements that are
+         not present; '-' requires them */
       for (b=0; b<m; b++) {
         for (a=0; a<n; a++) if (strcmp(out[a],tmp[b])==0) break;
+        if (a==n&&op=='%') continue;
         if (a==n) errmsg("Error: '-' in the definition of %s removes element %s, which is not present\n",owner,tmp[b]);
         else {
           for (w=a; w<n-1; w++) strcpy(out[w],out[w+1]);
@@ -7069,12 +7233,12 @@ dim_t set_expr_build(set_element *se, set_def *sets, dim_t nset, dim_t i) {
       if (*p=='"') { inq=1; lastterm[0]='\0'; k=0; continue; }
       if (*p=='(') { depth++; lastterm[0]='\0'; k=0; continue; }
       if (*p==')') { depth--; k=0; continue; }
-      if (*p=='+'||*p=='-'||*p=='^'||*p=='&'||*p=='*') {
+      if (*p=='+'||*p=='-'||*p=='%'||*p=='^'||*p=='&'||*p=='*') {
         anyop=1;
-        if (*p=='-'||*p=='*') { allplusun=0; allint=0; }
+        if (*p=='-'||*p=='%'||*p=='*') { allplusun=0; allint=0; }
         else if (*p=='&') allplusun=0;
         else allint=0;
-        if (depth==0) { lastop=*p; lastterm[0]='\0'; k=0; firstdone=1; seen_top_op=1; if (*p!='-') allminus_top=0; }
+        if (depth==0) { lastop=*p; lastterm[0]='\0'; k=0; firstdone=1; seen_top_op=1; if (*p!='-'&&*p!='%') allminus_top=0; }
         continue;
       }
       if (depth==0) {
@@ -7102,7 +7266,7 @@ dim_t set_expr_build(set_element *se, set_def *sets, dim_t nset, dim_t i) {
         if (*p=='\0') break;
         continue;
       }
-      if (*p=='+'||*p=='-'||*p=='^'||*p=='&'||*p=='*'||*p=='('||*p==')'||*p=='"'||*p=='\0') {
+      if (*p=='+'||*p=='-'||*p=='%'||*p=='^'||*p=='&'||*p=='*'||*p=='('||*p==')'||*p=='"'||*p=='\0') {
         if (k>0) {
           nm[k]='\0';
           k=0;

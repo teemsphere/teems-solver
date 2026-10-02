@@ -1011,13 +1011,48 @@ static int lv_rename_line(lv_ctx *c, char *line, size_t cap) {
 
 /* linearize one "equation (levels) ..." line (keyword already
    consumed by the caller: p points after "equation") into fout */
+/* PROD over levels variables in a levels equation (manual 11.4.4):
+   PROD(i,S,f) is written EXP(SUM(i,S,LOGE(f))), whose change
+   differentiation is PROD * SUM(df/f); the factors of a PROD in a
+   levels equation are positive levels (powers, prices, quantities).
+   MAXS and MINS have no derivative and stop here. Marks come from the
+   preprocess (reduce_marks); one is expanded per pass. Returns 0, or
+   -1 with the message set. */
+static int lv_prod_expand(lv_ctx *c, char *buf, size_t cap) {
+  for (;;) {
+    char *m = NULL, *b, *e, *comma = NULL, tmp[DATREADLINE];
+    int d = 0;
+    for (b = buf; *b != '\0'; b++)
+      if (*b == SUM_MARK_PROD || *b == SUM_MARK_MAXS || *b == SUM_MARK_MINS) { m = b; break; }
+    if (m == NULL) return 0;
+    if (*m != SUM_MARK_PROD) return lv_err(c, "MAXS and MINS may not appear in levels equations (manual 11.4.4); only PROD may hold levels variables");
+    b = m - 1;
+    if (b - 3 < buf) return lv_err(c, "internal: malformed PROD");
+    for (e = b; *e != '\0'; e++) {
+      if (*e == '(' || *e == '{' || *e == '[') d++;
+      else if (*e == ')' || *e == '}' || *e == ']') { d--; if (d == 0) break; }
+      else if (*e == ',' && d == 1) comma = e;
+    }
+    if (*e == '\0' || comma == NULL) return lv_err(c, "malformed PROD in a levels equation");
+    if (strlen(buf) + 16 >= cap || strlen(buf) + 16 >= sizeof(tmp)) return lv_err(c, "levels equation too long");
+    snprintf(tmp, sizeof(tmp), "%.*sexp(sum%c%.*s,loge(%.*s)))%s",
+             (int)(b - 3 - buf), buf, *b, (int)(comma - (m + 1)), m + 1,
+             (int)(e - (comma + 1)), comma + 1, e + 1);
+    strcpy(buf, tmp);
+  }
+}
+
 static int lv_emit_linearized(lv_ctx *c, const char *p, FILE *fout) {
-  char out[DATREADLINE];
+  char out[DATREADLINE], pbuf[DATREADLINE];
   const char *name, *label = NULL, *quants, *lhs;
   int namelen, labellen = 0, quantslen, ge;
   char lhsbuf[DATREADLINE], rhsbuf[DATREADLINE];
   const char *eq, *semi;
   c->nnodes = 0; c->nterms = 0;
+  if (strlen(p) >= sizeof(pbuf)) return lv_err(c, "levels equation too long");
+  strcpy(pbuf, p);
+  if (lv_prod_expand(c, pbuf, sizeof(pbuf)) < 0) return -1;
+  p = pbuf;
   while (*p == ' ') p++;
   if (strncmp(p, "(levels)", 8) != 0) {
     if (strncmp(p, "(levels", 7) == 0)

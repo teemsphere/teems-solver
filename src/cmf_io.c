@@ -975,6 +975,62 @@ static int pc_tokens_line(char *line, const char *tabfile, int rewrite) {
   return 0;
 }
 
+/* PROD(i,S,e), MAXS(...) and MINS(...) (manual 11.4.4) become
+   sum(<mark>i,S,e) in place -- "prod(" and "sum(<mark>" have the same
+   length -- and fold as products, maxima or minima in the SUM
+   machinery (sum_parse moves the mark into sum_def.fold) */
+static void reduce_marks(char *line) {
+  static const char *kw[3]={"prod","maxs","mins"};
+  static const char mk[3]={SUM_MARK_PROD,SUM_MARK_MAXS,SUM_MARK_MINS};
+  char *c;
+  int q=0,k;
+  for (c=line; *c!='\0'; c++) {
+    if (*c=='"') { q=!q; continue; }
+    if (q||(c>line&&cond_is_namec(c[-1]))) continue;
+    for (k=0; k<3; k++) if (strncmp(c,kw[k],4)==0) {
+        char *b=c+4;
+        while (*b==' ') b++;
+        if (*b!='('&&*b!='{'&&*b!='[') continue;
+        memcpy(c,"sum",3);
+        memmove(c+3,c+4,(size_t)(b-(c+4))+1);
+        b[0]=mk[k];
+        break;
+      }
+  }
+}
+
+/* a PROD/MAXS/MINS body takes no linear variable (manual 11.4.4):
+   a declared linear variable, or the p_/c_ linear name of a levels
+   variable, inside a marked reduction stops here, before the equation
+   scans read the reduction as a sum */
+static int reduce_linvar_check(const char *line) {
+  const char *m;
+  for (m=line; *m!='\0'; m++) {
+    const char *e,*t;
+    int d=0;
+    if (sum_mark_fold(*m)==SUM_FOLD_SUM) continue;
+    for (e=m-1; *e!='\0'; e++) {
+      if (*e=='('||*e=='{'||*e=='[') d++;
+      else if (*e==')'||*e=='}'||*e==']') { d--; if (d==0) break; }
+    }
+    for (t=m+1; t<e; ) {
+      const char *s0=t;
+      size_t len;
+      int kd,pre;
+      if (!cond_is_namec(*t)||(t>line&&cond_is_namec(t[-1]))) { t++; continue; }
+      while (t<e&&cond_is_namec(*t)) t++;
+      len=(size_t)(t-s0);
+      kd=pc_kind(s0,len);
+      pre=(len>2&&(s0[0]=='p'||s0[0]=='c')&&s0[1]=='_'&&pc_kind(s0+2,len-2)>=2);
+      if (kd==1||pre) {
+        errmsg("Error: linear variable %.*s inside PROD, MAXS or MINS; linear variables are not permitted there (manual 11.4.4)\n",(int)len,s0);
+        return -1;
+      }
+    }
+  }
+  return 0;
+}
+
 /* A coefficient named p_NAME (legal beside a linear variable NAME,
    manual 9.2.2) reads like the p_ column token every linear variable
    reference becomes, so formulas bound it to the variable and equations
@@ -1503,10 +1559,11 @@ static int tab_preprocess_run(char *filename, char *newtabfile) {
     if (rawpos==NULL) {
       rawno++;
       /* a DOS end-of-file mark (Ctrl-Z) after the last statement read
-         as a keyword-less statement continuing the previous kind */
+         as a keyword-less statement continuing the previous kind; tabs
+         and form feeds are blanks (manual 11.1.2) */
       {
         char *z;
-        for (z=rawline; *z!='\0'; z++) if (*z=='\032') *z=' ';
+        for (z=rawline; *z!='\0'; z++) if (*z=='\032'||*z=='\t'||*z=='\f'||*z=='\v') *z=' ';
       }
       if (strong_comment_strip(rawline,&sdepth)<0) {
         errmsg("Error: '!]]!' at line %ld of the TAB file closes a strong comment that was never opened (manual 11.1.5)\n",rawno);
@@ -1621,9 +1678,19 @@ static int tab_preprocess_run(char *filename, char *newtabfile) {
       str_replace_first(readline,"zerodivide(", "zerodivide (");
       str_replace_first(readline,"mapping(", "mapping (");
       str_replace_first(readline,"complementarity(", "complementarity (");
+      str_replace_first(readline,"subset(", "subset (");
       if(str_find_ci(readline,"subset ")==1||str_find_ci(readline,"subset ")==0) {
         strcpy(commsyntax,"subset");
         check=1;
+        /* Subset (BY_ELEMENTS) is the default reading (manual 10.2);
+           (BY_NUMBERS) is obsolete */
+        if(str_find_ci(readline,"(by_numbers)")>-1) {
+          errmsg("Error: Subset (by_numbers) is obsolete and not supported; list the subset's elements by name (manual 10.2)\n");
+          fclose(filehandle);
+          fclose(fout);
+          return -1;
+        }
+        str_replace_first(readline,"(by_elements)","");
       }
       if(str_find_ci(readline,"file ")==1||str_find_ci(readline,"file ")==0) {
         strcpy(commsyntax,"file");
@@ -1861,6 +1928,13 @@ static int tab_preprocess_run(char *filename, char *newtabfile) {
          only (manual 9.2.2); in equations and updates c_X becomes the
          p_X column token. A declared coefficient or variable of that
          name is itself (vetting dynamic G8 / small S11). */
+      if (l1==0||l2==0||l4==0||l5==0) {
+        reduce_marks(line);
+        if ((l1==0||l4==0)&&(strchr(line,SUM_MARK_PROD)!=NULL||strchr(line,SUM_MARK_MAXS)!=NULL||strchr(line,SUM_MARK_MINS)!=NULL)) {
+          if (n_pc_vars==0&&pc_vars==NULL&&pc_kinds_build(newtabfile1)<0) { fclose(filehandle); fclose(fout); return -1; }
+          if (reduce_linvar_check(line)<0) { fclose(filehandle); fclose(fout); return -1; }
+        }
+      }
       if ((l1==0||l2==0||l4==0||l5==0)&&(strstr(line,"p_")!=NULL||strstr(line,"c_")!=NULL)) {
         if (n_pc_vars==0&&pc_vars==NULL&&pc_kinds_build(newtabfile1)<0) { fclose(filehandle); fclose(fout); return -1; }
         if (pc_tokens_line(line,newtabfile1,l1==0||l4==0)<0) { fclose(filehandle); fclose(fout); return -1; }
@@ -2237,10 +2311,14 @@ int outputs_write_csv(char *filename, char *newdatlogname, char *newdatfile,set_
         header[i]='\0';
 
         i=str_find_ci(line,"longname \"");
-        readline=line+i+10;
-        i=str_find_ci(readline,"\"");
-        strncpy(longname,readline,i);
-        longname[i]='\0';
+        if(i<0) longname[0]='\0';
+        else {
+          readline=line+i+10;
+          i=str_find_ci(readline,"\"");
+          if(i<0) i=0;
+          strncpy(longname,readline,i);
+          longname[i]='\0';
+        }
         setsize[0]='\0';
         for (i=0; i<nset; i++) {
           if (strcmp(sets[i].setname,varname)==0) {
@@ -2256,8 +2334,10 @@ int outputs_write_csv(char *filename, char *newdatlogname, char *newdatfile,set_
           }
         }
       } else {
+        int wbyele=0;
         i=str_find_ci(line," ");
         readline=line+i+1;
+        if(strncmp(readline,"(by_elements) ",14)==0) { wbyele=1; readline+=14; }
         i=str_find_ci(readline," ");
         strncpy(varname,readline,i);
         varname[i]='\0';
@@ -2269,10 +2349,14 @@ int outputs_write_csv(char *filename, char *newdatlogname, char *newdatfile,set_
         header[i]='\0';
 
         i=str_find_ci(line,"longname \"");
-        readline=line+i+10;
-        i=str_find_ci(readline,"\"");
-        strncpy(longname,readline,i);
-        longname[i]='\0';
+        if(i<0) longname[0]='\0';
+        else {
+          readline=line+i+10;
+          i=str_find_ci(readline,"\"");
+          if(i<0) i=0;
+          strncpy(longname,readline,i);
+          longname[i]='\0';
+        }
         setsize[0]='\0';
         for (i=0; i<ncof; i++) {
           vname1= strtok(coefs[i].cofname,"(");
@@ -2343,6 +2427,35 @@ int outputs_write_csv(char *filename, char *newdatlogname, char *newdatfile,set_
               }
             }
             break;
+          }
+        }
+        /* a mapping (manual 11.9.10): its element numbers, or with
+           (by_elements) its element names, one per domain element */
+        {
+          dim_t mm,e;
+          for (mm=0; mm<teems_nmap; mm++) if (strcmp(teems_maps[mm].mapname,varname)==0) break;
+          if (mm<teems_nmap) {
+            map_def *md=&teems_maps[mm];
+            dim_t n1=sets[md->fromset].size;
+            if (!md->has_values) {
+              errmsg("Error: mapping %s is written before all of its values are assigned (manual 11.9.10)\n",md->mapname);
+              fclose(filehandle);
+              fclose(fout);
+              return -1;
+            }
+            if (wbyele) {
+              size_t len=1;
+              for (e=0; e<n1; e++) {
+                size_t l1=strlen(set_elems[sets[md->toset].offset+md->values[e]].setele);
+                if (l1>len) len=l1;
+              }
+              fprintf(fout,"%ld Strings Length %ld Header \"%s\" LongName \"%s\";\n",(long)n1,(long)len,header,longname);
+              for (e=0; e<n1; e++) fprintf(fout,"%s\n",set_elems[sets[md->toset].offset+md->values[e]].setele);
+            } else {
+              fprintf(fout,"%ld Integer SpreadSheet Header \"%s\" LongName \"%s\";\n",(long)n1,header,longname);
+              for (e=0; e<n1; e++) fprintf(fout,"%ld\n",(long)md->values[e]+1);
+            }
+            fprintf(fout,"\n");
           }
         }
       }

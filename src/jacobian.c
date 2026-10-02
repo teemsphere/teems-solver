@@ -46,6 +46,7 @@ typedef struct
   offset_t cond_fixed;              /* fixed codomain position, or -1 */
   dim_t cond_ss;                    /* superset_pos slot lifting the RHS position, 0 = none */
   sum_cofcond cofcond;              /* coefficient comparison (gap 2); cofid -1 = none */
+  int fold;                         /* SUM_FOLD_*: SUM, PROD, MAXS or MINS (11.4.4) */
 } sum_prog;
 
 /* one linear-variable occurrence: the compiled coefficient program */
@@ -150,6 +151,7 @@ static int sum_prog_build(char *formulain, char *commsyntax, bool skip_linvar_su
         strcpy(out->arSet[sum_cof[j].size].index_name,sum_cof[j].sumindx);
         out->sumset_size=sets[sum_cof[j].sumsetid].size;
         out->cond_mapid=sum_cof[j].cond_mapid;
+        out->fold=sum_cof[j].fold;
         sum_cond_rhs_resolve(out->cond_mapid,sum_cof[j].cond_rhs,out->arSet,(dim_t)(sum_cof[j].size+1),sets,set_elems,&out->cond_pos,&out->cond_fixed,&out->cond_ss);
         sum_cond_coef_resolve(&sum_cof[j],out->arSet,(dim_t)(sum_cof[j].size+1),sets,set_elems,coefs,ncof,&out->cofcond);
         sum_cond_general_compile(&sum_cof[j],&out->cofcond,out->arSet,(dim_t)(sum_cof[j].size+1),sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum);
@@ -221,7 +223,7 @@ static void sum_prog_eval(sum_prog *sp, set_def *sets, set_element *set_elems, e
       arSet2[dcount].indx=superset_pos;
       l2=l2-superset_pos*sp->dcountdim[dcount];
     }
-    vval=0;
+    vval=sum_fold_init(sp->fold);
     for (l1=0; l1<sp->sumset_size; l1++) {
       /* mapping-equality condition (M3): only domain elements mapping
          to the target codomain position contribute */
@@ -231,7 +233,7 @@ static void sum_prog_eval(sum_prog *sp, set_def *sets, set_element *set_elems, e
       arSet2[sp->nouter].indx=l1;
       if (sp->cofcond.ic!=NULL&&!icond_eval((const icond *)sp->cofcond.ic,arSet2,sets,set_elems)) continue;
       if (sp->cofcond.gen&&!sum_cond_general_test(&sp->cofcond,gown,elem_vals,sets,set_elems,sum_vals,arSet2,(dim_t)(sp->nouter+1),zerodivide)) continue;
-      vval+=formula_eval(elem_vals,sets,set_elems,sum_vals,ops1,sp->nops,arSet2,(dim_t)(sp->nouter+1),zerodivide);
+      vval=sum_fold(sp->fold,vval,formula_eval(elem_vals,sets,set_elems,sum_vals,ops1,sp->nops,arSet2,(dim_t)(sp->nouter+1),zerodivide));
     }
     sum_vals[sp->base+l].value=vval;
   }
@@ -1861,6 +1863,20 @@ int backsolve_recover(char *fname, char *commsyntax,set_def *sets,offset_t nset,
   return 1;
 }
 
+/* a sum over linear variables (left to the variable-sum path) must be
+   a SUM: PROD, MAXS and MINS take no linear variables (11.4.4) */
+static void eq_reduce_linvar_check(const char *sumtext) {
+  const char *o=strchr(sumtext,'(');
+  if (o!=NULL&&sum_mark_fold(o[1])!=SUM_FOLD_SUM) {
+    char shown[TABREADLINE];
+    size_t q;
+    snprintf(shown,sizeof(shown),"%s",sumtext);
+    for (q=0; shown[q]!='\0'; q++) if (sum_mark_fold(shown[q])!=SUM_FOLD_SUM) shown[q]=' ';
+    errmsg("Error: linear variables are not permitted inside PROD, MAXS or MINS (manual 11.4.4): %s\n",shown);
+    MPI_Abort(PETSC_COMM_WORLD,1);
+  }
+}
+
 int eq_sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifier *arSet,set_def *sets,dim_t nset,dim_t fdim,int j) {
   char *readitem,*p,*p1,*p2,interchar2[NAMESIZE],argu[TABREADLINE],tempname[NAMESIZE];//,line5[TABREADLINE]
   char interchar[NAMESIZE],interchar1[NAMESIZE],line[TABREADLINE],line1[TABREADLINE],line2[TABREADLINE],line3[TABREADLINE],line4[TABREADLINE];
@@ -1885,6 +1901,7 @@ int eq_sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifier 
       }
       else {
         if(str_find_ci(line,",p_")>-1||str_find_ci(line,"*p_")>-1||str_find_ci(line,"+p_")>-1||str_find_ci(line,"-p_")>-1||str_find_ci(line,"(p_")>-1) {
+          eq_reduce_linvar_check(line);
           i=i+k+4;
           readitem=formulain+i;
         }
@@ -1916,6 +1933,8 @@ int eq_sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifier 
           strcpy(line,line1);
           p = strtok(line,"(");
           p = strtok(NULL,",");
+          sum_cof[j].fold=sum_mark_fold(p[0]);
+          if (sum_cof[j].fold!=SUM_FOLD_SUM) p++;
           strcpy(sum_cof[j].sumindx,p);
           p = strtok(NULL,",");
           { char *st_sc=sum_settok_extract(line1); if (st_sc!=NULL) p=st_sc; }
@@ -2068,6 +2087,7 @@ int eq_sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifier 
       }
       else {
         if(str_find_ci(line,",p_")>-1||str_find_ci(line,"*p_")>-1||str_find_ci(line,"+p_")>-1||str_find_ci(line,"-p_")>-1||str_find_ci(line,"(p_")>-1) {
+          eq_reduce_linvar_check(line);
           i=i+k+4;
           readitem=formulain+i;
         }
@@ -2099,6 +2119,8 @@ int eq_sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifier 
           strcpy(line,line1);
           p = strtok(line,"(");
           p = strtok(NULL,",");
+          sum_cof[j].fold=sum_mark_fold(p[0]);
+          if (sum_cof[j].fold!=SUM_FOLD_SUM) p++;
           strcpy(sum_cof[j].sumindx,p);
           p = strtok(NULL,",");
           { char *st_sc=sum_settok_extract(line1); if (st_sc!=NULL) p=st_sc; }

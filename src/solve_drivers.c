@@ -1575,6 +1575,49 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
     return 1;
   }
 
+/* -convrule 1: GEMPACK's treatment of poorly converging components
+   (manual 26.2.5, 26.2.5.1; default off, as it changes reported
+   results). Per element and subinterval the three pass results c1 c2
+   c3 (step counts n1<n2<n3) are classified and the reported increment
+   is
+     - their average when they lie very close together or near zero
+       (GEMPACK's MVC/OVC/MN0/ON0);
+     - the extrapolation when they are monotonic and the second
+       difference is within twice the size the method's error order
+       predicts from the first (Pearson 1991 condition 5.8; the
+       confident codes CX/FCX);
+     - the third result otherwise (converging slowly, diverging or
+       oscillating: MC?/MD?/MD!/OC?/OD?/OD!).
+   The manual does not publish the code thresholds; "very close" is
+   agreement to about six figures. conv_c holds the three passes,
+   conv_w their extrapolation weights. */
+static solve_real *conv_c[3]={NULL,NULL,NULL};
+static double conv_w[3];
+static offset_t conv_n[3];
+
+static void conv_store(int sol, offset_t nvarele, const solve_real *varchange, double w) {
+  conv_c[sol]=(solve_real *) realloc (conv_c[sol],(nvarele>0?nvarele:1)*sizeof(solve_real));
+  memcpy(conv_c[sol],varchange,nvarele*sizeof(solve_real));
+  conv_w[sol]=w;
+}
+
+static void conv_apply(array_def *vars, offset_t nvar, dim_t subindx, const solve_real *xc0, solve_real *xcf, bool euler) {
+  offset_t i,k;
+  double p=euler?1.0:2.0,n1=steps1,n2=llround(steps1*step_ratio2),n3=llround(steps1*step_ratio3);
+  double rho=(pow(n3,-p)-pow(n2,-p))/(pow(n2,-p)-pow(n1,-p));
+  for(i=0; i<nvar; i++) for(k=vars[i].offset; k<vars[i].offset+vars[i].nelem; k++) {
+      double c1=conv_c[0][k],c2=conv_c[1][k],c3=conv_c[2][k];
+      double E=conv_w[0]*c1+conv_w[1]*c2+conv_w[2]*c3,R=E,d1=c2-c1,d2=c3-c2;
+      double sc=fmax(fabs(c1),fmax(fabs(c2),fabs(c3)));
+      int o;
+      if(sc<=1e-6||fabs(c3-c1)<=1e-6*sc) { R=(c1+c2+c3)/3; o=1; }
+      else if(d1*d2>0&&fabs(d2)<=2*rho*fabs(d1)) o=0;
+      else { R=c3; o=2; }
+      conv_n[o]++;
+      if(o!=0) xcf[k]+=(R-E)*((!vars[i].change_real&&subindx>0)?xc0[k]:1);
+    }
+}
+
 /* Extrapolation accuracy side-car (<stem>.xac, Tier B2; GEMPACK's XAC
    file, manual 26.2.3): per variable element the three pass solutions
    the Richardson extrapolation combines and the figures-of-accuracy
@@ -1684,15 +1727,26 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
   solve_real vpercents=1.0;
   FILE* solution;
   /* -single_run: one pass, no extrapolation triple */
-  int maxsol=teems_single_run?1:3;
+  int maxsol=teems_single_run?1:(teems_two_run?2:3);
   /* Euler: forward step on every substep (no leapfrog, no terminal
      smoothing pass) and an h — not h^2 — truncation error series, so
      the Richardson weights below use the step ratios unsquared */
   bool euler=(solmethod==SM_EULER);
+  /* midpoint: Gragg's leapfrog without the terminal smoothing pass --
+     N passes for N steps, the result is the last leapfrog point (manual
+     30.2); it never takes the exogenous variables past their end point */
+  bool midpoint=(solmethod==SM_MIDPOINT);
   /* -fastrefac: sequential LU keeps the MA48 pivot sequence across
      steps and refactorizes with JOB=2 (analyse runs once per solve) */
   dim_t fastrefac=0;
   PetscOptionsGetInt(NULL,NULL,"-fastrefac",&fastrefac,NULL);
+  dim_t convrule=0;
+  PetscOptionsGetInt(NULL,NULL,"-convrule",&convrule,NULL);
+  if(convrule&&(teems_single_run||teems_two_run||teems_sub_active)) {
+    if(rank==0)errmsg("Error: -convrule 1 applies to a run extrapolating from three solutions without subtotals (manual 26.2.5)\n");
+    MPI_Abort(PETSC_COMM_WORLD,1);
+  }
+  conv_n[0]=conv_n[1]=conv_n[2]=0;
               offset_t *counteqs= (offset_t *) calloc (ndblock+1,sizeof(offset_t));
               offset_t *counteqnoadds= (offset_t *) calloc (ndblock,sizeof(offset_t));
               offset_t *countvarintra1s= (offset_t *) calloc (ndblock+1,sizeof(offset_t));
@@ -2439,9 +2493,10 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
         strcpy(commsyntax,"equation");
         /* Gragg's terminal smoothing pass: one more Jacobian build and
            solve at the final state, then the half-sum correction. Euler
-           has no such pass — its accumulated varchange IS the solution,
-           so skip straight to the state reset (nothing was spilled). */
-        if(!euler) {
+           and midpoint have no such pass — their accumulated varchange IS
+           the solution, so skip straight to the state reset (nothing was
+           spilled). */
+        if(!euler&&!midpoint) {
         if(rank==rank_hsl) {
 
 
@@ -2918,7 +2973,7 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
         }
         }
         else {
-          /* Euler: the last substep created vece for a next fill that
+          /* Euler/midpoint: the last substep created vece for a next fill that
              never comes; the smoothing pass destroyed it on the Gragg
              path */
           ierr = VecDestroy(&vece);
@@ -3018,11 +3073,14 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
               extrap_w2=1.0/(1-q2)/(1.0-q3);
               /* single pass: the pass itself is the result (weight 1) */
               if(teems_single_run) { extrap_w1=0.0; extrap_w2=1.0; }
+              /* two solutions: (q c2 - c1)/(q - 1) */
+              if(teems_two_run) extrap_w2=1.0/(1.0-q2);
             }
             if(sol==1) {
               extrap_w1=q2/(q2-1.0);
               extrap_w2=q2/(q3-q2);
               extrap_w3=q2*q2/(q2-q3)/(1.0-q2);
+              if(teems_two_run) { extrap_w2=0.0; extrap_w3=-q2/(q2-1.0); }
             }
             if(sol==2) {
               extrap_w2=q3/(q3-q2);
@@ -3110,6 +3168,10 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
                 xcf[i]+=varchange[i]*extrap_w3;
               }
             }
+          }
+          if(convrule&&rank==rank_hsl) {
+            conv_store(sol,nvarele,varchange,sol==0?extrap_w2:(sol==1?-extrap_w3:extrap_w3));
+            if(sol==2) conv_apply(vars,nvar,subindx,xc0,xcf,euler);
           }
           if(teems_sub_active&&rank==0)sub_pass_end(sol,subindx,vars,nvar,nvarele,xc0);
 
@@ -3355,6 +3417,9 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
     if(teems_single_run) {
       if(rank==0)printf("Accuracy estimates: not available for a single-pass run (-single_run 1; they need three multi-step solutions)\n");
     }
+    else if(teems_two_run) {
+      if(rank==0)printf("Accuracy estimates: not available from two solutions (-two_run 1; they need three multi-step solutions, manual 26.2.3)\n");
+    }
     else if(rank==0)printf("Accurate at 6 digits        %ld\nAccurate at 5 digits        %ld\nAccurate at 4 digits        %ld\nAccurate at 3 digits        %ld\nAccurate at 2 digits        %ld\nAccurate at 1 digit or none %ld\n",precis[5],precis[4],precis[3],precis[2],precis[1],precis[0]);
     }
     free(precis);
@@ -3372,7 +3437,11 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
     free(exo_z);
     free(bsvals);
     gettimeofday(&endtime, NULL);
-    if(rank==0)logmsg(1,"%s solve time %.2f s\n",euler?"Euler":"Gragg",(endtime.tv_sec - begintime.tv_sec)+((double)(endtime.tv_usec - begintime.tv_usec))/ 1000000);
+    if(convrule&&rank==rank_hsl) {
+      logmsg(1,"Convergence rule (-convrule 1, manual 26.2.5): %ld component result(s) extrapolated, %ld averaged (results very close or near zero), %ld taken from the %d-step solution (poor convergence)\n",(long)conv_n[0],(long)conv_n[1],(long)conv_n[2],(int)llround(steps1*step_ratio3));
+      for(i=0; i<3; i++) { free(conv_c[i]); conv_c[i]=NULL; }
+    }
+    if(rank==0)logmsg(1,"%s solve time %.2f s\n",euler?"Euler":midpoint?"Midpoint":"Gragg",(endtime.tv_sec - begintime.tv_sec)+((double)(endtime.tv_usec - begintime.tv_usec))/ 1000000);
     teems_rss_probe("solve");
               free(counteqs);
               free(counteqnoadds);

@@ -8,6 +8,7 @@
 #include <sys/time.h>
 #include <ctype.h>
 #include <math.h>
+#include <float.h>
 #include <stdint.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -69,6 +70,7 @@ extern int max_threads;
 extern double step_ratio2,step_ratio3,extrap_w1,extrap_w2,extrap_w3;
 extern int steps1,steps2,steps3;
 extern int teems_single_run;
+extern int teems_two_run;
 /* RANDOM (manual 11.5.2): -random_seed, and the key of the statement
    being compiled with its running RANDOM occurrence count */
 extern long teems_random_seed;
@@ -101,7 +103,7 @@ typedef float store_real;
 enum matrix_method { MM_LU=0, MM_SBBD=1, MM_DBBD=2, MM_NDBBD=3 };
 /* -solmed solution method (GEMPACK manual; Pearson 1991; Schiffmann
    2022 / GEMPACK 26.5 for the Runge-Kutta flavors) */
-enum solution_method { SM_GRAGG=1, SM_EULER=2, SM_RK2=3, SM_RK4=4, SM_BOSHA32=5, SM_DOPRI54=6, SM_HEUN=7, SM_JOHANSEN=10, SM_PROBE=100, SM_NOSIM=101 };
+enum solution_method { SM_GRAGG=1, SM_EULER=2, SM_RK2=3, SM_RK4=4, SM_BOSHA32=5, SM_DOPRI54=6, SM_HEUN=7, SM_MIDPOINT=8, SM_JOHANSEN=10, SM_PROBE=100, SM_NOSIM=101 };
 /* array_def.gltype: bound imposed on levels values */
 enum bound_type { BT_NONE=0, BT_GE=1, BT_GT=2, BT_LE=3, BT_LT=4 };
 /* formula_op.Oper: compiled formula operation */
@@ -275,6 +277,7 @@ typedef struct
   offset_t setid[MAXVARDIM];
   offset_t strides[MAXVARDIM];
   int cond_mapid;              /* >0: mapping-equality condition on the summed index (11.4.11, M3) */
+  int fold;                    /* SUM_FOLD_*: SUM, PROD, MAXS or MINS (11.4.4) */
   char cond_rhs[NAMESIZE];     /* its RHS token: outer quantifier index or codomain element */
   /* coefficient-comparison condition (11.4.11; IF-survey gap 2):
      COEF(args) <op> <numeric const>, e.g. ENDOWFLAG(e,t) NE 0 */
@@ -593,6 +596,26 @@ int tab_postsim_split(char *newtabfile, char *psfile);
    mapping_complementarity_design.md section 5); no-op when the TAB
    has no levels statements; -1 on error */
 int tab_levels_transform(char *fname);
+/* PROD/MAXS/MINS (manual 11.4.4) ride the SUM machinery: the
+   preprocess writes them as sum( with one of these marks before the
+   summed index, and sum_parse moves the mark into sum_def.fold */
+#define SUM_MARK_PROD '\021'
+#define SUM_MARK_MAXS '\022'
+#define SUM_MARK_MINS '\023'
+enum { SUM_FOLD_SUM=0, SUM_FOLD_PROD=1, SUM_FOLD_MAXS=2, SUM_FOLD_MINS=3 };
+/* empty-set values: PROD 1, MAXS a very large negative number, MINS a
+   very large positive one (11.4.4) */
+static inline solve_real sum_fold_init(int f) { return f==SUM_FOLD_PROD?1:f==SUM_FOLD_MAXS?-FLT_MAX:f==SUM_FOLD_MINS?FLT_MAX:0; }
+static inline solve_real sum_fold(int f, solve_real a, solve_real v) {
+  switch (f) {
+  case SUM_FOLD_PROD: return a*v;
+  case SUM_FOLD_MAXS: return v>a?v:a;
+  case SUM_FOLD_MINS: return v<a?v:a;
+  default: return a+v;
+  }
+}
+static inline int sum_mark_fold(char c) { return c==SUM_MARK_PROD?SUM_FOLD_PROD:c==SUM_MARK_MAXS?SUM_FOLD_MAXS:c==SUM_MARK_MINS?SUM_FOLD_MINS:SUM_FOLD_SUM; }
+int shocks_check_floor(array_def *vars, offset_t nvar, dim_t subints, int solmethod);
 const char *levels_linear_of(const char *name);
 /* C1: one Complementarity statement (manual 10.17/11.14; design doc
    section 7): parsed at transform time, set matching validated after
@@ -766,7 +789,7 @@ int names_validate(set_def *sets, dim_t nset, array_def *coefs, offset_t ncof, a
 /* MAPPING statements (manual 11.9): declarations, by_elements value
    reads, and the pre-use validation pass (range/onto/coverage) */
 int mappings_read(char *fname, map_def *maps, dim_t nmap, set_def *sets, dim_t nset);
-int mapping_values_read(char *fname, int niodata, cmf_file_entry *iodata, map_def *maps, dim_t nmap, set_def *sets, set_element *set_elems);
+int mapping_values_read(char *fname, int niodata, cmf_file_entry *iodata, map_def *maps, dim_t nmap, set_def *sets, dim_t nset, set_element *set_elems);
 int mapping_use_guards(char *fname, map_def *maps, dim_t nmap);
 void mapping_lower_calls(char *line);
 void mapping_reject_in(char *line, const char *what);
@@ -1080,7 +1103,9 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
    steps1/steps2/steps3. solmethod selects the stepping scheme:
    SM_GRAGG (smoothed modified midpoint, Pearson 1991 eq. 6.1 /
    Alg. 7.1.2): Euler start, midpoint leapfrog, terminal smoothing
-   pass, h^2 error series; SM_EULER: forward Euler on every substep,
+   pass, h^2 error series; SM_MIDPOINT: the same leapfrog without the
+   smoothing pass, N passes for N steps (manual 30.2), h^2 error series
+   within one step parity; SM_EULER: forward Euler on every substep,
    no smoothing pass, h error series (extrapolation weights differ
    accordingly). */
 bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A,PetscInt dnz,PetscInt* dnnz,PetscInt onz,PetscInt* onnz,Mat* B,PetscInt dnzB,PetscInt* dnnzB,PetscInt onzB,PetscInt* onnzB,Vec* vecb,Vec *vece,PetscInt rank,PetscInt rank_hsl,PetscInt mpisize,char* tabfile, char *commsyntax,set_def *sets,dim_t nset, set_element *set_elems, array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar, elem_value **elem_vals2,offset_t ncofvar,offset_t ncofele,offset_t nvarele,closure_entry **closure_vals2,offset_t alltimeset,offset_t allregset,offset_t nintraeq,dim_t matsol,PetscInt Istart,PetscInt Iend,  offset_t nreg, offset_t ntime, PetscInt *eq_addr, offset_t ndblock, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laDi,dim_t laD,PetscReal cntl3,PetscReal cntl6,dim_t nesteddbbd,int localsize,PetscInt *ndbbddrank1,fortran_int* indata,dim_t mc66,fortran_int *ptx,struct timeval begintime,dim_t subints,MPI_Fint fcomm,int solmethod,solve_real **xcf2);

@@ -102,12 +102,12 @@ static const char *blas_corename(void) {
 static const char *const cli_teems_flags[]={
   "adaptive","assertions","cmdfile","cntl_3","cntl_6","cofdump",
   "comp_do_acc","comp_do_approx","comp_redo","comp_redo_min_frac",
-  "comp_sberr_warn","comp_steps","condest","epstol","fastrefac","fhtest",
+  "comp_sberr_warn","comp_steps","condest","convrule","epstol","fastrefac","fhtest",
   "gpzerodivide","inmemory","jacdump","laA","laD","laDi","ma48u","matsol",
   "maxretries","maxthreads","ndcutcache","nowrites","nsbbdblocks",
   "nsubints","postsim","probefine","probepattern","random_seed",
   "range_test_initial","range_test_updated","refine","residcheck","retryadj","rkchart",
-  "rkctrl","rkguard","rk_h0","rknorm","rkscope","single_run",
+  "rkctrl","rkguard","rk_h0","rknorm","rkscope","single_run","two_run",
   "smllthreads","solmed","step1","step2","step3","tempdir","verbosity","zdivshift",
   "withmc66","version",NULL
 };
@@ -434,15 +434,23 @@ static void ordering_stats_write(cmf_file_entry *iodata, int niodata, int noutda
     int isrk=(strcmp(solmed,"RK2")==0||strcmp(solmed,"Heun")==0||strcmp(solmed,"RK4")==0||strcmp(solmed,"BoSha32")==0||strcmp(solmed,"DoPri54")==0);
     PetscOptionsGetInt(NULL,NULL,"-fastrefac",&frchk,NULL); /* post force-clear = effective */
     fprintf(fp,"  \"options\": {\n");
-    if((strcmp(solmed,"Gragg")==0||strcmp(solmed,"Euler")==0)&&teems_single_run)
+    int multistep=(strcmp(solmed,"Gragg")==0||strcmp(solmed,"Midpoint")==0||strcmp(solmed,"Euler")==0);
+    if(multistep&&teems_single_run)
       fprintf(fp,"    \"steps\": [%d],\n",steps1);
-    else if(strcmp(solmed,"Gragg")==0||strcmp(solmed,"Euler")==0)
+    else if(multistep&&teems_two_run)
+      fprintf(fp,"    \"steps\": [%d,%d],\n",steps1,(int)llround(steps1*step_ratio2));
+    else if(multistep)
       fprintf(fp,"    \"steps\": [%d,%d,%d],\n",steps1,(int)llround(steps1*step_ratio2),(int)llround(steps1*step_ratio3));
     else if(strcmp(solmed,"Johansen")==0||strcmp(solmed,"probe")==0)
       fprintf(fp,"    \"steps\": null,\n");
     else fprintf(fp,"    \"steps\": [%d],\n",steps1);
     fprintf(fp,"    \"subintervals\": %ld,\n",ropt->subints);
     fprintf(fp,"    \"single_run\": %s,\n",teems_single_run?"true":"false");
+    {
+      dim_t cr=0;
+      PetscOptionsGetInt(NULL,NULL,"-convrule",&cr,NULL);
+      fprintf(fp,"    \"convergence_rule\": %s,\n",cr?"true":"false");
+    }
     fprintf(fp,"    \"random_seed\": %ld,\n",teems_random_seed);
     if(isrk)fprintf(fp,"    \"adaptive\": %d,\n    \"eps_tolerance\": %g,\n    \"max_retries\": %d,\n    \"retry_adjust\": %g,\n    \"rk_chart\": \"%s\",\n    \"rk_norm\": \"%s\",\n    \"rk_controller\": \"%s\",\n    \"rk_scope\": \"%s\",\n    \"rk_h0\": %g,\n",ropt->adaptive,ropt->epstol,ropt->maxretries,ropt->retryadj,ropt->rk_chart==RK_CHART_LOG?"log":"percent",ropt->rk_norm==RK_NORM_RMS?"rms":"max",ropt->rk_ctrl==RK_CTRL_PI?"pi":"std",ropt->rk_scope==RK_SCOPE_ALL?"all":"pct",ropt->rk_h0);
     else fprintf(fp,"    \"adaptive\": null,\n    \"eps_tolerance\": null,\n    \"max_retries\": null,\n    \"retry_adjust\": null,\n    \"rk_chart\": null,\n    \"rk_norm\": null,\n    \"rk_controller\": null,\n    \"rk_scope\": null,\n    \"rk_h0\": null,\n");
@@ -1463,6 +1471,8 @@ int main(int argc,char **args) {
   if(steps3==0)steps3=8;
   PetscOptionsGetInt(NULL,NULL,"-single_run",&teems_single_run,NULL);
   teems_single_run=(teems_single_run!=0);
+  PetscOptionsGetInt(NULL,NULL,"-two_run",&teems_two_run,NULL);
+  teems_two_run=(teems_two_run!=0);
   /* -random_seed N: seed of RANDOM(a,b) (manual 11.5.2); the same seed
      reproduces every draw */
   {
@@ -1588,7 +1598,7 @@ int main(int argc,char **args) {
     strcpy(solmed,"Gragg");
   }
   if(strcmp(solmed,"Mmid")==0) {/* transitional alias: the multi-step method has always been Gragg's smoothed modified midpoint (Pearson 1991) */
-    if(rank==0)printf("Warning: -solmed Mmid is deprecated; the method is Gragg's (smoothed modified midpoint) — use -solmed Gragg\n");
+    if(rank==0)printf("Warning: -solmed Mmid is deprecated and runs Gragg's method (smoothed modified midpoint) — use -solmed Gragg, or -solmed Midpoint for the midpoint method without the smoothing pass (manual 30.2)\n");
     strcpy(solmed,"Gragg");
   }
   if(strcmp(solmed,"NoSol")==0) {/* transitional alias: renamed — it is a structure probe, not a degenerate solve */
@@ -1598,6 +1608,7 @@ int main(int argc,char **args) {
   int solmethod=0;
   if(strcmp(solmed,"Gragg")==0)solmethod=SM_GRAGG;
   if(strcmp(solmed,"Euler")==0)solmethod=SM_EULER;
+  if(strcmp(solmed,"Midpoint")==0)solmethod=SM_MIDPOINT;
   if(strcmp(solmed,"RK2")==0)solmethod=SM_RK2;
   if(strcmp(solmed,"Heun")==0)solmethod=SM_HEUN;
   if(strcmp(solmed,"RK4")==0)solmethod=SM_RK4;
@@ -1607,7 +1618,7 @@ int main(int argc,char **args) {
   if(strcmp(solmed,"probe")==0)solmethod=SM_PROBE;
   if(strcmp(solmed,"nosim")==0)solmethod=SM_NOSIM;
   if(solmethod==0) {
-    if(rank==0)errmsg("Error: unknown -solmed %s (valid: Gragg, Euler, RK2, Heun, RK4, BoSha32, DoPri54, Johansen, probe, nosim)\n",solmed);
+    if(rank==0)errmsg("Error: unknown -solmed %s (valid: Gragg, Midpoint, Euler, RK2, Heun, RK4, BoSha32, DoPri54, Johansen, probe, nosim)\n",solmed);
     PetscFinalize();
     return 1;
   }
@@ -1621,17 +1632,39 @@ int main(int argc,char **args) {
      teems-R's matrix_method = "auto" consults (ROADMAP 6.10); the MC79
      diagnosis itself is ordering-invariant. */
   if(solmethod==SM_PROBE)nohsl=true;
-  /* -single_run 1 (GEMPACK "method = euler|gragg; steps = N;"): one pass
+  /* -single_run 1 (GEMPACK "method = euler|midpoint|gragg; steps = N;"): one pass
      of -step1 steps with no extrapolation. Johansen is a single step
      already; the Runge-Kutta family has its own step control. */
   if(teems_single_run) {
     if(solmethod==SM_RK2||solmethod==SM_HEUN||solmethod==SM_RK4||solmethod==SM_BOSHA32||solmethod==SM_DOPRI54) {
-      errmsg("Error: -single_run 1 applies to -solmed Euler or Gragg; the Runge-Kutta methods (%s) are single-pass already and take their steps from -step1/-adaptive\n",solmed);
+      errmsg("Error: -single_run 1 applies to -solmed Euler, Midpoint or Gragg; the Runge-Kutta methods (%s) are single-pass already and take their steps from -step1/-adaptive\n",solmed);
       PetscFinalize();
       return 1;
     }
     if(solmethod==SM_JOHANSEN||solmethod==SM_PROBE||solmethod==SM_NOSIM) teems_single_run=0;
     else if(rank==0) printf("Single-pass %s run: %d steps, no extrapolation (-single_run 1)\n",solmed,(int)steps1);
+  }
+  /* -two_run 1 (GEMPACK "steps = n1 n2;"): extrapolation from two
+     multi-step solutions, -step1 and -step2, with no accuracy estimate
+     (manual 26.1.2, 26.2.3) */
+  if(teems_two_run) {
+    if(teems_single_run) {
+      errmsg("Error: -two_run 1 and -single_run 1 exclude each other\n");
+      PetscFinalize();
+      return 1;
+    }
+    if(solmethod!=SM_GRAGG&&solmethod!=SM_MIDPOINT&&solmethod!=SM_EULER) {
+      if(solmethod==SM_JOHANSEN||solmethod==SM_PROBE||solmethod==SM_NOSIM) teems_two_run=0;
+      else {
+        errmsg("Error: -two_run 1 applies to -solmed Euler, Midpoint or Gragg (%s takes its steps from -step1/-adaptive)\n",solmed);
+        PetscFinalize();
+        return 1;
+      }
+    }
+    if(teems_two_run) {
+      steps3=steps2;
+      if(rank==0) printf("Two-solution %s run: %d and %d steps extrapolated, no accuracy estimate (-two_run 1)\n",solmed,(int)steps1,(int)steps2);
+    }
   }
   /* -probefine: with -solmed probe, add the MC79 fine Dulmage-Mendelsohn
      report (strongly connected components of the well-determined block) */
@@ -1785,10 +1818,10 @@ int main(int argc,char **args) {
       }
     }
   }
-  if(solmethod==SM_GRAGG&&!teems_single_run) {
-    /* Gragg's h^2 error expansion (Pearson 1991 Thm 6.1) holds for even
-       step counts only; mixed parity also breaks the shared-power
-       extrapolation */
+  if((solmethod==SM_GRAGG||solmethod==SM_MIDPOINT)&&!teems_single_run) {
+    /* the h^2 error expansion of Gragg and the midpoint method holds
+       within one step parity (Pearson 1991 Thm 6.1; manual 26.1.2,
+       30.2); mixed parity also breaks the shared-power extrapolation */
     step_ratio2=steps1/(double)2;
     i=(offset_t)steps1/2;
     if(step_ratio2!=i){
@@ -1825,7 +1858,12 @@ int main(int argc,char **args) {
       }
     }
   }
-  if((solmethod==SM_GRAGG||solmethod==SM_EULER)&&!teems_single_run&&!(steps1<steps2&&steps2<steps3)) {
+  if((solmethod==SM_GRAGG||solmethod==SM_MIDPOINT||solmethod==SM_EULER)&&teems_two_run&&!(steps1<steps2)) {
+    errmsg("Error: -step1/-step2 must be strictly increasing (got %d %d)\n",steps1,steps2);
+    PetscFinalize();
+    return 1;
+  }
+  if((solmethod==SM_GRAGG||solmethod==SM_MIDPOINT||solmethod==SM_EULER)&&!teems_single_run&&!teems_two_run&&!(steps1<steps2&&steps2<steps3)) {
     /* extrapolation needs three distinct step sizes (GEMPACK: i<j<k) */
     errmsg("Error: -step1/-step2/-step3 must be strictly increasing (got %d %d %d)\n",steps1,steps2,steps3);
     PetscFinalize();
@@ -1866,9 +1904,9 @@ int main(int argc,char **args) {
     if(matsol==MM_NDBBD)why="matrix_method NDBBD, which cannot keep its factorization for more solves yet";
     else if(matsol==MM_SBBD&&mc66!=0)why="SBBD under -withmc66 1, which cannot keep its factorization for more solves";
     else if(solmethod==SM_NOSIM)why="-solmed nosim, which runs no simulation";
-    else if(solmethod!=SM_JOHANSEN&&solmethod!=SM_GRAGG&&solmethod!=SM_EULER&&solmethod!=SM_PROBE)why="a Runge-Kutta method, whose stage combination in the log chart has no settled subtotal convention yet";
+    else if(solmethod!=SM_JOHANSEN&&solmethod!=SM_GRAGG&&solmethod!=SM_MIDPOINT&&solmethod!=SM_EULER&&solmethod!=SM_PROBE)why="a Runge-Kutta method, whose stage combination in the log chart has no settled subtotal convention yet";
     if(why!=NULL) {
-      if(rank==0)errmsg("Error: subtotals (manual 29) are not available with %s; use matrix_method LU, SBBD or DBBD with the Johansen, Euler or Gragg method\n",why);
+      if(rank==0)errmsg("Error: subtotals (manual 29) are not available with %s; use matrix_method LU, SBBD or DBBD with the Johansen, Euler, midpoint or Gragg method\n",why);
       MPI_Barrier(PETSC_COMM_WORLD);
       MPI_Abort(PETSC_COMM_WORLD,1);
     }
@@ -2114,7 +2152,7 @@ int main(int argc,char **args) {
     if(nmap>0) {
       maps= (map_def *) calloc (nmap,sizeof(map_def));
       mappings_read(tabfile,maps,nmap,sets,nset);
-      mapping_values_read(tabfile,niodata,iodata,maps,nmap,sets,set_elems);
+      mapping_values_read(tabfile,niodata,iodata,maps,nmap,sets,nset,set_elems);
       /* formula-assigned mappings (manual 10.13.1) get their values
          when their Formula executes (main passes or PostSim), so the
          completeness check moves to first use for those */
@@ -2340,6 +2378,7 @@ int main(int argc,char **args) {
     nexo1=nexo;
     strcpy(commsyntax,"shock");
     if(shocks_read(shock,commsyntax,closure_vals,nvarele,vars,nvar,sets,nset,set_elems,subints)==-1)MPI_Abort(PETSC_COMM_WORLD,1);
+    if(shocks_check_floor(vars,nvar,subints,solmethod)<0)MPI_Abort(PETSC_COMM_WORLD,1);
     if(has_sub) {
       if(subtotals_read(subfile,vars,nvar,sets,nset,set_elems,nvarele)<0)MPI_Abort(PETSC_COMM_WORLD,1);
       logmsg(1,"Subtotals: %d shock group(s) from %s (manual 29)\n",teems_nsub,subfile);
@@ -2386,7 +2425,7 @@ int main(int argc,char **args) {
     /* 51.6 default = the accurate run's step sum; steps2/steps3 were
        folded into ratios above, so rebuild the three counts the
        multistep driver will use */
-    comp_steps=(solmethod==SM_GRAGG||solmethod==SM_EULER)
+    comp_steps=(solmethod==SM_GRAGG||solmethod==SM_MIDPOINT||solmethod==SM_EULER)
       ?steps1+(int)llround(steps1*step_ratio2)+(int)llround(steps1*step_ratio3)
       :steps1;
     if(comp_steps<1)comp_steps=10;
@@ -3387,7 +3426,7 @@ comp_accurate_reentry:
 
   FILE* solution;
 
-  if(!comp_dispatch&&(solmethod==SM_GRAGG||solmethod==SM_EULER))solve_gragg(nohsl,VecSize,&A,dnz,dnnz,onz,onnz,&B,dnzB,dnnzB,onzB,onnzB,&vecb,&vece,rank,rank_hsl,mpisize,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,&elem_vals,ncofele+nvarele,ncofele,nvarele,&closure_vals,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,eq_addr,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,subints,fcomm,solmethod,&xcf);
+  if(!comp_dispatch&&(solmethod==SM_GRAGG||solmethod==SM_MIDPOINT||solmethod==SM_EULER))solve_gragg(nohsl,VecSize,&A,dnz,dnnz,onz,onnz,&B,dnzB,dnnzB,onzB,onnzB,&vecb,&vece,rank,rank_hsl,mpisize,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,&elem_vals,ncofele+nvarele,ncofele,nvarele,&closure_vals,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,eq_addr,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,subints,fcomm,solmethod,&xcf);
 
   if(!comp_dispatch&&isrk)solve_rk(nohsl,VecSize,dnz,dnnz,onz,onnz,dnzB,dnnzB,onzB,onnzB,&vece,rank,rank_hsl,mpisize,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,&elem_vals,ncofele,nvarele,&closure_vals,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,eq_addr,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,fcomm,solmethod,adaptive,(double)epstol,(double)retryadj,maxretries,&rko,&xcf,&accmetric);
 

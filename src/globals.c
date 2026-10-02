@@ -24,6 +24,8 @@ int steps1, steps2, steps3;
 /* -single_run 1: one multi-step Euler/Gragg pass over -step1 steps, no
    Richardson extrapolation (GEMPACK "method = euler; steps = N;") */
 int teems_single_run=0;
+/* -two_run 1: extrapolate from two multi-step solutions (manual 26.1.2) */
+int teems_two_run=0;
 /* RANDOM (manual 11.5.2): a value is a hash of the seed, the statement
    text, the occurrence in the statement and the element tuple, so every
    re-evaluation (steps, passes, ranks) draws the same number */

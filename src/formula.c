@@ -2079,11 +2079,9 @@ static void mapping_assign_formula(dim_t mm, char *vname, char *rhs, int byele, 
     rr[k]='\0';
     for (idxl=0; idxl<fdim-1; idxl++) if (strcmp(rr,arSet[idxl].index_name)==0) break;
     if (idxl<fdim-1) {
+      /* no subset relation is required: values are then matched to
+         codomain elements by name (11.9.12) */
       idxss=set_supset_slot(sets,(dim_t)arSet[idxl].setid,md->toset);
-      if (idxss<0) {
-        errmsg("Error: Formula for mapping %s: index %s ranges over set %s, which is neither the codomain %s nor a declared subset of it (manual 10.13.1)\n",md->mapname,rr,sets[arSet[idxl].setid].setname,sets[md->toset].setname);
-        MPI_Abort(PETSC_COMM_WORLD,1);
-      }
       idxmode=1;
     } else if ((p=strchr(rr,MAPMARK))!=NULL&&strpbrk(rr,"+-*/^(){}")==NULL) {
       char bname[NAMESIZE];
@@ -2102,8 +2100,8 @@ static void mapping_assign_formula(dim_t mm, char *vname, char *rhs, int byele, 
       }
       cpdss=set_supset_slot(sets,(dim_t)arSet[idxl].setid,teems_maps[mb].fromset);
       idxss=set_supset_slot(sets,teems_maps[mb].toset,md->toset);
-      if (cpdss<0||idxss<0) {
-        errmsg("Error: Formula for mapping %s: %s needs its index over the domain of %s (or a subset) and a codomain equal to or a subset of %s (manual 10.13.1)\n",md->mapname,rr,teems_maps[mb].mapname,sets[md->toset].setname);
+      if (cpdss<0) {
+        errmsg("Error: Formula for mapping %s: %s needs its index over the domain of %s or a subset of it (manual 10.13.1)\n",md->mapname,rr,teems_maps[mb].mapname);
         MPI_Abort(PETSC_COMM_WORLD,1);
       }
       teems_maps[mb].used=true;
@@ -2131,14 +2129,25 @@ static void mapping_assign_formula(dim_t mm, char *vname, char *rhs, int byele, 
       if (sup>0) d=set_elems[sets[arSet[l].setid].offset+d].superset_pos[sup];
     }
     if (codlit>=0) cod=codlit;
-    else if (idxmode==1) {
-      cod=(dim_t)arSet[idxl].indx;
-      if (idxss>0) cod=set_elems[sets[arSet[idxl].setid].offset+cod].superset_pos[idxss];
-    } else if (idxmode==2) {
-      dim_t bd=(dim_t)arSet[idxl].indx;
-      if (cpdss>0) bd=set_elems[sets[arSet[idxl].setid].offset+bd].superset_pos[cpdss];
-      cod=teems_maps[cpmap].values[bd];
-      if (idxss>0) cod=set_elems[sets[teems_maps[cpmap].toset].offset+cod].superset_pos[idxss];
+    else if (idxmode==1||idxmode==2) {
+      dim_t vs,vp;
+      if (idxmode==1) {
+        vs=(dim_t)arSet[idxl].setid;
+        vp=(dim_t)arSet[idxl].indx;
+      } else {
+        dim_t bd=(dim_t)arSet[idxl].indx;
+        if (cpdss>0) bd=set_elems[sets[arSet[idxl].setid].offset+bd].superset_pos[cpdss];
+        vs=teems_maps[cpmap].toset;
+        vp=teems_maps[cpmap].values[bd];
+      }
+      if (idxss>=0) cod=(idxss>0)?set_elems[sets[vs].offset+vp].superset_pos[idxss]:vp;
+      else {
+        cod=set_element_pos(set_elems[sets[vs].offset+vp].setele,md->toset,sets,set_elems);
+        if (cod<0) {
+          errmsg("Error: Formula for mapping %s gives element %s, which is not an element of its codomain %s (manual 11.9.12)\n",md->mapname,set_elems[sets[vs].offset+vp].setele,sets[md->toset].setname);
+          MPI_Abort(PETSC_COMM_WORLD,1);
+        }
+      }
     } else {
       solve_real v=formula_eval(elem_vals,sets,set_elems,sum_vals,ops,nops,arSet,fdim-1,zerodivide);
       cod=(dim_t)lround((double)v)-1;
@@ -4510,7 +4519,7 @@ int sum_eval(char *formulain, char *commsyntax,set_def *sets,dim_t nset, set_ele
             arSet2[dcount].indx=superset_pos;
             l2=l2-superset_pos*dcountdim1[dcount];
           }
-          vval=0;
+          vval=sum_fold_init(sum_cof[j].fold);
           for (l1=0; l1<sets[sum_cof[j].sumsetid].size; l1++) {
             /* mapping-equality condition (M3): only domain elements
                mapping to the target codomain position contribute */
@@ -4520,7 +4529,7 @@ int sum_eval(char *formulain, char *commsyntax,set_def *sets,dim_t nset, set_ele
             arSet2[sum_cof[j].size].indx=l1;
             if (cofcond.ic!=NULL&&!icond_eval((const icond *)cofcond.ic,arSet2,sets,set_elems)) continue;
             if (cofcond.gen&&!sum_cond_general_test(&cofcond,gown,elem_vals,sets,set_elems,sum_vals,arSet2,fdimsumcof,zerodivide)) continue;
-            vval+=formula_eval(elem_vals,sets,set_elems,sum_vals,ops1,nops,arSet2,fdimsumcof,zerodivide);
+            vval=sum_fold(sum_cof[j].fold,vval,formula_eval(elem_vals,sets,set_elems,sum_vals,ops1,nops,arSet2,fdimsumcof,zerodivide));
           }
           sum_vals[*sumindx+l].value=vval;
         }
@@ -4621,7 +4630,7 @@ int sum_eval(char *formulain, char *commsyntax,set_def *sets,dim_t nset, set_ele
             arSet2[dcount].indx=superset_pos;
             l2=l2-superset_pos*dcountdim1[dcount];
           }
-          vval=0;
+          vval=sum_fold_init(sum_cof[j].fold);
           for (l1=0; l1<sets[sum_cof[j].sumsetid].size; l1++) {
             /* mapping-equality condition (M3): only domain elements
                mapping to the target codomain position contribute */
@@ -4631,7 +4640,7 @@ int sum_eval(char *formulain, char *commsyntax,set_def *sets,dim_t nset, set_ele
             arSet2[sum_cof[j].size].indx=l1;
             if (cofcond.ic!=NULL&&!icond_eval((const icond *)cofcond.ic,arSet2,sets,set_elems)) continue;
             if (cofcond.gen&&!sum_cond_general_test(&cofcond,gown,elem_vals,sets,set_elems,sum_vals,arSet2,fdimsumcof,zerodivide)) continue;
-            vval+=formula_eval(elem_vals,sets,set_elems,sum_vals,ops1,nops,arSet2,fdimsumcof,zerodivide);
+            vval=sum_fold(sum_cof[j].fold,vval,formula_eval(elem_vals,sets,set_elems,sum_vals,ops1,nops,arSet2,fdimsumcof,zerodivide));
           }
           sum_vals[*sumindx+l].value=vval;//ha_sumele[*sumindx+l2].varval=vval;
         }
