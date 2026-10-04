@@ -560,9 +560,10 @@ static void linvar_dim_read(char *p, char *linecopy, offset_t lvar,
     if(split_mapped) {
       /* the loop set is whatever the domain index ranges over -- fall
          through to the textual recovery with the bare index so a sum
-         over a SUBSET of the domain resolves to the subset and trips
-         the exact-domain fatal in linvar_map_dim_check rather than
-         silently looping the full domain (M2c) */
+         over a SUBSET of the domain resolves to the subset, which
+         linvar_map_dim_check routes through superset_pos (or stops by
+         name when it is not a declared subset) rather than silently
+         looping the full domain (M2c) */
       ref->dimmapid[d]=mp;
       p=idx;
     }
@@ -643,13 +644,13 @@ static void linvar_dim_read(char *p, char *linecopy, offset_t lvar,
   }
 }
 
-/* Validate one mapped dimension of a linear-variable reference and
-   disable superset routing for it (the column offset goes through the
-   mapping's value table instead): the loop index must range over the
-   mapping's domain set exactly and the declared dim set must be the
-   codomain exactly -- the same contract map_dim_bind enforces on the
-   coefficient side -- and a lead/lag offset through a mapping has no
-   meaning.  Named fatals, not mis-binds. */
+/* Validate one mapped dimension of a linear-variable reference (the
+   column offset goes through the mapping's value table): the loop
+   index must range over the mapping's domain set or a declared subset
+   of it, and the codomain must be the declared dim set or a declared
+   subset of it (manual 11.9.7) -- the same contract map_dim_bind
+   enforces on the coefficient side -- and a lead/lag offset through a
+   mapping has no meaning. Named fatals, not mis-binds. */
 static void linvar_map_dim_check(eq_var_ref *ref, dim_t d, offset_t frame_setid,
                                  array_def *vars, set_def *sets, dim_t *dss, dim_t *css) {
   map_def *md=&teems_maps[ref->dimmapid[d]-1];
@@ -974,6 +975,7 @@ static void stmt_prog_build_one(char *line, stmt_prog *stp, char *commsyntax,
       eq_unmask(vname);
       eq_unmask(linecopy);
       str_delete_char(readitem,' ');
+      str_sign_runs_collapse(readitem);
       eq_linearity_check(readitem,eqname,coefs,ncof);
       while (formula_normalize(readitem)==1);
       leadlag_encode(readitem);
@@ -1191,6 +1193,9 @@ static void stmt_prog_build_one(char *line, stmt_prog *stp, char *commsyntax,
         stp->nlv=nlinvars;
         for (i=0; i<nlinvars; i++) {
           if(!force_all) {
+            /* an equation over an empty set owns no row: matrow is
+               already one past the last equation position */
+            if(nloops==0)continue;
             Jindx=eq_addr[matrow];
             if(Jindx>=Iend1)continue;
           }
@@ -1843,7 +1848,8 @@ int backsolve_recover(char *fname, char *commsyntax,set_def *sets,offset_t nset,
             }
           }
         }
-        if (npivot==0) {
+        /* over an empty set there is no row and nothing to recover */
+        if (npivot==0&&vars[backsolves[pr].varindx].nelem>0) {
           errmsg("Error: defining equation %s does not reference backsolved variable %s\n",backsolves[pr].eqname,vars[backsolves[pr].varindx].cofname);
           MPI_Abort(PETSC_COMM_WORLD,1);
         }
@@ -1878,7 +1884,7 @@ static void eq_reduce_linvar_check(const char *sumtext) {
 }
 
 int eq_sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifier *arSet,set_def *sets,dim_t nset,dim_t fdim,int j) {
-  char *readitem,*p,*p1,*p2,interchar2[NAMESIZE],argu[TABREADLINE],tempname[NAMESIZE];//,line5[TABREADLINE]
+  char *readitem,*p,*p1,interchar2[NAMESIZE],argu[TABREADLINE],tempname[NAMESIZE];//,line5[TABREADLINE]
   char interchar[NAMESIZE],interchar1[NAMESIZE],line[TABREADLINE],line1[TABREADLINE],line2[TABREADLINE],line3[TABREADLINE],line4[TABREADLINE];
   dim_t l,l1,l2,l3,l4,l5,l6,l7;
   int ncur=0,ncuri,i=0,k=0,k1=0,length;
@@ -1939,6 +1945,7 @@ int eq_sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifier 
           p = strtok(NULL,",");
           { char *st_sc=sum_settok_extract(line1); if (st_sc!=NULL) p=st_sc; }
           sum_cond_parse(p,sum_cof[j].sumindx,&sum_cof[j].cond_mapid,sum_cof[j].cond_rhs,&sum_cof[j]);
+          sum_cond_rhs_enclosing(&sum_cof[j],arSet,fdim,formulain,readitem);
           for (l7=0; l7<nset; l7++) if(strcmp(p,sets[l7].setname)==0) {
               sum_cof[j].sumsetid=l7;
               break;
@@ -1980,17 +1987,8 @@ int eq_sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifier 
                       l6++;
                     }
                   if (l6==0) {
-                    interchar1[0]='\0';
-                    strcat(interchar1,"sum(");
-                    strcat(interchar1,sum_dim_identity(p));
-                    strcpy(line3,formulain);
-                    line3[readitem-formulain]='\0';
-                    l7=str_rfind_ci(line3,interchar1);
-                    if (l7<0) sum_carried_fatal(sum_dim_identity(p),formulain);
-                    p1=&line3[l7+2];
-                    p1 = strtok(p1,",");
-                    if (p1==NULL) sum_carried_fatal(sum_dim_identity(p),formulain);
-                    { char *cc=strchr(p1,':'); if (cc!=NULL) *cc='\0'; } /* an enclosing sum's condition rides on its set token (vetting S7) */
+                    if (sum_enclosing_setname(formulain,readitem,sum_dim_identity(p),line3,TABREADLINE)<0) sum_carried_fatal(sum_dim_identity(p),formulain);
+                    p1=line3;
                     for (l7=0; l7<nset; l7++) if(strcmp(p1,sets[l7].setname)==0) {
                         sum_cof[j].setid[l3]=l7;
                         break;
@@ -2024,19 +2022,7 @@ int eq_sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifier 
                         break;
                       }
                     if (l6==0) {
-                      interchar1[0]='\0';
-                      strcat(interchar1,"sum(");
-                      strcat(interchar1,sum_dim_identity(p));
-                      strcpy(line3,formulain);
-                      line3[readitem-formulain]='\0';
-                      l7=str_rfind_ci(line3,interchar1);
-                      if (l7<0) sum_carried_fatal(sum_dim_identity(p),formulain);
-                      p1=&line3[l7+2];
-                      p2=strchr(p1,',');
-                      if (p2==NULL||p2-p1>=NAMESIZE) sum_carried_fatal(sum_dim_identity(p),formulain);
-                      strncpy(tempname,p1,p2-p1);
-                      tempname[p2-p1]='\0';
-                      { char *cc=strchr(tempname,':'); if (cc!=NULL) *cc='\0'; } /* an enclosing sum's condition rides on its set token (vetting S7) */
+                      if (sum_enclosing_setname(formulain,readitem,sum_dim_identity(p),tempname,NAMESIZE)<0) sum_carried_fatal(sum_dim_identity(p),formulain);
                       for (l7=0; l7<nset; l7++) if(strcmp(tempname,sets[l7].setname)==0) {
                           sum_cof[j].setid[l3]=l7;
                           break;
@@ -2125,6 +2111,7 @@ int eq_sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifier 
           p = strtok(NULL,",");
           { char *st_sc=sum_settok_extract(line1); if (st_sc!=NULL) p=st_sc; }
           sum_cond_parse(p,sum_cof[j].sumindx,&sum_cof[j].cond_mapid,sum_cof[j].cond_rhs,&sum_cof[j]);
+          sum_cond_rhs_enclosing(&sum_cof[j],arSet,fdim,formulain,readitem);
           for (l7=0; l7<nset; l7++) if(strcmp(p,sets[l7].setname)==0) {
               sum_cof[j].sumsetid=l7;
               break;
@@ -2166,17 +2153,8 @@ int eq_sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifier 
                       l6++;
                     }
                   if (l6==0) {
-                    interchar1[0]='\0';
-                    strcat(interchar1,"sum(");
-                    strcat(interchar1,sum_dim_identity(p));
-                    strcpy(line3,formulain);
-                    line3[readitem-formulain]='\0';
-                    l7=str_rfind_ci(line3,interchar1);
-                    if (l7<0) sum_carried_fatal(sum_dim_identity(p),formulain);
-                    p1=&line3[l7+2];
-                    p1 = strtok(p1,",");
-                    if (p1==NULL) sum_carried_fatal(sum_dim_identity(p),formulain);
-                    { char *cc=strchr(p1,':'); if (cc!=NULL) *cc='\0'; } /* an enclosing sum's condition rides on its set token (vetting S7) */
+                    if (sum_enclosing_setname(formulain,readitem,sum_dim_identity(p),line3,TABREADLINE)<0) sum_carried_fatal(sum_dim_identity(p),formulain);
+                    p1=line3;
                     for (l7=0; l7<nset; l7++) if(strcmp(p1,sets[l7].setname)==0) {
                         sum_cof[j].setid[l3]=l7;
                         break;
@@ -2210,19 +2188,7 @@ int eq_sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifier 
                         l6++;
                       }
                     if (l6==0) {
-                      interchar1[0]='\0';
-                      strcat(interchar1,"sum(");
-                      strcat(interchar1,sum_dim_identity(p));
-                      strcpy(line3,formulain);
-                      line3[readitem-formulain]='\0';
-                      l7=str_rfind_ci(line3,interchar1);
-                      if (l7<0) sum_carried_fatal(sum_dim_identity(p),formulain);
-                      p1=&line3[l7+2];
-                      p2=strchr(p1,',');
-                      if (p2==NULL||p2-p1>=NAMESIZE) sum_carried_fatal(sum_dim_identity(p),formulain);
-                      strncpy(tempname,p1,p2-p1);
-                      tempname[p2-p1]='\0';
-                      { char *cc=strchr(tempname,':'); if (cc!=NULL) *cc='\0'; } /* an enclosing sum's condition rides on its set token (vetting S7) */
+                      if (sum_enclosing_setname(formulain,readitem,sum_dim_identity(p),tempname,NAMESIZE)<0) sum_carried_fatal(sum_dim_identity(p),formulain);
                       for (l7=0; l7<nset; l7++) if(strcmp(tempname,sets[l7].setname)==0) {
                           sum_cof[j].setid[l3]=l7;
                           break;
@@ -2660,6 +2626,7 @@ int equation_order_read(char *fname, char *commsyntax,set_def *sets,dim_t nset,s
       eq_unmask(vname);
       eq_unmask(linecopy);
       str_delete_char(readitem,' ');
+      str_sign_runs_collapse(readitem);
       while (formula_normalize(readitem)==1);
       leadlag_encode(readitem);
       strcpy(tline,readitem);
@@ -3016,6 +2983,7 @@ int equation_order_read_nested(char *fname, char *commsyntax,set_def *sets,dim_t
       eq_unmask(vname);
       eq_unmask(linecopy);
       str_delete_char(readitem,' ');
+      str_sign_runs_collapse(readitem);
       while (formula_normalize(readitem)==1);
       leadlag_encode(readitem);
       strcpy(tline,readitem);
@@ -3342,6 +3310,7 @@ int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,
       eq_unmask(vname);
       eq_unmask(linecopy);
       str_delete_char(readitem,' ');
+      str_sign_runs_collapse(readitem);
       while (formula_normalize(readitem)==1);
       leadlag_encode(readitem);
       strcpy(tline,readitem);

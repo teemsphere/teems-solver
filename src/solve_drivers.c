@@ -1582,18 +1582,33 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
    is
      - their average when they lie very close together or near zero
        (GEMPACK's MVC/OVC/MN0/ON0);
-     - the extrapolation when they are monotonic and the second
-       difference is within twice the size the method's error order
-       predicts from the first (Pearson 1991 condition 5.8; the
-       confident codes CX/FCX);
-     - the third result otherwise (converging slowly, diverging or
-       oscillating: MC?/MD?/MD!/OC?/OD?/OD!).
+     - the extrapolation when the two two-pass extrapolations, from
+       passes 1,2 and from passes 2,3, agree to at least one figure
+       (manual 26.2.1's figures column; the confident codes CX/FCX);
+     - the third result otherwise (MC?/MD?/MD!/OC?/OD?/OD!; the
+       manual's GC10E1 example, figures 0, reports the 8-step result).
    The manual does not publish the code thresholds; "very close" is
-   agreement to about six figures. conv_c holds the three passes,
-   conv_w their extrapolation weights. */
+   agreement to about six figures. The same rule applies to the
+   (change)/(explicit) Update targets' extrapolated path values.
+   conv_c holds the three passes, conv_w their extrapolation weights. */
 static solve_real *conv_c[3]={NULL,NULL,NULL};
 static double conv_w[3];
 static offset_t conv_n[3];
+
+int conv_pick(double c1,double c2,double c3,double q2,double q3,double E,double *R) {
+  double sc=fmax(fabs(c1),fmax(fabs(c2),fabs(c3)));
+  double e12=(q2*c2-c1)/(q2-1.0),e23=(q3*c3-q2*c2)/(q3-q2);
+  if(sc<=1e-6||fabs(c3-c1)<=1e-6*sc) { *R=(c1+c2+c3)/3; return 1; }
+  if(fabs(e12-e23)<0.1*fmax(fabs(e12),fabs(e23))) { *R=E; return 0; }
+  *R=c3;
+  return 2;
+}
+
+void conv_ratios(bool euler,double *q2,double *q3) {
+  double p=euler?1.0:2.0;
+  *q2=pow((double)llround(steps1*step_ratio2)/steps1,p);
+  *q3=pow((double)llround(steps1*step_ratio3)/steps1,p);
+}
 
 static void conv_store(int sol, offset_t nvarele, const solve_real *varchange, double w) {
   conv_c[sol]=(solve_real *) realloc (conv_c[sol],(nvarele>0?nvarele:1)*sizeof(solve_real));
@@ -1603,16 +1618,12 @@ static void conv_store(int sol, offset_t nvarele, const solve_real *varchange, d
 
 static void conv_apply(array_def *vars, offset_t nvar, dim_t subindx, const solve_real *xc0, solve_real *xcf, bool euler) {
   offset_t i,k;
-  double p=euler?1.0:2.0,n1=steps1,n2=llround(steps1*step_ratio2),n3=llround(steps1*step_ratio3);
-  double rho=(pow(n3,-p)-pow(n2,-p))/(pow(n2,-p)-pow(n1,-p));
+  double q2,q3;
+  conv_ratios(euler,&q2,&q3);
   for(i=0; i<nvar; i++) for(k=vars[i].offset; k<vars[i].offset+vars[i].nelem; k++) {
       double c1=conv_c[0][k],c2=conv_c[1][k],c3=conv_c[2][k];
-      double E=conv_w[0]*c1+conv_w[1]*c2+conv_w[2]*c3,R=E,d1=c2-c1,d2=c3-c2;
-      double sc=fmax(fabs(c1),fmax(fabs(c2),fabs(c3)));
-      int o;
-      if(sc<=1e-6||fabs(c3-c1)<=1e-6*sc) { R=(c1+c2+c3)/3; o=1; }
-      else if(d1*d2>0&&fabs(d2)<=2*rho*fabs(d1)) o=0;
-      else { R=c3; o=2; }
+      double E=conv_w[0]*c1+conv_w[1]*c2+conv_w[2]*c3,R;
+      int o=conv_pick(c1,c2,c3,q2,q3,E,&R);
       conv_n[o]++;
       if(o!=0) xcf[k]+=(R-E)*((!vars[i].change_real&&subindx>0)?xc0[k]:1);
     }
@@ -2911,6 +2922,8 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
         /* recover the backsolved elements for the terminal smoothing
            solve (same pre-update evaluation point as the step loop) */
         if(rank==rank_hsl&&nbselems>0)backsolve_recover(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele,closure_vals,x1,exo_z,bsvals);
+        /* the subtotal columns smooth at the same pre-update point */
+        if(teems_sub_active&&rank==0)sub_update(SUB_SMOOTH,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele,closure_vals,nvarele,exo_z,varchange);
         /* the same terminal smoothing for the updated data of the
            (change)/(explicit) Update targets, (C[n-1] + C[n] + dC)/2 with
            dC from this pass's changes: their pass-end values feed the
@@ -2934,7 +2947,6 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
           }
           updates_apply(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,2);
         }
-        if(teems_sub_active&&rank==0)sub_update(SUB_SMOOTH,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele,closure_vals,nvarele,exo_z,varchange);
         for(i=0; i<nvar; i++) {
           if(vars[i].change_real) {
             for(tindx1=vars[i].offset; tindx1<vars[i].nelem+vars[i].offset; tindx1++) {
@@ -3093,6 +3105,14 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
              gives this pass (sol 0: w2, sol 1: -w3, sol 2: w3) */
           if(rank==0&&maxsol==3&&subindx==subints-1)xac_pass(sol,subindx,subints,vars,nvar,nvarele,varchange,xcf);
           if(updates_path_active())updates_path_accumulate(coefs,ncof,elem_vals,(sol==0)?extrap_w2:((sol==1)?-extrap_w3:extrap_w3),sol==0);
+          if(convrule&&updates_path_active()) {
+            updates_path_conv_store(sol,coefs,ncof,elem_vals);
+            if(sol==2) {
+              double q2,q3;
+              conv_ratios(euler,&q2,&q3);
+              updates_path_conv_apply(q2,q3);
+            }
+          }
           if(subindx>0) {
             if(sol==0)for(i=0; i<nvarele; i++) xc0[i]=1+xcf[i]/100;//if(i==1287)printf("sol!!!!!!!!!!!!!!!!!! %d step %d xc %lf xc0 %lf k %d\n",sol,stepcount,1.0+xc[k]/100,xc0[i],i);}
             if(sol==0) {
@@ -3275,7 +3295,9 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
             }
             }
 
-      for(i=0; i<nvarele; i++){
+      /* the figures compare the two two-pass extrapolations, which a
+         single- or two-solution run does not have (xc24 is unset) */
+      if(maxsol==3) for(i=0; i<nvarele; i++){
         j=0;
         if(xc12[i]>0){
         while (xc12[i] >= 10){

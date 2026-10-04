@@ -1765,6 +1765,7 @@ int formula_compile_addsub(char *fomulain, set_def *sets,int nplu,int ipar,array
   char *p=NULL;//,*p1=NULL,*p2=NULL,*p3=NULL,*p4=NULL;
   char fpart1[TABREADLINE],fpart2[TABREADLINE],fpart3[TABREADLINE],var1[TABREADLINE],var2[TABREADLINE],interchar[TABREADLINE],interchar1[TABREADLINE];
 
+  nplu-=str_sign_runs_collapse(fomulain);
   for (i=1; i<nplu+1; i++) {
     index=0;
     p=strpbrk(fomulain,"+-");
@@ -1817,11 +1818,18 @@ int formula_compile_addsub(char *fomulain, set_def *sets,int nplu,int ipar,array
     var2[index] = '\0';
     strcpy(fpart2,fpart3+index);
 
-    if(i==1&&var1[0]=='\0'){
+    /* a sign with nothing before it is unary at any position: after a
+       comparison (x > -1) the empty left operand is 0, never an earlier
+       group's temporary */
+    if(var1[0]=='\0'){
         ops[*nops].Var1Type=OT_CONST;
         ops[*nops].Var1Val=0;
     }
     else formula_bind_operand(var1,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,*nops,arSet,fdim,1);
+    if(var2[0]=='\0'&&i>1){
+      errmsg("Error: a + or - has no operand after it in formula: %s\n",fomulain);
+      return 0;
+    }
     if(i==1&&var2[0]=='\0'){
         ops[*nops].Var2Type=OT_CONST;
         ops[*nops].Var2Val=0;
@@ -2755,6 +2763,23 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
                     if (*q=='\0') simple=1;
                     else if (*q=='('&&strchr(q+1,'(')==NULL&&strchr(q,')')==q+strlen(q)-1) simple=1;
                   }
+                  /* the fast form strides each argument by name, so a
+                     repeated index M(i,i), an offset Q(u-1) or a quoted
+                     element goes through the expression path */
+                  if (simple&&*q=='(') {
+                    char args[NAMESIZE],*a,*sv=NULL,seen[MAXVARDIM][NAMESIZE];
+                    int na=0,k;
+                    strcpy(args,q+1);
+                    args[strlen(args)-1]='\0';
+                    for (a=strtok_r(args,",",&sv); a!=NULL&&simple; a=strtok_r(NULL,",",&sv)) {
+                      char *c=a;
+                      if (!isalpha((unsigned char)*c)) { simple=0; break; }
+                      for (; *c!='\0'; c++) if (!(isalnum((unsigned char)*c)||*c=='_'||*c=='@')) { simple=0; break; }
+                      for (k=0; k<na&&simple; k++) if (strcmp(seen[k],a)==0) simple=0;
+                      if (na<MAXVARDIM) strcpy(seen[na++],a);
+                      else simple=0;
+                    }
+                  }
                   /* the fast form reads a coefficient; a variable (PostSim)
                      or anything else is evaluated as an expression */
                   if (simple) {
@@ -3492,6 +3517,33 @@ void updates_path_accumulate(array_def *coefs, offset_t ncof, elem_value *elem_v
   }
 }
 
+/* -convrule 1 (manual 26.2.5) on the (change)/(explicit) Update
+   targets: the three passes' end values per element, then the rule
+   conv_pick applies to the variables replaces the extrapolated path
+   value */
+static double *upd_convc[3]={NULL,NULL,NULL};
+
+void updates_path_conv_store(int sol, array_def *coefs, offset_t ncof, elem_value *elem_vals) {
+  offset_t k,e;
+  if (upd_pathbase==NULL||upd_pathn==0) return;
+  upd_convc[sol]=realloc(upd_convc[sol],upd_pathn*sizeof(double));
+  for (k=0; k<ncof; k++) {
+    offset_t b=upd_pathbase[k];
+    if (b<0) continue;
+    for (e=0; e<coefs[k].nelem; e++) upd_convc[sol][b+e]=upd_shvalid?upd_shv[b+e]:(double)elem_vals[coefs[k].offset+e].value;
+  }
+}
+
+void updates_path_conv_apply(double q2, double q3) {
+  offset_t e;
+  if (upd_pathacc==NULL||upd_convc[2]==NULL) return;
+  for (e=0; e<upd_pathn; e++) {
+    double R;
+    conv_pick(upd_convc[0][e],upd_convc[1][e],upd_convc[2][e],q2,q3,upd_pathacc[e],&R);
+    upd_pathacc[e]=R;
+  }
+}
+
 /* ---- conditional Update quantifiers (all,i,S: <cond>) (manual 11.12,
    vetting S9): the condition is cut out of the statement text, both
    sides compiled over the statement frame, and an element whose
@@ -3657,6 +3709,31 @@ static int product_factor_ok(const char *f, array_def *coefs, offset_t ncof, arr
   return 1;
 }
 
+/* a product Update's factors are its top-level '*' operands: an
+   IF[cond, v] factor keeps the '*' of its condition and value */
+static int product_star_rewrite(char *s, const char *rep, size_t cap) {
+  char out[TABREADLINE];
+  size_t o=0,rl=strlen(rep);
+  int d=0;
+  const char *c;
+  for (c=s; *c!='\0'; c++) {
+    if (*c=='('||*c=='['||*c=='{') d++;
+    else if (*c==')'||*c==']'||*c=='}') d--;
+    if (*c=='*'&&d==0) {
+      if (o+rl>=sizeof(out)) return 0;
+      memcpy(out+o,rep,rl);
+      o+=rl;
+    } else {
+      if (o+1>=sizeof(out)) return 0;
+      out[o++]=*c;
+    }
+  }
+  out[o]='\0';
+  if (o>=cap) return 0;
+  strcpy(s,out);
+  return 1;
+}
+
 static void product_update_check(const char *rhs, const char *lhs, array_def *coefs, offset_t ncof, array_def *vars, offset_t nvar, const char *stmt) {
   char f[TABREADLINE],lname[NAMESIZE];
   const char *p=rhs;
@@ -3810,7 +3887,10 @@ offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_el
     readitem = strtok(NULL,";");
     if(IsChange==false&&IsExplicit==false) product_update_check(readitem,vname,coefs,ncof,vars,nvar,linecopy);
     if(IsChange==false&&IsExplicit==false) {
-      while (str_replace_all(readitem,"*", "+"));
+      if (!product_star_rewrite(readitem,"+",TABREADLINE-(size_t)(readitem-line))) {
+        errmsg("Error: Update statement too long: %s\n",linecopy);
+        MPI_Abort(PETSC_COMM_WORLD,1);
+      }
       strcpy(line1,vname);
       strcat(line1,"*(1+(");
       strcat(line1,readitem);
@@ -4130,8 +4210,10 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
     readitem = strtok(NULL,";");
     if(IsChange==false&&IsExplicit==false) product_update_check(readitem,vname,coefs,ncof,vars,nvar,linecopy);
     if(IsChange==false&&IsExplicit==false) {
-      while (str_replace_all(readitem,"*", "/100)!(1+"));
-      while (str_replace_all(readitem,"!", "*"));
+      if (!product_star_rewrite(readitem,"/100)*(1+",TABREADLINE-(size_t)(readitem-line))) {
+        errmsg("Error: Update statement too long: %s\n",linecopy);
+        MPI_Abort(PETSC_COMM_WORLD,1);
+      }
       strcpy(line1,vname);
       strcat(line1,"*(1+");
       strcat(line1,readitem);
@@ -4775,6 +4857,7 @@ offset_t assertions_execute(char *fname,set_def *sets,dim_t nset,set_element *se
     teems_rand_statement(linecopy);
     /* leading (all,index,SET) quantifiers */
     quantifier *arSet= (quantifier *) calloc (4*MAXVARDIM+1,sizeof(quantifier));
+    memset(cond_ops,0,sizeof(cond_ops));
     nq=0;
     nloops=1;
     skip=false;

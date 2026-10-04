@@ -189,6 +189,7 @@ typedef struct
 char* str_rfind_any(char *line, char *finditems);
 int str_rfind_ci(char *line, char *finditem);
 int str_count_char(char *line, int finditem);
+int str_sign_runs_collapse(char *line);
 int str_count_ci(char *line, char *finditem);
 char* str_rfind_toplevel(char *line, int finditem);
 
@@ -615,6 +616,8 @@ static inline solve_real sum_fold(int f, solve_real a, solve_real v) {
   }
 }
 static inline int sum_mark_fold(char c) { return c==SUM_MARK_PROD?SUM_FOLD_PROD:c==SUM_MARK_MAXS?SUM_FOLD_MAXS:c==SUM_MARK_MINS?SUM_FOLD_MINS:SUM_FOLD_SUM; }
+int elem_list_expand(const char *in, char *out, size_t cap, const char *setname);
+int sum_enclosing_setname(const char *formulain, const char *readitem, const char *idx, char *out, size_t cap);
 int shocks_check_floor(array_def *vars, offset_t nvar, dim_t subints, int solmethod);
 const char *levels_linear_of(const char *name);
 /* C1: one Complementarity statement (manual 10.17/11.14; design doc
@@ -719,8 +722,8 @@ typedef struct
   dim_t dimleadlag[MAXVARDIM];
   dim_t dimindx[MAXVARDIM];
   int dimmapid[MAXVARDIM];   /* >0: dim routes via teems_maps[id-1] (11.9.5, M2b) */
-  int dimcondmap[MAXVARDIM]; /* >0: dim's enclosing sum has a mapping-equality condition (M3) */
-  char dimcondrhs[MAXVARDIM][NAMESIZE]; /* its RHS token */
+  int dimcondmap[MAXVARDIM]; /* >0: dim's enclosing sum has a mapping-equality condition (M3); -1: a compound or index condition (11.4.5, 11.4.11) */
+  char dimcondrhs[MAXVARDIM][NAMESIZE]; /* the mapping condition's RHS token, or the whole -1 condition */
 } eq_var_ref ;
 
 /* per-equation-statement addressing metadata, captured by
@@ -822,6 +825,7 @@ int cond_lower_numeric(const char *cond, char *out, size_t cap, quantifier *fram
 int cond_text_lower(char *text, size_t cap, quantifier *frame, dim_t nframe, const char *ctx);
 int cond_lower_stmt(char *cond, size_t cap, const char *stmt, const char *ctx);
 dim_t sum_cond_carry_idx(sum_def *sc, quantifier *arSet, dim_t fdim, dim_t l3, char *interchar, const char *formulain, const char *readitem, set_def *sets, dim_t nset);
+void sum_cond_rhs_enclosing(sum_def *sc, quantifier *arSet, dim_t fdim, const char *formulain, const char *readitem);
 dim_t sum_cond_carry_rhs(sum_def *sc, quantifier *arSet, dim_t fdim, dim_t l3, char *interchar, set_def *sets);
 void sum_cond_rhs_resolve(int cond_mapid, const char *cond_rhs, quantifier *frame, dim_t nframe, set_def *sets, set_element *set_elems, int *condpos, offset_t *condfix, dim_t *condss);
 /* codomain position a mapping-equality condition compares against:
@@ -950,6 +954,10 @@ offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_el
 offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element *set_elems, array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar, elem_value *elem_vals,offset_t ncofvar,offset_t ncofele);
 void updates_path_accumulate(array_def *coefs, offset_t ncof, elem_value *elem_vals, double w, int first);
 int updates_path_active(void);
+void updates_path_conv_store(int sol, array_def *coefs, offset_t ncof, elem_value *elem_vals);
+void updates_path_conv_apply(double q2, double q3);
+int conv_pick(double c1,double c2,double c3,double q2,double q3,double E,double *R);
+void conv_ratios(bool euler,double *q2,double *q3);
 void updates_path_restart(void);
 extern int teems_upd_pathuse;
 

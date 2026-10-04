@@ -19,13 +19,20 @@ static const strict_spec closure_strict={"closure","an \"exogenous\" or \"rest e
 static const strict_spec shock_strict={"shock","a \"shock\" statement",shock_also};
 
 static char *strict_getline(char *line,int size,FILE *f,long *pos) {
+  /* a line longer than the buffer arrives in chunks: only the first
+     chunk of a line loses its leading blanks, or tokens either side of
+     a chunk boundary would be glued */
+  static int midline=0;
   char *p;
   size_t len;
-  int c;
+  int c,cont;
   *pos=ftell(f);
+  if (*pos==0) midline=0;
+  cont=midline;
   if (fgets(line,size,f)==NULL) return NULL;
   if (*pos==0&&strncmp(line,"\xEF\xBB\xBF",3)==0) memmove(line,line+3,strlen(line+3)+1);
   len=strlen(line);
+  midline=(len>0&&line[len-1]!='\n');
   p=strchr(line,'!');
   if (p!=NULL) {
     if (len>0&&line[len-1]!='\n') {
@@ -33,7 +40,9 @@ static char *strict_getline(char *line,int size,FILE *f,long *pos) {
     }
     p[0]='\n';
     p[1]='\0';
+    midline=0;
   }
+  if (cont) return line;
   len=0;
   while (line[len]==' '||line[len]=='\t') len++;
   if (len>0) memmove(line,line+len,strlen(line+len)+1);
@@ -1631,7 +1640,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
 
 
 offset_t sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifier *arSet,set_def *sets,dim_t nset,dim_t fdim,int j) {
-  char *readitem,*p,*p1,*p2,interchar2[TABREADLINE],argu[TABREADLINE];//,line5[TABREADLINE]
+  char *readitem,*p,*p1,interchar2[TABREADLINE],argu[TABREADLINE];//,line5[TABREADLINE]
   char interchar[TABREADLINE],interchar1[TABREADLINE],line[TABREADLINE],line1[TABREADLINE],line2[TABREADLINE],line3[TABREADLINE],line4[TABREADLINE],tempname[NAMESIZE];
   offset_t i=0,k=0,k1=0,length,ncur=0,ncuri,l,l1,l2,l3,l4,l5,l6,l7;
   length=strlen(formulain);
@@ -1683,6 +1692,7 @@ offset_t sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
         p = strtok(NULL,",");
         { char *st_sc=sum_settok_extract(line1); if (st_sc!=NULL) p=st_sc; }
         sum_cond_parse(p,sum_cof[j].sumindx,&sum_cof[j].cond_mapid,sum_cof[j].cond_rhs,&sum_cof[j]);
+        sum_cond_rhs_enclosing(&sum_cof[j],arSet,fdim,formulain,readitem);
         for (l7=0; l7<nset; l7++) if(strcmp(p,sets[l7].setname)==0) {
             sum_cof[j].sumsetid=l7;
             break;
@@ -1724,17 +1734,8 @@ offset_t sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
                     l6++;
                   }
                 if (l6==0) {
-                  interchar1[0]='\0';
-                  strcat(interchar1,"sum(");
-                  strcat(interchar1,sum_dim_identity(p));
-                  strcpy(line3,formulain);
-                  line3[readitem-formulain]='\0';
-                  l7=str_rfind_ci(line3,interchar1);
-                  if (l7<0) sum_carried_fatal(sum_dim_identity(p),formulain);
-                  p1=&line3[l7+2];
-                  p1 = strtok(p1,",");
-                  if (p1==NULL) sum_carried_fatal(sum_dim_identity(p),formulain);
-                  { char *cc=strchr(p1,':'); if (cc!=NULL) *cc='\0'; } /* an enclosing sum's condition rides on its set token (vetting S7) */
+                  if (sum_enclosing_setname(formulain,readitem,sum_dim_identity(p),line3,TABREADLINE)<0) sum_carried_fatal(sum_dim_identity(p),formulain);
+                  p1=line3;
                   for (l7=0; l7<nset; l7++) if(strcmp(p1,sets[l7].setname)==0) {
                       sum_cof[j].setid[l3]=l7;
                       break;
@@ -1766,19 +1767,7 @@ offset_t sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
                       break;
                     }
                   if (l6==0) {
-                    interchar1[0]='\0';
-                    strcat(interchar1,"sum(");
-                    strcat(interchar1,sum_dim_identity(p));
-                    strcpy(line3,formulain);
-                    line3[readitem-formulain]='\0';
-                    l7=str_rfind_ci(line3,interchar1);
-                    if (l7<0) sum_carried_fatal(sum_dim_identity(p),formulain);
-                    p1=&line3[l7+2];
-                    p2=strchr(p1,',');
-                    if (p2==NULL||p2-p1>=NAMESIZE) sum_carried_fatal(sum_dim_identity(p),formulain);
-                    strncpy(tempname,p1,p2-p1);
-                    tempname[p2-p1]='\0';
-                    { char *cc=strchr(tempname,':'); if (cc!=NULL) *cc='\0'; } /* an enclosing sum's condition rides on its set token (vetting S7) */
+                    if (sum_enclosing_setname(formulain,readitem,sum_dim_identity(p),tempname,NAMESIZE)<0) sum_carried_fatal(sum_dim_identity(p),formulain);
                     for (l7=0; l7<nset; l7++) if(strcmp(tempname,sets[l7].setname)==0) {
                         sum_cof[j].setid[l3]=l7;
                         break;
@@ -1854,6 +1843,7 @@ offset_t sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
         p = strtok(NULL,",");
         { char *st_sc=sum_settok_extract(line1); if (st_sc!=NULL) p=st_sc; }
         sum_cond_parse(p,sum_cof[j].sumindx,&sum_cof[j].cond_mapid,sum_cof[j].cond_rhs,&sum_cof[j]);
+        sum_cond_rhs_enclosing(&sum_cof[j],arSet,fdim,formulain,readitem);
         for (l7=0; l7<nset; l7++) if(strcmp(p,sets[l7].setname)==0) {
             sum_cof[j].sumsetid=l7;
             break;
@@ -1895,17 +1885,8 @@ offset_t sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
                     l6++;
                   }
                 if (l6==0) {
-                  interchar1[0]='\0';
-                  strcat(interchar1,"sum(");
-                  strcat(interchar1,sum_dim_identity(p));
-                  strcpy(line3,formulain);
-                  line3[readitem-formulain]='\0';
-                  l7=str_rfind_ci(line3,interchar1);
-                  if (l7<0) sum_carried_fatal(sum_dim_identity(p),formulain);
-                  p1=&line3[l7+2];
-                  p1 = strtok(p1,",");
-                  if (p1==NULL) sum_carried_fatal(sum_dim_identity(p),formulain);
-                  { char *cc=strchr(p1,':'); if (cc!=NULL) *cc='\0'; } /* an enclosing sum's condition rides on its set token (vetting S7) */
+                  if (sum_enclosing_setname(formulain,readitem,sum_dim_identity(p),line3,TABREADLINE)<0) sum_carried_fatal(sum_dim_identity(p),formulain);
+                  p1=line3;
                   for (l7=0; l7<nset; l7++) if(strcmp(p1,sets[l7].setname)==0) {
                       sum_cof[j].setid[l3]=l7;
                       break;
@@ -1937,19 +1918,7 @@ offset_t sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
                       l6++;
                     }
                   if (l6==0) {
-                    interchar1[0]='\0';
-                    strcat(interchar1,"sum(");
-                    strcat(interchar1,sum_dim_identity(p));
-                    strcpy(line3,formulain);
-                    line3[readitem-formulain]='\0';
-                    l7=str_rfind_ci(line3,interchar1);
-                    if (l7<0) sum_carried_fatal(sum_dim_identity(p),formulain);
-                    p1=&line3[l7+2];
-                    p2=strchr(p1,',');
-                    if (p2==NULL||p2-p1>=NAMESIZE) sum_carried_fatal(sum_dim_identity(p),formulain);
-                    strncpy(tempname,p1,p2-p1);
-                    tempname[p2-p1]='\0';
-                    { char *cc=strchr(tempname,':'); if (cc!=NULL) *cc='\0'; } /* an enclosing sum's condition rides on its set token (vetting S7) */
+                    if (sum_enclosing_setname(formulain,readitem,sum_dim_identity(p),tempname,NAMESIZE)<0) sum_carried_fatal(sum_dim_identity(p),formulain);
                     for (l7=0; l7<nset; l7++) if(strcmp(tempname,sets[l7].setname)==0) {
                         sum_cof[j].setid[l3]=l7;
                         break;
@@ -2705,7 +2674,7 @@ void sum_cond_parse(char *settok, const char *sumindx, int *cond_mapid, char *co
   int mp=0;
   *cond_mapid=0;
   cond_rhs[0]='\0';
-  if (sc!=NULL) { sc->cond_coef[0]='\0'; sc->cond_cofnargs=0; sc->cond_cofop=0; sc->cond_cofval=0; sc->cond_genop=0; }
+  if (sc!=NULL) { sc->cond_coef[0]='\0'; sc->cond_cofnargs=0; sc->cond_cofop=0; sc->cond_cofval=0; sc->cond_genop=0; sc->cond_gen[0][0]='\0'; }
   colon=strchr(settok,':');
   if (colon==NULL) return;
   *colon='\0';
@@ -2757,6 +2726,8 @@ void sum_cond_parse(char *settok, const char *sumindx, int *cond_mapid, char *co
           return;
         }
         *cond_mapid=mp;
+        /* the full text, for sum_cond_rhs_enclosing */
+        if (sc!=NULL&&strlen(cond0)<sizeof(sc->cond_gen[0])) strcpy(sc->cond_gen[0],cond0);
         {
           /* keep the RHS raw but unquoted: a fixed codomain element may
              arrive as "ele" */
@@ -2773,7 +2744,7 @@ void sum_cond_parse(char *settok, const char *sumindx, int *cond_mapid, char *co
      word operators sit glued after the closing bracket. */
   {
     char *p=lhs,*q;
-    int tl,opc=0,olen=0,scalar=0;
+    int tl,opc=0,olen=0;
     char *endp=NULL;
     double cval;
     if (sc==NULL) {
@@ -2791,7 +2762,6 @@ void sum_cond_parse(char *settok, const char *sumindx, int *cond_mapid, char *co
       /* an index compared with an element ("r=chn") is not a scalar
          coefficient: the general message names the supported forms */
       if (strcmp(sc->cond_coef,sumindx)==0) goto badcond;
-      scalar=1;
       p+=tl;
     } else {
       p=q+1;
@@ -2820,12 +2790,9 @@ void sum_cond_parse(char *settok, const char *sumindx, int *cond_mapid, char *co
     else if (strncmp(p,"le",2)==0) { opc=6; olen=2; }
     else goto badcond;
     cval=strtod(p+olen,&endp);
-    if (endp==p+olen||endp==NULL||*endp!='\0') {
-      if (scalar) goto badcond;
-      errmsg("Error: unsupported sum condition RHS '%s'; a coefficient condition compares against a NUMERIC constant (COEF(args) <op> const; manual 11.4.11)\n",p+olen);
-      MPI_Abort(PETSC_COMM_WORLD,1);
-      return;
-    }
+    /* a right-hand side that is not a number (A(c) > B(c)) is a
+       comparison of two expressions */
+    if (endp==p+olen||endp==NULL||*endp!='\0') goto badcond;
     sc->cond_cofop=opc;
     sc->cond_cofval=cval;
     return;
@@ -2992,6 +2959,22 @@ void sum_cond_rhs_resolve(int cond_mapid, const char *cond_rhs, quantifier *fram
   MPI_Abort(PETSC_COMM_WORLD,1);
 }
 
+/* MAP(i) = r with r the index of an enclosing sum (not a quantifier):
+   the mapping fast path binds the RHS to the frame or a codomain
+   element only, so the condition goes the deferred way r = MAP(i)
+   already takes */
+void sum_cond_rhs_enclosing(sum_def *sc, quantifier *arSet, dim_t fdim, const char *formulain, const char *readitem) {
+  char sn[NAMESIZE];
+  dim_t l;
+  if (sc->cond_mapid<=0||sc->cond_gen[0][0]=='\0') return;
+  for (l=0; l+1<fdim; l++) if (strcmp(sc->cond_rhs,arSet[l].index_name)==0) return;
+  if (sum_enclosing_setname(formulain,readitem,sc->cond_rhs,sn,sizeof(sn))<0) return;
+  sc->cond_mapid=0;
+  sc->cond_rhs[0]='\0';
+  sc->cond_gen[1][0]='\0';
+  sc->cond_genop=COND_DEFERRED;
+}
+
 /* The condition's value table is indexed by domain position, so the
    summed set must be the mapping's domain exactly (the M2 exact-match
    contract). */
@@ -3042,7 +3025,7 @@ int tab_logicops_normalize(char *line, size_t cap) {
   if (n>=sizeof(out)) return -1;
   for (i=0; i<n; ) {
     char c=line[i];
-    if (c=='"') { inq=!inq; out[o++]=c; i++; continue; }
+    if (c=='"') { if (o+1>=sizeof(out)) return -1; inq=!inq; out[o++]=c; i++; continue; }
     if (!inq&&(i==0||!logic_namec(line[i-1]))) {
       static const char *w[3]={"and","or","not"};
       static const char sym[3]={COND_AND,COND_OR,COND_NOT};
@@ -3565,6 +3548,7 @@ static dim_t stmt_index_names(const char *t, quantifier *names, dim_t cap) {
       if (k==0) { if (*q!=',') continue; }
       else if (!ct_open(*q)) continue;
       q++;
+      if (k>0&&sum_mark_fold(*q)!=SUM_FOLD_SUM) q++;
       while (*q==' ') q++;
       if (n>=cap) return n;
       while (logic_namec(*q)&&*q!=MAPMARK&&j<NAMESIZE-1) names[n].index_name[j++]=*q++;
@@ -3675,23 +3659,42 @@ int cond_text_lower(char *text, size_t cap, quantifier *frame, dim_t nframe, con
   return 1;
 }
 
+/* The set of the enclosing SUM/PROD/MAXS/MINS whose index is idx, read
+   from the statement text before readitem: the last "sum(" with an
+   optional fold mark (SUM_MARK_*), then exactly idx and a comma. A
+   prefix match ("c" in "sum(cc,") or a missed fold mark bound a nested
+   sum to the wrong set or stopped a legal reduction. The set token ends
+   at ',' or at the ':' of the enclosing sum's condition. 0 found, -1
+   not. */
+int sum_enclosing_setname(const char *formulain, const char *readitem, const char *idx, char *out, size_t cap) {
+  const char *p,*hit=NULL;
+  size_t il=strlen(idx),n=0;
+  if (readitem<formulain||il==0) return -1;
+  for (p=formulain; p+4<=readitem; p++) {
+    const char *q;
+    if (strncasecmp(p,"sum(",4)!=0) continue;
+    if (p>formulain&&logic_namec(p[-1])) continue;
+    q=p+4;
+    if (q<readitem&&sum_mark_fold(*q)!=SUM_FOLD_SUM) q++;
+    if (q+il<readitem&&strncasecmp(q,idx,il)==0&&q[il]==',') hit=q+il+1;
+  }
+  if (hit==NULL) return -1;
+  for (p=hit; p<readitem&&*p!=','&&*p!=':'&&*p!='\0'; p++) {
+    if (n+1>=cap) return -1;
+    out[n++]=*p;
+  }
+  out[n]='\0';
+  return n>0?0:-1;
+}
+
 /* Carry the frame indices a deferred sum condition names (s<>d needs one
    sum slot per d), as sum_cond_carry_rhs does for a mapping RHS: a
    quantifier index, or the index of an enclosing sum (its set read from
    the enclosing sum's text, as the carried-dim scan does) */
 static dim_t sum_enclosing_set(const char *nm, const char *formulain, const char *readitem, set_def *sets, dim_t nset) {
-  char key[NAMESIZE+8],head[TABREADLINE],sn[NAMESIZE];
-  long k,n;
+  char sn[NAMESIZE];
   dim_t l;
-  if (readitem<=formulain||readitem-formulain>=(long)sizeof(head)) return -1;
-  memcpy(head,formulain,readitem-formulain);
-  head[readitem-formulain]='\0';
-  snprintf(key,sizeof(key),"sum(%s,",nm);
-  k=str_rfind_ci(head,key);
-  if (k<0) return -1;
-  k++;
-  for (n=0; head[k+n]!='\0'&&head[k+n]!=','&&head[k+n]!=':'&&n<NAMESIZE-1; n++) sn[n]=head[k+n];
-  sn[n]='\0';
+  if (sum_enclosing_setname(formulain,readitem,nm,sn,sizeof(sn))<0) return -1;
   for (l=0; l<nset; l++) if (strcmp(sn,sets[l].setname)==0) return l;
   return -1;
 }
@@ -4164,13 +4167,16 @@ int shocks_check_floor(array_def *vars, offset_t nvar, dim_t subints, int solmet
       double tot;
       x=vars[i].offset+e;
       if (!CL_EXO(x)||!CL_SHOCKED(x)) continue;
+      /* the stored per-subinterval shock is single precision in the
+         f32 build: -100/3 rebuilds as -99.999996, so the floor
+         compares at float resolution */
       tot=(double)CL_SHOCK(x)*subints;
-      if (tot<-100-1e-9) {
+      if (tot<-100-1e-4) {
         array_element_label(&vars[i],e,lab,sizeof(lab));
         errmsg("Error: %s is shocked by %g percent; a percentage change below -100 would make its levels value negative (manual 30.2; shock file)\n",lab,tot);
         return -1;
       }
-      if (tot<=-100+1e-9&&solmethod==SM_GRAGG) {
+      if (tot<=-100+1e-4&&solmethod==SM_GRAGG) {
         array_element_label(&vars[i],e,lab,sizeof(lab));
         errmsg("Error: %s is shocked by -100 percent, which Gragg's method cannot take: its final pass carries the variable past its end point, through zero (manual 30.2); use the midpoint or Euler method\n",lab);
         return -1;
@@ -6234,7 +6240,7 @@ static int elem_range_split(const char *t, char *pre, const char **dig) {
   return 0;
 }
 
-static int elem_list_expand(const char *in, char *out, size_t cap, const char *setname) {
+int elem_list_expand(const char *in, char *out, size_t cap, const char *setname) {
   char buf[TABREADLINE],*item,*save=NULL;
   size_t o=0;
   if (strlen(in)>=sizeof(buf)) return -1;
@@ -6828,8 +6834,8 @@ dim_t set_difference(set_element *set_elems, set_def *sets,dim_t nset,dim_t i) {
 /* ---- GEMPACK set expressions (manual 10.1.1.1) -----------------------
    readele "@<expr>" holds the normalized RHS of
      SET <name> = <set-expression>;
-   with UNION as '^', INTERSECT as '&', '\' folded into '-', spaces
-   stripped. Terms are already-declared set names, quoted single
+   with UNION as '^', INTERSECT as '&', relative complement '\' as
+   '%', spaces stripped. Terms are already-declared set names, quoted single
    elements, or parenthesized subexpressions; operators apply left to
    right. Validity (per the manual): '+' operands must be disjoint;
    '-' may only remove elements that are present. */

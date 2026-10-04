@@ -87,7 +87,7 @@ Solver outputs, consumed by `ems_compose()`:
 | `.cof` | coefficient dump header + declarations (`-cofdump`, default on): 4 × long `{version=1, ncof, ncofele, reserved}`, then `ncof × array_def` (same struct as `.var`), then `ncof × uint8 kind` (bit 0 = PostSim coefficient, bit 1 = `(parameter)`). Written after PostSim, so PostSim coefficients carry their computed values |
 | `.cbin` | `ncofele × double` — updated (post-simulation) coefficient values, the coefficient slice of the value vector in `array_def.offset` order; the coefficient twin of `.bin`. Together with `.cof` this replaces the per-coefficient CSVs as teems-R's coefficient transport (2026-08) |
 | `.cbin0` | pre-simulation coefficient values (`-cofdump`, Tier B2): 4 × long `{version=1, ncof, ncofele, phase=0}` (phase 0 = after the initial Reads and Formulas, before any step), then `ncofele × double` in the same order as `.cbin`; the declarations are the run's `.cof`. Unblocks levels results, `ORIG_LEVEL`, AVC-style averages and level-value shocks on the R side |
-| `.xac` | Gragg/Euler extrapolation record (Tier B2; GEMPACK's XAC file, [GM] 26.2.3), three-pass runs only: 4 × long `{version=1, nrow=nvarele, npass=3, nsubints}`, then `3 × nrow` doubles (pass by pass, `.bin` order: each pass's solution; with subintervals, the last subinterval's pass compounded onto the extrapolated result before it, so the Richardson weights of the passes give `.bin` exactly), then `nrow × int32` accuracy codes (6 = the passes agree to 6+ figures … 1 = one or none; minimum over subintervals; their histogram is the log's accuracy summary) |
+| `.xac` | Gragg/Midpoint/Euler extrapolation record (Tier B2; GEMPACK's XAC file, [GM] 26.2.3), three-pass runs only: 4 × long `{version=1, nrow=nvarele, npass=3, nsubints}`, then `3 × nrow` doubles (pass by pass, `.bin` order: each pass's solution; with subintervals, the last subinterval's pass compounded onto the extrapolated result before it, so the Richardson weights of the passes give `.bin` exactly), then `nrow × int32` accuracy codes (6 = the passes agree to 6+ figures … 1 = one or none; minimum over subintervals; their histogram is the log's accuracy summary) |
 | `.cols` + `.cols.json` | extra solution columns (Tier B2): 4 × long `{version=1, ncol, nrow, kind}`, `nrow × long` row offsets (element offsets in `.bin` order), `ncol × nrow` doubles column by column; kind 0 mixed, 1 subtotal, 2 sagem_individual, 3 approx_cumulative, 4 pass_solution. The JSON carries `version/ncol/nrow/kind` and per column `index/kind/label/shocked`. Written for a complementarity run with both runs (the approximate (Euler) run's solution, kind 3) and for shock-group subtotals (Tier B3, one column per group in file order, kind 1; kind 2, SAGEM individual columns, when the run is one-step Johansen; the JSON `shocked` field is the group's item list). Per-subinterval pass solutions (kind 4) are not written |
 | `.jac` + `.jac.json` | base-point Jacobian (`-jacdump 1`, Tier B5): the linearized system C·z = 0 over every variable element, assembled once before the first step (after the initial Reads and Formulas) with the solve's own compiled equation programs, every row owned and every nonzero kept whatever the closure (endogenous, exogenous shocked or not), each entry with the equation's own sign (the solve's A / −B split undone). 4 × long `{version=1, nrow, ncol, nnz}`, then `nnz` long rows, `nnz` long columns, `nnz` doubles, sorted by row then column; repeated insertions into one (row, column) are summed (an exact cancellation stays as a stored 0, as in the probe pattern's `=0`). Rows are the condensed system's equation elements (backsolved defining equations excluded), equations in TAB order and GEMPACK order within each (first index fastest); columns are variable elements in `.bin` order (`ncol = nvarele`). The JSON carries `version/point/nrow/ncol/nnz` and per equation `name/first_row/nrows/sets`. The same bytes from every matrix method, rank count, thread count and driver; complementarity rows take their pre-simulation state branch (the probe's), and the state weights are restored before the solve. Costs 24 bytes per entry on rank 0 while it is built |
 | `.outputs.json` | completion marker (Tier B2), the run's LAST write and only after a run that printed no `Error:` line on any rank: `{version=1, solver_version, run_id, complete: true, files: [{name, path, kind, format_version}]}` listing every file rank 0 wrote (the locked five with `format_version` 0, `.cof` 1, `.cbin` 0, `.cbin0`/`.xac`/`.cols`/`.cols.json`/`.jac`/`.jac.json` 1, `.stats.json`/`.probe.json` 2, the CSVs). Written to a temporary name and renamed. The solver removes a previous run's `.outputs.json`, `.cbin0`, `.xac`, `.cols`, `.cols.json`, `.jac`, `.jac.json` before any work, so a failed run leaves no marker; a reader trusts a side-car only when this file lists it |
@@ -718,6 +718,7 @@ from tarball build-args.
 |---|---|
 | `Johansen` | one-step solution of the linearized system [D20; Johansen 1960] |
 | `Gragg` | Gragg's method (smoothed modified midpoint) with Richardson extrapolation over `-step1/-step2/-step3` step counts (default 2-4-8), per subinterval [GM "Gragg"; Pearson 1991 eq. 6.1/Alg. 7.1.2]; `Mmid` accepted as a deprecated alias (warns) |
+| `Midpoint` | the midpoint method ([GM] 26.1.2, 30.2): Gragg's Euler first step and midpoint leapfrog without the terminal smoothing pass — `s` passes for `s` steps, the result is the last leapfrog point, so the exogenous variables never go past their end point (an exact −100 % shock is taken). Richardson extrapolation and the parity rule as for Gragg |
 | `Euler` | forward Euler multistep with Richardson extrapolation over the same three step counts [GM "Euler"] — shares the Gragg driver with the leapfrog and terminal smoothing disabled; the truncation error series is `h` (not `h²`), so the extrapolation weights use the step ratios unsquared and each extra solution gains one order (not two). Any strictly increasing step counts are allowed (no parity rule) |
 | `RK2`, `Heun`, `RK4` | fixed-step explicit Runge–Kutta over `-step1` steps (no extrapolation triple): midpoint, explicit trapezoid (strong-stability-preserving) and classic fourth order. Stages are combined in the log-level chart by default (`-rkchart log`: every endogenous percent-change element is carried as log(1+X/100), so no percent variable can reach −100 % at any stage and every tableau keeps its order — Munthe-Kaas on the multiplicative group; `-rkchart percent` is the GEMPACK-orientation arithmetic); exogenous elements stay on the exact level-linear path |
 | `BoSha32`, `DoPri54` | embedded Runge–Kutta pairs (Bogacki–Shampine 3(2), Dormand–Prince 5(4)), first-same-as-last (an accepted step costs 3 / 6 new solves; a retried step reuses its stage-0 solve). With `-adaptive yes` the embedded estimate drives step control against `-epstol`, a step is redone at `-retryadj` when a stage state fails a coefficient range test, an assertion, the −100 % crossing (percent chart), the `-rkguard` level ratio or (LU) a singular factorization — the manual 26.5.1 triggers, abandoned at the failing stage; `accuracy-only` acts on the estimate alone. The accept test is steered by the percent-change elements (`-rkscope pct`; `all` restores GEMPACK's rule) in the `-rknorm max|rms` norm with the elementary or PI controller (`-rkctrl`). The accumulated estimate is written beside the solution as `sol.est` (one double per element, the paper's metric |Δ|/max(1,|X|)) — an indicator of the least-settled elements, measured NOT to be a bound; the run record (`runge_kutta` in stats.json) carries steps, stage solves, reuse and the rejection census |
@@ -742,10 +743,28 @@ from the extrapolated totals at the end of each subinterval.
 
 Single-pass runs (`-single_run 1`): the driver runs one pass (sol 0)
 with weight 1 instead of the triple — Gragg keeps its terminal
-smoothing (the GEMPACK single Gragg calculation), Euler is the plain
-forward pass; subintervals chain passes as usual. An `ITER = ITER + 1`
+smoothing (the GEMPACK single Gragg calculation), Midpoint and Euler
+are their plain passes; subintervals chain passes as usual. An `ITER = ITER + 1`
 counter then counts steps, and a RAS-style explicit update applied
 per step gives exactly N iterations (pmfix kit `ras`).
+
+Two-solution runs (`-two_run 1`, GEMPACK `steps = n1 n2;`, [GM]
+26.1.2): Euler, Midpoint or Gragg over `-step1` and `-step2` with the
+two-point Richardson weights; no accuracy estimate (the figures compare
+two two-pass extrapolations, which need three solutions; [GM] 26.2.3).
+
+Convergence rule (`-convrule 1`, [GM] 26.2.5/26.2.5.1; default off,
+since it changes reported results): per element and subinterval of a
+three-solution run, the reported result is the average of the three
+passes when they agree to about six figures or are near zero
+(MVC/OVC/MN0/ON0); the extrapolation when the two two-pass
+extrapolations — passes 1,2 and passes 2,3 — agree to at least one
+figure (the manual's figures column, the confident codes CX/FCX); and
+the third pass otherwise (MC?/MD?/MD!/OC?/OD?/OD!). On the manual's
+GC10E1 example (Gragg 4,6,8: 2.57380, 0.661399, −0.143593, figures 0)
+it reports −0.143593. The same rule applies to the `(change)`/
+`(explicit)` Update targets' extrapolated path values. A named fatal
+with `-single_run`, `-two_run` or subtotals.
 
 Euler mechanics: same driver and per-step refill+solve, but every
 sub-step is a forward step from the current state (`updates_apply`
@@ -812,7 +831,8 @@ Output: `.cols` kind 1 (subtotal), or kind 2 (SAGEM individual
 columns; one group per shocked component is GEMPACK's SAGEM) for a
 one-step Johansen run. Supported: LU, `-fastrefac` LU, SBBD,
 `-fastrefac` SBBD and DBBD (resident, `-inmemory 0`, `-fastrefac`) with
-Johansen, Euler and Gragg, any `-nsubints`, `-single_run`. Named
+Johansen, Euler, Midpoint and Gragg, any `-nsubints`, `-single_run`,
+`-two_run`. Named
 fatals: NDBBD and `-withmc66 1` (no kept factorization yet), the
 Runge–Kutta methods (the log-chart stage combination has no settled
 subtotal convention), and models with complementarities (the
@@ -1261,10 +1281,12 @@ needs corpus calibration.
 | `-cmdfile <path>` | `./reg.cmf` | CMF file |
 | `-matsol {0,1,2,3}` | 0 | matrix method (§6) |
 | `-solmed <name>` | `Gragg` | solution method (§5) |
-| `-step1/-step2/-step3` | 2/4/8 | Gragg step counts (all odd or all even) |
-| `-single_run {0,1}` | 0 | Euler/Gragg: one pass of `-step1` steps, no Richardson extrapolation (GEMPACK `method = euler; steps = N;`); accuracy estimates are reported as unavailable, updated data are that pass's path values; ignored for Johansen, a named fatal with the Runge–Kutta methods; `stats.json` records `"single_run"` |
+| `-step1/-step2/-step3` | 2/4/8 | Euler/Midpoint/Gragg step counts: strictly increasing, `-step1` at least 1; Midpoint and Gragg all odd or all even |
+| `-single_run {0,1}` | 0 | Euler/Midpoint/Gragg: one pass of `-step1` steps, no Richardson extrapolation (GEMPACK `method = euler; steps = N;`); accuracy estimates are reported as unavailable, updated data are that pass's path values; ignored for Johansen, a named fatal with the Runge–Kutta methods; `stats.json` records `"single_run"` |
+| `-two_run {0,1}` | 0 | Euler/Midpoint/Gragg: extrapolate from two solutions, `-step1` and `-step2` ([GM] 26.1.2); no accuracy estimate; ignored for Johansen, a named fatal with the Runge–Kutta methods and with `-single_run 1` |
+| `-convrule {0,1}` | 0 | GEMPACK's poorly-converging-component rule on a three-solution run ([GM] 26.2.5; §5); a named fatal with `-single_run`, `-two_run` or subtotals |
 | `-random_seed n` | 1 | seed of RANDOM(a,b) ([GM] 11.5.2); the same seed reproduces every draw (GEMPACK's `randomize = yes`, a new sequence per run, is not the default); `stats.json` records `"random_seed"` |
-| `-nsubints n` | 1 | shock subintervals |
+| `-nsubints n` | 1 | shock subintervals, at least 1 |
 | `-laA/-laDi/-laD n` | 2 (teems-R: 300/500/200) | workspace sizing, % of nnz |
 | `-fastrefac {0,1}` | 0 | all matrix methods: analyse once, fast refactorize per step (MA48 JOB=2 / MP48 FACT_JOB=2); LU auto-grows `laA` (§6). DBBD: small rigs only — at 1.4M equations no step reused its extraction and the run was slower than one-shot (§6) |
 | `-ma48u x` | library defaults | MA48 / HSL_MP48 pivot threshold `CNTL(2)`, 0 < x ≤ 1, applied at every factorization site (sequential LU, DBBD/NDBBD blocks and rank probes, SBBD's MP48 instance). Absent = each library's own default (MA48 0.1, MP48 0.01), bit-identical to builds without the option; recorded in `stats.json` (`ma48u`, null when default). A calibration knob, not a tuning recommendation |
@@ -1396,15 +1418,14 @@ without the feature. Names are case-insensitive, as in PETSc.
   overflow is diagnosed, not silently truncated.
 - **Language forms rejected by design** (named errors):
   LOOP/BREAK/CYCLE (DISPLAY/TRANSFER are dropped with a warning),
-  `(no_split)`, `linear_name=`,
+  `(no_split)`,
   and `$POS` written directly in an equation body (use a coefficient
   assigned `$POS`). Formula-computed operands in conditional set
   builders are evaluated by the R front end, which hands the pre-pass
-  a read 0/1 indicator. Compound `AND/OR/NOT` conditions and `IF`
-  nested inside expressions are not evaluated by the solver; the R
-  front end rewrites the supported `IF` forms into conditional
-  quantifiers, helper coefficients and domain splits before
-  deployment.
+  a read 0/1 indicator. `LINEAR_NAME=`/`LINEAR_VAR=` ([GM] 9.2.2,
+  24.13), compound `AND/OR/NOT` conditions and index comparisons
+  ([GM] 11.4.5, 11.4.11) and `IF` anywhere an expression may stand
+  are evaluated by the solver (Tier C, 2026-10-02).
 - **Tier A residue** (2026-09-28, updated Tier B3 2026-09-29): by
   default the residual-ratio check covers LU, `-fastrefac` SBBD and
   refined DBBD only (one-shot SBBD and NDBBD free A first); `-residcheck 1`

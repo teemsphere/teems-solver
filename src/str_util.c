@@ -50,6 +50,25 @@ int str_rfind_ci(char *line, char *finditem)
   return -1;
 }
 
+/* a run of signs between operands is one sign: A - -B is A + B and
+   A - +B is A - B (manual 11.4.1); returns the number of signs removed */
+int str_sign_runs_collapse(char *line)
+{
+  char *r=line,*w=line;
+  int n=0;
+  while (*r!='\0') {
+    if ((*r=='+'||*r=='-')&&w>line&&(w[-1]=='+'||w[-1]=='-')) {
+      w[-1]=(w[-1]==*r)?'+':'-';
+      r++;
+      n++;
+      continue;
+    }
+    *w++=*r++;
+  }
+  *w='\0';
+  return n;
+}
+
 int str_count_char(char *line, int finditem)
 {
   int i=0,j=0;

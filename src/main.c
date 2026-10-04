@@ -1010,6 +1010,7 @@ static int chain_refs_scan(char *fname, set_def *sets, dim_t nset, array_def *co
       strcat(readitem,")");
     }
     str_delete_char(readitem,' ');
+    str_sign_runs_collapse(readitem);
     while (formula_normalize(readitem)==1);
     leadlag_encode(readitem);
     np=str_count_ci(readitem,"p_");
@@ -1818,6 +1819,16 @@ int main(int argc,char **args) {
       }
     }
   }
+  if((solmethod==SM_GRAGG||solmethod==SM_MIDPOINT||solmethod==SM_EULER)&&steps1<1) {
+    if(rank==0)errmsg("Error: -step1 must be at least 1 (got %d)\n",steps1);
+    PetscFinalize();
+    return 1;
+  }
+  if(subints<1) {
+    if(rank==0)errmsg("Error: -nsubints must be at least 1 (got %d)\n",subints);
+    PetscFinalize();
+    return 1;
+  }
   if((solmethod==SM_GRAGG||solmethod==SM_MIDPOINT)&&!teems_single_run) {
     /* the h^2 error expansion of Gragg and the midpoint method holds
        within one step parity (Pearson 1991 Thm 6.1; manual 26.1.2,
@@ -2425,8 +2436,9 @@ int main(int argc,char **args) {
     /* 51.6 default = the accurate run's step sum; steps2/steps3 were
        folded into ratios above, so rebuild the three counts the
        multistep driver will use */
+    /* -single_run runs steps1 only, -two_run steps1 and steps2 */
     comp_steps=(solmethod==SM_GRAGG||solmethod==SM_MIDPOINT||solmethod==SM_EULER)
-      ?steps1+(int)llround(steps1*step_ratio2)+(int)llround(steps1*step_ratio3)
+      ?steps1+(teems_single_run?0:(int)llround(steps1*step_ratio2))+((teems_single_run||teems_two_run)?0:(int)llround(steps1*step_ratio3))
       :steps1;
     if(comp_steps<1)comp_steps=10;
     iopt=comp_steps;

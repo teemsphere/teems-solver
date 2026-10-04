@@ -157,6 +157,16 @@ static void cond_segment_normalize(char *line) {
       lastns='\0';
       continue;
     }
+    if (ch=='\"') {
+      /* any other quoted element is copied as written: "NE" is an
+         element, not the word operator */
+      buf[bi++]=ch;
+      for (i++; line[i]!='\0'&&line[i]!='\"'&&bi+2<sizeof(buf); i++) buf[bi++]=line[i];
+      if (line[i]!='\"') { changed=0; break; }
+      buf[bi++]=line[i];
+      lastns='\"';
+      continue;
+    }
     buf[bi++]=ch;
     if (ch!=' '&&ch!='\t') lastns=ch;
   }
@@ -1040,6 +1050,17 @@ static int reduce_linvar_check(const char *line) {
    variable NAME, whose c_NAME references become p_NAME column tokens,
    is renamed the same way; the structure files, closures and shocks
    use the declared name. Runs before the c_ -> p_ rewrite. */
+static int follows_file_kw(const char *line, const char *c) {
+  const char *b=c;
+  while (b>line&&b[-1]==' ') b--;
+  while (b>line&&b[-1]==')') {
+    int d=0;
+    do { b--; if (*b==')') d++; else if (*b=='(') d--; } while (b>line&&d>0);
+    while (b>line&&b[-1]==' ') b--;
+  }
+  return b-line>=4&&strncmp(b-4,"file",4)==0&&(b-4==line||!cond_is_namec(b[-5]));
+}
+
 static int pcoef_rename(const char *tabfile) {
   FILE *f=teems_fopen((char *)tabfile,"r"),*fo;
   char line[TABREADLINE+1],tmp[TABREADLINE],out[TABREADLINE+64];
@@ -1091,7 +1112,7 @@ static int pcoef_rename(const char *tabfile) {
     for (a=0; a<n; a++) {
       int cf=0,vr=0;
       for (b=0; b<nb; b++) if (strcmp(both[b],nm[a])==0) { if (bothvar[b]) vr=1; else cf=1; }
-      if (!(cf&&vr)) strcpy(nm[w++],nm[a]);
+      if (!(cf&&vr)) { if (w!=a) memcpy(nm[w],nm[a],NAMESIZE); w++; }
     }
     n=w;
   }
@@ -1104,11 +1125,13 @@ static int pcoef_rename(const char *tabfile) {
   if (f==NULL||fo==NULL) { if (f) fclose(f); if (fo) fclose(fo); free(nm); return -1; }
   while (fgets(line,TABREADLINE,f)) {
     size_t o=0;
-    int q=0;
+    int q=0,isfile=strncmp(line,"file",4)==0&&!cond_is_namec(line[4]);
     char *c;
     for (c=line; *c!='\0'; ) {
       if (*c=='"') q=!q;
-      if (!q&&c[0]=='p'&&c[1]=='_'&&(c==line||!cond_is_namec(c[-1]))) {
+      /* a logical file name is not a coefficient: File P_X and
+         "Write P_X to file P_X" keep it, as the CMF binds it */
+      if (!q&&!isfile&&c[0]=='p'&&c[1]=='_'&&(c==line||!cond_is_namec(c[-1]))&&!follows_file_kw(line,c)) {
         int k=0;
         while (cond_is_namec(c[k])) k++;
         for (i=0; i<n; i++) if ((int)strlen(nm[i])==k&&strncmp(nm[i],c,k)==0) break;
@@ -1239,8 +1262,8 @@ static int num_exp_expand(char *s, size_t cap) {
       if (any&&!cond_is_namec(s[ee])&&s[ee]!='.') {
         char num[TABREADLINE];
         long p,q,m=0;
-        if (k>99) {
-          errmsg("Error: numeric constant %.*s is out of the supported range (exponent notation, manual 11.4.9)\n",(int)(ee-ms),s+ms);
+        if (k>99||nd+(size_t)k+3>=sizeof(num)) {
+          errmsg("Error: numeric constant %.*s is out of the supported range (exponent notation, manual 11.4.9)\n",(int)(ee-ms)>200?200:(int)(ee-ms),s+ms);
           return -1;
         }
         p=(long)dp+(neg?-k:k);
@@ -2701,23 +2724,16 @@ static int decl_index_build(char *filename) {
   return 0;
 }
 
-/* one pass of the lookup over an indexed statement kind; varname1 is
-   shared between the passes on purpose (the p_/c_ fallback rewrites
-   it once and the coefficient pass then sees the rewritten name, as
-   the file-scanning original did). Returns 1 found, -1 malformed,
+/* one pass of the lookup over an indexed statement kind for the
+   declared name varname1 (")NAME("). Returns 1 found, -1 malformed,
    0 not in this kind. */
-static int tab_read_set_name_pass(char **stmts, int nstmt, char *varname, char *varname1, int indx, char *setname) {
+static int tab_read_set_name_pass(char **stmts, int nstmt, char *varname1, int indx, char *setname) {
   int n,i,k;
   char indxname[NAMESIZE],line[TABREADLINE+1],line1[TABREADLINE+1],*p,tmp[TABREADLINE+1];
   for (k=0; k<nstmt; k++) {
     strcpy(line,stmts[k]);
     strcpy(line1,line);
     n=str_find_ci(line,varname1);
-    if (n==-1&&((varname[0]=='p'&&varname[1]=='_')||(varname[0]=='c'&&varname[1]=='_'))) {
-      strcpy(varname1,")");
-      strcat(varname1,varname+2);
-      n=str_find_ci(line,varname1);
-    }
     if (n>-1) {
       p=strtok(line+n,"(");
       p=strtok(NULL,")");
@@ -2758,10 +2774,20 @@ int tab_read_set_name(char *filename, char *varname, int indx, char *setname) {
   strcpy(varname1,")");
   strcat(varname1,varname);
   if (decl_index_build(filename)<0) return -1;
-  r=tab_read_set_name_pass(decl_var,n_decl_var,varname,varname1,indx,setname);
+  r=tab_read_set_name_pass(decl_var,n_decl_var,varname1,indx,setname);
   if (r!=0) return r;
-  r=tab_read_set_name_pass(decl_cof,n_decl_cof,varname,varname1,indx,setname);
+  r=tab_read_set_name_pass(decl_cof,n_decl_cof,varname1,indx,setname);
   if (r!=0) return r;
+  /* p_X / c_X with no declaration of its own is the linear variable of
+     a levels X (manual 9.2.2); a declared p_X or c_X coefficient or
+     variable resolves above and its literals are checked like any
+     other's */
+  if ((tolower((unsigned char)varname[0])=='p'||tolower((unsigned char)varname[0])=='c')&&varname[1]=='_') {
+    strcpy(varname1,")");
+    strcat(varname1,varname+2);
+    r=tab_read_set_name_pass(decl_var,n_decl_var,varname1,indx,setname);
+    if (r!=0) return r;
+  }
   return -1;
 }
 
@@ -3183,17 +3209,23 @@ static int sb_elements_d(char *tabfile, cmf_file_entry *iodata, int nio, const c
     p+=snlen;
     while (*p==' ') p++;
     if (*p=='#') { p=strchr(p+1,'#'); if (p==NULL) break; p++; while (*p==' ') p++; }
+    if (strncmp(p,"(intertemporal)",15)==0) { p+=15; while (*p==' ') p++; }
+    else if (strncmp(p,"(non_intertemporal)",19)==0) { p+=19; while (*p==' ') p++; }
     if (*p=='(') {
-      /* explicit list */
+      /* explicit list, element ranges (c1 - c5) expanded as sets_read
+         does (manual 11.2.2) */
+      char lst[TABREADLINE],*e=strchr(p,')'),*q;
+      if (e==NULL||(size_t)(e-p-1)>=sizeof(lst)) break;
+      memcpy(lst,p+1,e-p-1);
+      lst[e-p-1]='\0';
+      if (elem_list_expand(lst,line,sizeof(line),setname)<0) break;
       n=0;
-      p++;
-      while (*p!='\0'&&*p!=')') {
+      for (q=line; *q!='\0'&&n<SB_MAXELE; ) {
         int tl=0;
-        while (*p==' '||*p==',') p++;
-        while (*p!='\0'&&*p!=','&&*p!=')'&&*p!=' '&&tl<NAMESIZE-1) ele[n][tl++]=*p++;
+        while (*q==' '||*q==',') q++;
+        while (*q!='\0'&&*q!=','&&*q!=' '&&tl<NAMESIZE-1) ele[n][tl++]=*q++;
         ele[n][tl]='\0';
         if (tl>0) n++;
-        if (n>=SB_MAXELE) break;
       }
       break;
     }
