@@ -799,6 +799,12 @@ int mappings_read(char *fname, map_def *maps, dim_t nmap, set_def *sets, dim_t n
 int mapping_values_read(char *fname, int niodata, cmf_file_entry *iodata, map_def *maps, dim_t nmap, set_def *sets, dim_t nset, set_element *set_elems);
 int mapping_use_guards(char *fname, map_def *maps, dim_t nmap);
 void mapping_lower_calls(char *line);
+/* synthetic mappings for compositions and offsets on mapped indices
+   (manual 11.9.6): slots reserved after the declared mappings */
+#define MAP_SYNTH_MAX 64
+extern dim_t teems_nmap_user;
+int mapping_ready(dim_t m);
+void mapping_frame_check(dim_t m, dim_t frame_setid, dim_t dss, int leadlag, const char *symname);
 void mapping_reject_in(char *line, const char *what);
 void mapping_reject_lhs(char *line, const char *what);
 char *mapping_token_split(char *p, int *mp);

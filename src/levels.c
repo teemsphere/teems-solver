@@ -109,6 +109,9 @@ typedef struct {
   lv_coefrec cf[LV_MAXNAMES]; int ncf;
   char linvar[LV_MAXNAMES][NAMESIZE]; int nlinvar; /* non-levels variables */
   char linsets[LV_MAXNAMES][NAMESIZE];              /* their argument sets, comma-joined */
+  /* ADD_HOMOTOPY (manual 26.7.4-26.7.6): homotopy levels variables in
+     use; decl = declared by the transform (not by the TAB) */
+  char homo[LV_MAXSUM][NAMESIZE]; bool homodecl[LV_MAXSUM], homoemitted[LV_MAXSUM]; int nhomo;
   /* per-statement expression workspace */
   lv_node nodes[LV_MAXNODES]; int nnodes;
   lv_term terms[LV_MAXTERMS]; int nterms;
@@ -250,6 +253,57 @@ static int lv_parse_head(const char *after_kw, lv_head *h) {
     if (ge < 0) return -1;
     h->args = p; h->argslen = ge + 1;
   }
+  return 0;
+}
+
+/* the qualifier group of an Equation statement (manual 10.9, 26.7.5):
+   levels/linear and ADD_HOMOTOPY[=name]/NOT_ADD_HOMOTOPY. q points
+   after the keyword; returns the offset just past the group (0 when
+   there is none), -1 on an unknown token. homo: -1 unspecified, 0 not,
+   1 add (hname set) */
+static int lv_eq_quals(const char *q, int *levels, int *linear, int *homo, char *hname) {
+  int ge, i, ti = 0;
+  char tok[NAMESIZE];
+  const char *q0 = q;
+  *levels = 0; *linear = 0; *homo = -1; hname[0] = '\0';
+  while (*q == ' ') q++;
+  if (*q != '(' || strncmp(q, "(all,", 5) == 0 || strncmp(q, "(all ", 5) == 0) return 0;
+  ge = lv_group_end(q);
+  if (ge < 0) return -1;
+  for (i = 1; i <= ge; i++) {
+    char ch = q[i];
+    if (ch == ',' || ch == ')') {
+      tok[ti] = '\0';
+      if (strcmp(tok, "levels") == 0) *levels = 1;
+      else if (strcmp(tok, "linear") == 0) *linear = 1;
+      else if (strcmp(tok, "not_add_homotopy") == 0) *homo = 0;
+      else if (strcmp(tok, "add_homotopy") == 0) { *homo = 1; strcpy(hname, "homotopy"); }
+      else if (strncmp(tok, "add_homotopy=", 13) == 0 && tok[13] != '\0') { *homo = 1; snprintf(hname, NAMESIZE, "%s", tok + 13); }
+      else if (tok[0] != '\0') return -1;
+      ti = 0;
+    } else if (ch != ' ' && ti < NAMESIZE - 1) tok[ti++] = ch;
+  }
+  {
+    const char *e = q + ge + 1;
+    while (*e == ' ') e++;
+    return (int)(e - q0);
+  }
+}
+
+/* the homotopy name an Equation (default=...) statement sets, or ""
+   (manual 26.7.5): returns 1 when defval is a homotopy default */
+static int lv_homo_default(const char *defval, char *cur) {
+  if (strcmp(defval, "not_add_homotopy") == 0) { cur[0] = '\0'; return 1; }
+  if (strcmp(defval, "add_homotopy") == 0) { strcpy(cur, "homotopy"); return 1; }
+  if (strncmp(defval, "add_homotopy=", 13) == 0 && defval[13] != '\0') { snprintf(cur, NAMESIZE, "%s", defval + 13); return 1; }
+  return 0;
+}
+
+static int lv_homo_note(lv_ctx *c, const char *hname) {
+  int i;
+  for (i = 0; i < c->nhomo; i++) if (strcmp(c->homo[i], hname) == 0) return 0;
+  if (c->nhomo >= LV_MAXSUM) { errmsg("Error: more than %d ADD_HOMOTOPY variable names (manual 26.7.5)\n", LV_MAXSUM); return -1; }
+  strcpy(c->homo[c->nhomo++], hname);
   return 0;
 }
 
@@ -803,7 +857,8 @@ static int lv_diff_side(lv_ctx *c, const char *expr, char *out, size_t outcap) {
 static int lv_scan(lv_ctx *c, char *fname, bool *any) {
   FILE *f;
   char line[TABREADLINE], defval[NAMESIZE];
-  bool sticky_level = false, sticky_change = false, sticky_param = false;
+  bool sticky_level = false, sticky_change = false, sticky_param = false, eq_levels = false;
+  char homo_cur[NAMESIZE] = "";
   lv_head h;
   *any = false;
   f = teems_fopen(fname, "r");
@@ -935,15 +990,26 @@ static int lv_scan(lv_ctx *c, char *fname, bool *any) {
         c->ncf++;
       }
     } else if (strncmp(line, "formula", 7) == 0) {
-      if (strstr(line, "&equation") != NULL || strstr(line, "& equation") != NULL) *any = true;
+      if (strstr(line, "&equation") != NULL || strstr(line, "& equation") != NULL) {
+        *any = true;
+        if (homo_cur[0] != '\0' && lv_homo_note(c, homo_cur) < 0) { fclose(f); return -1; }
+      }
     } else if (strncmp(line, "equation", 8) == 0) {
-      const char *p = line + 8;
-      while (*p == ' ') p++;
+      int glev, glin, ghomo;
+      char gname[NAMESIZE];
       if (tab_default_value(line, defval)) {
-        if (strcmp(defval, "levels") == 0) *any = true;
+        if (strcmp(defval, "levels") == 0) { *any = true; eq_levels = true; }
+        else if (strcmp(defval, "linear") == 0) eq_levels = false;
+        else lv_homo_default(defval, homo_cur);
         continue;
       }
-      if (strncmp(p, "(levels", 7) == 0) *any = true;
+      if (lv_eq_quals(line + 8, &glev, &glin, &ghomo, gname) < 0) continue; /* the transform reports it */
+      if (ghomo != -1) *any = true; /* a misplaced ADD_HOMOTOPY is reported by the transform */
+      if (glev || (!glin && eq_levels)) {
+        *any = true;
+        if (ghomo == 1 && lv_homo_note(c, gname) < 0) { fclose(f); return -1; }
+        if (ghomo == -1 && homo_cur[0] != '\0' && lv_homo_note(c, homo_cur) < 0) { fclose(f); return -1; }
+      }
     }
   }
   fclose(f);
@@ -1042,7 +1108,7 @@ static int lv_prod_expand(lv_ctx *c, char *buf, size_t cap) {
   }
 }
 
-static int lv_emit_linearized(lv_ctx *c, const char *p, FILE *fout) {
+static int lv_emit_linearized(lv_ctx *c, const char *p, FILE *fout, const char *hname) {
   char out[DATREADLINE], pbuf[DATREADLINE];
   const char *name, *label = NULL, *quants, *lhs;
   int namelen, labellen = 0, quantslen, ge;
@@ -1102,6 +1168,50 @@ static int lv_emit_linearized(lv_ctx *c, const char *p, FILE *fout) {
     strncpy(rhsbuf, eq + 1, rl); rhsbuf[rl] = '\0';
   }
   lhs = lhsbuf;
+  if (hname != NULL && hname[0] != '\0') {
+    /* ADD_HOMOTOPY (manual 26.7.4): Coefficient(Parameter) NAME@h over
+       the equation's quantifiers, Formula(Initial) NAME@h = LHS - RHS,
+       and -NAME@h*HOMOTOPY added to the RHS; HOMOTOPY starts at -1, so
+       the pre-simulation data satisfy the modified equation, and a
+       shock of 1 to its change variable removes the term */
+    char args[DATREADLINE], hcoef[NAMESIZE], rhsnew[DATREADLINE];
+    const char *g = quants;
+    int hi;
+    args[0] = '\0';
+    while (g < quants + quantslen) {
+      const char *a1, *a2;
+      if (*g != '(') { g++; continue; }
+      a1 = strchr(g, ',');
+      if (a1 == NULL) break;
+      a1++;
+      a2 = strchr(a1, ',');
+      if (a2 == NULL) break;
+      if (lv_strcat_b(args, args[0] ? "," : "(", sizeof(args)) < 0 || lv_ncat_b(args, a1, (int)(a2 - a1), sizeof(args)) < 0) return lv_err(c, "too many quantifiers");
+      g += lv_group_end(g) + 1;
+    }
+    if (args[0] != '\0' && lv_strcat_b(args, ")", sizeof(args)) < 0) return lv_err(c, "too many quantifiers");
+    if (namelen + 3 > NAMESIZE) return lv_err(c, "equation name too long for its ADD_HOMOTOPY coefficient");
+    snprintf(hcoef, sizeof(hcoef), "%.*s@h", namelen, name);
+    if (lv_find_cf(c, hcoef, (int)strlen(hcoef)) < 0) {
+      if (c->ncf >= LV_MAXNAMES) return lv_err(c, "too many coefficients");
+      strcpy(c->cf[c->ncf].name, hcoef);
+      c->cf[c->ncf].param = true;
+      c->ncf++;
+    }
+    for (hi = 0; hi < c->nhomo; hi++) if (strcmp(c->homo[hi], hname) == 0) break;
+    if (hi == c->nhomo) return lv_err(c, "internal: homotopy variable not registered");
+    if (c->homodecl[hi] && !c->homoemitted[hi]) {
+      fprintf(fout, "variable (levels,change) %s ;\n", hname);
+      fprintf(fout, "coefficient (non_parameter) %s ;\n", hname);
+      fprintf(fout, "update (change) %s = p_%s ;\n", hname, hname);
+      fprintf(fout, "formula (initial) %s = -1 ;\n", hname);
+      c->homoemitted[hi] = true;
+    }
+    fprintf(fout, "coefficient (parameter) %.*s %s%s ;\n", quantslen, quants, hcoef, args);
+    fprintf(fout, "formula (initial) %.*s %s%s = (%s) - (%s) ;\n", quantslen, quants, hcoef, args, lhsbuf, rhsbuf);
+    if (snprintf(rhsnew, sizeof(rhsnew), "(%s)-%s%s*%s", rhsbuf, hcoef, args, hname) >= (int)sizeof(rhsnew)) return lv_err(c, "levels equation too long");
+    strcpy(rhsbuf, rhsnew);
+  }
   out[0] = '\0';
   if (lv_strcat_b(out, "equation ", sizeof(out)) < 0) return lv_err(c, "output too large");
   if (lv_ncat_b(out, name, namelen, sizeof(out)) < 0) return lv_err(c, "output too large");
@@ -2175,6 +2285,7 @@ int tab_levels_transform(char *fname) {
   lv_ctx *c;
   FILE *f, *fout;
   char line[TABREADLINE], stmt[TABREADLINE], tmpname[TABREADLINE], defval[NAMESIZE];
+  char homo_cur[NAMESIZE] = "";
   bool any = false, eq_default_levels = false;
   lv_head h;
   int rc = 0;
@@ -2182,6 +2293,34 @@ int tab_levels_transform(char *fname) {
   if (c == NULL) { errmsg("Error: out of memory in tab_levels_transform\n"); return -1; }
   if (lv_scan(c, fname, &any) < 0) { free(c); return -1; }
   if (!any) { free(c); return 0; }
+  {
+    int i, k;
+    for (i = 0; i < c->nhomo; i++) {
+      int len = (int)strlen(c->homo[i]);
+      k = lv_find_lv_decl(c, c->homo[i], len);
+      if (k >= 0) {
+        if (!c->lv[k].change || c->lv[k].kind != 0) {
+          errmsg("Error: %s, the ADD_HOMOTOPY variable, is declared in the TAB but not as a plain (levels,change) variable (manual 26.7.4)\n", c->homo[i]);
+          free(c);
+          return -1;
+        }
+        continue;
+      }
+      if (lv_find_linvar(c, c->homo[i], len) >= 0 || lv_find_cf(c, c->homo[i], len) >= 0) {
+        errmsg("Error: %s, the ADD_HOMOTOPY variable, is already declared as a linear variable or coefficient (manual 26.7.5)\n", c->homo[i]);
+        free(c);
+        return -1;
+      }
+      if (c->nlv >= LV_MAXLV) { errmsg("Error: too many levels variables\n"); free(c); return -1; }
+      strcpy(c->lv[c->nlv].name, c->homo[i]);
+      strcpy(c->lv[c->nlv].decl, c->homo[i]);
+      strcpy(c->lv[c->nlv].valname, c->homo[i]);
+      c->lv[c->nlv].kind = 0;
+      c->lv[c->nlv].change = true;
+      c->nlv++;
+      c->homodecl[i] = true;
+    }
+  }
   lv_alias_store(c);
   f = teems_fopen(fname, "r");
   if (f == NULL) { errmsg("Error: cannot open %s\n", fname); free(c); return -1; }
@@ -2288,7 +2427,7 @@ int tab_levels_transform(char *fname) {
           fprintf(fout, "formula (initial) %s\n", body);
           snprintf(eqline, sizeof(eqline), "equation (levels) %.*s %s", nmlen, nm, body);
           c->stmt = eqline;
-          if (lv_emit_linearized(c, eqline + 8, fout) < 0) { rc = -1; break; }
+          if (lv_emit_linearized(c, eqline + 8, fout, homo_cur) < 0) { rc = -1; break; }
         }
         continue;
       }
@@ -2296,35 +2435,41 @@ int tab_levels_transform(char *fname) {
       continue;
     }
     if (strncmp(stmt, "equation", 8) == 0) {
-      const char *q = stmt + 8;
-      while (*q == ' ') q++;
-      /* Equation (default=levels|linear) (manual 10.19): positional;
-         an equation written without a qualifier group takes the
-         current default, the statement itself is consumed here */
+      int gl, glev, glin, ghomo;
+      char gname[NAMESIZE], eqline[TABREADLINE];
+      const char *hn;
+      /* Equation (default=levels|linear|add_homotopy[=name]|
+         not_add_homotopy) (manual 10.19, 26.7.5): positional; an
+         equation written without a qualifier group takes the current
+         default, the statement itself is consumed here */
       if (tab_default_value(stmt, defval)) {
         if (strcmp(defval, "levels") == 0) eq_default_levels = true;
         else if (strcmp(defval, "linear") == 0) eq_default_levels = false;
+        else lv_homo_default(defval, homo_cur);
         continue;
       }
-      if (strncmp(q, "(levels", 7) == 0) {
-        if (lv_emit_linearized(c, stmt + 8, fout) < 0) { rc = -1; break; }
+      gl = lv_eq_quals(stmt + 8, &glev, &glin, &ghomo, gname);
+      if (gl < 0) {
+        const char *q = stmt + 8;
+        while (*q == ' ') q++;
+        if (eq_default_levels) { rc = lv_err(c, "only (linear) or (levels) may qualify an equation under Equation (default=levels)"); break; }
+        if (strncmp(q, "(levels", 7) == 0) { rc = lv_err(c, "unsupported qualifier combination on Equation (levels)"); break; }
+        fprintf(fout, "%s\n", stmt);
         continue;
       }
-      if (eq_default_levels && *q != '(') {
-        char eqline[TABREADLINE];
-        if (snprintf(eqline, sizeof(eqline), "equation (levels) %s", q) >= (int)sizeof(eqline)) {
-          rc = lv_err(c, "statement too long under Equation (default=levels)");
-          break;
-        }
-        c->stmt = eqline;
-        if (lv_emit_linearized(c, eqline + 8, fout) < 0) { rc = -1; break; }
+      if (glev && glin) { rc = lv_err(c, "an Equation is either LINEAR or LEVELS"); break; }
+      if (!(glev || (!glin && eq_default_levels))) {
+        if (ghomo != -1) { rc = lv_err(c, "ADD_HOMOTOPY and NOT_ADD_HOMOTOPY qualify levels equations only (manual 26.7.5)"); break; }
+        fprintf(fout, "%s\n", stmt);
         continue;
       }
-      if (eq_default_levels && strncmp(q, "(linear)", 8) != 0) {
-        rc = lv_err(c, "only (linear) or (levels) may qualify an equation under Equation (default=levels)");
+      hn = (ghomo == 1) ? gname : (ghomo == 0) ? "" : homo_cur;
+      if (snprintf(eqline, sizeof(eqline), "equation (levels) %s", stmt + 8 + gl) >= (int)sizeof(eqline)) {
+        rc = lv_err(c, "statement too long under Equation (default=levels)");
         break;
       }
-      fprintf(fout, "%s\n", stmt);
+      c->stmt = eqline;
+      if (lv_emit_linearized(c, eqline + 8, fout, hn) < 0) { rc = -1; break; }
       continue;
     }
     fprintf(fout, "%s\n", stmt);

@@ -299,11 +299,11 @@ void jacobian_cache_free(void) {
    domain position (lifted from a subset of the domain), through the
    mapping, lifted into the argument set when the codomain is a subset
    of it */
-static inline offset_t linvar_map_pos(int mp, dim_t dss, dim_t css, const quantifier *q, set_def *sets, set_element *set_elems) {
+static inline offset_t linvar_map_pos(int mp, dim_t dss, dim_t css, int leadlag, const quantifier *q, set_def *sets, set_element *set_elems) {
   const map_def *md=&teems_maps[mp-1];
   offset_t di=q->indx,v;
   if(dss>0) di=set_elems[sets[q->setid].offset+di].superset_pos[dss];
-  v=md->values[di];
+  v=md->values[di+leadlag];
   if(css>0) v=set_elems[sets[md->toset].offset+v].superset_pos[css];
   return v;
 }
@@ -377,7 +377,7 @@ static void stmt_prog_execute(stmt_prog *st, offset_t matrow, PetscInt *eq_addr,
             if(lv->dcountmap[dcount]>0) {
               /* mapped dim (M2b): the loop runs the domain; the column
                  sits at the mapping's codomain position */
-              li3=li3+linvar_map_pos(lv->dcountmap[dcount],lv->mapdss[dcount],lv->supset[dcount],&arSet1[lv->dcountdim3[dcount]],sets,set_elems)*vars[lv->LinVarIndx].strides[dcount];
+              li3=li3+linvar_map_pos(lv->dcountmap[dcount],lv->mapdss[dcount],lv->supset[dcount],lv->dimleadlag[dcount],&arSet1[lv->dcountdim3[dcount]],sets,set_elems)*vars[lv->LinVarIndx].strides[dcount];
             }
             else if(lv->supset[dcount]==0) {
               li3=li3+(arSet1[lv->dcountdim3[dcount]].indx+lv->dimleadlag[dcount])*vars[lv->LinVarIndx].strides[dcount];
@@ -675,14 +675,12 @@ static void linvar_map_dim_check(eq_var_ref *ref, dim_t d, offset_t frame_setid,
       MPI_Abort(PETSC_COMM_WORLD,1);
     }
   }
-  if(ref->dimleadlag[d]!=0) {
-    errmsg("Error: a lead/lag offset on the mapped index of %s (mapping %s) is not supported\n",ref->LinVarName,md->mapname);
-    MPI_Abort(PETSC_COMM_WORLD,1);
-  }
-  if(!md->has_values) {
+  offset_range_check((dim_t)frame_setid,*dss,md->fromset,ref->dimleadlag[d],md->mapname,ref->LinVarName);
+  if(!mapping_ready((dim_t)(ref->dimmapid[d]-1))) {
     errmsg("Error: mapping %s is used (in %s) before a Formula has assigned all of its values (manual 10.13.1/11.9.1)\n",md->mapname,ref->LinVarName);
     MPI_Abort(PETSC_COMM_WORLD,1);
   }
+  mapping_frame_check((dim_t)(ref->dimmapid[d]-1),(dim_t)frame_setid,*dss,ref->dimleadlag[d],ref->LinVarName);
   md->used=true;
 }
 
@@ -1722,7 +1720,7 @@ static void bs_prog_execute(bs_prog *bp, set_def *sets, set_element *set_elems,
           li3=0;
           for (dcount=0; dcount<vars[lv->LinVarIndx].size; dcount++) {
             if(lv->dcountmap[dcount]>0) {
-              li3=li3+linvar_map_pos(lv->dcountmap[dcount],lv->mapdss[dcount],lv->supset[dcount],&arSet1[lv->dcountdim3[dcount]],sets,set_elems)*vars[lv->LinVarIndx].strides[dcount];
+              li3=li3+linvar_map_pos(lv->dcountmap[dcount],lv->mapdss[dcount],lv->supset[dcount],lv->dimleadlag[dcount],&arSet1[lv->dcountdim3[dcount]],sets,set_elems)*vars[lv->LinVarIndx].strides[dcount];
             }
             else if(lv->supset[dcount]==0) {
               li3=li3+(arSet1[lv->dcountdim3[dcount]].indx+lv->dimleadlag[dcount])*vars[lv->LinVarIndx].strides[dcount];
@@ -3604,7 +3602,7 @@ int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,
           for (dcount=0; dcount<vars[LinVars[i].LinVarIndx].size; dcount++) {
             if(LinVars[i].dimmapid[dcount]>0) {
               /* must mirror the fill loop exactly or dnnz/onnz miscount */
-              li3=li3+linvar_map_pos(LinVars[i].dimmapid[dcount],mapdss[dcount],supset[dcount],&arSet[dcountdim5[dcount]],sets,set_elems)*vars[LinVars[i].LinVarIndx].strides[dcount];
+              li3=li3+linvar_map_pos(LinVars[i].dimmapid[dcount],mapdss[dcount],supset[dcount],LinVars[i].dimleadlag[dcount],&arSet[dcountdim5[dcount]],sets,set_elems)*vars[LinVars[i].LinVarIndx].strides[dcount];
             }
             else if(supset[dcount]==0) {
               li3=li3+(arSet[dcountdim5[dcount]].indx+LinVars[i].dimleadlag[dcount])*vars[LinVars[i].LinVarIndx].strides[dcount];

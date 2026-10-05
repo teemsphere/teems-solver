@@ -2161,7 +2161,7 @@ int main(int argc,char **args) {
        exist before any coefficient/equation machinery runs */
     nmap=tab_count_statements(tabfile,"mapping");
     if(nmap>0) {
-      maps= (map_def *) calloc (nmap,sizeof(map_def));
+      maps= (map_def *) calloc (nmap+MAP_SYNTH_MAX,sizeof(map_def));
       mappings_read(tabfile,maps,nmap,sets,nset);
       mapping_values_read(tabfile,niodata,iodata,maps,nmap,sets,nset,set_elems);
       /* formula-assigned mappings (manual 10.13.1) get their values
@@ -2182,7 +2182,7 @@ int main(int argc,char **args) {
     MPI_Bcast(set_elems,nsetspace*sizeof(set_element), MPI_BYTE,0, PETSC_COMM_WORLD);
     MPI_Bcast(&nmap,sizeof(dim_t), MPI_BYTE,0, PETSC_COMM_WORLD);
     if(nmap>0) {
-      if(rank!=0) maps= (map_def *) calloc (nmap,sizeof(map_def));
+      if(rank!=0) maps= (map_def *) calloc (nmap+MAP_SYNTH_MAX,sizeof(map_def));
       MPI_Bcast(maps,nmap*sizeof(map_def), MPI_BYTE,0, PETSC_COMM_WORLD);
       for(i=0; i<nmap; i++) {
         if(rank!=0) maps[i].values= (dim_t *) calloc (sets[maps[i].fromset].size>0?sets[maps[i].fromset].size:1,sizeof(dim_t));
@@ -2206,6 +2206,7 @@ int main(int argc,char **args) {
   }
   teems_maps=maps;
   teems_nmap=nmap;
+  teems_nmap_user=nmap;
   /* The chain dimension and the diagonal-block partition are derived
      structurally just before the ordering, once the equations are
      readable. Only the bordered methods consume these dimensions. */

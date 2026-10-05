@@ -58,6 +58,13 @@ char *mapping_token_split(char *p, int *mp) {
   *at='\0';
   for (m=0; m<teems_nmap; m++) if (strcmp(p,teems_maps[m].mapname)==0) {
       *mp=(int)m+1;
+      if (at[1]=='"') {
+        /* a mapping applied to an element literal (manual 11.9.6) has no
+           quantifier to bind, and used to read the codomain's first
+           element */
+        errmsg("Error: a set mapping applied to the element %s (mapping %s) is not supported in an expression yet; write the codomain element it maps to (manual 11.9.6)\n",at+1,m<teems_nmap_user?teems_maps[m].mapname:"in a composition");
+        MPI_Abort(PETSC_COMM_WORLD,1);
+      }
       return at+1;
     }
   errmsg("Error: unknown mapping %s in an index expression\n",p);
@@ -91,11 +98,12 @@ static void map_dim_bind(dim_addr *Dm, int mp, dim_t frame_setid, offset_t arg_s
       MPI_Abort(PETSC_COMM_WORLD,1);
     }
   }
-  if (!md->has_values) {
+  if (!mapping_ready((dim_t)(mp-1))) {
     errmsg("Error: mapping %s is used (in %s) before a Formula has assigned all of its values (manual 10.13.1/11.9.1)\n",md->mapname,symname);
     MPI_Abort(PETSC_COMM_WORLD,1);
   }
   offset_range_check(frame_setid,dss>0?dss:0,(dim_t)md->fromset,leadlag,md->mapname,symname);
+  mapping_frame_check((dim_t)(mp-1),frame_setid,dss,leadlag,symname);
   Dm->ADims=stride;
   Dm->leadlag=leadlag;
   Dm->SupSet=(css>0)?1:0;
@@ -259,7 +267,8 @@ static int pos_lower(char *f, set_def *sets, quantifier *arSet, dim_t fdim, form
       base=(dim_t)arSet[l].setid;
       if (mp>0) {
         if ((dim_t)teems_maps[mp-1].fromset!=base) { errmsg("Error: $POS: the index of mapping %s does not range over its domain set\n",teems_maps[mp-1].mapname); return 0; }
-        if (!teems_maps[mp-1].has_values) { errmsg("Error: mapping %s is used (in $POS) before a Formula has assigned all of its values (manual 10.13.1/11.9.1)\n",teems_maps[mp-1].mapname); return 0; }
+        if (!mapping_ready((dim_t)(mp-1))) { errmsg("Error: mapping %s is used (in $POS) before a Formula has assigned all of its values (manual 10.13.1/11.9.1)\n",teems_maps[mp-1].mapname); return 0; }
+        mapping_frame_check((dim_t)(mp-1),base,0,0,"$POS");
         teems_maps[mp-1].used=true;
         base=(dim_t)teems_maps[mp-1].toset;
       }
@@ -2102,7 +2111,7 @@ static void mapping_assign_formula(dim_t mm, char *vname, char *rhs, int byele, 
         errmsg("Error: Formula for mapping %s: %s is not a mapping of one of the Formula's quantifier indices (manual 10.13.1)\n",md->mapname,rr);
         MPI_Abort(PETSC_COMM_WORLD,1);
       }
-      if (!teems_maps[mb].has_values) {
+      if (!mapping_ready(mb)) {
         errmsg("Error: mapping %s is used (in the Formula for mapping %s) before all of its values are assigned (manual 10.13.1/11.9.1)\n",teems_maps[mb].mapname,md->mapname);
         MPI_Abort(PETSC_COMM_WORLD,1);
       }
@@ -2263,7 +2272,8 @@ void array_element_label(array_def *a, offset_t k, char *out, size_t cap) {
    name did the same; too few arguments crashed. Offsets are range
    checked like the right-hand side's (16.4). */
 static void lhs_args_bind(const char *kind, const char *stmt, array_def *a, char *argu, quantifier *arSet, dim_t nq, set_def *sets,
-                          offset_t *varantidim, offset_t *vararset, offset_t *varsubset, dim_t *varsupsetid, offset_t *varll) {
+                          offset_t *varantidim, offset_t *vararset, offset_t *varsubset, dim_t *varsupsetid, offset_t *varll,
+                          int *varmap, dim_t *varmapdss) {
   int nargs=0;
   dim_t d;
   char *p=argu;
@@ -2285,6 +2295,61 @@ static void lhs_args_bind(const char *kind, const char *stmt, array_def *a, char
     memcpy(tok,p,c-p);
     tok[c-p]='\0';
     p=c+1;
+    if (strchr(tok,MAPMARK)!=NULL) {
+      /* a set mapping on the LHS of a Formula (manual 11.9.8): the
+         element written is the mapped one; arguments over
+         intertemporal sets and offsets are not allowed (11.9.8.2) */
+      int mp=0;
+      char *ix;
+      dim_t dss=0,css=0;
+      map_def *md;
+      if (varmap==NULL) {
+        errmsg("Error: a set mapping on the left-hand side of an %s statement is not supported (manual 11.9.9): %s\n",kind,stmt);
+        MPI_Abort(PETSC_COMM_WORLD,1);
+      }
+      ix=mapping_token_split(tok,&mp);
+      md=&teems_maps[mp-1];
+      if (strpbrk(ix,"+-#!")!=NULL) {
+        errmsg("Error: an index offset on a mapped argument of the left-hand side of %s %s is not supported (manual 11.9.8): %s\n",kind,a->cofname,stmt);
+        MPI_Abort(PETSC_COMM_WORLD,1);
+      }
+      if (sets[a->setid[d]].intertemp) {
+        errmsg("Error: %s %s has a set mapping on its left-hand side but argument %d ranges over the intertemporal set %s; LHS mappings need non-intertemporal argument sets (manual 11.9.8.2): %s\n",kind,a->cofname,(int)d+1,sets[a->setid[d]].setname,stmt);
+        MPI_Abort(PETSC_COMM_WORLD,1);
+      }
+      for (l=0; l<nq; l++) if (strcmp(arSet[l].index_name,ix)==0) break;
+      if (l==nq) {
+        errmsg("Error: %s, the index of mapping %s on the left-hand side of %s %s, is not an index of the statement's quantifiers (manual 11.9.8): %s\n",ix,md->mapname,kind,a->cofname,stmt);
+        MPI_Abort(PETSC_COMM_WORLD,1);
+      }
+      if ((dim_t)md->fromset!=(dim_t)arSet[l].setid) {
+        dss=set_supset_slot(sets,(dim_t)arSet[l].setid,(dim_t)md->fromset);
+        if (dss<0) {
+          errmsg("Error: the index of mapping %s does not range over its domain set %s or a declared subset of it (it ranges over %s, in %s)\n",md->mapname,sets[md->fromset].setname,sets[arSet[l].setid].setname,a->cofname);
+          MPI_Abort(PETSC_COMM_WORLD,1);
+        }
+      }
+      if ((dim_t)md->toset!=(dim_t)a->setid[d]) {
+        css=set_supset_slot(sets,(dim_t)md->toset,(dim_t)a->setid[d]);
+        if (css<0) {
+          errmsg("Error: mapping %s does not map into the argument set at that position of %s (its codomain %s is neither %s nor a declared subset of it; manual 11.9.7)\n",md->mapname,a->cofname,sets[md->toset].setname,sets[a->setid[d]].setname);
+          MPI_Abort(PETSC_COMM_WORLD,1);
+        }
+      }
+      if (!mapping_ready((dim_t)(mp-1))) {
+        errmsg("Error: mapping %s is used (in %s) before a Formula has assigned all of its values (manual 10.13.1/11.9.1)\n",md->mapname,a->cofname);
+        MPI_Abort(PETSC_COMM_WORLD,1);
+      }
+      mapping_frame_check((dim_t)(mp-1),(dim_t)arSet[l].setid,dss,0,a->cofname);
+      md->used=true;
+      varantidim[d]=a->strides[d];
+      vararset[d]=l+1;
+      varll[d]=0;
+      varmap[d]=mp;
+      varmapdss[d]=dss;
+      if (css>0) { varsubset[d]=1; varsupsetid[d]=css; }
+      continue;
+    }
     sg=strpbrk(tok+1,"+-#!");
     if (sg!=NULL) {
       char *q=sg+1;
@@ -2311,6 +2376,43 @@ static void lhs_args_bind(const char *kind, const char *stmt, array_def *a, char
     if (ss>0) { varsubset[d]=1; varsupsetid[d]=ss; }
     offset_range_check((dim_t)arSet[l].setid,ss>0?ss:0,(dim_t)a->setid[d],ll,tok,a->cofname);
   }
+}
+
+/* LHS element address of a Formula whose arguments include a set
+   mapping (manual 11.9.8): every argument contributes its routed
+   position, mapped ones through the mapping table */
+static offset_t lhs_offset_all(const quantifier *arSet1, offset_t varsize, const offset_t *varantidim, const offset_t *vararset, const offset_t *varsubset, const dim_t *varsupsetid, const offset_t *varll, const int *varmap, const dim_t *varmapdss, const set_def *sets, const set_element *set_elems) {
+  offset_t l2=0,i1;
+  for (i1=0; i1<varsize; i1++)
+    l2+=dims_route(varantidim[i1],(int)varsubset[i1],(int)varsupsetid[i1],(int)varll[i1],varmap[i1],(int)varmapdss[i1],&arSet1[vararset[i1]-1],sets,set_elems);
+  return l2;
+}
+
+/* a Formula with a mapped LHS makes at most one assignment to each LHS
+   element, over every tuple of its ALLs whatever their conditions
+   (manual 11.9.8, 11.9.8.2) */
+static void lhs_mapped_unique(array_def *a, const char *stmt, quantifier *arSet, dim_t nq, const offset_t *dcountdim1, offset_t nloops, offset_t varsize, const offset_t *varantidim, const offset_t *vararset, const offset_t *varsubset, const dim_t *varsupsetid, const int *varmap, const dim_t *varmapdss, const set_def *sets, const set_element *set_elems) {
+  unsigned char *seen=(unsigned char *) calloc(a->nelem>0?a->nelem:1,1);
+  offset_t zero[MAXVARDIM]={0},l,i4,i3,off;
+  dim_t d;
+  for (l=0; l<nloops; l++) {
+    i4=l;
+    for (d=0; d<nq; d++) {
+      i3=i4/dcountdim1[d];
+      arSet[d].indx=i3;
+      i4-=i3*dcountdim1[d];
+    }
+    off=lhs_offset_all(arSet,varsize,varantidim,vararset,varsubset,varsupsetid,zero,varmap,varmapdss,sets,set_elems);
+    if (seen[off]) {
+      char lab[4*NAMESIZE];
+      array_element_label(a,off,lab,sizeof(lab));
+      errmsg("Error: the Formula assigns %s more than once through the set mapping on its left-hand side; a Formula with LHS mappings may assign each element at most once, whatever its conditions (manual 11.9.8): %s\n",lab,stmt);
+      free(seen);
+      MPI_Abort(PETSC_COMM_WORLD,1);
+    }
+    seen[off]=1;
+  }
+  free(seen);
 }
 
 /* ---- recursive formulas (manual 16.5) ------------------------------
@@ -2491,6 +2593,8 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
   dim_t fdim,dcount,varsupsetid[MAXVARDIM];
   int nops=0,totalsum,sumcount=1,npow,nmul,ndiv,nplu,nmin,npar,sumindx,b=0;
   offset_t varantidim[MAXVARDIM],varsubset[MAXVARDIM],vararset[MAXVARDIM],varll[MAXVARDIM];
+  int varmap[MAXVARDIM],lhsmapped=0;
+  dim_t varmapdss[MAXVARDIM];
   solve_real zerodivide=0,cond[MAXVARDIM],eval;
   bool IsFomIni=false,IsDefFomIni=false;
   char fsrc[TABREADLINE],fmain[TABREADLINE];
@@ -2947,9 +3051,12 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
             MPI_Abort(PETSC_COMM_WORLD,1);
           }
         }
-        for (l=0; l<MAXVARDIM; l++){varantidim[l]=0;varsubset[l]=0;varsupsetid[l]=0;varll[l]=0;}
+        for (l=0; l<MAXVARDIM; l++){varantidim[l]=0;varsubset[l]=0;varsupsetid[l]=0;varll[l]=0;varmap[l]=0;varmapdss[l]=0;}
         array_def *lhsdef=check10?&vars[index]:&coefs[index];
-        lhs_args_bind("Formula",linecopy,lhsdef,lhsargs,arSet,fdim-1,sets,varantidim,vararset,varsubset,varsupsetid,varll);
+        lhs_args_bind("Formula",linecopy,lhsdef,lhsargs,arSet,fdim-1,sets,varantidim,vararset,varsubset,varsupsetid,varll,varmap,varmapdss);
+        lhsmapped=0;
+        for (l=0; l<varsize; l++) if (varmap[l]>0) lhsmapped=1;
+        if (lhsmapped) lhs_mapped_unique(lhsdef,linecopy,arSet,fdim-1,dcountdim1,nloops,varsize,varantidim,vararset,varsubset,varsupsetid,varmap,varmapdss,sets,set_elems);
         if (IsFomIni) for (l=0; l<varsize; l++) if (varll[l]!=0) {
           errmsg("Error: index offsets are not allowed on the left-hand side of a Formula(Initial) (a Read in later steps; manual 10.8, 11.11.4): %s\n",linecopy);
           MPI_Abort(PETSC_COMM_WORLD,1);
@@ -2959,8 +3066,14 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
         fsr=SR_PARALLEL;
         {
           char *lhsname=lhsdef->cofname;
-          if (strstr(fsrc,lhsname)!=NULL) fsr=sr_classify_text(fsrc,lhsname,lhsdef,arSet,fdim-1,vararset,varll,0,linecopy);
-          for (i=0; i<fdim-1; i++) if (logioper[i]>0) {
+          if (lhsmapped) {
+            /* a mapped LHS writes elements the reference classifier cannot
+               relate to the RHS indices: any self reference runs in order */
+            if (strstr(fsrc,lhsname)!=NULL) fsr=SR_SERIAL_SUMS;
+            for (i=0; i<fdim-1; i++) if (logioper[i]>0&&((condgen[i]&&(strstr(condL[i],lhsname)!=NULL||strstr(condR[i],lhsname)!=NULL))||(!condgen[i]&&strstr(condvar[i],lhsname)!=NULL))) fsr=SR_SERIAL_SUMS;
+          }
+          else if (strstr(fsrc,lhsname)!=NULL) fsr=sr_classify_text(fsrc,lhsname,lhsdef,arSet,fdim-1,vararset,varll,0,linecopy);
+          if (!lhsmapped) for (i=0; i<fdim-1; i++) if (logioper[i]>0) {
             int m=SR_PARALLEL;
             if (condgen[i]) {
               if (strstr(condL[i],lhsname)!=NULL) m=sr_classify_text(condL[i],lhsname,lhsdef,arSet,fdim-1,vararset,varll,1,linecopy);
@@ -3129,6 +3242,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
                 }
               }
             }
+            if(lhsmapped)l2=lhs_offset_all(arSet1,varsize,varantidim,vararset,varsubset,varsupsetid,varll,varmap,varmapdss,sets,set_elems);
             logi=0;
             index=0;
             for(i1=0; i1<fdim-1; i1++) {
@@ -3221,6 +3335,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
                 }
               }
             }
+            if(lhsmapped)l2=lhs_offset_all(arSet1,varsize,varantidim,vararset,varsubset,varsupsetid,varll,varmap,varmapdss,sets,set_elems);
             {
               store_real fv=formula_eval(elem_vals,sets,set_elems,sum_vals,ops1,nops,arSet1,fdim-1,zerodivide);
               elem_vals[offset+l2].value=fv;
@@ -3980,7 +4095,7 @@ offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_el
           if (ta!=NULL&&strlen(ta)+2<sizeof(argu)) { strcpy(argu,ta); strcat(argu,","); lhsargs=argu; }
         }
         for (l=0; l<MAXVARDIM; l++){varantidim[l]=0;varsubset[l]=0;varsupsetid[l]=0;varll[l]=0;}
-        lhs_args_bind("Update",linecopy,check10?&vars[index]:&coefs[index],lhsargs,arSet,fdim-1,sets,varantidim,vararset,varsubset,varsupsetid,varll);
+        lhs_args_bind("Update",linecopy,check10?&vars[index]:&coefs[index],lhsargs,arSet,fdim-1,sets,varantidim,vararset,varsubset,varsupsetid,varll,NULL,NULL);
         upd_nonfinite_note(check10?-1:index);
     if(!formula_compile(line1,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,&nops,arSet,fdim-1))MPI_Abort(PETSC_COMM_WORLD,1);
     upd_cond_compile(&uc,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,arSet,fdim-1);
@@ -4303,7 +4418,7 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
           if (ta!=NULL&&strlen(ta)+2<sizeof(argu)) { strcpy(argu,ta); strcat(argu,","); lhsargs=argu; }
         }
         for (l=0; l<MAXVARDIM; l++){varantidim[l]=0;varsubset[l]=0;varsupsetid[l]=0;varll[l]=0;}
-        lhs_args_bind("Update",linecopy,check10?&vars[index]:&coefs[index],lhsargs,arSet,fdim-1,sets,varantidim,vararset,varsubset,varsupsetid,varll);
+        lhs_args_bind("Update",linecopy,check10?&vars[index]:&coefs[index],lhsargs,arSet,fdim-1,sets,varantidim,vararset,varsubset,varsupsetid,varll,NULL,NULL);
         upd_nonfinite_note(check10?-1:index);
     if(!formula_compile(line1,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,&nops,arSet,fdim-1))MPI_Abort(PETSC_COMM_WORLD,1);
     upd_cond_compile(&uc,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,arSet,fdim-1);

@@ -2484,7 +2484,7 @@ int outputs_write_csv(char *filename, char *newdatlogname, char *newdatfile,set_
           if (mm<teems_nmap) {
             map_def *md=&teems_maps[mm];
             dim_t n1=sets[md->fromset].size;
-            if (!md->has_values) {
+            if (!mapping_ready(mm)) {
               errmsg("Error: mapping %s is written before all of its values are assigned (manual 11.9.10)\n",md->mapname);
               fclose(filehandle);
               fclose(fout);
@@ -2800,8 +2800,8 @@ int tab_read_set_name(char *filename, char *varname, int indx, char *setname) {
    Coefficient parameter/non_parameter, Variable linear/levels/change/
    percent_change, Formula initial/always, Equation linear/levels (the
    levels transform qualifies unqualified equations positionally).
-   Accepted no-op: Equation not_add_homotopy. Fatal: Equation
-   add_homotopy (unsupported semantics), Coefficient
+   Equation add_homotopy[=name]/not_add_homotopy are applied by the
+   levels transform (manual 26.7.5). Fatal: Coefficient
    lower_bound/upper_bound defaults (single bound slot, audit A9), and
    any unknown keyword or value. Returns 0 ok, -1 fatal. */
 int tab_defaults_validate(char *fname) {
@@ -2826,9 +2826,8 @@ int tab_defaults_validate(char *fname) {
       errmsg("Error: unknown Formula default '%s'\n",val);
     } else if(strncmp(line,"equation",8)==0) {
       if(strcmp(val,"linear")==0||strcmp(val,"levels")==0||strcmp(val,"not_add_homotopy")==0)continue;
-      if(strncmp(val,"add_homotopy",12)==0)
-        errmsg("Error: Equation (default=add_homotopy) is not supported\n");
-      else errmsg("Error: unknown Equation default '%s'\n",val);
+      if(strcmp(val,"add_homotopy")==0||(strncmp(val,"add_homotopy=",13)==0&&val[13]!='\0'))continue;
+      errmsg("Error: unknown Equation default '%s'\n",val);
     } else {
       errmsg("Error: Default statements apply only to Coefficient/Variable/Formula/Equation: %s",line);
     }

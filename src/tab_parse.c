@@ -2900,42 +2900,184 @@ int mapping_use_guards(char *fname, map_def *maps, dim_t nmap) {
   return 0;
 }
 
-/* pre-lower mapping calls "map(i)" to the flat token "map~i" so the
-   brace tokenizers never meet a nested index list (design doc M2);
-   composition map1(map2(i)) stays a named fatal (11.9.6 deferred) */
-void mapping_lower_calls(char *line) {
+/* Index expressions a single mapping table cannot carry are compiled
+   into synthetic mappings (manual 11.9.6, 16.4): a composition
+   MAP1(MAP2(i)) is the table i -> MAP1(MAP2(i)), and an offset on a
+   mapped index, MAP(t)+k, the table t -> MAP(t)+k. They take the
+   slots reserved after the declared mappings (named m@N; '@' cannot
+   appear in a declared name), so every binder routes them like any
+   mapping. Values are built once the component mappings have theirs;
+   a position an offset carries outside the codomain is -1 and stops
+   the run where an index that reaches it is bound. */
+#define MAP_SYNTH_COMPOSE 1
+#define MAP_SYNTH_SHIFT 2
+typedef struct {
+  int kind;
+  dim_t a,b;
+  int k;
+} map_synth;
+static map_synth map_synths[MAP_SYNTH_MAX];
+dim_t teems_nmap_user = 0;
+
+static dim_t mapping_synth_register(int kind, dim_t a, dim_t b, int k) {
+  dim_t m,ss;
+  map_def *md;
+  for (m=teems_nmap_user; m<teems_nmap; m++) {
+    map_synth *sy=&map_synths[m-teems_nmap_user];
+    if (sy->kind==kind&&sy->a==a&&sy->b==b&&sy->k==k) return m;
+  }
+  if (teems_nmap-teems_nmap_user>=MAP_SYNTH_MAX) {
+    errmsg("Error: more than %d distinct mapping compositions and offsets on mapped indices (manual 11.9.6); simplify the index expressions\n",MAP_SYNTH_MAX);
+    MPI_Abort(PETSC_COMM_WORLD,1);
+  }
+  m=teems_nmap;
+  md=&teems_maps[m];
+  memset(md,0,sizeof(*md));
+  snprintf(md->mapname,NAMESIZE,"m@%d",(int)m);
+  if (kind==MAP_SYNTH_COMPOSE) {
+    ss=teems_maps[b].toset==teems_maps[a].fromset?0:set_supset_slot(teems_sets,teems_maps[b].toset,teems_maps[a].fromset);
+    if (ss<0) {
+      errmsg("Error: %s(%s(...)): mapping %s maps into %s, which is neither the domain %s of %s nor a declared subset of it (manual 11.9.6)\n",teems_maps[a].mapname,teems_maps[b].mapname,teems_maps[b].mapname,teems_sets[teems_maps[b].toset].setname,teems_sets[teems_maps[a].fromset].setname,teems_maps[a].mapname);
+      MPI_Abort(PETSC_COMM_WORLD,1);
+    }
+    md->fromset=teems_maps[b].fromset;
+    md->toset=teems_maps[a].toset;
+  } else {
+    if (!teems_sets[teems_maps[a].toset].intertemp) {
+      errmsg("Error: an offset %+d on the mapped index %s(...) needs an intertemporal codomain; %s maps into %s (manual 11.9.6, 16.2)\n",k,teems_maps[a].mapname,teems_maps[a].mapname,teems_sets[teems_maps[a].toset].setname);
+      MPI_Abort(PETSC_COMM_WORLD,1);
+    }
+    md->fromset=teems_maps[a].fromset;
+    md->toset=teems_maps[a].toset;
+  }
+  md->values=(dim_t *) calloc(teems_sets[md->fromset].size>0?teems_sets[md->fromset].size:1,sizeof(dim_t));
+  map_synths[m-teems_nmap_user].kind=kind;
+  map_synths[m-teems_nmap_user].a=a;
+  map_synths[m-teems_nmap_user].b=b;
+  map_synths[m-teems_nmap_user].k=k;
+  teems_nmap++;
+  return m;
+}
+
+int mapping_ready(dim_t m) {
+  map_def *md=&teems_maps[m];
+  map_synth *sy;
+  dim_t d,n,v,ss=0;
+  if (md->has_values) return 1;
+  if (m<teems_nmap_user) return 0;
+  sy=&map_synths[m-teems_nmap_user];
+  if (!mapping_ready(sy->a)) return 0;
+  if (sy->kind==MAP_SYNTH_COMPOSE&&!mapping_ready(sy->b)) return 0;
+  if (sy->kind==MAP_SYNTH_COMPOSE&&teems_maps[sy->b].toset!=teems_maps[sy->a].fromset)
+    ss=set_supset_slot(teems_sets,teems_maps[sy->b].toset,teems_maps[sy->a].fromset);
+  n=teems_sets[md->fromset].size;
+  for (d=0; d<n; d++) {
+    if (sy->kind==MAP_SYNTH_COMPOSE) {
+      v=teems_maps[sy->b].values[d];
+      if (v>=0&&ss>0) v=(dim_t)teems_set_elems[teems_sets[teems_maps[sy->b].toset].offset+v].superset_pos[ss];
+      md->values[d]=(v<0)?-1:teems_maps[sy->a].values[v];
+    } else {
+      v=teems_maps[sy->a].values[d];
+      if (v>=0) v+=sy->k;
+      md->values[d]=(v<0||v>=teems_sets[md->toset].size)?-1:v;
+    }
+  }
+  md->nassigned=n;
+  md->has_values=true;
+  teems_maps[sy->a].used=true;
+  if (sy->kind==MAP_SYNTH_COMPOSE) teems_maps[sy->b].used=true;
+  return 1;
+}
+
+/* every element of the frame set, routed into the mapping's domain and
+   shifted by the domain offset, must reach a codomain position: an
+   offset carried by a synthetic mapping may leave the codomain
+   (manual 16.4) */
+void mapping_frame_check(dim_t m, dim_t frame_setid, dim_t dss, int leadlag, const char *symname) {
+  map_def *md=&teems_maps[m];
+  offset_t e,di;
+  if (m<teems_nmap_user) return;
+  for (e=0; e<teems_sets[frame_setid].size; e++) {
+    di=(dss>0)?teems_set_elems[teems_sets[frame_setid].offset+e].superset_pos[dss]:e;
+    di+=leadlag;
+    if (di<0||di>=teems_sets[md->fromset].size) continue;
+    if (md->values[di]<0) {
+      errmsg("Error: an index expression through a mapping in %s runs outside set %s at element %s of %s (an offset on a mapped index must stay in the codomain; manual 11.9.6, 16.4)\n",symname,teems_sets[md->toset].setname,teems_set_elems[teems_sets[frame_setid].offset+e].setele,teems_sets[frame_setid].setname);
+      MPI_Abort(PETSC_COMM_WORLD,1);
+    }
+  }
+}
+
+static int map_name_at(const char *line, int k, dim_t *mm) {
   dim_t m;
-  int k,k2,from;
-  char find[NAMESIZE+2];
-  for (m=0; m<teems_nmap; m++) {
-    sprintf(find,"%s(",teems_maps[m].mapname);
-    from=0;
-    while ((k=str_find_ci(line+from,find))>-1) {
-      k+=from;
-      if (k>0&&(isalnum((int)line[k-1])||line[k-1]=='_')) {
-        from=k+1;
-        continue;
-      }
-      int op=k+(int)strlen(find)-1;
-      for (k2=op+1; line[k2]!='\0'&&line[k2]!=')'&&line[k2]!='('; k2++) {}
-      /* a '(' before the ')' is an unlowered inner call; a MAPMARK in the
-         span is an already-lowered one -- both are composition */
+  size_t n;
+  if (k>0&&(isalnum((unsigned char)line[k-1])||line[k-1]=='_'||line[k-1]=='@'||line[k-1]==MAPMARK||line[k-1]=='$')) return 0;
+  for (m=0; m<teems_nmap_user; m++) {
+    n=strlen(teems_maps[m].mapname);
+    if (str_ncmp_ci(line+k,teems_maps[m].mapname,n)==0&&line[k+n]=='(') {
+      *mm=m;
+      return (int)n;
+    }
+  }
+  return 0;
+}
+
+/* pre-lower mapping calls "map(i)" to the flat token "map~i" so the
+   brace tokenizers never meet a nested index list (design doc M2).
+   Innermost calls first: a call whose argument is already a lowered
+   token is a composition, and a call followed by +k or -k carries an
+   offset on its result; both lower to a synthetic mapping. An offset
+   inside the call, map(t+1), stays on the domain index. */
+void mapping_lower_calls(char *line) {
+  int k,n,close,changed=1;
+  dim_t m;
+  if (teems_nmap_user==0) return;
+  while (changed) {
+    changed=0;
+    for (k=0; line[k]!='\0'; k++) {
+      char arg[TABREADLINE],repl[TABREADLINE];
+      int inner=-1,shift=0,end,j;
+      dim_t id;
+      if ((n=map_name_at(line,k,&m))==0) continue;
+      for (close=k+n+1; line[close]!='\0'&&line[close]!=')'&&line[close]!='('; close++) {}
+      if (line[close]!=')') continue;
+      if (close-(k+n+1)>=(int)sizeof(arg)) continue;
+      memcpy(arg,line+k+n+1,close-(k+n+1));
+      arg[close-(k+n+1)]='\0';
+      id=m;
       {
-        int k3;
-        int inner=(line[k2]=='(');
-        for (k3=op+1; k3<k2; k3++) if (line[k3]==MAPMARK) inner=1;
-        if (inner) {
-          errmsg("Error: composition of set mappings is not supported (mapping %s; manual 11.9.6)\n",teems_maps[m].mapname);
-          MPI_Abort(PETSC_COMM_WORLD,1);
+        char *at=strchr(arg,MAPMARK);
+        if (at!=NULL) {
+          dim_t i2;
+          *at='\0';
+          for (i2=0; i2<teems_nmap; i2++) if (str_cmp_ci(arg,teems_maps[i2].mapname)==0) break;
+          if (i2==teems_nmap) {
+            errmsg("Error: unknown mapping %s in an index expression\n",arg);
+            MPI_Abort(PETSC_COMM_WORLD,1);
+          }
+          inner=(int)i2;
+          memmove(arg,at+1,strlen(at+1)+1);
+          id=mapping_synth_register(MAP_SYNTH_COMPOSE,m,(dim_t)inner,0);
         }
       }
-      if (line[k2]=='\0') {
-        from=k+1;
-        continue;
+      end=close+1;
+      if ((line[end]=='+'||line[end]=='-'||line[end]=='#'||line[end]=='!')&&isdigit((unsigned char)line[end+1])) {
+        j=end+1;
+        while (isdigit((unsigned char)line[j])) j++;
+        if (line[j]==','||line[j]==')'||line[j]=='}'||line[j]==']'||line[j]=='\0'||line[j]==' '||line[j]==';'||line[j]=='='||line[j]=='<'||line[j]=='>') {
+          shift=atoi(line+end+1);
+          if (line[end]=='-'||line[end]=='!') shift=-shift;
+          end=j;
+        }
       }
-      line[op]=MAPMARK;
-      memmove(line+k2,line+k2+1,strlen(line+k2+1)+1);
-      from=k+1;
+      if (shift!=0) id=mapping_synth_register(MAP_SYNTH_SHIFT,id,0,shift);
+      if (snprintf(repl,sizeof(repl),"%s%c%s%s",teems_maps[id].mapname,MAPMARK,arg,line+end)>=(int)sizeof(repl)) {
+        errmsg("Error: statement too long after lowering mapping calls: %.120s\n",line);
+        MPI_Abort(PETSC_COMM_WORLD,1);
+      }
+      strcpy(line+k,repl);
+      changed=1;
+      break;
     }
   }
 }
@@ -3721,11 +3863,12 @@ int icond_compile(const char *cond, quantifier *frame, dim_t nframe, set_def *se
           MPI_Abort(PETSC_COMM_WORLD,1);
           return 0;
         }
-        if (!md->has_values) {
+        if (!mapping_ready((dim_t)(mp[sd]-1))) {
           errmsg("Error: mapping %s is used (in a condition) before a Formula has assigned all of its values (manual 10.13.1/11.9.1) in %s\n",md->mapname,ctx);
           MPI_Abort(PETSC_COMM_WORLD,1);
           return 0;
         }
+        mapping_frame_check((dim_t)(mp[sd]-1),lf->st0[sd],ds,0,ctx);
         md->used=true;
         lf->map[sd]=mp[sd];
         lf->dss[sd]=ds;
