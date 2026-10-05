@@ -126,8 +126,7 @@ static void dim_bind_pos(dim_addr *D, bool *seen, char *p, int mp, int leadlag, 
   memset(&b,0,sizeof(b));
   if (mp>0) map_dim_bind(&b,mp,frame_setid,arg_setid,stride,leadlag,symname,sets);
   else {
-    dim_t ss=set_supset_slot(sets,frame_setid,(dim_t)arg_setid);
-    if (ss<0) set_supset_fatal(p,symname,NULL,sets,frame_setid,(dim_t)arg_setid);
+    dim_t ss=set_bind_slot(sets,frame_setid,(dim_t)arg_setid,&leadlag,p,symname);
     if (ss>0) { b.SupSet=1; b.SSIndx=(int)ss; }
     b.ADims=stride;
     b.leadlag=leadlag;
@@ -423,13 +422,11 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
               map_dim_bind(varindex==2?&ops[nops].Var2Dims[l]:&ops[nops].Var1Dims[l],mp,arSet[l].setid,coefs[index].setid[0],coefs[index].strides[0],leadlag,coefs[index].cofname,sets);
             } else
             if(varindex==2) {
-              { dim_t ss=set_supset_slot(sets,arSet[l].setid,coefs[index].setid[0]); if(ss<0)set_supset_fatal(p,coefs[index].cofname,NULL,sets,arSet[l].setid,coefs[index].setid[0]); if(ss>0){ops[nops].Var2Dims[l].SupSet=1; ops[nops].Var2Dims[l].SSIndx=(int)ss;} offset_range_check(arSet[l].setid,ss>0?ss:0,coefs[index].setid[0],leadlag,p,coefs[index].cofname); }
+              { int ll=leadlag; dim_t ss=set_bind_slot(sets,arSet[l].setid,coefs[index].setid[0],&ll,p,coefs[index].cofname); if(ss>0){ops[nops].Var2Dims[l].SupSet=1; ops[nops].Var2Dims[l].SSIndx=(int)ss;} offset_range_check(arSet[l].setid,ss>0?ss:0,coefs[index].setid[0],ll,p,coefs[index].cofname); ops[nops].Var2Dims[l].leadlag=ll; }
               ops[nops].Var2Dims[l].ADims=coefs[index].strides[0];
-              ops[nops].Var2Dims[l].leadlag=leadlag;
             } else {
-              { dim_t ss=set_supset_slot(sets,arSet[l].setid,coefs[index].setid[0]); if(ss<0)set_supset_fatal(p,coefs[index].cofname,NULL,sets,arSet[l].setid,coefs[index].setid[0]); if(ss>0){ops[nops].Var1Dims[l].SupSet=1; ops[nops].Var1Dims[l].SSIndx=(int)ss;} offset_range_check(arSet[l].setid,ss>0?ss:0,coefs[index].setid[0],leadlag,p,coefs[index].cofname); }
+              { int ll=leadlag; dim_t ss=set_bind_slot(sets,arSet[l].setid,coefs[index].setid[0],&ll,p,coefs[index].cofname); if(ss>0){ops[nops].Var1Dims[l].SupSet=1; ops[nops].Var1Dims[l].SSIndx=(int)ss;} offset_range_check(arSet[l].setid,ss>0?ss:0,coefs[index].setid[0],ll,p,coefs[index].cofname); ops[nops].Var1Dims[l].leadlag=ll; }
               ops[nops].Var1Dims[l].ADims=coefs[index].strides[0];
-              ops[nops].Var1Dims[l].leadlag=leadlag;
             }
           }
         }
@@ -528,13 +525,11 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
               map_dim_bind(varindex==2?&ops[nops].Var2Dims[l]:&ops[nops].Var1Dims[l],mp,arSet[l].setid,vars[index].setid[0],vars[index].strides[0],leadlag,vars[index].cofname,sets);
             } else
             if(varindex==2) {
-              { dim_t ss=set_supset_slot(sets,arSet[l].setid,vars[index].setid[0]); if(ss<0)set_supset_fatal(p,vars[index].cofname,NULL,sets,arSet[l].setid,vars[index].setid[0]); if(ss>0){ops[nops].Var2Dims[l].SupSet=1; ops[nops].Var2Dims[l].SSIndx=(int)ss;} offset_range_check(arSet[l].setid,ss>0?ss:0,vars[index].setid[0],leadlag,p,vars[index].cofname); }
+              { int ll=leadlag; dim_t ss=set_bind_slot(sets,arSet[l].setid,vars[index].setid[0],&ll,p,vars[index].cofname); if(ss>0){ops[nops].Var2Dims[l].SupSet=1; ops[nops].Var2Dims[l].SSIndx=(int)ss;} offset_range_check(arSet[l].setid,ss>0?ss:0,vars[index].setid[0],ll,p,vars[index].cofname); ops[nops].Var2Dims[l].leadlag=ll; }
               ops[nops].Var2Dims[l].ADims=vars[index].strides[0];
-              ops[nops].Var2Dims[l].leadlag=leadlag;
             } else {
-              { dim_t ss=set_supset_slot(sets,arSet[l].setid,vars[index].setid[0]); if(ss<0)set_supset_fatal(p,vars[index].cofname,NULL,sets,arSet[l].setid,vars[index].setid[0]); if(ss>0){ops[nops].Var1Dims[l].SupSet=1; ops[nops].Var1Dims[l].SSIndx=(int)ss;} offset_range_check(arSet[l].setid,ss>0?ss:0,vars[index].setid[0],leadlag,p,vars[index].cofname); }
+              { int ll=leadlag; dim_t ss=set_bind_slot(sets,arSet[l].setid,vars[index].setid[0],&ll,p,vars[index].cofname); if(ss>0){ops[nops].Var1Dims[l].SupSet=1; ops[nops].Var1Dims[l].SSIndx=(int)ss;} offset_range_check(arSet[l].setid,ss>0?ss:0,vars[index].setid[0],ll,p,vars[index].cofname); ops[nops].Var1Dims[l].leadlag=ll; }
               ops[nops].Var1Dims[l].ADims=vars[index].strides[0];
-              ops[nops].Var1Dims[l].leadlag=leadlag;
             }
           }
         }
@@ -774,6 +769,43 @@ int parse_index_leadlag(char *p,int *leadlag) {
     *minsign='\0';
   }
   return 1;
+}
+
+/* superset slot for an index over `sub` bound to an argument declared
+   over `sup`, with its offset (manual 16.2, 16.4). An offset needs both
+   sets intertemporal. Two sets with intertemporal elements of one stem
+   (p[a] - p[b]) line up by element number, so without a declared
+   subset the index binds by its own position shifted by a_sub - a_sup
+   and *leadlag absorbs the shift: 16.4 Example 1 (sub inside sup, no
+   Subset statement) and Example 2 (sub not a subset of sup, the offset
+   brings every element into sup); offset_range_check confirms it. */
+dim_t set_bind_slot(set_def *sets, dim_t sub, dim_t sup, int *leadlag, const char *idx, const char *symname) {
+  dim_t ss;
+  if (*leadlag!=0&&(!sets[sub].intertemp||!sets[sup].intertemp)) {
+    dim_t bad=sets[sup].intertemp?sub:sup;
+    errmsg("Error: index offset %s%+d in %s applies to set %s, which is not intertemporal; offsets t+n and t-n are allowed only over sets declared (intertemporal) (manual 16.2)\n",idx,*leadlag,symname,sets[bad].setname);
+    MPI_Abort(PETSC_COMM_WORLD,1);
+  }
+  ss=set_supset_slot(sets,sub,sup);
+  if (ss>=0) return ss;
+  if (teems_set_itstem!=NULL&&teems_set_itstem[sub][0]!='\0'&&strcasecmp(teems_set_itstem[sub],teems_set_itstem[sup])==0) {
+    offset_t e;
+    long k,lo=teems_set_itfirst[sup],hi=teems_set_itfirst[sup]+sets[sup].size-1;
+    for (e=0; e<sets[sub].size; e++) {
+      k=teems_set_itfirst[sub]+e+*leadlag;
+      if (k<lo||k>hi) {
+        char ix[NAMESIZE+16];
+        if (*leadlag!=0) snprintf(ix,sizeof(ix),"%s%+d",idx,*leadlag);
+        else snprintf(ix,sizeof(ix),"%s",idx);
+        errmsg("Error: index %s of %s ranges over set %s, and its element %s[%ld] lands on %s[%ld], outside set %s (%s[%ld] - %s[%ld]); intertemporal elements line up by number (manual 16.4)\n",ix,symname,sets[sub].setname,teems_set_itstem[sub],(long)(teems_set_itfirst[sub]+e),teems_set_itstem[sup],k,sets[sup].setname,teems_set_itstem[sup],lo,teems_set_itstem[sup],hi);
+        MPI_Abort(PETSC_COMM_WORLD,1);
+      }
+    }
+    *leadlag+=teems_set_itfirst[sub]-teems_set_itfirst[sup];
+    return 0;
+  }
+  set_supset_fatal(idx,symname,NULL,sets,sub,sup);
+  return -1;
 }
 
 /* compile-time range check of an index offset (manual 16.4: indices
@@ -2370,9 +2402,8 @@ static void lhs_args_bind(const char *kind, const char *stmt, array_def *a, char
     }
     varantidim[d]=a->strides[d];
     vararset[d]=l+1;
+    ss=set_bind_slot(sets,(dim_t)arSet[l].setid,(dim_t)a->setid[d],&ll,tok,a->cofname);
     varll[d]=ll;
-    ss=set_supset_slot(sets,(dim_t)arSet[l].setid,(dim_t)a->setid[d]);
-    if (ss<0) set_supset_fatal(tok,a->cofname,NULL,sets,(dim_t)arSet[l].setid,(dim_t)a->setid[d]);
     if (ss>0) { varsubset[d]=1; varsupsetid[d]=ss; }
     offset_range_check((dim_t)arSet[l].setid,ss>0?ss:0,(dim_t)a->setid[d],ll,tok,a->cofname);
   }
@@ -3017,6 +3048,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
                since TEEMS never enforced the distinction */
             if(!teems_ps_pass&&IsIni&&!IsFomIni&&teems_coef_is_param!=NULL&&teems_coef_is_param[index])printf("Warning: Formula (always) assigns (parameter) coefficient %s; GEMPACK only allows Read or Formula (Initial) for parameters\n",coefs[index].cofname);
             coefs[index].suplval=true;
+            if(!teems_ps_pass&&IsIni&&IsFomIni&&teems_coef_is_fini!=NULL)teems_coef_is_fini[index]=true;
             offset=coefs[index].offset;
             varsize=coefs[index].size;
             check10=false;

@@ -26,6 +26,13 @@ int steps1, steps2, steps3;
 int teems_single_run=0;
 /* -two_run 1: extrapolate from two multi-step solutions (manual 26.1.2) */
 int teems_two_run=0;
+/* -sup (manual 26.8.1 SUP): 0 none, 1 last, 2 all multi-step solutions
+   write their updated data (<stem>.ud5/.ud6/.ud7) */
+int teems_sup=0;
+/* -sui 1 (manual 26.8.2 SUI): .cof kind bit 2 marks the coefficients a
+   Formula (Initial) sets, whose updated values are in the .cbin */
+int teems_sui=0;
+bool *teems_coef_is_fini = NULL;
 /* RANDOM (manual 11.5.2): a value is a hash of the seed, the statement
    text, the occurrence in the statement and the element tuple, so every
    re-evaluation (steps, passes, ranks) draws the same number */
@@ -80,6 +87,10 @@ set_element *teems_set_elems = NULL;
 bool *teems_set_isprod = NULL;
 dim_t *teems_set_prod1 = NULL;
 dim_t *teems_set_prod2 = NULL;
+/* intertemporal element stem of a p[a] - p[b] set ("" otherwise) and
+   the number a of its first element (manual 16.2.1) */
+char (*teems_set_itstem)[NAMESIZE] = NULL;
+int *teems_set_itfirst = NULL;
 
 /* complementarities (manual 10.17/11.14; design doc sections 7-8):
    records filled by tab_complementarity_transform on rank 0,

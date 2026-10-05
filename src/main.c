@@ -43,6 +43,7 @@ static int coefficients_dump(const char *stem, array_def *coefs, offset_t ncof, 
     unsigned char kind=0;
     if(teems_coef_is_ps!=NULL&&teems_coef_is_ps[i])kind|=1;
     if(teems_coef_is_param!=NULL&&teems_coef_is_param[i])kind|=2;
+    if(teems_sui&&teems_coef_is_fini!=NULL&&teems_coef_is_fini[i])kind|=4;
     fwrite(&kind,1,1,fp);
   }
   fclose(fp);
@@ -107,7 +108,7 @@ static const char *const cli_teems_flags[]={
   "maxretries","maxthreads","ndcutcache","nowrites","nsbbdblocks",
   "nsubints","postsim","probefine","probepattern","random_seed",
   "range_test_initial","range_test_updated","refine","residcheck","retryadj","rkchart",
-  "rkctrl","rkguard","rk_h0","rknorm","rkscope","single_run","two_run",
+  "rkctrl","rkguard","rk_h0","rknorm","rkscope","single_run","sui","sup","two_run",
   "smllthreads","solmed","step1","step2","step3","tempdir","verbosity","zdivshift",
   "withmc66","version",NULL
 };
@@ -162,7 +163,7 @@ static int cli_options_check(PetscInt rank) {
    removed before any work, so a run that fails leaves none of them and
    no completion marker behind. The locked five and the .cof/.cbin dump
    keep their existing rules. */
-static const char *const sidecar_exts[]={".outputs.json",".outputs.json.tmp",".cols",".cols.json",".cbin0",".xac",".jac",".jac.json",NULL};
+static const char *const sidecar_exts[]={".outputs.json",".outputs.json.tmp",".cols",".cols.json",".cbin0",".xac",".ud5",".ud6",".ud7",".jac",".jac.json",NULL};
 
 static void sidecars_clear_stale(const char *cmfname) {
   FILE *f;
@@ -195,7 +196,7 @@ static void sidecars_clear_stale(const char *cmfname) {
    the post-simulation .cbin, behind the .cof header form: int64
    {version 1, ncof, ncofele, phase 0 = pre-simulation}, then ncofele
    doubles in begadd order; the declarations are the run's .cof. */
-static int coefficients_dump_phase(const char *stem, const char *ext, offset_t phase, offset_t ncof, offset_t ncofele, elem_value *elem_vals) {
+int coefficients_dump_phase(const char *stem, const char *ext, offset_t phase, offset_t ncof, offset_t ncofele, elem_value *elem_vals) {
   char path[TABREADLINE];
   FILE *fp;
   offset_t i,hdr[4];
@@ -219,7 +220,7 @@ static int coefficients_dump_phase(const char *stem, const char *ext, offset_t p
     errmsg("Error: cannot write %s: %s\n",path,strerror(errno));
     return 1;
   }
-  outputs_note(path,"coefficients_presim",1);
+  outputs_note(path,phase==0?"coefficients_presim":"coefficients_updated_pass",1);
   return 0;
 }
 
@@ -451,6 +452,7 @@ static void ordering_stats_write(cmf_file_entry *iodata, int niodata, int noutda
       PetscOptionsGetInt(NULL,NULL,"-convrule",&cr,NULL);
       fprintf(fp,"    \"convergence_rule\": %s,\n",cr?"true":"false");
     }
+    fprintf(fp,"    \"save_updated_passes\": \"%s\",\n",teems_sup==2?"all":(teems_sup==1?"last":"none"));
     fprintf(fp,"    \"random_seed\": %ld,\n",teems_random_seed);
     if(isrk)fprintf(fp,"    \"adaptive\": %d,\n    \"eps_tolerance\": %g,\n    \"max_retries\": %d,\n    \"retry_adjust\": %g,\n    \"rk_chart\": \"%s\",\n    \"rk_norm\": \"%s\",\n    \"rk_controller\": \"%s\",\n    \"rk_scope\": \"%s\",\n    \"rk_h0\": %g,\n",ropt->adaptive,ropt->epstol,ropt->maxretries,ropt->retryadj,ropt->rk_chart==RK_CHART_LOG?"log":"percent",ropt->rk_norm==RK_NORM_RMS?"rms":"max",ropt->rk_ctrl==RK_CTRL_PI?"pi":"std",ropt->rk_scope==RK_SCOPE_ALL?"all":"pct",ropt->rk_h0);
     else fprintf(fp,"    \"adaptive\": null,\n    \"eps_tolerance\": null,\n    \"max_retries\": null,\n    \"retry_adjust\": null,\n    \"rk_chart\": null,\n    \"rk_norm\": null,\n    \"rk_controller\": null,\n    \"rk_scope\": null,\n    \"rk_h0\": null,\n");
@@ -816,12 +818,12 @@ static void stats_refine_patch(cmf_file_entry *iodata, int niodata, int noutdata
    ordering can map subset elements onto chain-block positions. Extracted
    verbatim from the inline marking (both the explicit-flag path and the
    structural path must produce identical maps). */
-static void chain_flags_apply(set_def *sets, dim_t nset) {
+static void chain_flags_apply(set_def *sets, dim_t nset, offset_t chain) {
   offset_t i,j;
   for(i=0; i<nset; i++) {
     for(j=1; j<MAXSUPSET; j++) {
       if(sets[i].subsetid[j]>-1) {
-        if(sets[sets[i].subsetid[j]].intertemp) {
+        if(sets[i].subsetid[j]==chain) {
           sets[i].intsup=j;
           break;
         }
@@ -1099,8 +1101,10 @@ static offset_t chain_set_select(set_def *sets, dim_t nset, offset_t *refcount, 
       i=set_find_alltime(sets,nset);
       if(i>=0)logmsg(1,"Set %s is declared (intertemporal) but no equation uses lead/lag offsets; no chain ordering applied\n",sets[i].setname);
     }
-    if(chain>=0)logmsg(1,"Chain dimension detected structurally: set %s (size %d), %ld lead/lag references\n",sets[chain].setname,sets[chain].size,topcount[chain]);
+    if(chain>=0&&sets[chain].size<2)logmsg(1,"Set %s carries the lead/lag offsets but has %d element(s); no chain ordering applied (one period orders as a static model)\n",sets[chain].setname,sets[chain].size);
+    else if(chain>=0)logmsg(1,"Chain dimension detected structurally: set %s (size %d), %ld lead/lag references\n",sets[chain].setname,sets[chain].size,topcount[chain]);
   }
+  if(chain>=0&&sets[chain].size<2)chain=-1;
   free(topcount);
   return chain;
 }
@@ -1667,6 +1671,38 @@ int main(int argc,char **args) {
       if(rank==0) printf("Two-solution %s run: %d and %d steps extrapolated, no accuracy estimate (-two_run 1)\n",solmed,(int)steps1,(int)steps2);
     }
   }
+  /* -sup 1|2 (manual 26.8.1 SUP = last|all): the updated data after
+     the last or every separate multi-step solution, <stem>.ud5..ud7 in
+     the .cbin0 layout (phase 5..7), indexed by the run's .cof. GEMPACK
+     allows it with neither subintervals nor automatic accuracy. */
+  PetscOptionsGetInt(NULL,NULL,"-sup",&teems_sup,NULL);
+  PetscOptionsGetInt(NULL,NULL,"-sui",&teems_sui,NULL);
+  teems_sui=(teems_sui!=0);
+  if(teems_sui&&!cofdump) {
+    errmsg("Error: -sui marks Formula (Initial) coefficients in the coefficient dump, so it needs -cofdump 1\n");
+    PetscFinalize();
+    return 1;
+  }
+  if(teems_sup<0||teems_sup>2) {
+    errmsg("Error: -sup takes 0 (none), 1 (last) or 2 (all)\n");
+    PetscFinalize();
+    return 1;
+  }
+  if(teems_sup&&solmethod!=SM_GRAGG&&solmethod!=SM_MIDPOINT&&solmethod!=SM_EULER) {
+    errmsg("Error: -sup saves the updated data of separate multi-step solutions, so it applies to -solmed Euler, Midpoint or Gragg (manual 26.8.1)\n");
+    PetscFinalize();
+    return 1;
+  }
+  if(teems_sup&&subints>1) {
+    errmsg("Error: -sup cannot be used with more than one subinterval (manual 26.8.1)\n");
+    PetscFinalize();
+    return 1;
+  }
+  if(teems_sup&&!cofdump) {
+    errmsg("Error: -sup needs the coefficient dump (-cofdump 1): the .cof declarations index the updated-data files\n");
+    PetscFinalize();
+    return 1;
+  }
   /* -probefine: with -solmed probe, add the MC79 fine Dulmage-Mendelsohn
      report (strongly connected components of the well-determined block) */
   dim_t probefine=0;
@@ -2028,6 +2064,8 @@ int main(int argc,char **args) {
   teems_set_isprod= (bool *) calloc (nset>0?nset:1,sizeof(bool));
   teems_set_prod1= (dim_t *) calloc (nset>0?nset:1,sizeof(dim_t));
   teems_set_prod2= (dim_t *) calloc (nset>0?nset:1,sizeof(dim_t));
+  teems_set_itstem= (char (*)[NAMESIZE]) calloc (nset>0?nset:1,NAMESIZE);
+  teems_set_itfirst= (int *) calloc (nset>0?nset:1,sizeof(int));
   for(i=0; i<nset; i++) {
     sets[i].subsetid[0]=i;
     for(j=0; j<MAXSUPSET; j++)sets[i].subsetid[j]=-1;
@@ -2051,6 +2089,8 @@ int main(int argc,char **args) {
   if(nohsl) {
     MPI_Bcast(sets,nset*sizeof(set_def), MPI_BYTE,0, PETSC_COMM_WORLD);
     MPI_Bcast(&nsetspace,sizeof(offset_t), MPI_BYTE,0, PETSC_COMM_WORLD);
+    MPI_Bcast(teems_set_itstem,(nset>0?nset:1)*NAMESIZE, MPI_BYTE,0, PETSC_COMM_WORLD);
+    MPI_Bcast(teems_set_itfirst,(nset>0?nset:1)*sizeof(int), MPI_BYTE,0, PETSC_COMM_WORLD);
   }
   set_element *set_elems= (set_element *) calloc (nsetspace,sizeof(set_element));
   /* set sizes come from the data-file headers (sets_read), so a header
@@ -2573,6 +2613,8 @@ int main(int argc,char **args) {
     free(teems_set_isprod);
     free(teems_set_prod1);
     free(teems_set_prod2);
+    free(teems_set_itstem);
+    free(teems_set_itfirst);
     MPI_Comm_free(&node_comm);
     MPI_Comm_free(&node_tail_comm);
     PetscFinalize();
@@ -2640,7 +2682,7 @@ int main(int argc,char **args) {
       alltimeset=chain_set_select(sets,nset,chainrefs,rank);
       free(chainrefs);
       if(alltimeset>=0) {
-        chain_flags_apply(sets,nset);
+        chain_flags_apply(sets,nset,alltimeset);
         chain_source="structural";
       }
     }
@@ -2650,7 +2692,7 @@ int main(int argc,char **args) {
        launched with does not decide */
     if(solmethod==SM_PROBE)nesteddbbd=(alltimeset>=0)?1:0;
     if(structural_reg) {
-      allregset=partition_auto_select(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele,nvarele,closure_vals,neq,(offset_t)VecSize,alltimeset,ntime,nesteddbbd,(long)mpisize,rank,&partition_auto_json);
+      allregset=partition_auto_select(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele,nvarele,closure_vals,neq,(offset_t)VecSize,alltimeset,ntime,(alltimeset>=0)?nesteddbbd:0,(long)mpisize,rank,&partition_auto_json);
       if(allregset>=0) {
         partition_flags_apply(sets,nset,allregset);
         partition_source="structural";
@@ -2668,7 +2710,7 @@ int main(int argc,char **args) {
   }
   if(solmethod!=SM_PROBE&&matsol==MM_NDBBD&&(alltimeset<0||allregset<0)) {
     if(rank==0) {
-      if(alltimeset<0)errmsg("Error: NDBBD (-matsol 3) needs a chain dimension, but no equation couples set elements through lead/lag offsets.\n");
+      if(alltimeset<0)errmsg("Error: NDBBD (-matsol 3) needs a chain dimension, but no equation couples set elements through lead/lag offsets (or the set that carries them has one element); use -matsol 2 (DBBD) or -matsol 0 (LU).\n");
       if(allregset<0)errmsg("Error: NDBBD (-matsol 3) needs a diagonal-block partition and no viable set was detected (see the candidate table above); choose another -matsol.\n");
     }
     PetscFinalize();
@@ -2688,7 +2730,7 @@ int main(int argc,char **args) {
     int sbbd_nochain=(rank==0&&alltimeset<0)?1:0;
     MPI_Bcast(&sbbd_nochain,1,MPI_INT,0,PETSC_COMM_WORLD);
     if(sbbd_nochain) {
-      if(rank==0)errmsg("Error: SBBD (-matsol 1) requires a chain dimension, but the equations couple no set through lead/lag offsets; use -matsol 0 (LU) or -matsol 2 (DBBD) for static models.\n");
+      if(rank==0)errmsg("Error: SBBD (-matsol 1) requires a chain dimension, but the equations couple no set through lead/lag offsets (or the set that carries them has one element); use -matsol 0 (LU) or -matsol 2 (DBBD) for static and one-period models.\n");
       PetscFinalize();
       return 1;
     }
@@ -3131,6 +3173,14 @@ comp_accurate_reentry:
   if(rank==rank_hsl) {
     logmsg(1,"Border netcut %ld, intra-block equations %ld\n",netcut,nintraeq);
   }
+  /* DBBD on the chain alone (no partition set): when the chain blocks
+     hold under half the system the border solve is the whole problem,
+     and the degenerate split crashed in the block extraction */
+  if(solmethod!=SM_PROBE&&matsol==MM_DBBD&&allregset<0&&alltimeset>=0&&2*netcut>VecSize) {
+    if(rank==0)errmsg("Error: DBBD (-matsol 2) found no partition set and its chain blocks over %s hold only %ld of %ld equations (border %.1f%%); use -matsol 1 (SBBD) or -matsol 0 (LU)\n",sets[alltimeset].setname,(long)(VecSize-netcut),(long)VecSize,VecSize>0?100.0*netcut/VecSize:0.0);
+    PetscFinalize();
+    return 1;
+  }
   /* rank 0 always holds valid ordering data: rank_hsl==0 under HSL, and
      under nohsl every rank computes the full ordering */
   if(rank==0) {
@@ -3274,7 +3324,7 @@ comp_accurate_reentry:
     jac_only=true;
     solmethod=SM_PROBE;
   }
-  if(rank==0&&sbbd_overrid&&alltimeset<0) {
+  if(rank==0&&sbbd_overrid&&alltimeset<0&&(set_find_alltime(sets,nset)<0||sets[set_find_alltime(sets,nset)].size>1)) {
     printf("Warning: the equations reference intertemporal sets but this run's ordering ignores that structure; a bordered matrix method (-matsol 1/2/3) would detect and exploit it\n");
   }
   free(eq_intertemp);
@@ -3400,6 +3450,19 @@ comp_accurate_reentry:
          it read on pass 1 */
       if(rank==rank_hsl) {
         if(comp_accurate_closure(closure_vals,vars,nvar,coefs,ncof,sets,nset,set_elems,elem_vals)<0)MPI_Abort(PETSC_COMM_WORLD,1);
+        /* a percentage-change complementarity variable whose bound is 0
+           gets a -100 percent shock in the accurate run (51.7.1); under
+           Gragg its update left the reals with no named cause */
+        if(solmethod==SM_GRAGG)for(i=0; i<nvar; i++) {
+          offset_t e;
+          if(vars[i].change_real)continue;
+          for(e=0; e<vars[i].nelem; e++)if(CL_EXO(vars[i].offset+e)&&CL_SHOCK(vars[i].offset+e)<=-100+1e-4) {
+            char lab[4*NAMESIZE];
+            array_element_label(&vars[i],e,lab,sizeof(lab));
+            errmsg("Error: the complementarity accurate run (manual 51.7.1) shocks %s by -100 percent to reach its bound of zero, which Gragg's method cannot take (manual 30.2); declare %s (change,levels), or use the midpoint or Euler method\n",lab,vars[i].cofname);
+            MPI_Abort(PETSC_COMM_WORLD,1);
+          }
+        }
       }
       if(rank==0)printf("Complementarity: accurate simulation with the %s method (closure/shocks modified per manual 51.7.1)\n",solmed);
       /* tear down pass-1 state and re-enter the closure-dependent

@@ -5716,6 +5716,8 @@ offset_t coefficients_read(char *fname, char *commsyntax, array_def *record, off
      array_def is binary-locked to the R-side sol.var parser */
   free(teems_coef_is_param);
   teems_coef_is_param= (bool *) calloc (ncof+1,sizeof(bool));
+  free(teems_coef_is_fini);
+  teems_coef_is_fini= (bool *) calloc (ncof+1,sizeof(bool));
   free(teems_coef_is_int);
   teems_coef_is_int= (bool *) calloc (ncof+1,sizeof(bool));
   teems_n_int_coefs=0;
@@ -6725,11 +6727,16 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
         else {
           intvar[1]=intindx[2];
         }
-        if (intvar[1]+1-intvar[0]<=0) {
-          errmsg("Error: intertemporal set has an empty or inverted time range in TAB file\n");
+        if (intvar[1]+1-intvar[0]<0) {
+          errmsg("Error: intertemporal set %s has an inverted time range (%d - %d) in TAB file\n",record[j].setname,intvar[0],intvar[1]);
           return -1;
         }
         record[j].readele[0]='\0';
+        if (teems_set_itfirst!=NULL) teems_set_itfirst[j]=intvar[0];
+        if (intvar[1]+1-intvar[0]==0) {
+          record[j].size=0;
+          continue;
+        }
         for (i=intvar[0]; i<intvar[1]+1; i++) {
           sprintf(line, "%d",i);
           if (strlen(record[j].readele)+strlen(line)+2>=sizeof(record[j].readele)) {
@@ -6857,6 +6864,14 @@ int sets_read(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,
       strcpy(record[j].setname,readitem);
       strcpy(line1,"intertemporal,");
       readitem = strtok(NULL,"[");
+      if (readitem!=NULL&&teems_set_itstem!=NULL) {
+        size_t e=strlen(readitem),b=e;
+        while (b>0&&(isalnum((unsigned char)readitem[b-1])||readitem[b-1]=='_')) b--;
+        if (e-b>0&&e-b<NAMESIZE) {
+          memcpy(teems_set_itstem[j],readitem+b,e-b);
+          teems_set_itstem[j][e-b]='\0';
+        }
+      }
       readitem = strtok(NULL,"]");
       if (readitem==NULL) {
         errmsg("Error: malformed set declaration in TAB file\n");

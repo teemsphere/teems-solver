@@ -1325,7 +1325,7 @@ static void stmt_prog_build_one(char *line, stmt_prog *stp, char *commsyntax,
               linvar_map_dim_check(&LinVars[i],dcount,arSet[dcountdim3[dcount]].setid,vars,sets,&mapdss[dcount],&supset[dcount]);
               continue;
             }
-            { dim_t ss=set_supset_slot(sets,arSet[dcountdim3[dcount]].setid,vars[LinVars[i].LinVarIndx].setid[dcount]); if(ss<0)set_supset_fatal(LinVars[i].dimnames[dcount],LinVars[i].LinVarName,NULL,sets,arSet[dcountdim3[dcount]].setid,vars[LinVars[i].LinVarIndx].setid[dcount]); supset[dcount]=(ss>0)?ss:0; }
+            { int ll=LinVars[i].dimleadlag[dcount]; dim_t ss=set_bind_slot(sets,arSet[dcountdim3[dcount]].setid,vars[LinVars[i].LinVarIndx].setid[dcount],&ll,LinVars[i].dimnames[dcount],LinVars[i].LinVarName); LinVars[i].dimleadlag[dcount]=ll; supset[dcount]=(ss>0)?ss:0; }
             offset_range_check((dim_t)arSet[dcountdim3[dcount]].setid,supset[dcount],(dim_t)vars[LinVars[i].LinVarIndx].setid[dcount],LinVars[i].dimleadlag[dcount],LinVars[i].dimnames[dcount],LinVars[i].LinVarName);
           }
           stp->lv[i].ops= (formula_op *) malloc (nops*sizeof(formula_op));
@@ -2473,7 +2473,16 @@ static void border_mark_ref(eq_var_ref *ref, array_def *vars, set_def *sets, dim
     }
     else {
       for(sup=1; sup<MAXSUPSET; sup++)if(sets[s].subsetid[sup]==vars[l].setid[d])break;
-      if(sup==MAXSUPSET) { /* not a resolvable subset of the declared set */
+      if(sup==MAXSUPSET&&teems_set_itstem!=NULL&&teems_set_itstem[s][0]!='\0'&&strcasecmp(teems_set_itstem[s],teems_set_itstem[vars[l].setid[d]])==0) {
+        /* intertemporal elements line up by number (16.4) */
+        poslist[d]=(offset_t *) malloc (sets[s].size*sizeof(offset_t));
+        poscnt[d]=0;
+        for(li=0; li<sets[s].size; li++) {
+          pos=li+teems_set_itfirst[s]-teems_set_itfirst[vars[l].setid[d]]+k;
+          if(pos>=0&&pos<dsize)poslist[d][poscnt[d]++]=pos;
+        }
+      }
+      else if(sup==MAXSUPSET) { /* not a resolvable subset of the declared set */
         if(k==0)continue;
         poslist[d]=(offset_t *) malloc (dsize*sizeof(offset_t));
         poscnt[d]=0;
@@ -2531,6 +2540,18 @@ static const char *eq_chain_index(quantifier *arSet, dim_t fdim, set_def *sets) 
   dim_t i;
   for(i=0; i<fdim; i++)if(sets[arSet[i].setid].intertemp)q=arSet[i].index_name;
   return q;
+}
+
+/* the bordered orderings place rows and columns by position in the
+   chain set (intsup = its superset slot), so every intertemporal set an
+   equation or variable ranges over must be the chain set or nested in
+   it; another intertemporal dimension used to be read as chain
+   positions */
+static void chain_set_check(set_def *sets, offset_t s, offset_t alltimeset, const char *what, const char *name) {
+  if(alltimeset<0||s==alltimeset||!sets[s].intertemp) return;
+  if(sets[s].intsup>0&&sets[s].subsetid[sets[s].intsup]==alltimeset) return;
+  errmsg("Error: %s %s ranges over intertemporal set %s, which is neither the chain set %s nor a declared subset of it; the bordered methods (-matsol 1/2/3) order the system by position in the chain set. Add 'Subset %s is subset of %s;' if it is one, or use -matsol 0 (LU)\n",what,name,sets[s].setname,sets[alltimeset].setname,sets[s].setname,sets[alltimeset].setname);
+  MPI_Abort(PETSC_COMM_WORLD,1);
 }
 
 int equation_order_read(char *fname, char *commsyntax,set_def *sets,dim_t nset,set_element *set_elems,array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar,elem_value *elem_vals,offset_t ncofvar,offset_t ncofele,closure_entry *closure_vals,bool *var_inter,bool *ele_inter,array_def *eq_defs,bool *eq_intertemp,dim_t *eq_orderintra,dim_t *eq_orderreg,offset_t allregset,offset_t alltimeset,dim_t *orderintra,dim_t *orderreg) {
@@ -2751,6 +2772,7 @@ int equation_order_read(char *fname, char *commsyntax,set_def *sets,dim_t nset,s
             if(var_inter[i]) continue;
             j=0;
             for(i4=0; i4<vars[i].size; i4++)if(sets[vars[i].setid[i4]].intertemp) {
+                chain_set_check(sets,vars[i].setid[i4],alltimeset,"variable",vars[i].cofname);
                 orderintra[i]=i4;
                 j++;
                 break;
@@ -2760,6 +2782,7 @@ int equation_order_read(char *fname, char *commsyntax,set_def *sets,dim_t nset,s
         }
         j=0;
         for (i=0; i<fdim; i++)if(sets[eq_defs[eqindx].setid[i]].intertemp) {
+            chain_set_check(sets,eq_defs[eqindx].setid[i],alltimeset,"equation",eq_defs[eqindx].cofname);
             j++;
             eq_orderintra[eqindx]=i;
           }
@@ -3109,6 +3132,7 @@ int equation_order_read_nested(char *fname, char *commsyntax,set_def *sets,dim_t
           if(var_inter[i]) continue;
           j=0;
           for(i4=0; i4<vars[i].size; i4++)if(sets[vars[i].setid[i4]].intertemp) {
+              chain_set_check(sets,vars[i].setid[i4],alltimeset,"variable",vars[i].cofname);
               orderintra[i]=i4;
               j++;
               break;
@@ -3218,6 +3242,7 @@ int equation_order_read_nested(char *fname, char *commsyntax,set_def *sets,dim_t
 
       j=0;
       for (i=0; i<fdim; i++)if(sets[eq_defs[eqindx].setid[i]].intertemp) {
+            chain_set_check(sets,eq_defs[eqindx].setid[i],alltimeset,"equation",eq_defs[eqindx].cofname);
           j++;
           eq_orderintra[eqindx]=i;
         }
@@ -3433,7 +3458,7 @@ int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,
         }
         if(alltimeset>=0&&allregset<0) {
           for (dcount=eq_time[eqindx]-1; dcount>-1; dcount--) {
-            dcountdim3[dcount]=dcountdim1[dcount]/sets[arSet[eq_time[eqindx]].setid].size;
+            dcountdim3[dcount]=dcountdim1[dcount]/(sets[arSet[eq_time[eqindx]].setid].size?sets[arSet[eq_time[eqindx]].setid].size:1);
           }
           /* dcount>-1: eq_time==-1 ran one extra iteration writing
              dcountdim3[-1] (stack scribble) */
@@ -3443,7 +3468,7 @@ int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,
         }
         if(alltimeset<0&&allregset>=0) {
           for (dcount=eq_reg[eqindx]-1; dcount>-1; dcount--) {
-            dcountdim4[dcount]=dcountdim1[dcount]/sets[arSet[eq_reg[eqindx]].setid].size;
+            dcountdim4[dcount]=dcountdim1[dcount]/(sets[arSet[eq_reg[eqindx]].setid].size?sets[arSet[eq_reg[eqindx]].setid].size:1);
           }
           /* dcount>-1: eq_reg==-1 ran one extra iteration writing
              dcountdim4[-1] (stack scribble; ASan-confirmed on nsub-dbbd) */
@@ -3457,7 +3482,7 @@ int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,
           for (dcount=fdim-2; dcount>-1; dcount--) {
             if(dcount+1==eq_reg[eqindx])i3*=sets[arSet[eq_reg[eqindx]].setid].size;
             if(dcount+1==eq_time[eqindx])i3*=sets[arSet[eq_time[eqindx]].setid].size;
-            dcountdim4[dcount]=dcountdim1[dcount]/i3;
+            dcountdim4[dcount]=i3?dcountdim1[dcount]/i3:0;
           }
         }
       }
@@ -3549,7 +3574,7 @@ int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,
             linvar_map_dim_check(&LinVars[i],dcount,arSet[dcountdim5[dcount]].setid,vars,sets,&mapdss[dcount],&supset[dcount]);
             continue;
           }
-          { dim_t ss=set_supset_slot(sets,arSet[dcountdim5[dcount]].setid,vars[LinVars[i].LinVarIndx].setid[dcount]); if(ss<0)set_supset_fatal(LinVars[i].dimnames[dcount],LinVars[i].LinVarName,NULL,sets,arSet[dcountdim5[dcount]].setid,vars[LinVars[i].LinVarIndx].setid[dcount]); supset[dcount]=(ss>0)?ss:0; }
+          { int ll=LinVars[i].dimleadlag[dcount]; dim_t ss=set_bind_slot(sets,arSet[dcountdim5[dcount]].setid,vars[LinVars[i].LinVarIndx].setid[dcount],&ll,LinVars[i].dimnames[dcount],LinVars[i].LinVarName); LinVars[i].dimleadlag[dcount]=ll; supset[dcount]=(ss>0)?ss:0; }
             offset_range_check((dim_t)arSet[dcountdim5[dcount]].setid,supset[dcount],(dim_t)vars[LinVars[i].LinVarIndx].setid[dcount],LinVars[i].dimleadlag[dcount],LinVars[i].dimnames[dcount],LinVars[i].LinVarName);
         }
         for (lj=0; lj<nloopslin; lj++) {

@@ -1082,7 +1082,7 @@ bool solve_comp_approx(PetscBool nohsl,PetscInt VecSize,PetscInt dnz,PetscInt* d
 
   double t=0,hdef=1.0/napprox,h=hdef;
   int stepno=0,redoing=0;
-  bool firstsolve=true;
+  bool firstsolve=true,flipped=false;
   double stepdata[2];
 
   while(t<1.0-1e-12) {
@@ -1092,6 +1092,10 @@ bool solve_comp_approx(PetscBool nohsl,PetscInt VecSize,PetscInt dnz,PetscInt* d
     if(rank==rank_hsl) {
       if(comp_states_set(sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals)<0)MPI_Abort(PETSC_COMM_WORLD,1);
     }
+    /* a state change moves E_$comp entries between columns: the NDBBD
+       cut probed on the old pattern no longer partitions the matrix */
+    if(flipped&&nesteddbbd==1)ndbbd_cut_cache_free();
+    flipped=false;
     if(!firstsolve) {
       if(nohsl) {
         VecCreate(PETSC_COMM_WORLD,&vece);
@@ -1189,6 +1193,7 @@ bool solve_comp_approx(PetscBool nohsl,PetscInt VecSize,PetscInt dnz,PetscInt* d
         continue;
       }
       redoing=0;
+      if(nflip>0)flipped=true;
     }
     /* accept */
     for(i=0; i<ncofele; i++)base_vals[i]=elem_vals[i].value;

@@ -71,6 +71,9 @@ extern double step_ratio2,step_ratio3,extrap_w1,extrap_w2,extrap_w3;
 extern int steps1,steps2,steps3;
 extern int teems_single_run;
 extern int teems_two_run;
+extern int teems_sup;
+extern int teems_sui;
+extern bool *teems_coef_is_fini;
 /* RANDOM (manual 11.5.2): -random_seed, and the key of the statement
    being compiled with its running RANDOM occurrence count */
 extern long teems_random_seed;
@@ -218,6 +221,8 @@ typedef struct
 extern bool *teems_set_isprod;
 extern dim_t *teems_set_prod1;
 extern dim_t *teems_set_prod2;
+extern char (*teems_set_itstem)[NAMESIZE];
+extern int *teems_set_itfirst;
 /* one set element with its position in each superset */
 typedef struct
 {
@@ -939,7 +944,9 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
 int leadlag_encode(char *line);
 int parse_index_leadlag(char *p,int *leadlag);
 void offset_range_check(dim_t frame_setid, dim_t ss, dim_t arg_setid, int leadlag, const char *idx, const char *symname);
+dim_t set_bind_slot(set_def *sets, dim_t sub, dim_t sup, int *leadlag, const char *idx, const char *symname);
 void array_element_label(array_def *a, offset_t k, char *out, size_t cap);
+int coefficients_dump_phase(const char *stem, const char *ext, offset_t phase, offset_t ncof, offset_t ncofele, elem_value *elem_vals);
 extern long zdiv_default_hits;
 extern double teems_zdiv_shift;
 void probe_col_label(PetscInt col, char *out, size_t cap);

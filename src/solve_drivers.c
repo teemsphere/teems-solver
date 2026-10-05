@@ -3102,6 +3102,10 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
              extrapolation with the weight the variables' final result
              gives this pass (sol 0: w2, sol 1: -w3, sol 2: w3) */
           if(rank==0&&maxsol==3&&subindx==subints-1)xac_pass(sol,subindx,subints,vars,nvar,nvarele,varchange,xcf);
+          if(teems_sup&&rank==0&&subints==1&&(teems_sup==2||sol==maxsol-1)) {
+            static const char *const udext[3]={".ud5",".ud6",".ud7"};
+            coefficients_dump_phase(teems_sol_stem,udext[sol],5+sol,ncof,ncofele,elem_vals);
+          }
           if(updates_path_active())updates_path_accumulate(coefs,ncof,elem_vals,(sol==0)?extrap_w2:((sol==1)?-extrap_w3:extrap_w3),sol==0);
           if(convrule&&updates_path_active()) {
             updates_path_conv_store(sol,coefs,ncof,elem_vals);
