@@ -29,6 +29,12 @@ int teems_two_run=0;
 /* -sup (manual 26.8.1 SUP): 0 none, 1 last, 2 all multi-step solutions
    write their updated data (<stem>.ud5/.ud6/.ud7) */
 int teems_sup=0;
+/* -comp_do_acc 0 (51.5.6): the approximate run is the result */
+int teems_comp_no_acc=0;
+/* complementarity subintervals (51.7.4): their count, and the result
+   compounded over the finished ones, onto which .xac pass values add */
+int teems_comp_nsub=1;
+solve_real *teems_comp_xac_base=NULL;
 /* -sui 1 (manual 26.8.2 SUI): .cof kind bit 2 marks the coefficients a
    Formula (Initial) sets, whose updated values are in the .cbin */
 int teems_sui=0;

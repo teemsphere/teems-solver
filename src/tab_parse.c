@@ -4704,6 +4704,11 @@ int shocks_check_floor(array_def *vars, offset_t nvar, dim_t subints, int solmet
         errmsg("Error: %s is shocked by -100 percent, which Gragg's method cannot take: its final pass carries the variable past its end point, through zero (manual 30.2); use the midpoint or Euler method\n",lab);
         return -1;
       }
+      if (tot<=-100+1e-4&&(solmethod==SM_RK2||solmethod==SM_HEUN||solmethod==SM_RK4||solmethod==SM_BOSHA32||solmethod==SM_DOPRI54)) {
+        array_element_label(&vars[i],e,lab,sizeof(lab));
+        errmsg("Error: %s is shocked by -100 percent, which the Runge-Kutta methods cannot take: each step that reaches zero is rejected and retried at half the size without end (manual 30.2); use the midpoint or Euler method\n",lab);
+        return -1;
+      }
     }
   }
   return 0;

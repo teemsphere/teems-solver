@@ -2063,13 +2063,19 @@ int comp_states_report(set_def *sets, dim_t nset, set_element *set_elems, array_
       s = cp_plane_state(X - E, L, U);
       cp_tuple_name(rt, sets, set_elems, coefs, j, tn, sizeof(tn));
       if (s != rt->prestate[j])
-        printf("Complementarity %s%s: state change %d -> %d over the simulation (X %.6g, expression %.6g)\n",
+        printf("Complementarity %s%s: state change %d -> %d over the approximate run (X %.6g, expression %.6g)\n",
                cp->name, tn, (int)rt->prestate[j], s, X, E);
       else
         logmsg(1, "Complementarity %s%s: state %d unchanged (X %.6g, expression %.6g)\n", cp->name, tn, s, X, E);
       if (cp_exact_state(X, E, L, U) == 0)
-        printf("Warning: Complementarity %s%s: the post-simulation point is not accurately in any state (X %.6g, expression %.6g, bounds %.6g/%.6g; manual 51.7.5)\n",
-               cp->name, tn, X, E, L <= -CP_INF ? -9e99 : L, U >= CP_INF ? 9e99 : U);
+      {
+        if (teems_comp_no_acc)
+          printf("Warning: Complementarity %s%s: the post-simulation point is not accurately in any state (X %.6g, expression %.6g, bounds %.6g/%.6g; no accurate run, manual 51.5.6/51.7.5)\n",
+                 cp->name, tn, X, E, L <= -CP_INF ? -9e99 : L, U >= CP_INF ? 9e99 : U);
+        else
+          logmsg(1, "Complementarity %s%s: the approximate run ends off the exact state graph (X %.6g, expression %.6g, bounds %.6g/%.6g); the accurate run puts it on (manual 51.7.1)\n",
+                 cp->name, tn, X, E, L <= -CP_INF ? -9e99 : L, U >= CP_INF ? 9e99 : U);
+      }
     }
   }
   return 0;

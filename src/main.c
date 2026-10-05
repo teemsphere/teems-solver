@@ -1840,11 +1840,6 @@ int main(int argc,char **args) {
         PetscFinalize();
         return 1;
       }
-      if(subints>1) {
-        if(rank==0)errmsg("Error: subintervals are not available with Runge-Kutta methods (got -nsubints %d); increase -step1 instead\n",subints);
-        PetscFinalize();
-        return 1;
-      }
       if(epstol<=0||retryadj<=0||retryadj>=1||maxretries<1) {
         if(rank==0)errmsg("Error: -epstol and -retryadj must be positive (-retryadj below 1) and -maxretries at least 1\n");
         PetscFinalize();
@@ -2472,6 +2467,13 @@ int main(int argc,char **args) {
      pass), 1 = the accurate pass after the 51.7.1 closure
      modification (C3). */
   int comp_steps=0,comp_redo=1,comp_do_approx=1,comp_do_acc=1,comp_sberr_warn=0,comp_acc_phase=0;
+  /* 51.7.4: with several subintervals each one runs its own approximate
+     and accurate pair. The original closure and per-subinterval shares
+     are kept to restore between pairs; results compound across them. */
+  int comp_sub=0,comp_next_phase=0;
+  unsigned char *comp_flags0=NULL;
+  store_real *comp_shock0=NULL;
+  solve_real *comp_tot=NULL,*comp_apx_tot=NULL,*comp_est_tot=NULL;
   double comp_minfrac=0.005;
   if(teems_comp_active>0) {
     PetscReal minfrac_opt=comp_minfrac;
@@ -2506,6 +2508,7 @@ int main(int argc,char **args) {
     iopt=comp_do_acc;
     PetscOptionsGetInt(NULL,NULL,"-comp_do_acc",&iopt,NULL);
     comp_do_acc=iopt?1:0;
+    teems_comp_no_acc=!comp_do_acc;
     iopt=comp_sberr_warn;
     PetscOptionsGetInt(NULL,NULL,"-comp_sberr_warn",&iopt,NULL);
     comp_sberr_warn=iopt?1:0;
@@ -2523,6 +2526,17 @@ int main(int argc,char **args) {
         PetscOptionsSetValue(NULL,"-fastrefac","0");
       }
     }
+  }
+  /* a Runge-Kutta run marches the whole interval under its own step
+     control, so subintervals only mean something where they re-predict
+     complementarity states: an approximate and an accurate pair per
+     subinterval (51.7.4), the accurate run by the Runge-Kutta method
+     with -step1 steps in each. Decided here, once the closure says
+     which complementarities are active. */
+  if(isrk&&subints>1&&!(teems_comp_active>0&&comp_do_acc)) {
+    if(rank==0)errmsg("Error: subintervals are not available with Runge-Kutta methods (got -nsubints %d) except in complementarity runs with an accurate run; increase -step1 instead\n",subints);
+    PetscFinalize();
+    return 1;
   }
   if(nohsl) {
     if(nvarele*sizeof(closure_entry)>1500000000) {
@@ -3413,14 +3427,47 @@ comp_accurate_reentry:
   }
   bool comp_dispatch=(teems_comp_active>0&&solmethod!=SM_PROBE&&comp_acc_phase==0);
   if(comp_dispatch) {
+    if(comp_flags0==NULL&&comp_sub==0&&subints>1&&comp_do_acc) {
+      teems_comp_nsub=(int)subints;
+      if(rank==rank_hsl) {
+        comp_flags0=(unsigned char *) malloc (nvarele>0?nvarele:1);
+        comp_shock0=(store_real *) malloc ((nvarele>0?nvarele:1)*sizeof(store_real));
+        memcpy(comp_flags0,teems_cl_flags,nvarele);
+        memcpy(comp_shock0,teems_cl_shock,nvarele*sizeof(store_real));
+      }
+    }
+    if(teems_comp_nsub>1) {
+      if(rank==0)printf("Complementarity: subinterval %d of %d -- an approximate and an accurate run (manual 51.7.4)\n",comp_sub+1,teems_comp_nsub);
+      /* this subinterval's shocks relative to its start: the shares are
+         linear in the pre-simulation levels, as for any subinterval run */
+      if(rank==rank_hsl)for(i=0; i<nvar; i++) {
+        offset_t e,x;
+        for(e=0; e<vars[i].nelem; e++) {
+          x=vars[i].offset+e;
+          if(!(comp_flags0[x]&CL_F_EXO))continue;
+          if(vars[i].change_real)CL_SHOCK(x)=comp_shock0[x];
+          else CL_SHOCK(x)=(store_real)(100.0*((100.0+(comp_sub+1)*(double)comp_shock0[x])/(100.0+comp_sub*(double)comp_shock0[x])-1.0));
+        }
+      }
+    }
     if(comp_do_approx) {
       if(rank==0)printf("Complementarity: %ld active (endogenous) component(s); approximate simulation as forward Euler with %d steps (manual 51.1.2)\n",(long)teems_comp_active,comp_steps);
-      if(rank==0&&subints>1)printf("Warning: the complementarity approximate run treats the simulation as one interval (per-subinterval approximate+accurate pairs, manual 51.7.4, are not implemented)\n");
+      if(rank==0&&subints>1&&!comp_do_acc)printf("Warning: without an accurate run the complementarity approximate run treats the simulation as one interval (manual 51.7.4 pairs need the accurate run)\n");
       solve_comp_approx(nohsl,VecSize,dnz,dnnz,onz,onnz,dnzB,dnnzB,onzB,onnzB,&vece,rank,rank_hsl,mpisize,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,&elem_vals,ncofele,nvarele,&closure_vals,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,eq_addr,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,fcomm,comp_steps,comp_redo,comp_minfrac,&xcf);
       if(rank==0&&comp_do_acc&&xcf!=NULL) {
         free(comp_approx_col);
         comp_approx_col=(solve_real *) malloc (nvarele*sizeof(solve_real));
         if(comp_approx_col!=NULL)memcpy(comp_approx_col,xcf,nvarele*sizeof(solve_real));
+        if(comp_approx_col!=NULL&&teems_comp_nsub>1) {
+          if(comp_apx_tot==NULL)comp_apx_tot=(solve_real *) calloc (nvarele>0?nvarele:1,sizeof(solve_real));
+          for(i=0; i<nvar; i++) {
+            offset_t e;
+            for(e=vars[i].offset; e<vars[i].offset+vars[i].nelem; e++) {
+              if(vars[i].change_real)comp_apx_tot[e]+=comp_approx_col[e];
+              else comp_apx_tot[e]+=comp_approx_col[e]*(1+comp_apx_tot[e]/100);
+            }
+          }
+        }
       }
     }
     else {
@@ -3452,22 +3499,28 @@ comp_accurate_reentry:
         if(comp_accurate_closure(closure_vals,vars,nvar,coefs,ncof,sets,nset,set_elems,elem_vals)<0)MPI_Abort(PETSC_COMM_WORLD,1);
         /* a percentage-change complementarity variable whose bound is 0
            gets a -100 percent shock in the accurate run (51.7.1); under
-           Gragg its update left the reals with no named cause */
-        if(solmethod==SM_GRAGG)for(i=0; i<nvar; i++) {
+           Gragg its update left the reals with no named cause, and the
+           Runge-Kutta drivers halve their step towards it without end
+           (the log chart then ends wrong with no message) */
+        if(solmethod==SM_GRAGG||isrk)for(i=0; i<nvar; i++) {
           offset_t e;
           if(vars[i].change_real)continue;
           for(e=0; e<vars[i].nelem; e++)if(CL_EXO(vars[i].offset+e)&&CL_SHOCK(vars[i].offset+e)<=-100+1e-4) {
             char lab[4*NAMESIZE];
             array_element_label(&vars[i],e,lab,sizeof(lab));
-            errmsg("Error: the complementarity accurate run (manual 51.7.1) shocks %s by -100 percent to reach its bound of zero, which Gragg's method cannot take (manual 30.2); declare %s (change,levels), or use the midpoint or Euler method\n",lab,vars[i].cofname);
+            errmsg("Error: the complementarity accurate run (manual 51.7.1) shocks %s by -100 percent to reach its bound of zero, which the %s method cannot take (manual 30.2); declare %s (change,levels), or use the midpoint or Euler method\n",lab,solmed,vars[i].cofname);
             MPI_Abort(PETSC_COMM_WORLD,1);
           }
         }
       }
       if(rank==0)printf("Complementarity: accurate simulation with the %s method (closure/shocks modified per manual 51.7.1)\n",solmed);
+      teems_comp_xac_base=comp_tot;
+      comp_next_phase=1;
       /* tear down pass-1 state and re-enter the closure-dependent
          pipeline: exo_index numbering restarts from zero (backsolved
-         ordinals are assigned by backsolve_read and keep theirs) */
+         ordinals are assigned by backsolve_read and keep theirs); the
+         next subinterval's approximate run re-enters here too */
+comp_teardown:
       for(i=0; i<nvarele; i++)if(!CL_BS(i))closure_vals[i].exo_index=0;
       jacobian_cache_free();
       backsolve_cache_free();
@@ -3491,7 +3544,7 @@ comp_accurate_reentry:
       }
       var_inter=(bool *) calloc (nvar,sizeof(bool));
       ele_inter=(bool *) calloc (nvarele,sizeof(bool));
-      comp_acc_phase=1;
+      comp_acc_phase=comp_next_phase;
       goto comp_accurate_reentry;
     }
     else {
@@ -3504,7 +3557,7 @@ comp_accurate_reentry:
 
   FILE* solution;
 
-  if(!comp_dispatch&&(solmethod==SM_GRAGG||solmethod==SM_MIDPOINT||solmethod==SM_EULER))solve_gragg(nohsl,VecSize,&A,dnz,dnnz,onz,onnz,&B,dnzB,dnnzB,onzB,onnzB,&vecb,&vece,rank,rank_hsl,mpisize,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,&elem_vals,ncofele+nvarele,ncofele,nvarele,&closure_vals,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,eq_addr,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,subints,fcomm,solmethod,&xcf);
+  if(!comp_dispatch&&(solmethod==SM_GRAGG||solmethod==SM_MIDPOINT||solmethod==SM_EULER))solve_gragg(nohsl,VecSize,&A,dnz,dnnz,onz,onnz,&B,dnzB,dnnzB,onzB,onnzB,&vecb,&vece,rank,rank_hsl,mpisize,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,&elem_vals,ncofele+nvarele,ncofele,nvarele,&closure_vals,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,eq_addr,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,(teems_comp_nsub>1)?1:subints,fcomm,solmethod,&xcf);
 
   if(!comp_dispatch&&isrk)solve_rk(nohsl,VecSize,dnz,dnnz,onz,onnz,dnzB,dnnzB,onzB,onnzB,&vece,rank,rank_hsl,mpisize,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,&elem_vals,ncofele,nvarele,&closure_vals,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,eq_addr,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,fcomm,solmethod,adaptive,(double)epstol,(double)retryadj,maxretries,&rko,&xcf,&accmetric);
 
@@ -3523,6 +3576,43 @@ comp_accurate_reentry:
       }
     }
     comp_states_free();
+    if(teems_comp_nsub>1) {
+      if(xcf!=NULL) {
+        if(comp_tot==NULL)comp_tot=(solve_real *) calloc (nvarele>0?nvarele:1,sizeof(solve_real));
+        for(i=0; i<nvar; i++) {
+          offset_t e;
+          for(e=vars[i].offset; e<vars[i].offset+vars[i].nelem; e++) {
+            if(vars[i].change_real)comp_tot[e]+=xcf[e];
+            else comp_tot[e]+=xcf[e]*(1+comp_tot[e]/100);
+          }
+        }
+      }
+      /* the embedded Runge-Kutta estimate accumulates over steps, and so
+         over subintervals */
+      if(accmetric!=NULL) {
+        if(comp_est_tot==NULL)comp_est_tot=(solve_real *) calloc (nvarele>0?nvarele:1,sizeof(solve_real));
+        for(i=0; i<nvarele; i++)comp_est_tot[i]+=accmetric[i];
+      }
+      teems_comp_xac_base=NULL;
+      comp_sub++;
+      if(comp_sub<teems_comp_nsub) {
+        /* back to the user's closure for the next approximate run; its
+           shocks are set from the shares at the dispatch */
+        if(rank==rank_hsl) {
+          memcpy(teems_cl_flags,comp_flags0,nvarele);
+          memcpy(teems_cl_shock,comp_shock0,nvarele*sizeof(store_real));
+        }
+        free(accmetric); /* re-declared NULL after the re-entry */
+        accmetric=NULL;
+        comp_next_phase=0;
+        goto comp_teardown;
+      }
+      if(xcf!=NULL&&comp_tot!=NULL)memcpy(xcf,comp_tot,nvarele*sizeof(solve_real));
+      if(comp_approx_col!=NULL&&comp_apx_tot!=NULL)memcpy(comp_approx_col,comp_apx_tot,nvarele*sizeof(solve_real));
+      if(accmetric!=NULL&&comp_est_tot!=NULL)memcpy(accmetric,comp_est_tot,nvarele*sizeof(solve_real));
+      free(comp_tot); free(comp_apx_tot); free(comp_est_tot); free(comp_flags0); free(comp_shock0);
+      comp_tot=comp_apx_tot=comp_est_tot=NULL; comp_flags0=NULL; comp_shock0=NULL;
+    }
   }
 
   /* -solmed probe: MC79 structural diagnosis rides the probe after the

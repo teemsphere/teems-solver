@@ -1649,7 +1649,7 @@ static void xac_pass(int sol,dim_t subindx,dim_t subints,array_def *vars,offset_
   solve_real buf[CHUNK];
   offset_t i,k,n,m;
   if(sol==0) {
-    offset_t hdr[4]={1,nvarele,3,(offset_t)subints};
+    offset_t hdr[4]={1,nvarele,3,(offset_t)(teems_comp_nsub>1?teems_comp_nsub:subints)};
     if(xac_fp!=NULL)fclose(xac_fp);
     snprintf(xac_path,sizeof(xac_path),"%s.xac",teems_sol_stem);
     xac_fp=fopen(xac_path,"wb");
@@ -1670,6 +1670,10 @@ static void xac_pass(int sol,dim_t subindx,dim_t subints,array_def *vars,offset_
         return;
       }
       memcpy(xac_base,xcf,nvarele*sizeof(solve_real));
+    }
+    else if(teems_comp_xac_base!=NULL) {
+      xac_base=(solve_real *) malloc (nvarele*sizeof(solve_real));
+      if(xac_base!=NULL)memcpy(xac_base,teems_comp_xac_base,nvarele*sizeof(solve_real));
     }
   }
   if(xac_fp==NULL)return;

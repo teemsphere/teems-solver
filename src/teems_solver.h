@@ -72,6 +72,8 @@ extern int steps1,steps2,steps3;
 extern int teems_single_run;
 extern int teems_two_run;
 extern int teems_sup;
+extern int teems_comp_no_acc;
+extern int teems_comp_nsub;
 extern int teems_sui;
 extern bool *teems_coef_is_fini;
 /* RANDOM (manual 11.5.2): -random_seed, and the key of the statement
@@ -946,6 +948,7 @@ int parse_index_leadlag(char *p,int *leadlag);
 void offset_range_check(dim_t frame_setid, dim_t ss, dim_t arg_setid, int leadlag, const char *idx, const char *symname);
 dim_t set_bind_slot(set_def *sets, dim_t sub, dim_t sup, int *leadlag, const char *idx, const char *symname);
 void array_element_label(array_def *a, offset_t k, char *out, size_t cap);
+extern solve_real *teems_comp_xac_base;
 int coefficients_dump_phase(const char *stem, const char *ext, offset_t phase, offset_t ncof, offset_t ncofele, elem_value *elem_vals);
 extern long zdiv_default_hits;
 extern double teems_zdiv_shift;
