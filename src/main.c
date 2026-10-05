@@ -2351,6 +2351,8 @@ int main(int argc,char **args) {
   //**************************************************************************************
   //********************* READ VARIABLE, COEFFICIENT VALUE FROM FILE**********************
   //**************************************************************************************
+  if(rank==rank_hsl)ord_plan_build(tabfile,0,coefs,ncof,vars,nvar);
+  ord_io_set(niodata,iodata,nvarele);
   if(rank==0) {
     strcpy(commsyntax,"read");
     /* fail-fast: exit 0 here used to mask read errors */
@@ -2513,8 +2515,7 @@ int main(int argc,char **args) {
   strcpy(commsyntax,"formula");
   bool IsIni=true;
   if(rank==0) {
-    formulas_execute(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,IsIni);
-assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,IsIni,teems_assertions_mode,0);
+    statements_execute(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,IsIni,0);
     if(cofdump&&elem_vals!=NULL)coefficients_dump_phase(teems_sol_stem,".cbin0",0,ncof,ncofele,elem_vals); /* reported, not fatal: the run goes on and exits 1 without a completion marker */
   }
   /* formula-assigned mappings (manual 10.13.1) got their values on rank
@@ -2592,6 +2593,7 @@ assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,nc
     else {
       MPI_Bcast(elem_vals,(nvarele+ncofele)*sizeof(elem_value), MPI_BYTE,0, PETSC_COMM_WORLD);
     }
+    ord_coverage_bcast(tabfile,rank);
   }
   //**************************************************************************************
   //****************** END CALCULATE VARIABLE, COEFFICIENT VALUE FROM FORMULA*************
@@ -3634,12 +3636,12 @@ comp_accurate_reentry:
     if(npostsim>0) {
       logmsg(1,"postsim: running %d statement(s)\n",npostsim);
       teems_ps_pass=1;
-      /* reads first (each statement kind runs as its own scan; within
-         a kind, file order -- manual 12.2.1) */
+      /* Reads, Formulas and Assertions in file order (manual 12.2.1);
+         the Read targets are checked first (12.2.3) */
       if(postsim_reads_execute(psfile,niodata,iodata,sets,nset,set_elems,coefs,ncof,ncofele,vars,nvar,nvarele,elem_vals)==-1)MPI_Abort(PETSC_COMM_WORLD,1);
+      ord_plan_build(psfile,1,coefs,ncof,vars,nvar);
       strcpy(commsyntax,"formula");
-      formulas_execute(psfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,true);
-      assertions_execute(psfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,true,teems_assertions_mode,0);
+      statements_execute(psfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,true,0);
       teems_ps_pass=0;
     }
     assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,true,teems_assertions_mode,1);

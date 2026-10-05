@@ -2514,6 +2514,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
      pass its fresh initial state (manual 12.2.4) */
   zdiv_scan_reset();
   while (tab_next_statement_resolved(commsyntax,filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
+    long spos=teems_stmt_start;
     /* mapping calls lower to flat map~idx tokens before any brace
        tokenizer runs (manual 11.9.4; design doc M2); sum carried-dim
        discovery identifies them by their domain index (M2c) */
@@ -2537,6 +2538,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
       else if(strcmp(fdefval,"always")==0)IsDefFomIni=false;
       continue;
     }
+    if (teems_ord_lo>=0&&(spos<teems_ord_lo||spos>=teems_ord_hi)) continue;
     {
       IsFomIni=IsDefFomIni;
       int byele=0,explicit_always=0;
@@ -2932,13 +2934,6 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
         if (varsize>0) {
           char *ta=strtok(NULL,")");
           if (ta!=NULL&&strlen(ta)+2<sizeof(argu)) { strcpy(argu,ta); strcat(argu,","); lhsargs=argu; }
-        }
-        /* a satisfied Read (IfHeaderExists) supersedes formulas
-           assigning the read coefficient (manual 11.11.8 idiom under
-           the reads-then-formulas pass order, plan 3.9): keep all the
-           statement plumbing, evaluate nothing */
-        if (!check10&&teems_coef_ifhdr!=NULL&&teems_coef_ifhdr[index]) {
-          nloops=0;
         }
         /* PostSim Formula LHS must be a PostSim Coefficient (manual
            12.2.2): never a Variable, never an ordinary Coefficient */
@@ -4812,6 +4807,7 @@ offset_t assertions_execute(char *fname,set_def *sets,dim_t nset,set_element *se
   zdiv_scan_reset();
   strcpy(sumsyntax,"sum(");
   while (tab_next_statement_resolved("assertion",filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
+    if (teems_ord_lo>=0&&(teems_stmt_start<teems_ord_lo||teems_stmt_start>=teems_ord_hi)) continue;
     mapping_reject_in(line,"Assertion");
     /* (postsim) assertions run only in the post-solve pass, where the
        initial/always qualifiers are ignored (manual 12.2.4) */

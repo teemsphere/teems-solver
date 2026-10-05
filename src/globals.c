@@ -66,12 +66,9 @@ int teems_ps_ncoefs = 0;
 bool *teems_coef_is_ps = NULL;
 int teems_ps_pass = 0;
 
-/* Read (IfHeaderExists) satisfied per coefficient (manual 11.11.8;
-   plan 3.9): under the engine's reads-then-formulas pass order, a
-   satisfied conditional read supersedes formulas assigning the same
-   coefficient -- reproducing GEMPACK's file-order outcome for the
-   default-formula + conditional-read idiom */
-bool *teems_coef_ifhdr = NULL;
+/* statement order (manual 10.1, 11.11.8, 12.2.1) */
+long teems_stmt_start = -1;
+long teems_ord_lo = -1, teems_ord_hi = -1;
 
 /* set mappings (manual 11.9): filled in main once declarations and
    by_elements values are read and broadcast */

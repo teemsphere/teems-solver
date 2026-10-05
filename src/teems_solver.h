@@ -464,8 +464,12 @@ extern offset_t teems_n_int_coefs;
    binary-locked array_def */
 extern int *teems_coef_gltype2;
 extern store_real *teems_coef_glval2;
-/* satisfied Read (IfHeaderExists) targets, parallel to coefs[] (3.9) */
-extern bool *teems_coef_ifhdr;
+/* statement order (manual 10.1, 11.11.8, 12.2.1): file offset of the
+   statement the last TAB iterator call returned, and the offset window
+   [teems_ord_lo, teems_ord_hi) a segmented formula/assertion pass
+   executes (teems_ord_lo < 0: whole file) */
+extern long teems_stmt_start;
+extern long teems_ord_lo, teems_ord_hi;
 /* set mappings (manual 11.9), populated in main after the broadcast;
    consumed by the operand binder/eval and the statement guards */
 extern map_def *teems_maps;
@@ -949,6 +953,19 @@ int formula_compile_muldiv(char *fomulain, set_def *sets,int nmul,int ipar,array
 int formula_compile_addsub(char *fomulain, set_def *sets,int nplu,int ipar,array_def *coefs,offset_t ncof, array_def *vars,offset_t nvar,offset_t ncofele,sum_def *sum_cof,int totalsum,formula_op *ops,int *nops,quantifier *arSet,dim_t fdim);
 int formula_compile_if(char *fomulain, set_def *sets,int nif,int ipar,array_def *coefs,offset_t ncof, array_def *vars,offset_t nvar,offset_t ncofele,sum_def *sum_cof,int totalsum,formula_op *ops,int *nops,quantifier *arSet,dim_t fdim);
 offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset, set_element *set_elems, array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar, elem_value *elem_vals,offset_t ncofvar,offset_t ncofele,bool IsIni);
+/* file-order execution of Reads, Formulas and Assertions (manual 10.1,
+   11.11.8, 12.2.1): ord_plan_build scans a TAB once per process;
+   data_read_files then skips the Reads it defers, and
+   statements_execute runs the formula/assertion pass in segments with
+   each deferred Read replayed at its position (from the data files on
+   the initial pass, from the values at the start of the pass on a
+   step). ord_coverage_bcast hands the element coverage of the deferred
+   Reads to the other ranks. */
+int ord_plan_build(char *fname, int postsim, array_def *coefs, offset_t ncof, array_def *vars, offset_t nvar);
+int ord_read_deferred(char *fname, long pos);
+void ord_io_set(int niodata, cmf_file_entry *iodata, offset_t nvarele);
+void ord_coverage_bcast(char *fname, int rank);
+offset_t statements_execute(char *fname, char *commsyntax, set_def *sets, dim_t nset, set_element *set_elems, array_def *coefs, offset_t ncof, array_def *vars, offset_t nvar, elem_value *elem_vals, offset_t ncofvar, offset_t ncofele, bool IsIni, int postsim_pass);
 int sum_eval(char *formulain, char *commsyntax,set_def *sets,dim_t nset, set_element *set_elems,elem_value *elem_vals,offset_t ncofvar,offset_t ncofele, array_def *coefs,offset_t ncof, array_def *vars,offset_t nvar,sum_def *sum_cof,int totalsum,sum_value *sum_vals,offset_t nsumele,formula_op *ops,quantifier *arSet1,dim_t fdim,int *sumindx,int j, solve_real zerodivide);
 offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_elems, array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar, elem_value *elem_vals,offset_t ncofvar,offset_t ncofele,int midpoint);
 offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element *set_elems, array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar, elem_value *elem_vals,offset_t ncofvar,offset_t ncofele);

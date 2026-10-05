@@ -1,5 +1,6 @@
 #include <teems_solver.h>
 #include <errno.h>
+#include <limits.h>
 
 /* Shock and closure files follow the GEMPACK command-file rules (manual
    20.7): "!" comments to the end of the line, every statement ends in
@@ -763,6 +764,38 @@ double teems_value_checked(const char *tok, const char *what, const char *name) 
   return v;
 }
 
+/* Read store writes go through rd_put: with a window open (a deferred
+   Read replayed at its file position) the target's elements land in a
+   scratch store indexed from the window base, and each write is marked
+   so only the elements the Read supplied are copied (manual 11.11.8:
+   values not read stand) */
+static struct {
+  int on,kind;
+  offset_t lo,n;
+  unsigned char *mark;
+} rd_win={0,0,0,0,NULL};
+static int rd_filter_mode=0;
+static long rd_filter_pos=-1;
+
+static void rd_put(elem_store *store, offset_t at, solve_real val, int kind) {
+  if (!rd_win.on) {
+    store[at].value=val;
+    return;
+  }
+  if (kind!=rd_win.kind||at<rd_win.lo||at>=rd_win.lo+rd_win.n) {
+    errmsg("Error: internal: a deferred Read wrote outside its target (statement order, manual 11.11.8)\n");
+    MPI_Abort(PETSC_COMM_WORLD,1);
+    return;
+  }
+  store[at-rd_win.lo].value=val;
+  rd_win.mark[at-rd_win.lo]=1;
+}
+
+static int rd_filter_skip(char *fname, long pos) {
+  if (rd_filter_mode==2) return pos!=rd_filter_pos;
+  return ord_read_deferred(fname,pos);
+}
+
 offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char *commsyntax,set_def *sets,dim_t nset, set_element *set_elems,array_def *coefs,offset_t ncof, elem_store *coef_store,offset_t ncofele,array_def *vars,offset_t nvar, elem_store *var_store,offset_t nvarele) {
   FILE * filehandle, * filehandle1;
   char line[DATREADLINE]="\0",linecopy[DATREADLINE],line1[TABREADLINE],*p,*p1;//,line1[DATREADLINE]
@@ -780,6 +813,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
   }
 
   while (tab_next_statement(commsyntax,filehandle,line,DATREADLINE)) {
+    if (rd_filter_skip(fname,teems_stmt_start)) continue;
     strcpy(linecopy,line);
     /* Read (by_elements) statements carry CHARACTER data for set
        mappings (manual 11.9.1a) and are consumed by
@@ -948,7 +982,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
                       for (n1=0; n1<vars[i].size; n1++) {
                         recount1=recount1+index[n1]*vars[i].strides[n1];
                       }
-                      var_store[vars[i].offset+recount1].value=val;
+                      rd_put(var_store,vars[i].offset+recount1,val,1);
                       recount++;
                       if (recount>=dims) {
                         break;
@@ -978,7 +1012,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
                         for (n1=0; n1<vars[i].size; n1++) {
                           recount1=recount1+index[n1]*vars[i].strides[n1];
                         }
-                        var_store[vars[i].offset+recount1].value=val;
+                        rd_put(var_store,vars[i].offset+recount1,val,1);
                         recount++;
                       }
                       readitem = strtok(NULL,"\n");
@@ -1000,7 +1034,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
                       for (n1=0; n1<vars[i].size; n1++) {
                         recount1=recount1+index[n1]*vars[i].strides[n1];
                       }
-                      var_store[vars[i].offset+recount1].value=val;
+                      rd_put(var_store,vars[i].offset+recount1,val,1);
                       recount++;
                       if (recount>=dims) {
                         break;
@@ -1116,7 +1150,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
                       for (n1=0; n1<coefs[i].size; n1++) {
                         recount1=recount1+index[n1]*coefs[i].strides[n1];
                       }
-                      coef_store[coefs[i].offset+recount1].value=val;
+                      rd_put(coef_store,coefs[i].offset+recount1,val,0);
                       recount++;
                       if (recount>=dims) {
                         break;
@@ -1146,7 +1180,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
                         for (n1=0; n1<coefs[i].size; n1++) {
                           recount1=recount1+index[n1]*coefs[i].strides[n1];
                         }
-                        coef_store[coefs[i].offset+recount1].value=val;
+                        rd_put(coef_store,coefs[i].offset+recount1,val,0);
                         recount++;
                       }
                       readitem = strtok(NULL,"\n");
@@ -1168,7 +1202,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
                       for (n1=0; n1<coefs[i].size; n1++) {
                         recount1=recount1+index[n1]*coefs[i].strides[n1];
                       }
-                      coef_store[coefs[i].offset+recount1].value=val;
+                      rd_put(coef_store,coefs[i].offset+recount1,val,0);
                       recount++;
                       if (recount>=dims) {
                         break;
@@ -1194,9 +1228,6 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
             errmsg("Error: header \"%s\" not found in the data file\n",header);
             return -1;
           }
-          /* satisfied conditional read: formulas assigning this
-             coefficient are superseded (11.11.8 idiom, plan 3.9) */
-          if(ifhdr&&teems_coef_ifhdr!=NULL&&i<ncof)teems_coef_ifhdr[i]=true;
           fclose(filehandle1);
           break;
         }
@@ -1316,16 +1347,19 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
             readitem = strtok(line,"\"");
             readitem = strtok(NULL,"\"");
             if (readitem != NULL) {
-              strcpy(vname1,readitem);              //printf("read %s\n",readitem);
+              /* the header label goes to its own buffer: vname1 points
+                 into the target's name, which the copy used to overwrite */
+              char hdrlabel[NAMESIZE];
+              str_copy_bounded(hdrlabel,readitem,NAMESIZE);
               n1=0;
-              while (vname1[n1]!='\0'){
-                if(vname1[n1]==' '){
-                  vname1[n1]='\0';
+              while (hdrlabel[n1]!='\0'){
+                if(hdrlabel[n1]==' '){
+                  hdrlabel[n1]='\0';
                   break;
                 }
                 n1++;
               }
-              if (str_ncmp_ci(vname1,header,strlen(header)) == 0&&strlen(header)==strlen(vname1)) {
+              if (str_ncmp_ci(hdrlabel,header,strlen(header)) == 0&&strlen(header)==strlen(hdrlabel)) {
                 logmsg(2,"dim %s\n",readitem);
                 count2=2;
                 recount=0;
@@ -1363,7 +1397,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
                       for (n1=0; n1<coefs[i].size; n1++) {
                         recount1=recount1+set_elems[offset[n1]+index[n1]].superset_pos[supsetid[n1]]*coefs[i].strides[n1];
                       }
-                      coef_store[coefs[i].offset+recount1].value=val;
+                      rd_put(coef_store,coefs[i].offset+recount1,val,0);
                       recount++;
                       if (recount>=dims) {
                         break;
@@ -1393,7 +1427,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
                         for (n1=0; n1<coefs[i].size; n1++) {
                           recount1=recount1+set_elems[offset[n1]+index[n1]].superset_pos[supsetid[n1]]*coefs[i].strides[n1];
                         }
-                        coef_store[coefs[i].offset+recount1].value=val;
+                        rd_put(coef_store,coefs[i].offset+recount1,val,0);
                         recount++;
                       }
                       readitem = strtok(NULL,"\n");
@@ -1415,7 +1449,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
                       for (n1=0; n1<coefs[i].size; n1++) {
                         recount1=recount1+set_elems[offset[n1]+index[n1]].superset_pos[supsetid[n1]]*coefs[i].strides[n1];
                       }
-                      coef_store[coefs[i].offset+recount1].value=val;
+                      rd_put(coef_store,coefs[i].offset+recount1,val,0);
                       recount++;
                       if (recount>=dims) {
                         break;
@@ -1440,9 +1474,6 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
             errmsg("Error: header \"%s\" not found in the data file\n",header);
             return -1;
           }
-          /* satisfied conditional read: formulas assigning this
-             coefficient are superseded (11.11.8 idiom, plan 3.9) */
-          if(ifhdr&&teems_coef_ifhdr!=NULL&&i<ncof)teems_coef_ifhdr[i]=true;
           fclose(filehandle1);
           break;
         }
@@ -1501,16 +1532,19 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
             readitem = strtok(line,"\"");
             readitem = strtok(NULL,"\"");
             if (readitem != NULL) {
-              strcpy(vname1,readitem);              //printf("read %s\n",readitem);
+              /* the header label goes to its own buffer: vname1 points
+                 into the target's name, which the copy used to overwrite */
+              char hdrlabel[NAMESIZE];
+              str_copy_bounded(hdrlabel,readitem,NAMESIZE);
               n1=0;
-              while (vname1[n1]!='\0'){
-                if(vname1[n1]==' '){
-                  vname1[n1]='\0';
+              while (hdrlabel[n1]!='\0'){
+                if(hdrlabel[n1]==' '){
+                  hdrlabel[n1]='\0';
                   break;
                 }
                 n1++;
               }
-              if (str_ncmp_ci(vname1,header,strlen(header)) == 0&&strlen(header)==strlen(vname1)) {
+              if (str_ncmp_ci(hdrlabel,header,strlen(header)) == 0&&strlen(header)==strlen(hdrlabel)) {
                 count2=4;
                 recount=0;
                 while (fgets(line,DATREADLINE,filehandle1)) {
@@ -1547,7 +1581,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
                       for (n1=0; n1<vars[i].size; n1++) {
                         recount1=recount1+set_elems[offset[n1]+index[n1]].superset_pos[supsetid[n1]]*vars[i].strides[n1];
                       }
-                      var_store[vars[i].offset+recount1].value=val;
+                      rd_put(var_store,vars[i].offset+recount1,val,1);
                       recount++;
                       if (recount>=dims) {
                         break;
@@ -1577,7 +1611,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
                         for (n1=0; n1<vars[i].size; n1++) {
                           recount1=recount1+set_elems[offset[n1]+index[n1]].superset_pos[supsetid[n1]]*vars[i].strides[n1];
                         }
-                        var_store[vars[i].offset+recount1].value=val;
+                        rd_put(var_store,vars[i].offset+recount1,val,1);
                         recount++;
                       }
                       readitem = strtok(NULL,"\n");
@@ -1599,7 +1633,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
                       for (n1=0; n1<vars[i].size; n1++) {
                         recount1=recount1+set_elems[offset[n1]+index[n1]].superset_pos[supsetid[n1]]*vars[i].strides[n1];
                       }
-                      var_store[vars[i].offset+recount1].value=val;
+                      rd_put(var_store,vars[i].offset+recount1,val,1);
                       recount++;
                       if (recount>=dims) {
                         break;
@@ -2119,11 +2153,12 @@ void postsim_mark_coefs(array_def *coefs, offset_t ncof) {
    stores, then copies only the read coefficients' element ranges into
    the live elem_vals, preserving every post-simulation value.
    Returns the read count (0 = zero cost), -1 on error. */
+static void ord_head_name(const char *t, const char *kw, char *name);
+
 offset_t postsim_reads_execute(char *psname, int niodata, cmf_file_entry *iodata, set_def *sets, dim_t nset, set_element *set_elems, array_def *coefs, offset_t ncof, offset_t ncofele, array_def *vars, offset_t nvar, offset_t nvarele, elem_value *elem_vals) {
   FILE *f;
-  char line[TABREADLINE],name[NAMESIZE],*p;
-  offset_t i,j,l,nreads;
-  elem_store *cstore,*vstore;
+  char line[TABREADLINE],name[NAMESIZE];
+  offset_t i,j,nreads;
   bool *docopy;
   nreads=tab_count_statements(psname,"read");
   if(nreads==0)return 0;
@@ -2134,13 +2169,10 @@ offset_t postsim_reads_execute(char *psname, int niodata, cmf_file_entry *iodata
     return -1;
   }
   while (tab_next_statement("read",f,line,TABREADLINE)) {
-    /* target = the first token after "read" ("read elements" stays
-       with the declarations and never reaches the _ps file) */
-    p=line+4;
-    while(*p==' ')p++;
-    l=0;
-    while(*p!=' '&&*p!='\0'&&*p!=';'&&l<NAMESIZE-1)name[l++]=*p++;
-    name[l]='\0';
+    /* target = the name after "read" and any qualifier or quantifier
+       groups ("read elements" stays with the declarations and never
+       reaches the _ps file) */
+    ord_head_name(line,"read",name);
     for(i=0; i<ncof; i++)if(strcmp(coefs[i].cofname,name)==0)break;
     if(i<ncof) {
       if(teems_coef_is_ps==NULL||!teems_coef_is_ps[i]) {
@@ -2165,20 +2197,368 @@ offset_t postsim_reads_execute(char *psname, int niodata, cmf_file_entry *iodata
     return -1;
   }
   fclose(f);
-  cstore= (elem_store *) calloc (ncofele+1,sizeof(elem_store));
-  vstore= (elem_store *) calloc (nvarele+1,sizeof(elem_store));
-  if(data_read_files(psname,niodata,iodata,"read",sets,nset,set_elems,coefs,ncof,cstore,ncofele,vars,nvar,vstore,nvarele)==-1) {
-    free(cstore);
-    free(vstore);
-    free(docopy);
-    return -1;
-  }
-  for(i=0; i<ncof; i++)if(docopy[i])
-      for(l=0; l<coefs[i].nelem; l++)elem_vals[coefs[i].offset+l].value=cstore[coefs[i].offset+l].value;
-  free(cstore);
-  free(vstore);
   free(docopy);
   return nreads;
+}
+
+/* ---- file-order execution of Reads, Formulas and Assertions ----------
+   GEMPACK runs a TAB file's statements in file order (manual 10.1; a
+   Read (IfHeaderExists) after a default Formula, 11.11.8; PostSim,
+   12.2.1). The engine loads every Read first and runs the formulas and
+   assertions as whole-file scans. That is the file-order outcome
+   unless an earlier Formula or Assertion mentions a coefficient a later
+   Read supplies, or an Assertion precedes a Formula that assigns what
+   it checks. ord_plan_build finds those points; statements_execute
+   runs the pass in segments between them and replays each such Read at
+   its position. Elsewhere the single scan stands unchanged. */
+typedef struct {
+  long pos;
+  int tkind;
+  offset_t tidx,base,n;
+  int known,full;
+  offset_t nel;
+  offset_t *el;
+  store_real *snap;
+} ord_read;
+typedef struct {
+  int isread,r;
+  long lo,hi;
+} ord_event;
+typedef struct {
+  char *fname;
+  int postsim,needed;
+  int nev,nrd;
+  ord_event *ev;
+  ord_read *rd;
+} ord_plan;
+typedef struct {
+  long pos;
+  int kind;
+  char *text;
+} ord_stmt;
+typedef struct {
+  char **k;
+  offset_t cap,n;
+} ord_set;
+static ord_plan ord_plans[2];
+static int ord_nplans=0;
+static int ord_niodata=0;
+static cmf_file_entry *ord_iodata=NULL;
+static offset_t ord_nvarele=0;
+
+static uint64_t ord_hash(const char *t) {
+  uint64_t h=0xCBF29CE484222325ULL;
+  for (; *t; t++) { h^=(unsigned char)*t; h*=0x100000001B3ULL; }
+  return h;
+}
+
+static void ord_set_free(ord_set *st) {
+  offset_t i;
+  for (i=0; i<st->cap; i++) free(st->k[i]);
+  free(st->k);
+  st->k=NULL;
+  st->cap=st->n=0;
+}
+
+static int ord_set_has(ord_set *st, const char *t) {
+  offset_t i;
+  if (st->cap==0) return 0;
+  for (i=ord_hash(t)%st->cap; st->k[i]!=NULL; i=(i+1)%st->cap) if (strcmp(st->k[i],t)==0) return 1;
+  return 0;
+}
+
+static void ord_set_add(ord_set *st, const char *t) {
+  offset_t i;
+  if (2*(st->n+1)>st->cap) {
+    ord_set old=*st;
+    st->cap=old.cap?2*old.cap:64;
+    st->k=(char **) calloc(st->cap,sizeof(char *));
+    st->n=0;
+    for (i=0; i<old.cap; i++) if (old.k[i]!=NULL) ord_set_add(st,old.k[i]);
+    ord_set_free(&old);
+  }
+  for (i=ord_hash(t)%st->cap; st->k[i]!=NULL; i=(i+1)%st->cap) if (strcmp(st->k[i],t)==0) return;
+  st->k[i]=strdup(t);
+  st->n++;
+}
+
+static int ord_identch(char c) {
+  return isalnum((unsigned char)c)||c=='_'||c=='@';
+}
+
+static void ord_tokens_add(ord_set *st, const char *t) {
+  char name[NAMESIZE];
+  int n;
+  while (*t) {
+    if (*t=='"') {
+      t++;
+      while (*t&&*t!='"') t++;
+      if (*t) t++;
+      continue;
+    }
+    if (ord_identch(*t)) {
+      n=0;
+      while (ord_identch(*t)) {
+        if (n<NAMESIZE-1) name[n++]=(char)tolower((unsigned char)*t);
+        t++;
+      }
+      name[n]='\0';
+      ord_set_add(st,name);
+      continue;
+    }
+    t++;
+  }
+}
+
+static void ord_head_name(const char *t, const char *kw, char *name) {
+  int d,n=0;
+  t+=strlen(kw);
+  for (;;) {
+    while (*t==' '||*t=='\t'||*t=='\n'||*t=='\r') t++;
+    if (*t!='(') break;
+    d=0;
+    do {
+      if (*t=='(') d++;
+      else if (*t==')') d--;
+      t++;
+    } while (*t&&d>0);
+  }
+  while (ord_identch(*t)&&n<NAMESIZE-1) name[n++]=(char)tolower((unsigned char)*t++);
+  name[n]='\0';
+}
+
+static int ord_name_eq(const char *cofname, const char *name) {
+  while (*cofname&&*cofname!='('&&*name) {
+    if (tolower((unsigned char)*cofname)!=*name) return 0;
+    cofname++;
+    name++;
+  }
+  return (*cofname=='\0'||*cofname=='(')&&*name=='\0';
+}
+
+static int ord_stmt_cmp(const void *a, const void *b) {
+  long pa=((const ord_stmt *)a)->pos,pb=((const ord_stmt *)b)->pos;
+  return (pa>pb)-(pa<pb);
+}
+
+static ord_plan *ord_find(const char *fname) {
+  int i;
+  for (i=0; i<ord_nplans; i++) if (strcmp(ord_plans[i].fname,fname)==0) return &ord_plans[i];
+  return NULL;
+}
+
+static void ord_event_push(ord_plan *pl, int isread, int r, long lo, long hi) {
+  pl->ev=(ord_event *) realloc(pl->ev,(pl->nev+1)*sizeof(ord_event));
+  pl->ev[pl->nev].isread=isread;
+  pl->ev[pl->nev].r=r;
+  pl->ev[pl->nev].lo=lo;
+  pl->ev[pl->nev].hi=hi;
+  pl->nev++;
+}
+
+int ord_plan_build(char *fname, int postsim, array_def *coefs, offset_t ncof, array_def *vars, offset_t nvar) {
+  static const char *kws[3]= {"read","formula","assertion"};
+  char line[TABREADLINE],name[NAMESIZE];
+  ord_stmt *st=NULL;
+  offset_t nst=0,i,k;
+  ord_set seen= {NULL,0,0},sega= {NULL,0,0};
+  long seg_lo=0;
+  int seg_fa=0,nseg=0,kw;
+  FILE *f;
+  ord_plan *pl=ord_find(fname);
+  if (pl!=NULL) return pl->needed;
+  if (ord_nplans>=2) return 0;
+  pl=&ord_plans[ord_nplans++];
+  memset(pl,0,sizeof(*pl));
+  pl->fname=strdup(fname);
+  pl->postsim=postsim;
+  for (kw=0; kw<3; kw++) {
+    f=teems_fopen(fname,"r");
+    if (f==NULL) return 0;
+    while (tab_next_statement((char *)kws[kw],f,line,TABREADLINE)) {
+      st=(ord_stmt *) realloc(st,(nst+1)*sizeof(ord_stmt));
+      st[nst].pos=teems_stmt_start;
+      st[nst].kind=kw;
+      st[nst].text=strdup(line);
+      nst++;
+    }
+    fclose(f);
+  }
+  qsort(st,nst,sizeof(ord_stmt),ord_stmt_cmp);
+  for (i=0; i<nst; i++) {
+    if (st[i].kind==1) {
+      if (strstr(st[i].text,"(default")!=NULL) continue;
+      ord_head_name(st[i].text,"formula",name);
+      if (name[0]!='\0'&&ord_set_has(&sega,name)) {
+        if (seg_fa>0) { ord_event_push(pl,0,-1,seg_lo,st[i].pos); nseg++; }
+        seg_lo=st[i].pos;
+        seg_fa=0;
+        ord_set_free(&sega);
+      }
+      ord_tokens_add(&seen,st[i].text);
+      seg_fa++;
+    } else if (st[i].kind==2) {
+      ord_tokens_add(&seen,st[i].text);
+      ord_tokens_add(&sega,st[i].text);
+      seg_fa++;
+    } else {
+      int tkind=-1;
+      offset_t tidx=-1;
+      ord_head_name(st[i].text,"read",name);
+      if (name[0]=='\0') continue;
+      if (!postsim) for (k=0; k<nvar; k++) if (!vars[k].level_par&&ord_name_eq(vars[k].cofname,name)) { tkind=1; tidx=k; break; }
+      if (tkind<0) for (k=0; k<ncof; k++) if (ord_name_eq(coefs[k].cofname,name)) { tkind=0; tidx=k; break; }
+      if (tkind<0) continue;
+      if (!postsim&&!ord_set_has(&seen,name)) continue;
+      if (seg_fa>0) { ord_event_push(pl,0,-1,seg_lo,st[i].pos); nseg++; }
+      pl->rd=(ord_read *) realloc(pl->rd,(pl->nrd+1)*sizeof(ord_read));
+      memset(&pl->rd[pl->nrd],0,sizeof(ord_read));
+      pl->rd[pl->nrd].pos=st[i].pos;
+      pl->rd[pl->nrd].tkind=tkind;
+      pl->rd[pl->nrd].tidx=tidx;
+      pl->rd[pl->nrd].n=tkind?vars[tidx].nelem:coefs[tidx].nelem;
+      ord_event_push(pl,1,pl->nrd,st[i].pos,st[i].pos+1);
+      pl->nrd++;
+      seg_lo=st[i].pos+1;
+      seg_fa=0;
+      ord_set_free(&sega);
+    }
+  }
+  if (seg_fa>0||pl->nev==0) { ord_event_push(pl,0,-1,seg_lo,LONG_MAX); nseg++; }
+  pl->needed=(pl->nrd>0||nseg>1);
+  for (i=0; i<nst; i++) free(st[i].text);
+  free(st);
+  ord_set_free(&seen);
+  ord_set_free(&sega);
+  if (pl->needed) logmsg(1,"Statement order: %d Read(s) replayed at their file position, %d formula/assertion segment(s) (%s; manual 10.1, 11.11.8)\n",pl->nrd,nseg,postsim?"PostSim":"TAB");
+  return pl->needed;
+}
+
+int ord_read_deferred(char *fname, long pos) {
+  ord_plan *pl;
+  int lo,hi,mid;
+  if (ord_nplans==0) return 0;
+  pl=ord_find(fname);
+  if (pl==NULL||pl->nrd==0) return 0;
+  lo=0;
+  hi=pl->nrd-1;
+  while (lo<=hi) {
+    mid=(lo+hi)/2;
+    if (pl->rd[mid].pos==pos) return 1;
+    if (pl->rd[mid].pos<pos) lo=mid+1;
+    else hi=mid-1;
+  }
+  return 0;
+}
+
+void ord_io_set(int niodata, cmf_file_entry *iodata, offset_t nvarele) {
+  ord_niodata=niodata;
+  ord_iodata=iodata;
+  ord_nvarele=nvarele;
+}
+
+static int ord_replay(ord_plan *pl, ord_read *r, int record, set_def *sets, dim_t nset, set_element *set_elems, array_def *coefs, offset_t ncof, array_def *vars, offset_t nvar, elem_value *elem_vals, offset_t ncofele) {
+  elem_store *scr;
+  offset_t l,cnt=0;
+  offset_t rc;
+  scr=(elem_store *) calloc(r->n+1,sizeof(elem_store));
+  rd_win.mark=(unsigned char *) calloc(r->n+1,1);
+  rd_win.on=1;
+  rd_win.kind=r->tkind;
+  rd_win.lo=r->tkind?vars[r->tidx].offset:coefs[r->tidx].offset;
+  rd_win.n=r->n;
+  rd_filter_mode=2;
+  rd_filter_pos=r->pos;
+  rc=data_read_files(pl->fname,ord_niodata,ord_iodata,"read",sets,nset,set_elems,coefs,ncof,scr,ncofele,vars,nvar,scr,ord_nvarele);
+  rd_filter_mode=0;
+  rd_win.on=0;
+  if (rc==-1) {
+    free(scr);
+    free(rd_win.mark);
+    rd_win.mark=NULL;
+    return -1;
+  }
+  r->base=r->tkind?ncofele+vars[r->tidx].offset:coefs[r->tidx].offset;
+  for (l=0; l<r->n; l++) if (rd_win.mark[l]) {
+      elem_vals[r->base+l].value=scr[l].value;
+      cnt++;
+    }
+  if (record) {
+    r->full=(cnt==r->n);
+    r->nel=cnt;
+    free(r->el);
+    r->el=NULL;
+    if (!r->full&&cnt>0) {
+      r->el=(offset_t *) malloc(cnt*sizeof(offset_t));
+      cnt=0;
+      for (l=0; l<r->n; l++) if (rd_win.mark[l]) r->el[cnt++]=l;
+    }
+    r->known=1;
+  }
+  free(scr);
+  free(rd_win.mark);
+  rd_win.mark=NULL;
+  return 0;
+}
+
+void ord_coverage_bcast(char *fname, int rank) {
+  ord_plan *pl=ord_find(fname);
+  int i,hdr[2];
+  if (pl==NULL||pl->nrd==0) return;
+  for (i=0; i<pl->nrd; i++) {
+    ord_read *r=&pl->rd[i];
+    hdr[0]=r->known;
+    hdr[1]=r->full;
+    MPI_Bcast(hdr,2,MPI_INT,0,PETSC_COMM_WORLD);
+    MPI_Bcast(&r->nel,sizeof(offset_t),MPI_BYTE,0,PETSC_COMM_WORLD);
+    MPI_Bcast(&r->base,sizeof(offset_t),MPI_BYTE,0,PETSC_COMM_WORLD);
+    if (rank!=0) {
+      r->known=hdr[0];
+      r->full=hdr[1];
+      free(r->el);
+      r->el=(!r->full&&r->nel>0)?(offset_t *) malloc(r->nel*sizeof(offset_t)):NULL;
+    }
+    if (r->el!=NULL) MPI_Bcast(r->el,r->nel*sizeof(offset_t),MPI_BYTE,0,PETSC_COMM_WORLD);
+  }
+}
+
+static void ord_snap(ord_read *r, elem_value *elem_vals, int restore) {
+  offset_t l,m=r->full?r->n:r->nel;
+  if (!r->known||m==0) return;
+  if (r->snap==NULL) r->snap=(store_real *) malloc(m*sizeof(store_real));
+  for (l=0; l<m; l++) {
+    offset_t at=r->base+(r->full?l:r->el[l]);
+    if (restore) elem_vals[at].value=r->snap[l];
+    else r->snap[l]=elem_vals[at].value;
+  }
+}
+
+offset_t statements_execute(char *fname, char *commsyntax, set_def *sets, dim_t nset, set_element *set_elems, array_def *coefs, offset_t ncof, array_def *vars, offset_t nvar, elem_value *elem_vals, offset_t ncofvar, offset_t ncofele, bool IsIni, int postsim_pass) {
+  ord_plan *pl=ord_find(fname);
+  offset_t j=0;
+  int e,fromfile;
+  if (pl==NULL||!pl->needed) {
+    j=formulas_execute(fname,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofvar,ncofele,IsIni);
+    assertions_execute(fname,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofvar,ncofele,IsIni,teems_assertions_mode,postsim_pass);
+    return j;
+  }
+  fromfile=pl->postsim||IsIni;
+  if (!fromfile) for (e=0; e<pl->nrd; e++) ord_snap(&pl->rd[e],elem_vals,0);
+  for (e=0; e<pl->nev; e++) {
+    ord_event *ev=&pl->ev[e];
+    if (ev->isread) {
+      if (fromfile) {
+        if (ord_replay(pl,&pl->rd[ev->r],!pl->postsim,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele)==-1) MPI_Abort(PETSC_COMM_WORLD,1);
+      } else ord_snap(&pl->rd[ev->r],elem_vals,1);
+      continue;
+    }
+    teems_ord_lo=ev->lo;
+    teems_ord_hi=ev->hi;
+    j+=formulas_execute(fname,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofvar,ncofele,IsIni);
+    assertions_execute(fname,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofvar,ncofele,IsIni,teems_assertions_mode,postsim_pass);
+    teems_ord_lo=teems_ord_hi=-1;
+  }
+  return j;
 }
 
 offset_t tab_count_statements(char *fname, char *commsyntax) {
@@ -5200,8 +5580,6 @@ offset_t coefficients_read(char *fname, char *commsyntax, array_def *record, off
   free(teems_coef_glval2);
   teems_coef_gltype2= (int *) calloc (ncof+1,sizeof(int));
   teems_coef_glval2= (store_real *) calloc (ncof+1,sizeof(store_real));
-  free(teems_coef_ifhdr);
-  teems_coef_ifhdr= (bool *) calloc (ncof+1,sizeof(bool));
 
   while (tab_next_statement(commsyntax,filehandle,line,TABREADLINE)) {
     /* positional PARAMETER/NON_PARAMETER default for real
@@ -7606,7 +7984,8 @@ static char *tab_next_statement_raw(char *commsyntax, FILE *filehandle, char *re
   }
   strcpy(readline,"\0");
 
-  while (strict?strict_getline(line,TABLINESIZE,filehandle,&pos):fgets(line,TABLINESIZE,filehandle)) {
+  long lp=0;
+  while ((lp=ftell(filehandle),strict?strict_getline(line,TABLINESIZE,filehandle,&pos):fgets(line,TABLINESIZE,filehandle))) {
     while (str_replace_all(line,"  ", " "));
     if (line[0]==' ') {
       memmove(line,&line[0]+1,strlen(line)-1);
@@ -7626,6 +8005,7 @@ static char *tab_next_statement_raw(char *commsyntax, FILE *filehandle, char *re
     }
     if (strncmp(upperlinecomm,uppercomsyn,count1) == 0&&check1==0) {
       check1=1;
+      teems_stmt_start=lp;
       n=strstr(line,finditem);//ha_cgefendofc
       if (n==NULL) {
         strcpy(readline,line);
@@ -7675,13 +8055,15 @@ static char *tab_next_statement_resolved_raw(char *commsyntax, FILE *filehandle,
   }
   char *n,line[TABLINESIZE],*finditem=";";//,linecopy[TABLINESIZE+2]
   strcpy(readline,"\0");
-  while (fgets(line,TABLINESIZE,filehandle)) {
+  long lp=0;
+  while ((lp=ftell(filehandle),fgets(line,TABLINESIZE,filehandle))) {
     while (str_replace_all(line,"  ", " "));
     if (line[0]==' ') {
       memmove(line,&line[0]+1,strlen(line)-1);
     }
     if (strncmp(line,commsyntax,count1) == 0&&check1==0) {
       check1=1;
+      teems_stmt_start=lp;
       n=strstr(line,finditem);//ha_cgefendofc
       if (n==NULL) {
         strcpy(readline,line);
