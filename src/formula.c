@@ -202,6 +202,13 @@ static int pos_lower(char *f, set_def *sets, quantifier *arSet, dim_t fdim, form
     }
     if (arg1[0]=='\0') { errmsg("Error: $POS needs an index, element or index expression argument (manual 11.5.6): %s\n",f); return 0; }
     dim_t setS=-1;
+    /* a loop index ranges over the one-element loop set lp@<id>; its
+       position is the one in the loop set (manual 11.18, 11.5.6) */
+    if (arg2[0]=='\0') {
+      dim_t l,par;
+      for (l=0; l<fdim; l++) if (strcmp(arg1,arSet[l].index_name)==0) break;
+      if (l<fdim&&(par=loop_set_parent((dim_t)arSet[l].setid))>=0) strcpy(arg2,sets[par].setname);
+    }
     /* internal form from a lowered index comparison (manual 11.4.11):
        "=other" / "<other" -- the position in the common set of this
        side and the other, the larger of the two sets; "<" orders, so
@@ -2686,6 +2693,13 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
         IsFomIni=false;
         explicit_always=1;
       }
+      /* the one Formula of a fused loop (tab_loop_transform; manual
+         11.9.8.1): serial in loop order, repeated LHS elements allowed */
+      int loopser=0;
+      if(strstr(line, "(loopserial)")!=NULL) {
+        str_replace_first(line, "(loopserial)", "");
+        loopser=1;
+      }
       /* a Formula whose LHS is an integer coefficient is INITIAL by
          default whatever FORMULA(DEFAULT=...) says; only an explicit
          (always) recomputes it at each step (manual 10.19, 11.6.3). It
@@ -3088,7 +3102,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
         lhs_args_bind("Formula",linecopy,lhsdef,lhsargs,arSet,fdim-1,sets,varantidim,vararset,varsubset,varsupsetid,varll,varmap,varmapdss);
         lhsmapped=0;
         for (l=0; l<varsize; l++) if (varmap[l]>0) lhsmapped=1;
-        if (lhsmapped) lhs_mapped_unique(lhsdef,linecopy,arSet,fdim-1,dcountdim1,nloops,varsize,varantidim,vararset,varsubset,varsupsetid,varmap,varmapdss,sets,set_elems);
+        if (lhsmapped&&!loopser) lhs_mapped_unique(lhsdef,linecopy,arSet,fdim-1,dcountdim1,nloops,varsize,varantidim,vararset,varsubset,varsupsetid,varmap,varmapdss,sets,set_elems);
         if (IsFomIni) for (l=0; l<varsize; l++) if (varll[l]!=0) {
           errmsg("Error: index offsets are not allowed on the left-hand side of a Formula(Initial) (a Read in later steps; manual 10.8, 11.11.4): %s\n",linecopy);
           MPI_Abort(PETSC_COMM_WORLD,1);
@@ -3113,6 +3127,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
             } else if (strstr(condvar[i],lhsname)!=NULL) m=sr_classify_text(condvar[i],lhsname,lhsdef,arSet,fdim-1,vararset,varll,1,linecopy);
             if (m>fsr) fsr=m;
           }
+          if (loopser&&fsr==SR_PARALLEL) fsr=SR_SERIAL;
           if (fsr!=SR_PARALLEL) logmsg(2,"formula for %s runs serially in loop order (%s; manual 16.5)\n",lhsname,fsr==SR_SERIAL_SUMS?"self reference inside a sum":"self reference");
         }
         if (fsr==SR_SERIAL_SUMS) strcpy(fmain,line1);
@@ -4940,7 +4955,15 @@ offset_t assertions_execute(char *fname,set_def *sets,dim_t nset,set_element *se
   dim_t cond_nops[4*MAXVARDIM];
   int cond_relop[4*MAXVARDIM],ncond;
   char condtxt[TABREADLINE];
-  if(mode==0)return 0;
+  /* BREAK/CYCLE (manual 11.18) arrive as "(loopctl)" assertions; the
+     loop driver evaluates them in probe mode, which counts the tuples
+     and the true ones instead of reporting, whatever -assertions says */
+  int probe=(teems_loopctl_probe!=0),isctl;
+  if(probe) {
+    teems_loopctl_n=0;
+    teems_loopctl_true=0;
+  }
+  if(mode==0&&!probe)return 0;
   /* count cached per file buffer: the PostSim pass runs this on the
      _ps companion with its own count */
   if(nassert<0||fname!=nassert_fname) {
@@ -4955,10 +4978,21 @@ offset_t assertions_execute(char *fname,set_def *sets,dim_t nset,set_element *se
   strcpy(sumsyntax,"sum(");
   while (tab_next_statement_resolved("assertion",filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
     if (teems_ord_lo>=0&&(teems_stmt_start<teems_ord_lo||teems_stmt_start>=teems_ord_hi)) continue;
+    isctl=(strstr(line,"(loopctl)")!=NULL);
+    if(isctl!=probe)continue;
+    if(isctl) {
+      char *lc=strstr(line,"(lc=");
+      if(lc!=NULL) {
+        char *e=strchr(lc,')');
+        if(e!=NULL)memmove(lc,e+1,strlen(e+1)+1);
+      }
+      str_replace_first(line,"(loopctl)","");
+    }
     mapping_reject_in(line,"Assertion");
     /* (postsim) assertions run only in the post-solve pass, where the
        initial/always qualifiers are ignored (manual 12.2.4) */
-    if(strstr(line,"(postsim)")!=NULL) {
+    if(isctl) {}
+    else if(strstr(line,"(postsim)")!=NULL) {
       if(postsim_pass==0)continue;
       str_replace_first(line,"(postsim)","");
     }
@@ -5242,6 +5276,11 @@ offset_t assertions_execute(char *fname,set_def *sets,dim_t nset,set_element *se
       if(relop==4)ok=(r<=0);
       if(relop==5)ok=(r>0);
       if(relop==6)ok=(r<0);
+      if(isctl) {
+        teems_loopctl_n++;
+        if(ok)teems_loopctl_true++;
+        continue;
+      }
       if(!ok) {
         fails++;
         if(shown<10) {

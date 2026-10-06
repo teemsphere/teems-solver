@@ -2019,10 +2019,15 @@ int main(int argc,char **args) {
        differentiation; untouched when the TAB has no levels
        statements (design doc section 5) */
     if(tab_levels_transform(newtabfile)<0)MPI_Abort(PETSC_COMM_WORLD,1);
+    /* loops (manual 11.18): marker statements, body statements over
+       the loop, BREAK/CYCLE as probe assertions; a PostSim section's
+       loops are in the companion file */
+    if(tab_loop_transform(newtabfile)<0)MPI_Abort(PETSC_COMM_WORLD,1);
+    if(npostsim>0&&tab_loop_transform(psfile)<0)MPI_Abort(PETSC_COMM_WORLD,1);
   }
 
   strcpy(tabfile,newtabfile);
-  if(rank==0)nset=sets_count(tabfile);
+  if(rank==0)nset=sets_count(tabfile)+teems_loop_nsyn; /* + one lp@<id> set per general loop */
   /* Tier B4: a TAB without equations is a data program (manual 5.1.2,
      6.3; GEMPACK runs it without a simulation), and -solmed nosim runs
      any TAB that way (CMF "simulation = no;", 25.1.8): reads, formulas
@@ -2068,6 +2073,18 @@ int main(int argc,char **args) {
   if(rank==0) {
     if(sets_read(tabfile,niodata,iodata, sets,nset)==-1)MPI_Abort(PETSC_COMM_WORLD,1);
     if(sets_read_intertemporal(tabfile,niodata,iodata, sets,nset)==-1)MPI_Abort(PETSC_COMM_WORLD,1);
+    for (i=0; i<teems_loop_nsyn; i++) {
+      set_def *ls=&sets[nset-teems_loop_nsyn+i];
+      dim_t par;
+      snprintf(ls->setname,sizeof(ls->setname),"lp@%d",teems_loop_syns[i].id);
+      snprintf(ls->readele,sizeof(ls->readele),"~%s",teems_loop_syns[i].parent);
+      for (par=0; par<nset-teems_loop_nsyn; par++) if (strcmp(sets[par].setname,teems_loop_syns[i].parent)==0) break;
+      if (par==nset-teems_loop_nsyn) {
+        errmsg("Error: Loop over %s, which is not a declared set (manual 11.18)\n",teems_loop_syns[i].parent);
+        MPI_Abort(PETSC_COMM_WORLD,1);
+      }
+      ls->size=(sets[par].size>0)?1:0;
+    }
     for (i=0; i<nset; i++) {
       if(sets[i].size<0){
         errmsg("Error: set %s has a negative size in TAB file\n",sets[i].setname);
@@ -2104,6 +2121,14 @@ int main(int argc,char **args) {
   for (i=0; i<nsetspace; i++)for (j=0; j<MAXSUPSET; j++)set_elems[i].superset_pos[j]=-1;
   if(rank==0) {
     for (i=0; i<nset; i++) {
+      if (sets[i].readele[0]=='~') continue; /* loop set: tab_loop_sets_link */
+      if (sets[i].readele[0]=='#') { /* unnamed set (manual 11.7.1): elements 1..n */
+        for (j=0; j<sets[i].size; j++) {
+          snprintf(set_elems[j+sets[i].offset].setele,NAMESIZE,"%ld",(long)(j+1));
+          set_elems[j+sets[i].offset].superset_pos[0]=j;
+        }
+        continue;
+      }
       strcpy(vname,sets[i].header);
       nlength=0;
       while (vname[nlength] != '\0') {
@@ -2190,6 +2215,7 @@ int main(int argc,char **args) {
     subsets_read(tabfile, set_elems, sets,nset);
     j2=1;
     while(j2==1)for(i=1; i<MAXSUPSET; i++)subset_map_build(set_elems,sets,nset,&j2); //printf("check %d\n",i);}
+    if(tab_loop_sets_link(set_elems,sets,nset)<0)MPI_Abort(PETSC_COMM_WORLD,1);
     ndblock1=ndblock;
     /* MAPPING statements (manual 11.9): declarations + by_elements
        values, resolved against the set elements built above so they
@@ -2215,6 +2241,15 @@ int main(int argc,char **args) {
   if(nohsl) {
     MPI_Bcast(sets,nset*sizeof(set_def), MPI_BYTE,0, PETSC_COMM_WORLD);
     MPI_Bcast(set_elems,nsetspace*sizeof(set_element), MPI_BYTE,0, PETSC_COMM_WORLD);
+    /* every rank that runs formulas repoints its own loop sets */
+    MPI_Bcast(&teems_loop_nsyn,1,MPI_INT,0,PETSC_COMM_WORLD);
+    if(teems_loop_nsyn>0) {
+      if(rank!=0) {
+        free(teems_loop_syns); /* nohsl ranks ran the transform too */
+        teems_loop_syns=(teems_loop_syn *) calloc (teems_loop_nsyn,sizeof(teems_loop_syn));
+      }
+      MPI_Bcast(teems_loop_syns,teems_loop_nsyn*sizeof(teems_loop_syn),MPI_BYTE,0,PETSC_COMM_WORLD);
+    }
     MPI_Bcast(&nmap,sizeof(dim_t), MPI_BYTE,0, PETSC_COMM_WORLD);
     if(nmap>0) {
       if(rank!=0) maps= (map_def *) calloc (nmap+MAP_SYNTH_MAX,sizeof(map_def));

@@ -74,6 +74,8 @@ extern int teems_two_run;
 extern int teems_sup;
 extern int teems_comp_no_acc;
 extern int teems_comp_nsub;
+extern int teems_loopctl_probe;
+extern long teems_loopctl_n,teems_loopctl_true;
 extern int teems_sui;
 extern bool *teems_coef_is_fini;
 /* RANDOM (manual 11.5.2): -random_seed, and the key of the statement
@@ -948,6 +950,18 @@ int parse_index_leadlag(char *p,int *leadlag);
 void offset_range_check(dim_t frame_setid, dim_t ss, dim_t arg_setid, int leadlag, const char *idx, const char *symname);
 dim_t set_bind_slot(set_def *sets, dim_t sub, dim_t sup, int *leadlag, const char *idx, const char *symname);
 void array_element_label(array_def *a, offset_t k, char *out, size_t cap);
+/* tab_loop.c: loops in TAB files (manual 11.18, 11.9.8.1) */
+typedef struct {
+  int id;                 /* loop id, as in the "loop (begin) <id>" marker */
+  char parent[NAMESIZE];  /* the loop set */
+  dim_t setid, parentid;  /* lp@<id> and the loop set, after the set read */
+} teems_loop_syn;
+extern teems_loop_syn *teems_loop_syns;
+extern int teems_loop_nsyn;
+int tab_loop_transform(char *fname);
+int tab_loop_sets_link(set_element *se, set_def *sets, dim_t nset);
+void loop_set_point(set_element *se, set_def *sets, int k, dim_t e);
+dim_t loop_set_parent(dim_t s);
 extern solve_real *teems_comp_xac_base;
 int coefficients_dump_phase(const char *stem, const char *ext, offset_t phase, offset_t ncof, offset_t ncofele, elem_value *elem_vals);
 extern long zdiv_default_hits;

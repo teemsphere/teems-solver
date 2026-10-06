@@ -2385,13 +2385,36 @@ int ord_plan_build(char *fname, int postsim, array_def *coefs, offset_t ncof, ar
     fclose(f);
   }
   qsort(st,nst,sizeof(ord_stmt),ord_stmt_cmp);
+  /* a loop (manual 11.18) is one unit here: the loop driver orders the
+     statements of its body, so a split never falls inside it */
+  long *lpb=NULL,*lpe=NULL;
+  int nlp=0,depth=0;
+  f=teems_fopen(fname,"r");
+  if (f!=NULL) {
+    while (tab_next_statement("loop",f,line,TABREADLINE)) {
+      if (strncmp(line,"loop (begin)",12)==0) {
+        if (depth++==0) {
+          lpb=(long *) realloc(lpb,(nlp+1)*sizeof(long));
+          lpe=(long *) realloc(lpe,(nlp+1)*sizeof(long));
+          lpb[nlp]=teems_stmt_start;
+          lpe[nlp]=LONG_MAX;
+          nlp++;
+        }
+      }
+      else if (strncmp(line,"loop (end)",10)==0&&depth>0&&--depth==0) lpe[nlp-1]=teems_stmt_start;
+    }
+    fclose(f);
+  }
   for (i=0; i<nst; i++) {
+    long sp=st[i].pos;
+    int inlp=0,q;
+    for (q=0; q<nlp; q++) if (sp>lpb[q]&&sp<lpe[q]) { sp=lpb[q]; inlp=1; break; }
     if (st[i].kind==1) {
       if (strstr(st[i].text,"(default")!=NULL) continue;
       ord_head_name(st[i].text,"formula",name);
       if (name[0]!='\0'&&ord_set_has(&sega,name)) {
-        if (seg_fa>0) { ord_event_push(pl,0,-1,seg_lo,st[i].pos); nseg++; }
-        seg_lo=st[i].pos;
+        if (seg_fa>0&&sp>seg_lo) { ord_event_push(pl,0,-1,seg_lo,sp); nseg++; }
+        if (sp>seg_lo) seg_lo=sp;
         seg_fa=0;
         ord_set_free(&sega);
       }
@@ -2399,7 +2422,7 @@ int ord_plan_build(char *fname, int postsim, array_def *coefs, offset_t ncof, ar
       seg_fa++;
     } else if (st[i].kind==2) {
       ord_tokens_add(&seen,st[i].text);
-      ord_tokens_add(&sega,st[i].text);
+      if (!inlp) ord_tokens_add(&sega,st[i].text);
       seg_fa++;
     } else {
       int tkind=-1;
@@ -2426,6 +2449,8 @@ int ord_plan_build(char *fname, int postsim, array_def *coefs, offset_t ncof, ar
   }
   if (seg_fa>0||pl->nev==0) { ord_event_push(pl,0,-1,seg_lo,LONG_MAX); nseg++; }
   pl->needed=(pl->nrd>0||nseg>1);
+  free(lpb);
+  free(lpe);
   for (i=0; i<nst; i++) free(st[i].text);
   free(st);
   ord_set_free(&seen);
@@ -2533,11 +2558,201 @@ static void ord_snap(ord_read *r, elem_value *elem_vals, int restore) {
   }
 }
 
+/* ---- loops (manual 11.18; tab_loop.c) --------------------------------
+   The loop markers, the BREAK/CYCLE probe assertions and the ordinary
+   assertions inside loops are located once per TAB buffer, by statement
+   position in the file that actually runs (later rewrites move them). */
+typedef struct {
+  long bpos,epos;
+  int id,fused,syn;
+} lp_rt;
+typedef struct {
+  long pos;
+  int cycle,any,target;
+} lc_rt;
+typedef struct {
+  char *fname;
+  int nl,nc,na;
+  lp_rt *l;
+  lc_rt *c;
+  long *apos;
+} lp_plan;
+static lp_plan *lp_plans=NULL;
+static int lp_nplans=0;
+
+static lp_plan *lp_plan_get(char *fname) {
+  int i;
+  FILE *f;
+  char line[TABREADLINE];
+  lp_plan *P;
+  for (i=0; i<lp_nplans; i++) if (strcmp(lp_plans[i].fname,fname)==0) return &lp_plans[i];
+  lp_plans=(lp_plan *) realloc(lp_plans,(lp_nplans+1)*sizeof(lp_plan));
+  P=&lp_plans[lp_nplans++];
+  memset(P,0,sizeof(*P));
+  P->fname=strdup(fname);
+  f=teems_fopen(fname,"r");
+  if (f==NULL) return P;
+  while (tab_next_statement("loop",f,line,TABREADLINE)) {
+    int id,fused=0;
+    char idx[NAMESIZE],set[NAMESIZE],nm[NAMESIZE];
+    if (sscanf(line,"loop (begin) %d %255s %255s %255s %d",&id,idx,set,nm,&fused)==5) {
+      int k;
+      P->l=(lp_rt *) realloc(P->l,(P->nl+1)*sizeof(lp_rt));
+      P->l[P->nl].bpos=teems_stmt_start;
+      P->l[P->nl].epos=-1;
+      P->l[P->nl].id=id;
+      P->l[P->nl].fused=fused;
+      P->l[P->nl].syn=-1;
+      for (k=0; k<teems_loop_nsyn; k++) if (teems_loop_syns[k].id==id) P->l[P->nl].syn=k;
+      P->nl++;
+    }
+    else if (sscanf(line,"loop (end) %d",&id)==1) {
+      for (i=0; i<P->nl; i++) if (P->l[i].id==id) P->l[i].epos=teems_stmt_start;
+    }
+  }
+  fclose(f);
+  if (P->nl==0) return P;
+  f=teems_fopen(fname,"r");
+  while (tab_next_statement("assertion",f,line,TABREADLINE)) {
+    char *lc=strstr(line,"(lc=");
+    if (lc!=NULL&&strstr(line,"(loopctl)")!=NULL) {
+      char kind,qual;
+      int id;
+      if (sscanf(lc,"(lc=%c,%c,%d)",&kind,&qual,&id)==3) {
+        P->c=(lc_rt *) realloc(P->c,(P->nc+1)*sizeof(lc_rt));
+        P->c[P->nc].pos=teems_stmt_start;
+        P->c[P->nc].cycle=(kind=='c');
+        P->c[P->nc].any=(qual=='a');
+        P->c[P->nc].target=-1;
+        for (i=0; i<P->nl; i++) if (P->l[i].id==id) P->c[P->nc].target=i;
+        P->nc++;
+      }
+    }
+    else {
+      P->apos=(long *) realloc(P->apos,(P->na+1)*sizeof(long));
+      P->apos[P->na++]=teems_stmt_start;
+    }
+  }
+  fclose(f);
+  return P;
+}
+
+typedef struct {
+  char *fname,*commsyntax;
+  set_def *sets;
+  dim_t nset;
+  set_element *set_elems;
+  array_def *coefs,*vars;
+  offset_t ncof,nvar,ncofvar,ncofele;
+  elem_value *elem_vals;
+  bool IsIni;
+  int postsim_pass;
+  offset_t nf;
+} lp_ctx;
+
+/* the statements of [lo,hi) with no loop marker inside: formulas, then
+   assertions, as the whole-file scan runs them */
+static void lp_plain(lp_ctx *X, long lo, long hi) {
+  if (hi<=lo) return;
+  teems_ord_lo=lo;
+  teems_ord_hi=hi;
+  X->nf+=formulas_execute(X->fname,X->commsyntax,X->sets,X->nset,X->set_elems,X->coefs,X->ncof,X->vars,X->nvar,X->elem_vals,X->ncofvar,X->ncofele,X->IsIni);
+  assertions_execute(X->fname,X->sets,X->nset,X->set_elems,X->coefs,X->ncof,X->vars,X->nvar,X->elem_vals,X->ncofvar,X->ncofele,X->IsIni,teems_assertions_mode,X->postsim_pass);
+  teems_ord_lo=teems_ord_hi=-1;
+}
+
+enum { LP_GO=0, LP_BREAK=1, LP_CYCLE=2 };
+static int lp_run(lp_plan *P, lp_ctx *X, int L, int *tgt);
+
+/* [lo,hi) in file order; inside a loop body (inloop) every assertion
+   is its own step, so it sees the formulas before it and none after */
+static int lp_range(lp_plan *P, lp_ctx *X, long lo, long hi, int inloop, int *tgt) {
+  long cur=lo;
+  for (;;) {
+    long ev=hi;
+    int kind=0,which=-1,i;
+    for (i=0; i<P->nl; i++) if (P->l[i].bpos>=cur&&P->l[i].bpos<ev) { ev=P->l[i].bpos; kind=1; which=i; }
+    for (i=0; i<P->nc; i++) if (P->c[i].pos>=cur&&P->c[i].pos<ev) { ev=P->c[i].pos; kind=2; which=i; }
+    if (inloop) for (i=0; i<P->na; i++) if (P->apos[i]>=cur&&P->apos[i]<ev) { ev=P->apos[i]; kind=3; which=i; }
+    lp_plain(X,cur,ev);
+    if (kind==0) return LP_GO;
+    if (kind==1) {
+      lp_rt *L=&P->l[which];
+      if (L->epos<0||L->epos>=hi) {
+        errmsg("Error: a loop runs across a statement-order split (manual 10.1, 11.18); internal\n");
+        MPI_Abort(PETSC_COMM_WORLD,1);
+      }
+      if (L->fused) lp_plain(X,L->bpos+1,L->epos);
+      else {
+        int rc=lp_run(P,X,which,tgt);
+        if (rc!=LP_GO) return rc;
+      }
+      cur=L->epos+1;
+      continue;
+    }
+    if (kind==2) {
+      lc_rt *C=&P->c[which];
+      int fire;
+      teems_loopctl_probe=1;
+      teems_ord_lo=C->pos;
+      teems_ord_hi=C->pos+1;
+      assertions_execute(X->fname,X->sets,X->nset,X->set_elems,X->coefs,X->ncof,X->vars,X->nvar,X->elem_vals,X->ncofvar,X->ncofele,X->IsIni,teems_assertions_mode,X->postsim_pass);
+      teems_ord_lo=teems_ord_hi=-1;
+      teems_loopctl_probe=0;
+      fire=C->any?(teems_loopctl_true>0):(teems_loopctl_n>0&&teems_loopctl_true==teems_loopctl_n);
+      cur=C->pos+1;
+      if (fire) {
+        *tgt=C->target;
+        return C->cycle?LP_CYCLE:LP_BREAK;
+      }
+      continue;
+    }
+    lp_plain(X,P->apos[which],P->apos[which]+1);
+    cur=P->apos[which]+1;
+  }
+}
+
+static int lp_run(lp_plan *P, lp_ctx *X, int L, int *tgt) {
+  lp_rt *R=&P->l[L];
+  dim_t e,n;
+  if (R->syn<0) {
+    errmsg("Error: loop %d has no loop set (internal)\n",R->id);
+    MPI_Abort(PETSC_COMM_WORLD,1);
+  }
+  n=X->sets[teems_loop_syns[R->syn].parentid].size;
+  for (e=0; e<n; e++) {
+    int rc;
+    loop_set_point(X->set_elems,X->sets,R->syn,e);
+    rc=lp_range(P,X,R->bpos+1,R->epos,1,tgt);
+    if (rc==LP_GO) continue;
+    if (*tgt!=L) {
+      if (n>0) loop_set_point(X->set_elems,X->sets,R->syn,0);
+      return rc;
+    }
+    if (rc==LP_BREAK) break;
+  }
+  if (n>0) loop_set_point(X->set_elems,X->sets,R->syn,0);
+  return LP_GO;
+}
+
+static offset_t lp_execute(lp_plan *P, char *fname, char *commsyntax, set_def *sets, dim_t nset, set_element *set_elems, array_def *coefs, offset_t ncof, array_def *vars, offset_t nvar, elem_value *elem_vals, offset_t ncofvar, offset_t ncofele, bool IsIni, int postsim_pass, long lo, long hi) {
+  lp_ctx X;
+  int tgt=-1;
+  X.fname=fname; X.commsyntax=commsyntax; X.sets=sets; X.nset=nset; X.set_elems=set_elems;
+  X.coefs=coefs; X.vars=vars; X.ncof=ncof; X.nvar=nvar; X.ncofvar=ncofvar; X.ncofele=ncofele;
+  X.elem_vals=elem_vals; X.IsIni=IsIni; X.postsim_pass=postsim_pass; X.nf=0;
+  lp_range(P,&X,lo,hi,0,&tgt);
+  return X.nf;
+}
+
 offset_t statements_execute(char *fname, char *commsyntax, set_def *sets, dim_t nset, set_element *set_elems, array_def *coefs, offset_t ncof, array_def *vars, offset_t nvar, elem_value *elem_vals, offset_t ncofvar, offset_t ncofele, bool IsIni, int postsim_pass) {
   ord_plan *pl=ord_find(fname);
+  lp_plan *lpp=(teems_loop_nsyn>0)?lp_plan_get(fname):NULL;
   offset_t j=0;
   int e,fromfile;
+  if (lpp!=NULL&&lpp->nl==0) lpp=NULL;
   if (pl==NULL||!pl->needed) {
+    if (lpp!=NULL) return lp_execute(lpp,fname,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofvar,ncofele,IsIni,postsim_pass,0,LONG_MAX);
     j=formulas_execute(fname,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofvar,ncofele,IsIni);
     assertions_execute(fname,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofvar,ncofele,IsIni,teems_assertions_mode,postsim_pass);
     return j;
@@ -2550,6 +2765,10 @@ offset_t statements_execute(char *fname, char *commsyntax, set_def *sets, dim_t 
       if (fromfile) {
         if (ord_replay(pl,&pl->rd[ev->r],!pl->postsim,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele)==-1) MPI_Abort(PETSC_COMM_WORLD,1);
       } else ord_snap(&pl->rd[ev->r],elem_vals,1);
+      continue;
+    }
+    if (lpp!=NULL) {
+      j+=lp_execute(lpp,fname,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofvar,ncofele,IsIni,postsim_pass,ev->lo,ev->hi);
       continue;
     }
     teems_ord_lo=ev->lo;
@@ -6830,6 +7049,50 @@ toolong:
   return -1;
 }
 
+/* the value of an integer coefficient a TAB Read supplies (set sizes,
+   manual 10.1 style (4)): the Read statement names the file and
+   header, the header's first data line holds the integer */
+static int tab_int_coef_read(char *fname, const char *name, int niodata, cmf_file_entry *iodata, long *val) {
+  FILE *fh;
+  char line[TABREADLINE],cs[TABREADLINE],logn[NAMESIZE]="",hdr[HEADERSIZE]="",*t;
+  int k;
+  snprintf(cs,sizeof(cs),"read %s",name);
+  fh=teems_fopen(fname,"r");
+  if (fh==NULL) return -1;
+  while (tab_next_statement(cs,fh,line,TABREADLINE)) {
+    char *p=strstr(line," from file ");
+    if (p==NULL) continue;
+    p+=11;
+    while (*p==' ') p++;
+    for (k=0; *p!='\0'&&*p!=' '&&k<NAMESIZE-1; p++) logn[k++]=*p;
+    logn[k]='\0';
+    t=strchr(p,'"');
+    if (t!=NULL) {
+      char *e=strchr(t+1,'"');
+      if (e!=NULL&&(size_t)(e-t-1)<sizeof(hdr)) { memcpy(hdr,t+1,e-t-1); hdr[e-t-1]='\0'; }
+    }
+    break;
+  }
+  fclose(fh);
+  if (logn[0]=='\0'||hdr[0]=='\0') return -1;
+  for (k=0; k<niodata; k++) if (strcmp(logn,iodata[k].logname)==0) break;
+  if (k==niodata) return -1;
+  fh=teems_fopen(iodata[k].filname,"r");
+  if (fh==NULL) return -1;
+  while (fgets(line,TABREADLINE,fh)) {
+    char *q=strchr(line,'"'),*e;
+    if (q==NULL||(e=strchr(q+1,'"'))==NULL) continue;
+    *e='\0';
+    if (str_cmp_ci(q+1,hdr)!=0) continue;
+    if (fgets(line,TABREADLINE,fh)==NULL) break;
+    *val=atol(line);
+    fclose(fh);
+    return 0;
+  }
+  fclose(fh);
+  return -1;
+}
+
 int sets_read(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,dim_t nset) {
   FILE * filehandle;//, *fileout;
   char line[TABREADLINE]="\0",linecopy[TABREADLINE],line1[TABREADLINE],line2[TABREADLINE];
@@ -7159,6 +7422,36 @@ int sets_read(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,
           record[j].size=dim1;
         } else {
           record[j].header[0]='\0';
+          /* a set without named elements (manual 10.1 styles (3)/(4),
+             11.7.1): "size <n>" or "size <integer coefficient>" and no
+             element list; its elements are numbered 1..n ("#n" below,
+             built in main without an element list) */
+          if (strchr(linecopy,'(')==NULL) {
+            char tmp[TABREADLINE],*sz,*p,*h1,*h2;
+            strcpy(tmp,linecopy);
+            while ((h1=strchr(tmp,'#'))!=NULL&&(h2=strchr(h1+1,'#'))!=NULL) memmove(h1,h2+1,strlen(h2+1)+1);
+            sz=strstr(tmp," size ");
+            if (sz!=NULL) {
+              long n=-1;
+              char tok[NAMESIZE];
+              p=sz+6;
+              while (*p==' ') p++;
+              if (sscanf(p,"%255[^ ;]",tok)!=1) tok[0]='\0';
+              if (tok[0]>='0'&&tok[0]<='9') n=atol(tok);
+              else if (tok[0]!='\0'&&tab_int_coef_read(fname,tok,niodata,iodata,&n)<0) {
+                errmsg("Error: the size of set %s comes from %s, which no Read statement supplies as an integer from a data file (manual 10.1 style (4))\n",record[j].setname,tok);
+                return -1;
+              }
+              if (n<0) {
+                errmsg("Error: malformed size in the declaration of set %s (manual 10.1 style (3))\n",record[j].setname);
+                return -1;
+              }
+              snprintf(record[j].readele,sizeof(record[j].readele),"#%ld",n);
+              record[j].size=(dim_t)n;
+              j++;
+              continue;
+            }
+          }
           /* an empty element list "()" is a legal empty set (manual
              11.7.9); strtok skipped the empty span and read the text
              after ')' as one element */

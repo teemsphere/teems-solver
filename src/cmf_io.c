@@ -1825,23 +1825,19 @@ static int tab_preprocess_run(char *filename, char *newtabfile) {
       /* keywords the solver does not carry (manual 11.1.1 lists them):
          a keyword-less statement inherits the previous keyword, so
          "Loop (begin) ..." used to become "formula loop ..." and
-         "Display X" a Write or a bogus declaration. TAB-file loops are
-         fatal; DISPLAY and TRANSFER write files TEEMS does not produce
-         (every coefficient is in the coefficient dump) and are dropped
-         with a warning, their keyword-less continuations with them */
+         "Display X" a Write or a bogus declaration. LOOP, BREAK and
+         CYCLE (manual 11.18) pass through for tab_loop_transform;
+         DISPLAY and TRANSFER write files TEEMS does not produce (every
+         coefficient is in the coefficient dump) and are dropped with a
+         warning, their keyword-less continuations with them */
       if (check==0) {
         char kw[16];
         stmt_first_word(readline,kw,sizeof(kw));
         if (strcmp(kw,"loop")==0||strcmp(kw,"break")==0||strcmp(kw,"cycle")==0) {
-          char up[16];
-          for (k1=0; kw[k1]!='\0'; k1++) up[k1]=(char)toupper((int)kw[k1]);
-          up[k1]='\0';
-          errmsg("Error: %s statements are not supported (loops in TAB files, manual 11.18): %.120s\n",up,readline);
-          fclose(filehandle);
-          fclose(fout);
-          return -1;
+          strcpy(commsyntax,kw);
+          check=1;
         }
-        if (strcmp(kw,"display")==0||strcmp(kw,"transfer")==0) {
+        else if (strcmp(kw,"display")==0||strcmp(kw,"transfer")==0) {
           strcpy(commsyntax,kw);
           check=1;
         }
@@ -1869,6 +1865,7 @@ static int tab_preprocess_run(char *filename, char *newtabfile) {
          AND/OR/NOT to single characters while the blanks still
          delimit them; every reader strips blanks */
       if (strcmp(commsyntax,"formula")==0||strcmp(commsyntax,"equation")==0||strcmp(commsyntax,"update")==0||strcmp(commsyntax,"assertion")==0
+          ||strcmp(commsyntax,"break")==0||strcmp(commsyntax,"cycle")==0
           ||(strcmp(commsyntax,"set")==0&&strchr(readline,':')!=NULL)) {
         tab_wordops_normalize(readline);
         if (tab_logicops_normalize(readline,sizeof(readline))<0) {
@@ -3045,7 +3042,11 @@ int tab_postsim_split(char *newtabfile, char *psfile) {
       /* outputs ride the write-all coefficient dump */
       continue;
     }
-    if(strncmp(line,"formula ",8)==0||strncmp(line,"assertion ",10)==0||strncmp(line,"zerodivide",10)==0) {
+    if(strncmp(line,"formula ",8)==0||strncmp(line,"assertion ",10)==0||strncmp(line,"zerodivide",10)==0
+       ||strncmp(line,"loop ",5)==0||strncmp(line,"loop(",5)==0||strncmp(line,"break ",6)==0||strncmp(line,"cycle ",6)==0) {
+      /* loops (manual 11.18) hold only Formula, Assertion and ZeroDivide
+         statements, all PostSim-legal; tab_loop_transform runs on the
+         companion file */
       fputs(line,fps);
       nps++;
       continue;

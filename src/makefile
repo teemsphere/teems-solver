@@ -23,7 +23,7 @@ LDFLAGS   = -fopenmp
 LIBS      = ${PETSC_KSP_LIB} $(BUILD_DIR)/lib/ma48/src/.libs/libma48.so $(BUILD_DIR)/lib/ma51/src/.libs/libma51.so
 
 all-redirect: teems-solver
-C_OBJECTS = main.o globals.o cmf_io.o str_util.o tab_parse.o formula.o jacobian.o block_order.o block_solve.o solve_drivers.o solve_rk.o probe.o levels.o
+C_OBJECTS = main.o globals.o cmf_io.o str_util.o tab_parse.o formula.o jacobian.o block_order.o block_solve.o solve_drivers.o solve_rk.o probe.o levels.o tab_loop.o
 F_OBJECTS = hsl_kernels.o hsl_mp48d.o ddeps.o hsl_mc66d.o ddeps90.o hsl_mc79i.o hsl_mc79i_ciface.o ma60d.o mc71d.o fd15d.o
 OBJECTS = $(C_OBJECTS) $(F_OBJECTS)
 teems-solver: $(OBJECTS)

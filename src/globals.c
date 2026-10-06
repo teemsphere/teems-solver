@@ -34,6 +34,10 @@ int teems_comp_no_acc=0;
 /* complementarity subintervals (51.7.4): their count, and the result
    compounded over the finished ones, onto which .xac pass values add */
 int teems_comp_nsub=1;
+/* loop control probe (tab_loop.c): assertions_execute counts the tuples
+   of the "(loopctl)" statements in the window and the true ones */
+int teems_loopctl_probe=0;
+long teems_loopctl_n=0,teems_loopctl_true=0;
 solve_real *teems_comp_xac_base=NULL;
 /* -sui 1 (manual 26.8.2 SUI): .cof kind bit 2 marks the coefficients a
    Formula (Initial) sets, whose updated values are in the .cbin */
