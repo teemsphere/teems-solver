@@ -2314,6 +2314,7 @@ static int tab_preprocess_run(char *filename, char *newtabfile) {
 }
 
 int outputs_write_csv(char *filename, char *newdatlogname, char *newdatfile,set_def *sets,dim_t nset, set_element *set_elems,array_def *coefs,offset_t ncof,offset_t ncofele,array_def *vars,offset_t nvar,offset_t nvarele, elem_value *elem_vals) {
+  int wrote_set=0; /* returned as 1 for a (set) Write, 2 otherwise; -1 on failure */
   FILE * filehandle,*fout;
   char line[TABREADLINE]="\0",*readline,comsyntax[TABREADLINE],longname[TABREADLINE],varname[NAMESIZE],*vname1,header[NAMESIZE],setsize[DATREADLINE],tempname[NAMESIZE];
   filehandle = teems_fopen(filename,"r");
@@ -2341,6 +2342,7 @@ int outputs_write_csv(char *filename, char *newdatlogname, char *newdatfile,set_
   while (fgets(line,TABREADLINE,filehandle)) {
     if(strncmp(line,"write",5)==0&&strstr(line,comsyntax)!=NULL) {
       if(strstr(line,"(set)")!=NULL) {
+        wrote_set=1;
         i=str_find_ci(line," ");
         readline=line+i+1;
         i=str_find_ci(readline," ");
@@ -2507,7 +2509,7 @@ int outputs_write_csv(char *filename, char *newdatlogname, char *newdatfile,set_
   }
   fclose(filehandle);
   fclose(fout);
-  return 1;
+  return wrote_set?1:2;
 }
 
 /* an IF condition may read coefficients and levels variables, not

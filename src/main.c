@@ -1,4 +1,43 @@
 #include <teems_solver.h>
+#include <strings.h>
+/* -solmed probe: the structure-detection lines carry the probe prefix so
+   the probe log reads as one diagnosis; solve logs are unchanged */
+static int teems_probe_mode=0;
+#define PROBE_PFX (teems_probe_mode?"probe: ":"")
+
+/* what a run wrote, as one line at verbosity 2: the per-file "Wrote
+   <name>" lines were console noise under teems-R */
+/* teems-R's condensation appends its substitution coefficients as
+   CSUB<n> (Coefficient + Formula pairs); they are derived, not declared
+   by the model, so the tally reports them apart */
+static int cof_is_csub(const char *name) {
+  const char *p=name+4;
+  if(strncasecmp(name,"csub",4)!=0||*p=='\0')return 0;
+  for(; *p; p++)if(*p<'0'||*p>'9')return 0;
+  return 1;
+}
+
+static void outputs_summary_log(int cofdumped,array_def *coefs,offset_t ncof,offset_t ncofele,long nsets,long nother,long nskipped,int outputs_on,int solwritten,offset_t nvar,offset_t nvarele) {
+  char buf[512];
+  int n=0,first=1;
+  if(!cofdumped&&!outputs_on&&!solwritten)return;
+  n+=snprintf(buf+n,sizeof(buf)-n,"Wrote ");
+  if(cofdumped) {
+    offset_t i,ncsub=0,ncsubele=0;
+    for(i=0; i<ncof; i++)if(cof_is_csub(coefs[i].cofname)) { ncsub++; ncsubele+=coefs[i].nelem; }
+    if(ncsub>0)n+=snprintf(buf+n,sizeof(buf)-n,"%ld declared coefficients (%ld elements) and %ld condensation coefficients CSUB* (%ld elements)",(long)(ncof-ncsub),(long)(ncofele-ncsubele),(long)ncsub,(long)ncsubele);
+    else n+=snprintf(buf+n,sizeof(buf)-n,"%ld coefficients (%ld elements)",(long)ncof,(long)ncofele);
+    first=0;
+  }
+  if(outputs_on) {
+    n+=snprintf(buf+n,sizeof(buf)-n,"%s%ld set%s",first?"":", ",nsets,nsets==1?"":"s"); first=0;
+    if(nother>0)n+=snprintf(buf+n,sizeof(buf)-n,", %ld coefficient file%s",nother,nother==1?"":"s");
+  }
+  if(solwritten)n+=snprintf(buf+n,sizeof(buf)-n,"%s%ld variables (%ld elements)",first?"":", ",(long)nvar,(long)nvarele);
+  if(nskipped>0)n+=snprintf(buf+n,sizeof(buf)-n,"; %ld output%s skipped (PostSim pass not run)",nskipped,nskipped==1?"":"s");
+  logmsg(2,"%s\n",buf);
+}
+
 
 static char help[] = "teems-solver " TEEMS_SOLVER_VERSION ": solves a CGE model (TABLO/CMF) in parallel.\n\
   -version              print the solver version and exit 0\n\
@@ -1102,7 +1141,7 @@ static offset_t chain_set_select(set_def *sets, dim_t nset, offset_t *refcount, 
       if(i>=0)logmsg(1,"Set %s is declared (intertemporal) but no equation uses lead/lag offsets; no chain ordering applied\n",sets[i].setname);
     }
     if(chain>=0&&sets[chain].size<2)logmsg(1,"Set %s carries the lead/lag offsets but has %d element(s); no chain ordering applied (one period orders as a static model)\n",sets[chain].setname,sets[chain].size);
-    else if(chain>=0)logmsg(1,"Chain dimension detected structurally: set %s (size %d), %ld lead/lag references\n",sets[chain].setname,sets[chain].size,topcount[chain]);
+    else if(chain>=0)logmsg(1,"%sChain dimension detected structurally: set %s (size %d), %ld lead/lag references\n",PROBE_PFX,sets[chain].setname,sets[chain].size,topcount[chain]);
   }
   if(chain>=0&&sets[chain].size<2)chain=-1;
   free(topcount);
@@ -1231,13 +1270,13 @@ static offset_t partition_auto_select(char *tabfile, set_def *sets, dim_t nset, 
     iscand[s]=true;
     ncand++;
   }
-  if(rank==0)logmsg(1,"Partition detection: probing %ld candidate sets against the equation structure\n",ncand);
+  if(rank==0)logmsg(1,"%sPartition detection: probing %ld candidate sets against the equation structure\n",PROBE_PFX,ncand);
   for(s=0; s<nset; s++) {
     if(!iscand[s])continue;
     partition_probe(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele,nvarele,closure_vals,neq,VecSize,alltimeset,ntime,nesteddbbd,s,&cnetcut[s],&cnblocks[s],&cmin[s],&cmax[s]);
     viable[s]=cnblocks[s]>=mpisize&&2*cnetcut[s]<VecSize&&cmin[s]>0;
-    if(rank==0)logmsg(1,"  %-14s blocks %6ld  border %8ld (%5.1f%%)  block min/max %ld/%ld  %s\n",
-                        sets[s].setname,cnblocks[s],cnetcut[s],VecSize>0?100.0*cnetcut[s]/VecSize:0.0,
+    if(rank==0)logmsg(1,"%s  %-14s blocks %6ld  border %8ld (%5.1f%%)  block min/max %ld/%ld  %s\n",
+                        PROBE_PFX,sets[s].setname,cnblocks[s],cnetcut[s],VecSize>0?100.0*cnetcut[s]/VecSize:0.0,
                         cmin[s],cmax[s],viable[s]?"viable":"not viable");
   }
   for(s=0; s<nset; s++) {
@@ -1251,10 +1290,10 @@ static offset_t partition_auto_select(char *tabfile, set_def *sets, dim_t nset, 
     else if(cmin[s]*cmax[chosen]>cmin[chosen]*cmax[s])chosen=s;/* better balance */
   }
   if(rank==0) {
-    if(chosen>=0)logmsg(1,"Partition detection: selected set %s (%ld blocks, border %.1f%% of system)\n",
-                          sets[chosen].setname,cnblocks[chosen],VecSize>0?100.0*cnetcut[chosen]/VecSize:0.0);
-    else if(ncand>0)logmsg(1,"Partition detection: no viable candidate (need >=%ld nonempty blocks and a border below half the system)\n",mpisize);
-    else logmsg(1,"Partition detection: no candidate sets to probe\n");
+    if(chosen>=0)logmsg(1,"%sPartition detection: selected set %s (%ld blocks, border %.1f%% of system)\n",
+                          PROBE_PFX,sets[chosen].setname,cnblocks[chosen],VecSize>0?100.0*cnetcut[chosen]/VecSize:0.0);
+    else if(ncand>0)logmsg(1,"%sPartition detection: no viable candidate (need >=%ld nonempty blocks and a border below half the system)\n",PROBE_PFX,mpisize);
+    else logmsg(1,"%sPartition detection: no candidate sets to probe\n",PROBE_PFX);
   }
   {
     size_t cap=256+(size_t)ncand*256;
@@ -1292,7 +1331,7 @@ int main(int argc,char **args) {
   PetscInt VecSize=0,Istart=0,Iend=0,dnz=0,onz=0,dnzB=0,onzB=0,*onnz,*dnnz,*onnzB,*dnnzB;
   PetscErrorCode ierr;
   PetscBool   flg;
-  struct timeval begintime,endtime;
+  struct timeval begintime,endtime,probe_begin;
   offset_t i,j;
   offset_t j2=0,j1=0,j0=0,j3,j4,j5,j6;
   /* -version answers before MPI/PETSc start: one line, exit 0, no
@@ -1351,6 +1390,7 @@ int main(int argc,char **args) {
   MPI_Comm_split(PETSC_COMM_WORLD,color,rank,&node_tail_comm);
 
   gettimeofday(&begintime, NULL);
+  probe_begin=begintime;
   bool sbbd_overrid=false;
   PetscBool nohsl=false;
   if(rank==0) {
@@ -1621,6 +1661,7 @@ int main(int argc,char **args) {
   if(strcmp(solmed,"DoPri54")==0)solmethod=SM_DOPRI54;
   if(strcmp(solmed,"Johansen")==0)solmethod=SM_JOHANSEN;
   if(strcmp(solmed,"probe")==0)solmethod=SM_PROBE;
+  teems_probe_mode=(solmethod==SM_PROBE)?1:0;
   if(strcmp(solmed,"nosim")==0)solmethod=SM_NOSIM;
   if(solmethod==0) {
     if(rank==0)errmsg("Error: unknown -solmed %s (valid: Gragg, Midpoint, Euler, RK2, Heun, RK4, BoSha32, DoPri54, Johansen, probe, nosim)\n",solmed);
@@ -2629,16 +2670,20 @@ int main(int argc,char **args) {
       if(npostsim>0||tab_has_postsim_assertions(tabfile))
         printf("Warning: PostSim statements and assertions are not run without a simulation (manual 12.1); %d PostSim statement(s) skipped\n",npostsim);
       if(structure_files_write(teems_sol_stem,vars,nvar,sets,nset,set_elems,nsetspace,nvarele)==0) {
+        int cofdumped=0,wr;
+        long nsets_w=0,nother_w=0,nskip_w=0;
         if(cofdump&&elem_vals!=NULL) {
-          if(coefficients_dump(teems_sol_stem,coefs,ncof,ncofele,elem_vals)==0)
-            logmsg(1,"Wrote coefficient dump (%ld coefficients, %ld elements)\n",(long)ncof,(long)ncofele);
+          if(coefficients_dump(teems_sol_stem,coefs,ncof,ncofele,elem_vals)==0)cofdumped=1;
         }
         if(nowrites==0)for(i=0; i<noutdata; i++) {
-          if(outputs_write_csv(tabfile,iodata[i+niodata].logname,iodata[i+niodata].filname,sets,nset,set_elems,coefs,ncof,ncofele,vars,nvar,nvarele,elem_vals)!=-1) {
-            logmsg(1,"Wrote %s\n",iodata[i+niodata].logname);
+          if(postsim_write_skipped(iodata[i+niodata].logname)) { nskip_w++; continue; }
+          wr=outputs_write_csv(tabfile,iodata[i+niodata].logname,iodata[i+niodata].filname,sets,nset,set_elems,coefs,ncof,ncofele,vars,nvar,nvarele,elem_vals);
+          if(wr!=-1) {
+            if(wr==1)nsets_w++; else nother_w++;
             outputs_note(iodata[i+niodata].filname,"csv",0);
           }
         }
+        outputs_summary_log(cofdumped,coefs,ncof,ncofele,nsets_w,nother_w,nskip_w,nowrites==0,0,nvar,nvarele);
       }
       gettimeofday(&endtime, NULL);
       logmsg(1,"No-simulation run complete in %.2f s\n",(endtime.tv_sec - begintime.tv_sec)+((double)(endtime.tv_usec - begintime.tv_usec))/ 1000000);
@@ -2832,7 +2877,7 @@ comp_accurate_reentry:
     }
     j0=0;
     for(i=0; i<nvarele; i++)if(ele_inter[i])j0++;
-    if(j0>0&&rank==0)logmsg(1,"Element-level border classification: %ld elements bordered by sliced lead/lag references\n",j0);
+    if(j0>0&&rank==0)logmsg(1,"%sElement-level border classification: %ld elements bordered by sliced lead/lag references\n",PROBE_PFX,j0);
   }
   switch (nesteddbbd) {
   case 1 : ;/* missing partition sets already abort above (NDBBD requires both) */
@@ -3220,7 +3265,7 @@ comp_accurate_reentry:
     }
   }
   if(rank==rank_hsl) {
-    logmsg(1,"Border netcut %ld, intra-block equations %ld\n",netcut,nintraeq);
+    logmsg(1,"%sBorder netcut %ld, intra-block equations %ld\n",PROBE_PFX,netcut,nintraeq);
   }
   /* DBBD on the chain alone (no partition set): when the chain blocks
      hold under half the system the border solve is the whole problem,
@@ -3663,6 +3708,10 @@ comp_teardown:
     }
     if(!jac_only)probe_structural(VecSize,nvarele,ncofele,dnz,dnnz,dnzB,dnnzB,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,closure_vals,ndblock,alltimeset,allregset,eq_addr,counteq,nintraeq,eqmeta,neqmeta,iodata,niodata,noutdata,nsoldata,probefine,mpisize,rank);
     VecDestroy(&vece); /* the skipped solve driver would have destroyed it */
+    if(rank==0) {
+      gettimeofday(&endtime, NULL);
+      logmsg(1,"probe: done in %.2f s\n",(endtime.tv_sec - probe_begin.tv_sec)+((double)(endtime.tv_usec - probe_begin.tv_usec))/ 1000000);
+    }
   }
   free(eqmeta);
 
@@ -3728,7 +3777,7 @@ comp_teardown:
       fclose(solution);
       outputs_note(solchar,"rk_error_estimate",0);
     }
-    if(structure_files_write(tempchar,vars,nvar,sets,nset,set_elems,nsetspace,nvarele))return 1;
+    if(solmethod!=SM_PROBE&&structure_files_write(tempchar,vars,nvar,sets,nset,set_elems,nsetspace,nvarele))return 1;
     if(rank==0&&comp_approx_col!=NULL&&xcf!=NULL) {
       char label[96];
       const solve_real *cp[1]={comp_approx_col};
@@ -3813,7 +3862,7 @@ comp_teardown:
   if(isrk&&!comp_dispatch&&rank==0)stats_rk_patch(iodata,niodata,noutdata,nsoldata);
   /* phase resident-memory record: a last probe for the run's high-water
      mark (collective), then patch the per-phase table */
-  teems_rss_probe("solution write");
+  teems_rss_probe(solmethod==SM_PROBE?"structural diagnosis":"solution write");
   if(rank==0)stats_rss_patch(iodata,niodata,noutdata,nsoldata);
   if(rank==0)stats_ndbbd_threads_patch(iodata,niodata,noutdata,nsoldata);
   /* PostSim foundation F3 (early Tier 0): after the solve, coefficient
@@ -3832,20 +3881,28 @@ comp_teardown:
       strcpy(commsyntax,"formula");
       statements_execute(psfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,true,0);
       teems_ps_pass=0;
+      teems_ps_ran=1;
     }
     assertions_execute(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,true,teems_assertions_mode,1);
   }
-  if(cofdump&&rank==0&&elem_vals!=NULL) {
-    for (i=niodata+noutdata; i<niodata+noutdata+nsoldata; i++)
-      if (strcmp("solfiles",iodata[i].logname)==0)break;
-    if(coefficients_dump(i<niodata+noutdata+nsoldata?iodata[i].filname:"solution",coefs,ncof,ncofele,elem_vals))MPI_Abort(PETSC_COMM_WORLD,1);
-    logmsg(1,"Wrote coefficient dump (%ld coefficients, %ld elements)\n",(long)ncof,(long)ncofele);
-  }
-  if(nowrites==0&&rank==0)for(i=0; i<noutdata; i++){
-    if(outputs_write_csv(tabfile,iodata[i+niodata].logname,iodata[i+niodata].filname,sets,nset,set_elems,coefs,ncof,ncofele,vars,nvar,nvarele,elem_vals)!=-1) {
-      logmsg(1,"Wrote %s\n",iodata[i+niodata].logname);
-      outputs_note(iodata[i+niodata].filname,"csv",0);
+  {
+    int cofdumped=0,wr;
+    long nsets_w=0,nother_w=0,nskip_w=0;
+    if(cofdump&&rank==0&&elem_vals!=NULL) {
+      for (i=niodata+noutdata; i<niodata+noutdata+nsoldata; i++)
+        if (strcmp("solfiles",iodata[i].logname)==0)break;
+      if(coefficients_dump(i<niodata+noutdata+nsoldata?iodata[i].filname:"solution",coefs,ncof,ncofele,elem_vals))MPI_Abort(PETSC_COMM_WORLD,1);
+      cofdumped=1;
     }
+    if(nowrites==0&&rank==0)for(i=0; i<noutdata; i++){
+      if(postsim_write_skipped(iodata[i+niodata].logname)) { nskip_w++; continue; }
+      wr=outputs_write_csv(tabfile,iodata[i+niodata].logname,iodata[i+niodata].filname,sets,nset,set_elems,coefs,ncof,ncofele,vars,nvar,nvarele,elem_vals);
+      if(wr!=-1) {
+        if(wr==1)nsets_w++; else nother_w++;
+        outputs_note(iodata[i+niodata].filname,"csv",0);
+      }
+    }
+    if(rank==0)outputs_summary_log(cofdumped,coefs,ncof,ncofele,nsets_w,nother_w,nskip_w,nowrites==0,xcf!=NULL,nvar,nvarele);
   }
   /* completion marker, the run's last write: only a run that printed no
      Error line on any rank gets one */
