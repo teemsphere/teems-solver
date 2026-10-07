@@ -23,7 +23,7 @@ static int rank_probe_stage(PetscInt nrow,PetscInt nz,const PetscInt *ai,const P
   return k;
 }
 
-int dbbd_order(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscInt Istart, PetscInt Iend, offset_t nvarele, PetscInt *eq_addr,int *row_order,int *col_order, offset_t ndblock,int *block_sizes, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,solve_real cntl6) {
+int dbbd_order(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscInt Istart, PetscInt Iend, offset_t nvarele, PetscInt *eq_addr,int *row_order,int *col_order, offset_t ndblock,int *block_sizes, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,solve_real ma48_cntl4) {
   IS *rowindices,*colindices;//,isrow,iscol;
   PetscInt bfirst,bend,nmatin,nrowcolin;
   Mat *submatA;
@@ -115,7 +115,7 @@ int dbbd_order(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscIn
     insize[5]=lasize;
     insize[6]=0;
     j=0;
-    spec51m_rank_(insize,&cntl6,irn,jcn,values,irn1,jcn1,keep,w51,iw51);
+    spec51m_rank_(insize,&ma48_cntl4,irn,jcn,values,irn1,jcn1,keep,w51,iw51);
     if(insize[6]!=-3)break;
     {
       /* MA48 workspace too small for the rank probe: grow and
@@ -240,14 +240,14 @@ void ndbbd_cut_iface_put(int j3,int rank_val,const int *irn,const int *jcn,int n
   ndcut_if_set[j3]=1;
 }
 
-int ndbbd_order_presolve(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscInt Istart, PetscInt Iend,int nreg, int ntime, offset_t nvarele, PetscInt *eq_addr,int *row_order,int *col_order, offset_t ndblock,int *block_sizes, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laDi,solve_real cntl6,PetscInt* ndbbdrank,PetscBool presol) {
+int ndbbd_order_presolve(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscInt Istart, PetscInt Iend,int nreg, int ntime, offset_t nvarele, PetscInt *eq_addr,int *row_order,int *col_order, offset_t ndblock,int *block_sizes, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laDi,solve_real ma48_cntl4,PetscInt* ndbbdrank,PetscBool presol) {
   char filename[1024],rankname[1024];
   IS *rowindices=NULL,*colindices=NULL;//,isrow,iscol;
   PetscInt bfirst,bend,nmatin,nmatint;
   Mat *submatA=NULL;//,*submatD=NULL;
   PetscInt i,j,j1,j2,j3,j4,j5,j6,j7,j8,nrow,ncol,nz,nz1,*ai,*aj;
   offset_t lasize;
-  solve_real cntl6in;
+  solve_real cntl4in;
   PetscScalar *vals;
   PetscErrorCode ierr;
   MatInfo           matinfo;
@@ -332,9 +332,8 @@ int ndbbd_order_presolve(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt ran
   MPI_Barrier(PETSC_COMM_WORLD);
   int *row_order2= (int *) calloc (VecSize,sizeof(int));
   int *col_order2= (int *) calloc (VecSize,sizeof(int));
-  if(cntl6==0&&SORD==0)cntl6in=1e-5;
-  else cntl6in=cntl6;
-  #pragma omp parallel private(j1,j2,j3,j4,j5,j6,j7,j8,ai,aj,vals,nz,nrow,ncol,nz1,i,j,bfirst,lasize) shared(cntl6in,row_order2,col_order2,block_sizes1,counteqnoadd1,countvarintra2,countvarintra1,submatA)
+  cntl4in=ma48_cntl4;
+  #pragma omp parallel private(j1,j2,j3,j4,j5,j6,j7,j8,ai,aj,vals,nz,nrow,ncol,nz1,i,j,bfirst,lasize) shared(cntl4in,row_order2,col_order2,block_sizes1,counteqnoadd1,countvarintra2,countvarintra1,submatA)
   {
   long int lasizemax=0,nrowmax=0,ncolmax=0;
   #pragma omp for schedule (static)
@@ -400,7 +399,7 @@ int ndbbd_order_presolve(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt ran
       insize[4]=laA;
       insize[5]=lasize;
       insize[6]=0;
-      spec51m_rank_(insize,&cntl6in,irn,jcn,values,irn1,jcn1,keep,w51,iw51);
+      spec51m_rank_(insize,&cntl4in,irn,jcn,values,irn1,jcn1,keep,w51,iw51);
       if(insize[6]!=-3)break;
       {
         /* MA48 workspace too small for the rank probe: grow and
@@ -563,7 +562,7 @@ int ndbbd_order_presolve(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt ran
   return 1;
 }
 
-int ndbbd_order(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscInt Istart, PetscInt Iend,int nreg, int ntime, offset_t nvarele, PetscInt *eq_addr,int *row_order,int *col_order, offset_t ndblock,int *block_sizes, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laDi,solve_real cntl6,PetscInt* ndbbdrank,PetscBool presol) {
+int ndbbd_order(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscInt Istart, PetscInt Iend,int nreg, int ntime, offset_t nvarele, PetscInt *eq_addr,int *row_order,int *col_order, offset_t ndblock,int *block_sizes, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laDi,solve_real ma48_cntl4,PetscInt* ndbbdrank,PetscBool presol) {
   FILE *presolfile;
   char j1name[1024],filename[1024],rankname[1024];
   size_t frd;

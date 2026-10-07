@@ -579,7 +579,7 @@ static void ndbbd_fac_emit(int rank,int idx,int *irn,int *keep,solve_real *va,lo
   fclose(fp);
 }
 
-int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscInt Istart, PetscInt Iend,int *row_order,int *col_order, offset_t ndblock,int *block_sizes, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laD,PetscReal cntl3) {//,bool iter
+int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscInt Istart, PetscInt Iend,int *row_order,int *col_order, offset_t ndblock,int *block_sizes, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laD) {//,bool iter
   IS *rowindices,*colindices,*Cindices,*Bindices,*BBindices;
   const PetscInt *nindices;
   PetscInt bfirst,bend,nmatin,nmatinplus,sumrowcolin,i,j,j1,j2,j3,j6,proc1=0;
@@ -1767,12 +1767,12 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
   return 0;
 }
 
-int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscInt Istart, PetscInt Iend,int *row_order,int *col_order, offset_t ndblock,offset_t nreg,offset_t ntime,int *block_sizes, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laDi,dim_t laD,PetscReal cntl3,PetscReal cntl6,PetscBool presol) {//,bool iter
+int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscInt Istart, PetscInt Iend,int *row_order,int *col_order, offset_t ndblock,offset_t nreg,offset_t ntime,int *block_sizes, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laDi,dim_t laD,PetscReal ma48_cntl4,PetscBool presol) {//,bool iter
   IS *rowindices=NULL,*colindices=NULL,*colindicesbc1=NULL,*rowBBij=NULL,*colBBij=NULL;//,*colindicesbcpm,*colindicesbcpm1
   PetscInt bfirst,nmatin,nmatinplus,nmatint,nmatinplust,nmatminust,i,j,j1,j2,j3,j4;//,sumrowcolin
   Mat *submatAij=NULL,*submatBBij=NULL;//,*submatCij,*submatBij;,*submatB
   PetscInt *ai,*aj,*aic,*ajc;
-  PetscReal cntl6in;
+  solve_real cntl4in;
   offset_t lasize,ldsize;
   size_t fwrt;
   PetscInt nrow,ncol,nz,nrowc,ncolc,nrowb,ncolb,nzc;
@@ -2089,7 +2089,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
     snprintf(detail,sizeof(detail),"dense interface product %.2f GB, Schur staging %.2f GB, MA48 workspace %.2f GB",dense_b/1073741824.0,stage_b/1073741824.0,ws_b/1073741824.0);
     ndthr=ndbbd_team_cap(0,"presolve",ndthr,dense_b+stage_b+ws_b+small_b,detail,rank);
   }
-  #pragma omp parallel num_threads(ndthr) private(jthrd,nthrd,j3,j4,bivirowsize,bivicolsize,bbrowij,ai,nz,nrow,i,j,j1,j2,li,lj,ddrowi,vecbivisize,aic,ajc,valsc,nzc,nrowc,ncolc,ncolb,nrowb,aj,vals,lj2,nz0,j1name,filename,presolfile,fwrt,nz1,cntl6in,ncol,lasize,ldsize) shared(insize,submatAij,submatBij,submatCij)
+  #pragma omp parallel num_threads(ndthr) private(jthrd,nthrd,j3,j4,bivirowsize,bivicolsize,bbrowij,ai,nz,nrow,i,j,j1,j2,li,lj,ddrowi,vecbivisize,aic,ajc,valsc,nzc,nrowc,ncolc,ncolb,nrowb,aj,vals,lj2,nz0,j1name,filename,presolfile,fwrt,nz1,cntl4in,ncol,lasize,ldsize) shared(insize,submatAij,submatBij,submatCij)
   {
   long int *bivinzrow=NULL,irnmems=0;//(long int *) calloc (1,sizeof(long int));
   PetscInt *bivinzcol=NULL;//(PetscInt *) calloc (1,sizeof(PetscInt));
@@ -2529,7 +2529,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
       if((presolfile=scratch_open(filename, "wb"))==NULL) {
         errmsg("Error: cannot open scratch file %s\n",filename);
       }
-      logmsg(2,"rank %d nrow %d ncol %d block rank %d nz %d cntl6 %lf\n",rank,nrow,ncol,insized[3],nz,cntl6);
+      logmsg(2,"rank %d nrow %d ncol %d block rank %d nz %d ma48_cntl4 %g\n",rank,nrow,ncol,insized[3],nz,ma48_cntl4);
       fwrt=fwrite(insized, sizeof(int), 5+nreg*insizes, presolfile);
       if(fwrt== 0) {errmsg("Error: short write on scratch file %s (%s); the scratch filesystem is likely full - free space there or point -tempdir at a larger filesystem\n",filename,strerror(errno));fflush(stdout);MPI_Abort(PETSC_COMM_WORLD,1);}
       fclose(presolfile);
@@ -2593,7 +2593,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
     snprintf(detail,sizeof(detail),"interface staging %.2f GB (%ld entries at laDi %ld of %ld nz), MA51 workspace %.2f GB",stage_b/1073741824.0,(long)ld,(long)laDi,nz1max_all,ws_b/1073741824.0);
     ndthr2=ndbbd_team_cap(1,"interface-rank",ndthr2,stage_b+ws_b,detail,rank);
   }
-  #pragma omp parallel num_threads(ndthr2) private(jthrd,nthrd,j3,j4,ai,nz,nrow,i,j,j1,j2,li,lj,aj,vals,lj2,nz0,j1name,filename,presolfile,fwrt,nz1,cntl6in,ncol,lasize,ldsize) shared(insize,submatAij,submatBij,submatCij)
+  #pragma omp parallel num_threads(ndthr2) private(jthrd,nthrd,j3,j4,ai,nz,nrow,i,j,j1,j2,li,lj,aj,vals,lj2,nz0,j1name,filename,presolfile,fwrt,nz1,cntl4in,ncol,lasize,ldsize) shared(insize,submatAij,submatBij,submatCij)
   {
   int *irn=NULL,*jcn=NULL,*irn1=NULL,*jcn1=NULL,*keep=NULL,*iw51=NULL;
   solve_real *vecbivi=NULL,*w51=NULL;
@@ -2701,8 +2701,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
     ldsize=ma48_la_from_pct(laDi,nz);
     if(ldsize<nz)ldsize=nz;
       insized[5]=ldsize;
-      if(cntl6==0&&SORD==0)cntl6in=0.3;
-      else cntl6in=cntl6;
+      cntl4in=ma48_cntl4;
       {
       int tries,cut_rank=0;
       if(ndbbd_cut_iface_get(j3,&cut_rank,irn,jcn,nrow,ncol)) {
@@ -2714,7 +2713,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
       else
       for(tries=0; tries<6; tries++) {
         insized[6]=0;
-        spec51m_rank_(insized,&cntl6in,irn1,jcn1,vecbivi,irn,jcn,keep,w51,iw51);
+        spec51m_rank_(insized,&cntl4in,irn1,jcn1,vecbivi,irn,jcn,keep,w51,iw51);
         if(insized[6]!=-3)break;
         {
           /* MA48 workspace too small for the rank probe: grow and
@@ -2789,7 +2788,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
       if((presolfile=scratch_open(filename, "wb"))==NULL) {
         errmsg("Error: cannot open scratch file %s\n",filename);
       }
-      logmsg(2,"rank %d nrow %d ncol %d block rank %d nz %d cntl6 %lf\n",rank,nrow,ncol,insized[3],nz,cntl6in);
+      logmsg(2,"rank %d nrow %d ncol %d block rank %d nz %d ma48_cntl4 %g\n",rank,nrow,ncol,insized[3],nz,cntl4in);
       if(verbosity>=2) {
         unsigned long ph=1469598103934665603UL;
         for(i=0; i<nrow; i++)ph=(ph^(unsigned long)irn[i])*1099511628211UL;
@@ -2848,7 +2847,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
 }
 
 
-int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscInt Istart, PetscInt Iend,int *row_order,int *col_order, offset_t ndblock,offset_t nreg,offset_t ntime,int *block_sizes, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laDi,dim_t laD,PetscReal cntl3,PetscReal cntl6,PetscBool presol) {//,bool iter
+int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscInt Istart, PetscInt Iend,int *row_order,int *col_order, offset_t ndblock,offset_t nreg,offset_t ntime,int *block_sizes, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laDi,dim_t laD,PetscReal ma48_cntl4,PetscBool presol) {//,bool iter
   IS *rowindices=NULL,*colindices=NULL,*rowindicesbc=NULL,*colindicesbc1=NULL,*colindicesbc2=NULL,*Cindices=NULL,*Bindices=NULL,Cindicesc,Bindicesc,*BBindices=NULL,*rowBBij=NULL,*colBBij=NULL;//,*colindicesbcpm,*colindicesbcpm1
   const PetscInt *nindices;
   PetscInt bfirst,bend,nmatin,nmatinplus,nmatint,nmatinplust,nmatminust,sumrowcolin,i,j,j1,j2,j3,j4,j6,proc1=0;

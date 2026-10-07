@@ -30,28 +30,28 @@ contains
     end if
     hsl_i4=int(x,4)
   end function hsl_i4
-  ! MA48 pivot threshold override from the C side (-ma48u -> TEEMS_MA48U,
-  ! set only when the option is given). Applied right after every
+  ! MA48/HSL_MP48 pivot threshold CNTL(2) from the C side (-ma48_cntl2 ->
+  ! TEEMS_MA48_CNTL2, set only when the option is given). Applied right after every
   ! MA48ID/MA48I initialisation and to HSL_MP48's control block; when
   ! absent each library keeps its own default (MA48 0.1, MP48 0.01), so
   ! default runs are bit-identical to builds without this hook.
-  logical function teems_ma48u(u)
+  logical function teems_ma48_cntl2(u)
     real (kind=DPC), intent(out) :: u
     character(len=32) :: s
     integer :: st
-    teems_ma48u=.false.
+    teems_ma48_cntl2=.false.
     u=0.1_DPC
-    call get_environment_variable("TEEMS_MA48U",s,status=st)
+    call get_environment_variable("TEEMS_MA48_CNTL2",s,status=st)
     if (st==0) then
       read(s,*,iostat=st) u
-      if (st==0) teems_ma48u=.true.
+      if (st==0) teems_ma48_cntl2=.true.
     end if
-  end function teems_ma48u
-  subroutine teems_apply_ma48u(cntl)
+  end function teems_ma48_cntl2
+  subroutine teems_apply_ma48_cntl2(cntl)
     real (kind=DPC), intent(inout) :: cntl(*)
     real (kind=DPC) :: u
-    if (teems_ma48u(u)) cntl(2)=u
-  end subroutine teems_apply_ma48u
+    if (teems_ma48_cntl2(u)) cntl(2)=u
+  end subroutine teems_apply_ma48_cntl2
 end module constants
 
 SUBROUTINE SPEC48_SINGLE(indata,irn1,jcn1,b1,values1,x,neleperrow,ai1,fcomm)
@@ -114,7 +114,7 @@ SUBROUTINE SPEC48_SINGLE(indata,irn1,jcn1,b1,values1,x,neleperrow,ai1,fcomm)
   ! Initialize package
   data%JOB = 1
   CALL MP48AD(data)
-  call teems_apply_ma48u(data%CNTL)
+  call teems_apply_ma48_cntl2(data%CNTL)
   ! Reset control parameters (if required)
   ! Read all values on host
   data%ICNTL(7) = 3
@@ -240,7 +240,7 @@ SUBROUTINE SPEC48_NOMC66(indata,jcn1,b1,values1,x,neleperrow,fcomm,rowptrin,colp
   ! Initialize package
   data%JOB = 1
   CALL MP48AD(data)
-  call teems_apply_ma48u(data%CNTL)
+  call teems_apply_ma48_cntl2(data%CNTL)
   ! Reset control parameters (if required)
   ! Read all values on host
   data%ICNTL(7) = 3
@@ -405,7 +405,7 @@ SUBROUTINE SPEC48_NOMC66_P(indata,jcn1,b1,values1,x,neleperrow,fcomm,rowptrin,co
   pdata%COMM = fcomm1
   pdata%JOB = 1
   CALL MP48AD(pdata)
-  call teems_apply_ma48u(pdata%CNTL)
+  call teems_apply_ma48_cntl2(pdata%CNTL)
   pdata%ICNTL(7) = 3
   ! the instance persists across steps: own the solution vector so
   ! repeated JOB=5 calls never re-allocate package-owned storage
@@ -545,7 +545,7 @@ SUBROUTINE SPEC48_NOMC66_STAGE(indata,ai,aj,a,b1,fcomm,rowptrin,colptrin)
   odata%COMM = fcomm(1)
   odata%JOB = 1
   CALL MP48AD(odata)
-  call teems_apply_ma48u(odata%CNTL)
+  call teems_apply_ma48_cntl2(odata%CNTL)
   odata%ICNTL(7) = 3
   IF (odata%RANK.EQ.0) THEN
     m = indata(2)
@@ -789,7 +789,7 @@ SUBROUTINE SPEC48_NOMC66_P_CSR(indata,ai,aj,a,b1,x,fcomm,rowptrin,colptrin,redo)
   pdata%COMM = fcomm1
   pdata%JOB = 1
   CALL MP48AD(pdata)
-  call teems_apply_ma48u(pdata%CNTL)
+  call teems_apply_ma48_cntl2(pdata%CNTL)
   pdata%ICNTL(7) = 3
   pdata%ICNTL(13) = 1
   IF (pdata%RANK.EQ.0) THEN
@@ -898,14 +898,14 @@ SUBROUTINE SPEC48_NOMC66_P_SAME(indata,ai,aj,same)
   same(1)=1
 END SUBROUTINE SPEC48_NOMC66_P_SAME
 
-SUBROUTINE SPEC51M_RANK(INSIZE,CNTL6,IRN,JCN,VA,IRNA,JCNA,KEEP,W,IW)
+SUBROUTINE SPEC51M_RANK(INSIZE,CNTL4IN,IRN,JCN,VA,IRNA,JCNA,KEEP,W,IW)
   use constants
   IMPLICIT NONE
 
   integer M,N,NE
   integer (4) INSIZE(*)
   integer (4) JCN(*),IRN(*),JCNA(*),IRNA(*),KEEP(*),IW(*)
-  real (kind=DPC) VA(*),CNTL6(*),W(*)
+  real (kind=DPC) VA(*),CNTL4IN(*),W(*)
   integer LA,MAXN,RANK1,SGNDET,NEFAC
   real (kind=DPC) LOGDET
   real (kind=DPC), pointer :: CNTL(:),RINFO(:)!,W(:),A(:),
@@ -937,7 +937,7 @@ SUBROUTINE SPEC51M_RANK(INSIZE,CNTL6,IRN,JCN,VA,IRNA,JCNA,KEEP,W,IW)
     ELSE
       CALL MA48I(CNTL,ICNTL)
     ENDIF
-  call teems_apply_ma48u(CNTL)
+  call teems_apply_ma48_cntl2(CNTL)
     ! errors only below debug verbosity (silences duplicate-entry notes)
     if (teems_verbosity()<2) ICNTL(3)=1
     ! -3 workspace shortfalls are handled by caller-side growth, so
@@ -945,15 +945,7 @@ SUBROUTINE SPEC51M_RANK(INSIZE,CNTL6,IRN,JCN,VA,IRNA,JCNA,KEEP,W,IW)
     ! fatal in the logs; the wrappers print the diagnosis on genuinely
     ! fatal INFO(1) codes
     ICNTL(1)=0
-    IF(CNTL6(1).EQ.0)THEN
-      IF (FSORD.EQ.1) THEN
-        CNTL(4)=1e-4
-      else
-        CNTL(4)=0.3
-      ENDIF
-    ELSE
-      CNTL(4)=CNTL6(1)!1e-4!0.0000000001
-    ENDIF
+    CNTL(4)=CNTL4IN(1)
     ICNTL(7)=0
     ! INSIZE(7) (out): 0 = done, -3 = MA48 workspace too small
     ! (INSIZE(8) then holds the suggested LA; caller reallocates,
@@ -1130,7 +1122,7 @@ SUBROUTINE SPEC48M_MSOL(INSIZE,IRN,JCN,VA,B,X,IRNC,JCNC,VAC,IRNB,JCNB,VALUESB,VE
   ELSE
     CALL MA48I(CNTL,ICNTL)
   ENDIF
-call teems_apply_ma48u(CNTL)
+call teems_apply_ma48_cntl2(CNTL)
   ! errors only below debug verbosity (silences duplicate-entry notes)
   if (teems_verbosity()<2) ICNTL(3)=1
   ! -3 workspace shortfalls are handled by caller-side growth, so
@@ -1340,7 +1332,7 @@ SUBROUTINE SPEC48M_MSOL_P(INSIZE,IRN,JCN,VA,B,X,IRNC,JCNC,VAC,IRNB,JCNB,VALUESB,
   ELSE
     CALL MA48I(CNTL,ICNTL)
   ENDIF
-call teems_apply_ma48u(CNTL)
+call teems_apply_ma48_cntl2(CNTL)
   ! errors only below debug verbosity (silences duplicate-entry notes)
   if (teems_verbosity()<2) ICNTL(3)=1
   ! -3 workspace shortfalls are handled by caller-side growth, so
@@ -1557,7 +1549,7 @@ SUBROUTINE SPEC48M_ESOL(INSIZE,IRN,VA,KEEP,B,SOL)
   else
     CALL MA48I(CNTL,ICNTL)
   ENDIF
-call teems_apply_ma48u(CNTL)
+call teems_apply_ma48_cntl2(CNTL)
   ! errors only below debug verbosity (silences duplicate-entry notes)
   if (teems_verbosity()<2) ICNTL(3)=1
   JOB=1
@@ -1604,7 +1596,7 @@ SUBROUTINE SPEC48M_RPESOL(INSIZE,IRN,VA,KEEP,B,SOL,CNTL,ERROR1,ICNTL,INFO,W,IW)
   else
     CALL MA48I(CNTL,ICNTL)
   ENDIF
-call teems_apply_ma48u(CNTL)
+call teems_apply_ma48_cntl2(CNTL)
   ! errors only below debug verbosity (silences duplicate-entry notes)
   if (teems_verbosity()<2) ICNTL(3)=1
   JOB=1
@@ -1732,7 +1724,7 @@ SUBROUTINE SPEC48_SSOL2LA(INSIZE,IRN,JCN,VA,B,X)
   else
     CALL MA48I(CNTL,ICNTL)
   endif
-call teems_apply_ma48u(CNTL)
+call teems_apply_ma48_cntl2(CNTL)
   ! errors only below debug verbosity (silences duplicate-entry notes)
   if (teems_verbosity()<2) ICNTL(3)=1
   ! -3 workspace shortfalls are handled by caller-side growth, so
@@ -1975,7 +1967,7 @@ SUBROUTINE SPEC48_SSOL2LA_P(INSIZE,IRN,JCN,VA,B,X)
     else
       CALL MA48I(pCNTL,pICNTL)
     endif
-  call teems_apply_ma48u(pCNTL)
+  call teems_apply_ma48_cntl2(pCNTL)
     ! errors only below debug verbosity (silences duplicate-entry notes)
     if (teems_verbosity()<2) pICNTL(3)=1
     ! -3 workspace shortfalls are handled by caller-side growth, so
@@ -2218,7 +2210,7 @@ SUBROUTINE SPEC48M_SSOL2LA(INSIZE,IRN,JCN,VA,B,X)
   else
     CALL MA48I(CNTL,ICNTL)
   endif
-call teems_apply_ma48u(CNTL)
+call teems_apply_ma48_cntl2(CNTL)
   ! errors only below debug verbosity (silences duplicate-entry notes)
   if (teems_verbosity()<2) ICNTL(3)=1
   ! -3 workspace shortfalls are handled by caller-side growth, so
@@ -2505,7 +2497,7 @@ SUBROUTINE PREP48_ALU1(INSIZE,IRN,JCN,VA,W,IW,KEEP)
   else
     CALL MA48I(CNTL,ICNTL)
   endif
-call teems_apply_ma48u(CNTL)
+call teems_apply_ma48_cntl2(CNTL)
   ! errors only below debug verbosity (silences duplicate-entry notes)
   if (teems_verbosity()<2) ICNTL(3)=1
   ! -3 workspace shortfalls are handled by caller-side growth, so
@@ -2624,7 +2616,7 @@ SUBROUTINE PREP48M_MSOL(INSIZE,IRN,JCN,VA,IRNC,JCNC,VAC,IRNB,JCNB,VALUESB,VECBIV
   else
     CALL MA48I(CNTL,ICNTL)
   endif
-call teems_apply_ma48u(CNTL)
+call teems_apply_ma48_cntl2(CNTL)
   ! errors only below debug verbosity (silences duplicate-entry notes)
   if (teems_verbosity()<2) ICNTL(3)=1
   ! -3 workspace shortfalls are handled by caller-side growth, so
@@ -2809,7 +2801,7 @@ SUBROUTINE PREP48M_MSOL_P(INSIZE,IRN,JCN,VA,IRNC,JCNC,VAC,IRNB,JCNB,VALUESB,VECB
   else
     CALL MA48I(CNTL,ICNTL)
   endif
-call teems_apply_ma48u(CNTL)
+call teems_apply_ma48_cntl2(CNTL)
   ! errors only below debug verbosity (silences duplicate-entry notes)
   if (teems_verbosity()<2) ICNTL(3)=1
   ! -3 workspace shortfalls are handled by caller-side growth, so

@@ -111,8 +111,10 @@ static int coefficients_dump(const char *stem, array_def *coefs, offset_t ncof, 
   return 0;
 }
 
-/* -ma48u pivot threshold as given (<=0 = library defaults) */
-static double teems_ma48u_opt=-1.0;
+/* -ma48_cntl2 pivot threshold as given (<=0 = library defaults) */
+static double teems_ma48_cntl2_opt=-1.0;
+/* -ma48_cntl4: MA48 CNTL(4) in the DBBD/NDBBD rank probes */
+static double teems_ma48_cntl4=1e-4;
 
 /* Effective BLAS kernel family. The runtime image pins OPENBLAS_CORETYPE
    (docker/expedited_build/Dockerfile) so the same image gives the same
@@ -140,10 +142,10 @@ static const char *blas_corename(void) {
    solver has since dropped (accepted and ignored), or a PETSc runtime
    option. The check runs once, before any work. */
 static const char *const cli_teems_flags[]={
-  "adaptive","assertions","cmdfile","cntl_3","cntl_6","cofdump",
+  "adaptive","assertions","cmdfile","cofdump",
   "comp_do_acc","comp_do_approx","comp_redo","comp_redo_min_frac",
   "comp_sberr_warn","comp_steps","condest","convrule","epstol","fastrefac","fhtest",
-  "inmemory","jacdump","laA","laD","laDi","ma48u","matsol",
+  "inmemory","jacdump","laA","laD","laDi","ma48_cntl2","ma48_cntl4","matsol",
   "maxretries","maxthreads","ndcutcache","nowrites","nsbbdblocks",
   "nsubints","postsim","probefine","probepattern","random_seed",
   "range_test_initial","range_test_updated","refine","residcheck","retryadj","rkchart",
@@ -501,8 +503,9 @@ static void ordering_stats_write(cmf_file_entry *iodata, int niodata, int noutda
     fprintf(fp,"    \"blas_core\": \"%s\",\n",blas_corename());
     fprintf(fp,"    \"fastrefac\": %s,\n",frchk?"true":"false");
     fprintf(fp,"    \"refine\": %s,\n",(teems_refine&&matsol==MM_DBBD)?"true":"false");
-    if(teems_ma48u_opt>0)fprintf(fp,"    \"ma48u\": %g,\n",teems_ma48u_opt);
-    else fprintf(fp,"    \"ma48u\": null,\n");
+    if(teems_ma48_cntl2_opt>0)fprintf(fp,"    \"ma48_cntl2\": %g,\n",teems_ma48_cntl2_opt);
+    else fprintf(fp,"    \"ma48_cntl2\": null,\n");
+    fprintf(fp,"    \"ma48_cntl4\": %g,\n",teems_ma48_cntl4);
     fprintf(fp,"    \"ndcutcache\": %d,\n",teems_ndcutcache);
     fprintf(fp,"    \"condest\": %s,\n",teems_condest?"true":"false");
     fprintf(fp,"    \"assertions\": \"%s\",\n",mode_names[teems_assertions_mode>=0&&teems_assertions_mode<=2?teems_assertions_mode:2]);
@@ -1429,7 +1432,6 @@ int main(int argc,char **args) {
   offset_t alltimeset=-1,allregset=-1;
   map_def *maps=NULL;
   dim_t nmap=0;
-  PetscReal cntl6=0,cntl3;
   if(rank<10) {
     strcat(newtabfile,"000");
     strcat(newtabfile1,"000");
@@ -1542,8 +1544,6 @@ int main(int argc,char **args) {
   nesteddbbd=(matsol==MM_NDBBD)?1:0;/* nested ordering exists only for the NDBBD solve; any other pairing is broken */
   PetscOptionsGetInt(NULL,NULL,"-nowrites",&nowrites,NULL);
   PetscOptionsGetInt(NULL,NULL,"-cofdump",&cofdump,NULL); /* <stem>.cof/.cbin coefficient dump, default on */
-  PetscOptionsGetReal(NULL,NULL,"-cntl_6",&cntl6,NULL); /* CNTL6 in Mat Order */
-  PetscOptionsGetReal(NULL,NULL,"-cntl_3",&cntl3,NULL);/*Iterative threshold */
   {
     PetscInt verb=verbosity;
     PetscOptionsGetInt(NULL,NULL,"-verbosity",&verb,NULL);/* 0 errors/results, 1 progress (default), 2 debug */
@@ -1553,26 +1553,41 @@ int main(int argc,char **args) {
     setenv("TEEMS_VERBOSITY",verbstr,1);/* for the Fortran kernels (hsl_kernels.f90) */
   }
   {
-    /* -ma48u <x>: MA48/MP48 pivot threshold (CNTL(2), 0 < x <= 1).
+    /* -ma48_cntl2 <x>: MA48/HSL_MP48 pivot threshold (CNTL(2), 0 < x <= 1).
        Absent = each library's own default (MA48 0.1, HSL_MP48 0.01),
        bit-identical to pre-option builds; given = applied at every
-       MA48ID/MP48AD initialisation via TEEMS_MA48U (hsl_kernels.f90).
-       Recorded in stats.json options as ma48u (null when default). */
+       MA48ID/MP48AD initialisation, the DBBD/NDBBD rank probes included,
+       via TEEMS_MA48_CNTL2 (hsl_kernels.f90). Recorded in stats.json
+       options as ma48_cntl2 (null when default). */
     PetscReal u=0;
     PetscBool uflg=PETSC_FALSE;
-    PetscOptionsGetReal(NULL,NULL,"-ma48u",&u,&uflg);
+    PetscOptionsGetReal(NULL,NULL,"-ma48_cntl2",&u,&uflg);
     if(uflg) {
       if(!(u>0&&u<=1)) {
-        if(rank==0)errmsg("Error: -ma48u must be in (0,1] (MA48 pivot threshold CNTL(2); MA48 default 0.1, HSL_MP48 default 0.01), got %g\n",(double)u);
+        if(rank==0)errmsg("Error: -ma48_cntl2 must be in (0,1] (MA48/HSL_MP48 pivot threshold CNTL(2); MA48 default 0.1, HSL_MP48 default 0.01), got %g\n",(double)u);
         PetscFinalize();
         return 1;
       }
       char ustr[32];
       snprintf(ustr,sizeof(ustr),"%.17g",(double)u);
-      setenv("TEEMS_MA48U",ustr,1);
-      teems_ma48u_opt=(double)u;
+      setenv("TEEMS_MA48_CNTL2",ustr,1);
+      teems_ma48_cntl2_opt=(double)u;
     }
-    else unsetenv("TEEMS_MA48U");
+    else unsetenv("TEEMS_MA48_CNTL2");
+  }
+  {
+    /* -ma48_cntl4 <x>: MA48 CNTL(4), pivots below x treated as zero, in
+       the MA48/MA51 rank probes that size the DBBD/NDBBD blocks and the
+       NDBBD interface cut (x >= 0; default 1e-4; 0 = MA48's own default,
+       exact zeros only). Recorded in stats.json options as ma48_cntl4. */
+    PetscReal c4=teems_ma48_cntl4;
+    PetscOptionsGetReal(NULL,NULL,"-ma48_cntl4",&c4,NULL);
+    if(!(c4>=0)) {
+      if(rank==0)errmsg("Error: -ma48_cntl4 must be >= 0 (MA48 CNTL(4) rank-probe zero tolerance; default 1e-4), got %g\n",(double)c4);
+      PetscFinalize();
+      return 1;
+    }
+    teems_ma48_cntl4=(double)c4;
   }
   inmemory=-1;
   PetscOptionsGetInt(NULL,NULL,"-inmemory",&inmemory,NULL);/* keep value arrays resident instead of spilling to scratch */
@@ -3528,7 +3543,7 @@ comp_accurate_reentry:
     if(comp_do_approx) {
       if(rank==0)printf("Complementarity: %ld active (endogenous) component(s); approximate simulation as forward Euler with %d steps (manual 51.1.2)\n",(long)teems_comp_active,comp_steps);
       if(rank==0&&subints>1&&!comp_do_acc)printf("Warning: without an accurate run the complementarity approximate run treats the simulation as one interval (manual 51.7.4 pairs need the accurate run)\n");
-      solve_comp_approx(nohsl,VecSize,dnz,dnnz,onz,onnz,dnzB,dnnzB,onzB,onnzB,&vece,rank,rank_hsl,mpisize,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,&elem_vals,ncofele,nvarele,&closure_vals,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,eq_addr,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,fcomm,comp_steps,comp_redo,comp_minfrac,&xcf);
+      solve_comp_approx(nohsl,VecSize,dnz,dnnz,onz,onnz,dnzB,dnnzB,onzB,onnzB,&vece,rank,rank_hsl,mpisize,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,&elem_vals,ncofele,nvarele,&closure_vals,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,eq_addr,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,teems_ma48_cntl4,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,fcomm,comp_steps,comp_redo,comp_minfrac,&xcf);
       if(rank==0&&comp_do_acc&&xcf!=NULL) {
         free(comp_approx_col);
         comp_approx_col=(solve_real *) malloc (nvarele*sizeof(solve_real));
@@ -3628,13 +3643,13 @@ comp_teardown:
     }
   }
 
-  if(!comp_dispatch&&solmethod==SM_JOHANSEN)solve_johansen(nohsl,VecSize,A,dnz,dnnz,onz,onnz,B,dnzB,dnnzB,onzB,onnzB,vecb,vece,rank,rank_hsl,mpisize,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,&elem_vals,ncofele+nvarele,ncofele,nvarele,&closure_vals,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,eq_addr,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,&xcf);
+  if(!comp_dispatch&&solmethod==SM_JOHANSEN)solve_johansen(nohsl,VecSize,A,dnz,dnnz,onz,onnz,B,dnzB,dnnzB,onzB,onnzB,vecb,vece,rank,rank_hsl,mpisize,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,&elem_vals,ncofele+nvarele,ncofele,nvarele,&closure_vals,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,eq_addr,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,teems_ma48_cntl4,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,&xcf);
 
   FILE* solution;
 
-  if(!comp_dispatch&&(solmethod==SM_GRAGG||solmethod==SM_MIDPOINT||solmethod==SM_EULER))solve_gragg(nohsl,VecSize,&A,dnz,dnnz,onz,onnz,&B,dnzB,dnnzB,onzB,onnzB,&vecb,&vece,rank,rank_hsl,mpisize,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,&elem_vals,ncofele+nvarele,ncofele,nvarele,&closure_vals,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,eq_addr,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,(teems_comp_nsub>1)?1:subints,fcomm,solmethod,&xcf);
+  if(!comp_dispatch&&(solmethod==SM_GRAGG||solmethod==SM_MIDPOINT||solmethod==SM_EULER))solve_gragg(nohsl,VecSize,&A,dnz,dnnz,onz,onnz,&B,dnzB,dnnzB,onzB,onnzB,&vecb,&vece,rank,rank_hsl,mpisize,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,&elem_vals,ncofele+nvarele,ncofele,nvarele,&closure_vals,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,eq_addr,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,teems_ma48_cntl4,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,(teems_comp_nsub>1)?1:subints,fcomm,solmethod,&xcf);
 
-  if(!comp_dispatch&&isrk)solve_rk(nohsl,VecSize,dnz,dnnz,onz,onnz,dnzB,dnnzB,onzB,onnzB,&vece,rank,rank_hsl,mpisize,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,&elem_vals,ncofele,nvarele,&closure_vals,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,eq_addr,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,cntl3,cntl6,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,fcomm,solmethod,adaptive,(double)epstol,(double)retryadj,maxretries,&rko,&xcf,&accmetric);
+  if(!comp_dispatch&&isrk)solve_rk(nohsl,VecSize,dnz,dnnz,onz,onnz,dnzB,dnnzB,onzB,onnzB,&vece,rank,rank_hsl,mpisize,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,&elem_vals,ncofele,nvarele,&closure_vals,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,eq_addr,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,teems_ma48_cntl4,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,fcomm,solmethod,adaptive,(double)epstol,(double)retryadj,maxretries,&rko,&xcf,&accmetric);
 
   /* C3: after the accurate run, every component must sit in its
      approximate-run state with the variable inside its bounds

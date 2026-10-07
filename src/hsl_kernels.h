@@ -3,7 +3,7 @@
 /* Fortran kernels in hsl_kernels.f90 (wrappers around HSL MP48/MA48/MA51/MC66) */
 #include <teems_solver.h>
 
-extern void spec51m_rank_(int *INSIZE,solve_real *cntl6,int *IRN, int *JCN, solve_real *VA,int *IRNA, int *JCNA, int *KEEP,solve_real *w51, int *iw51);
+extern void spec51m_rank_(int *INSIZE,solve_real *cntl4,int *IRN, int *JCN, solve_real *VA,int *IRNA, int *JCNA, int *KEEP,solve_real *w51, int *iw51);
 extern void spec48_ssol2la_(int *INSIZE,int *IRN, int *JCN, solve_real *VA, solve_real *B, solve_real *X);/* INSIZE needs 7 entries: [6] = keep slot (0 none, 1 LU, 2 DBBD interface) */
 extern void spec48_ssol2la_p_(int *INSIZE,int *IRN, int *JCN, solve_real *VA, solve_real *B, solve_real *X);/* persistent pivot sequence (-fastrefac); INSIZE[3]=LA absolute; INSIZE[4] inout: 0 full analyse, 1 fast refactorize; out 0 ok, -3 workspace too small (INSIZE[5]=suggested LA), other <0 declined */
 extern void spec48_persist_free_(void);

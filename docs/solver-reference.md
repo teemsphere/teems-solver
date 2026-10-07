@@ -1018,8 +1018,8 @@ solve's residual ratio before and after the step and a summary line;
 - Diagonal blocks are distributed round-robin over ranks; rank counts
   should divide the block count reasonably (blocks = time periods or
   regions × periods).
-- **OpenMP** within rank: `-maxthreads` (global), `-smllthreads` (caps
-  selected sections); formula evaluation and updates parallelize over
+- **OpenMP** within rank: `-maxthreads` (global), `-smllthreads` (NDBBD
+  interface factorization and back-substitution); formula evaluation and updates parallelize over
   elements with per-thread copies of the op-list.
 - **NDBBD thread budget.** Four NDBBD regions own per-thread working
   sets that scale with the interface, not the rank count, so resident
@@ -1292,16 +1292,15 @@ needs corpus calibration.
 | `-nsubints n` | 1 | shock subintervals, at least 1 |
 | `-laA/-laDi/-laD n` | 2 (teems-R: 300/500/200) | workspace sizing, % of nnz |
 | `-fastrefac {0,1}` | 0 | all matrix methods: analyse once, fast refactorize per step (MA48 JOB=2 / MP48 FACT_JOB=2); LU auto-grows `laA` (§6). DBBD: small rigs only — at 1.4M equations no step reused its extraction and the run was slower than one-shot (§6) |
-| `-ma48u x` | library defaults | MA48 / HSL_MP48 pivot threshold `CNTL(2)`, 0 < x ≤ 1, applied at every factorization site (sequential LU, DBBD/NDBBD blocks and rank probes, SBBD's MP48 instance). Absent = each library's own default (MA48 0.1, MP48 0.01), bit-identical to builds without the option; recorded in `stats.json` (`ma48u`, null when default). A calibration knob, not a tuning recommendation |
-| `-cntl_3 x` | — | HSL iterative-refinement threshold |
-| `-cntl_6 x` | 0 | MA50 ordering control |
+| `-ma48_cntl2 x` | library defaults | MA48 / HSL_MP48 pivot threshold `CNTL(2)`, 0 < x ≤ 1, applied at every factorization site (sequential LU, DBBD/NDBBD blocks and rank probes, SBBD's MP48 instance), so it can also move the DBBD/NDBBD block sizes. Absent = each library's own default (MA48 0.1, MP48 0.01), bit-identical to builds without the option; recorded in `stats.json` (`ma48_cntl2`, null when default). A calibration knob, not a tuning recommendation |
+| `-ma48_cntl4 x` | 1e-4 | MA48 `CNTL(4)` in the MA48/MA51 rank probes that size the DBBD/NDBBD blocks and the NDBBD interface cut: pivots below x count as zero, x ≥ 0 (0 = MA48's own default, exact zeros only); recorded in `stats.json` (`ma48_cntl4`). Measured on GTAPv7 DBBD and GTAP-RE NDBBD: block ranks identical from 1e-14 to 1e-5; above 1e-3 the border grows and unrefined NDBBD accuracy moves without a consistent sign. A calibration knob, not a tuning recommendation |
 | `-withmc66 {0,1}` | 0 | MC66 ordering for SBBD |
 | `-maxthreads n` | 1 | OpenMP threads |
-| `-smllthreads n` | maxthreads | thread cap in selected sections |
+| `-smllthreads n` | maxthreads | NDBBD only: OpenMP threads for the interface factorization and the back-substitution (the interface-factor team is still capped by the memory budget) |
 | `-tempdir <dir>` | `/tmp/` (or `TMPDIR`) | scratch directory |
 | `-inmemory {0,1}` | 1 except NDBBD | §8 |
 | `-ndcutcache {0,1,2,3}` | 1 | NDBBD only: reuse the step-1 cuts for the following steps and RK stages instead of re-probing every block with a throwaway MA48 factorization. The regional cut (rank-deficient block tails migrated into the time-interface blocks, permutations, block sizes) is structural and its reuse is bit-identical; the interface cut (each chain block's MA51 rank probe: rank plus row/column selection) is value-dependent, and reusing it moves outputs at the rounding level (≤1e-6 on the reference rigs, accuracy summaries identical). Dropped at every subinterval start and at the complementarity re-entry. 0 = re-probe every step (the previous behaviour; the remedy named in the MA48B failure message when a cached interface selection goes singular on a later step); 2/3 = regional-only / interface-only, bisect aids |
-| `-nsbbdblocks n` | 2 | SBBD block-count hint |
+| `-nsbbdblocks n` | 2 | SBBD with `-withmc66 1` only: HSL_MC66 `nblocks`, the number of row blocks MC66 partitions into; ignored by the default SBBD path |
 | `-probefine {0,1}` | 0 | with `-solmed probe`: add the MC79 fine-DM strongly-connected-component report (§5) |
 | `-probepattern {0,1}` | 0 | with `-solmed probe`: also write the assembled structural pattern with element names to `<solfiles>.probe.pattern` — one line per equation element, its variable elements space-separated (`=0` marks an entry that is zero at base data); the element-level view for tracing an entangled block by hand when the aggregated report is not enough |
 | `-jacdump {0,1,2}` | 0 | write the base-point Jacobian to `<solfiles>.jac` + `.jac.json` before the first step (§1 file table). 1: the run then goes on as asked (any `-solmed` but `nosim`, any matrix method and rank count). 2: the run stops after the export, as a probe without its MC79 diagnosis (no `.bin`; the structure files, `.cbin0` and `stats.json` are written) — the input of teems-R's `ems_homogeneity()` ([GM] 57.4) and of SUMEQ-style views of the equations (ch 15) |
