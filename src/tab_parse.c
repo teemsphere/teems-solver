@@ -4886,7 +4886,7 @@ static void shock_component_set(array_def *vars, offset_t j, offset_t e, solve_r
   }
   if (seen[x]) {
     array_element_label(&vars[j],e,lab,sizeof(lab));
-    errmsg("Error: some components of %s have been specified more than once (%s is shocked by two statements; manual 68.1.1; shock file)\n",vars[j].cofname,lab);
+    errmsg("Error: some components of %s have been specified more than once (%s is shocked by two statements; shock file)\n",vars[j].cofname,lab);
     MPI_Abort(PETSC_COMM_WORLD,1);
   }
   seen[x]=1;
@@ -7723,12 +7723,12 @@ void tab_wordops_normalize(char *line) {
 /* named fatal for an index (idx != NULL) or a set qualifier (idx ==
    NULL) ranging over `sub` at an argument position of `symname`
    declared over `sup` without a declared subset relation -- TABLO
-   requires the Subset statement (manual 10.1.2).  `where` names the
+   requires the Subset statement (manual 10.2).  `where` names the
    input file class for the message ("closure file"), NULL for TAB. */
 void set_supset_fatal(const char *idx, const char *symname, const char *where, set_def *sets, dim_t sub, dim_t sup) {
   const char *wo=(where!=NULL)?" (":"",*ww=(where!=NULL)?where:"",*wc=(where!=NULL)?")":"";
-  if (idx!=NULL) errmsg("Error: index %s of %s ranges over set %s, which is not %s (the declared set at that argument position) or a declared subset of it; add 'Subset %s is subset of %s;' (manual 10.1.2)%s%s%s\n",idx,symname,sets[sub].setname,sets[sup].setname,sets[sub].setname,sets[sup].setname,wo,ww,wc);
-  else errmsg("Error: %s is qualified by set %s at an argument position declared over %s, and %s is not a declared subset of %s; add 'Subset %s is subset of %s;' (manual 10.1.2)%s%s%s\n",symname,sets[sub].setname,sets[sup].setname,sets[sub].setname,sets[sup].setname,sets[sub].setname,sets[sup].setname,wo,ww,wc);
+  if (idx!=NULL) errmsg("Error: index %s of %s ranges over set %s, which is not %s (the declared set at that argument position) or a declared subset of it; add 'Subset %s is subset of %s;' (manual 10.2)%s%s%s\n",idx,symname,sets[sub].setname,sets[sup].setname,sets[sub].setname,sets[sup].setname,wo,ww,wc);
+  else errmsg("Error: %s is qualified by set %s at an argument position declared over %s, and %s is not a declared subset of %s; add 'Subset %s is subset of %s;' (manual 10.2)%s%s%s\n",symname,sets[sub].setname,sets[sup].setname,sets[sub].setname,sets[sup].setname,sets[sub].setname,sets[sup].setname,wo,ww,wc);
   MPI_Abort(PETSC_COMM_WORLD,1);
 }
 

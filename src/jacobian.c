@@ -1778,7 +1778,7 @@ static void bs_prog_execute(bs_prog *bp, set_def *sets, set_element *set_elems,
   for (i5=0; i5<st->nloops; i5++) {
     if (piv[i5]==0) {
       bs_element_label(vars,bd->varindx,pivelem[i5],sets,set_elems,label);
-      errmsg("Error: zero pivot backsolving %s from equation %s at this step; the defining equation cannot determine the variable here (GEMPACK would report the same singularity) -- nominate a different equation or leave the variable in the system\n",label,bd->eqname);
+      errmsg("Error: zero pivot backsolving %s from equation %s at this step; the defining equation cannot determine the variable here -- nominate a different equation or leave the variable in the system\n",label,bd->eqname);
       MPI_Abort(PETSC_COMM_WORLD,1);
     }
     bsvals[bd->elem_base+pivelem[i5]]=-acc[i5]/piv[i5];

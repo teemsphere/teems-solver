@@ -118,7 +118,7 @@ The solver reads a GEMPACK-style TAB subset (statement syntax per [GM]):
   file, the full set-expression grammar of [GM] 10.1.1 (`+`, `-`, `\`,
   `UNION`, `INTERSECT`, quoted single elements, parentheses; `+`
   disjointness and `-` presence enforced), set equality, conditional
-  set builders `Set X = (all,i,SRC: <cond>)` ([GM] 10.1.2 — evaluated
+  set builders `Set X = (all,i,SRC: <cond>)` ([GM] 10.1.3 — evaluated
   from the input files ahead of set resolution by
   `tab_setbuilder_transform`; the source set may be declared by list,
   read, or derived — `A + B`, `A union B`, `A - B`, `A intersect B` —
@@ -418,7 +418,7 @@ Generated temporaries use the reserved prefixes `gen_sum`, `gen_par`,
    Every binding of a quantifier index to an argument position of a
    coefficient or variable resolves through `set_supset_slot`: the
    index's set must be the declared set or a declared/implied subset of
-   it (manual 10.1.2), else `set_supset_fatal` names the index, the
+   it (manual 10.2), else `set_supset_fatal` names the index, the
    symbol and the missing `Subset` statement — in equations, formulas
    (operands, targets, IF conditions), partial Reads and set-qualified
    closure entries alike. The former fallback bound the index by its

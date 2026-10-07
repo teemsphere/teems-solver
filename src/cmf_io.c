@@ -3087,7 +3087,7 @@ int tab_postsim_split(char *newtabfile, char *psfile) {
 }
 
 
-/* ---------- conditional set builders (manual 10.1.2; survey
+/* ---------- conditional set builders (manual 10.1.3; survey
    2026-08-06) --------------------------------------------------------
    `Set NAME = (all,i,SRC: <cond>);` where <cond> is one of the three
    corpus shapes:
@@ -3656,7 +3656,7 @@ static int sb_leaf_keep(char *fname, cmf_file_entry *iodata, int niodata, const 
         }
       }
       if (oi<0) {
-        errmsg("Error: set builder %s: unsupported condition '%s' (supported: COEF(...) <op> const, or a mapping-conditional sum <op> const; manual 10.1.2)\n",name,cond);
+        errmsg("Error: set builder %s: unsupported condition '%s' (supported: COEF(...) <op> const, or a mapping-conditional sum <op> const; manual 10.1.3)\n",name,cond);
         return -1;
       }
       strncpy(op,cond+oi,olen);
@@ -3666,7 +3666,7 @@ static int sb_leaf_keep(char *fname, cmf_file_entry *iodata, int niodata, const 
         cval=strtod(cond+oi+olen,&endp);
         while (endp!=NULL&&*endp==' ') endp++;
         if (endp==cond+oi+olen||endp==NULL||*endp!='\0') {
-          errmsg("Error: set builder %s: unsupported condition '%s' (a single comparison against a numeric constant; compound conditions are not supported; manual 10.1.2)\n",name,cond);
+          errmsg("Error: set builder %s: unsupported condition '%s' (a single comparison against a numeric constant; compound conditions are not supported; manual 10.1.3)\n",name,cond);
           return -1;
         }
       }
@@ -3792,7 +3792,7 @@ static int sb_leaf_keep(char *fname, cmf_file_entry *iodata, int niodata, const 
           free(mlab);
           free(v2);
           if (!ok) {
-            errmsg("Error: set builder %s: cannot evaluate the mapping-conditional sum '%s' (the mapping must be file-Read and the summed coefficient file-Read or an indicator assigned only constants; manual 10.1.2)\n",name,opnd);
+            errmsg("Error: set builder %s: cannot evaluate the mapping-conditional sum '%s' (the mapping must be file-Read and the summed coefficient file-Read or an indicator assigned only constants; manual 10.1.3)\n",name,opnd);
             return -1;
           }
         }
@@ -3830,7 +3830,7 @@ static int sb_leaf_keep(char *fname, cmf_file_entry *iodata, int niodata, const 
               cv=NULL;
               ok=2;
             } else {
-              errmsg("Error: set builder %s: condition coefficient %s must be Read from an input file or be an indicator assigned only constants (formula-computed operands cannot drive set resolution; manual 10.1.2)\n",name,coef);
+              errmsg("Error: set builder %s: condition coefficient %s must be Read from an input file or be an indicator assigned only constants (formula-computed operands cannot drive set resolution; manual 10.1.3)\n",name,coef);
               return -1;
             }
           }
@@ -3888,7 +3888,7 @@ static int sb_leaf_keep(char *fname, cmf_file_entry *iodata, int niodata, const 
             free(cv);
           }
           if (!ok) {
-            errmsg("Error: set builder %s: cannot evaluate condition '%s' (declaration/read/dimension resolution failed; manual 10.1.2)\n",name,cond);
+            errmsg("Error: set builder %s: cannot evaluate condition '%s' (declaration/read/dimension resolution failed; manual 10.1.3)\n",name,cond);
             return -1;
           }
         }
