@@ -29,6 +29,7 @@ The solver is distributed as a Docker image to ensure reproducibility and ease o
 - [Verification](#verification)
 - [Usage](#usage)
 - [Troubleshooting](#troubleshooting)
+- [References](#references)
 - [License](#license)
 - [Code Authorship](#code-authorship)
 - [Contact](#contact)
@@ -213,6 +214,44 @@ If you encounter issues not covered here:
 
 1. Check [existing issues](https://github.com/matthewcantele/teems-solver/issues)
 2. [Open a new issue](https://github.com/matthewcantele/teems-solver/issues/new) with system information (`uname -a`, `docker --version`, the solver version from `docker run --rm teems:<tag> /opt/teems-solver/solver/teems-solver -version`) and the complete error message
+
+## References
+
+The solver implements methods described in the following works.
+
+**Tablo language and solution procedure**
+
+- Horridge J.M., Jerie M., Mustakinov D. & Schiffmann F. (2018), *GEMPACK manual*, GEMPACK Software, Centre of Policy Studies, Victoria University, Melbourne, ISBN 978-1-921654-34-3. <https://ideas.repec.org/p/cop/wpaper/gpman.html>
+- Pearson K.R. (1991), 'Solving Nonlinear Economic Models Accurately via a Linear Representation', Impact Preliminary Working Paper No. IP-55, Melbourne (July), pp.39. <http://www.copsmodels.com/elecpapr/ip-55.htm>
+
+**Complementarities and subtotals**
+
+- Harrison, W.J., Mark Horridge, K.R. Pearson and Glyn Wittwer (2002), 'A Practical Method for Explicitly Modeling Quotas and Other Complementarities', Computational Economics, June 2004, Vol. 23(4), pp. 325-341. [A preliminary version was Centre of Policy Studies and the Impact Project Preliminary Working Paper No. IP-78, Melbourne (April), pp.19.] <http://www.copsmodels.com/elecpapr/ip-78.htm>
+- Harrison, W.J., J.M. Horridge and K.R. Pearson (2000), 'Decomposing Simulation Results with Respect to Exogenous Shocks', Computational Economics, vol.15, pp.227-249. [A preliminary version was Centre of Policy Studies and Impact Project Preliminary Working Paper No. IP-73, May 1999.] <http://www.copsmodels.com/elecpapr/ip-73.htm>
+
+**Runge-Kutta methods**
+
+- Schiffmann, F. (2022), 'Runge Kutta integrators for fast and accurate solutions in GEMPACK'.
+- Munthe-Kaas, H. (1999), 'High order Runge-Kutta methods on manifolds', Applied Numerical Mathematics, vol. 29, pp. 115-127.
+- Butcher, J.C. (2015), 'Runge-Kutta Methods for Ordinary Differential Equations', in M. Al-Baali, L. Grandinetti and A. Purnama (eds), *Numerical Analysis and Optimization*, Springer Proceedings in Mathematics & Statistics, vol. 134, pp. 37-58.
+- Bogacki, P. and L.F. Shampine (1989), 'A 3(2) pair of Runge-Kutta formulas', Applied Mathematics Letters, vol. 2, pp. 321-325.
+- Dormand, J.R. and P.J. Prince (1980), 'A family of embedded Runge-Kutta formulae', Journal of Computational and Applied Mathematics, vol. 6, pp. 19-26.
+- Gustafsson, K. (1991), 'Control theoretic techniques for stepsize selection in explicit Runge-Kutta methods', ACM Transactions on Mathematical Software, vol. 17, pp. 533-554.
+
+**Parallel matrix methods (SBBD, NDBBD)**
+
+- Van Ha, P. and T. Kompas (2016), 'Solving intertemporal CGE models in parallel using a singly bordered block diagonal ordering technique', Economic Modelling, vol. 52, pp. 3-12. <https://doi.org/10.1016/j.econmod.2015.07.011>
+- Kompas, T. and P. Van Ha (2019), 'The "curse of dimensionality" resolved: The effects of climate change and trade barriers in large dimensional modelling', Economic Modelling, vol. 80, pp. 103-110. <https://doi.org/10.1016/j.econmod.2018.08.011>
+
+**Sparse linear algebra**
+
+- Duff, I.S. and J.K. Reid (1993), 'MA48, a Fortran Code for Direct Solution of Sparse Unsymmetric Linear Systems of Equations', Rutherford Appleton Laboratory Report RAL-93-072, pp.62.
+
+**Software**
+
+- HSL (2026), A collection of Fortran codes for large scale scientific computation. <https://www.hsl.rl.ac.uk/>
+- Balay, S. et al. (2026), *PETSc/TAO Users Manual*, Argonne National Laboratory, ANL-21/39 - Revision 3.25. <https://doi.org/10.2172/2998643>
+- Balay, S. et al. (2026), *PETSc Web page*. <https://petsc.org/>
 
 ## License
 
