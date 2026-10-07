@@ -143,7 +143,7 @@ static const char *const cli_teems_flags[]={
   "adaptive","assertions","cmdfile","cntl_3","cntl_6","cofdump",
   "comp_do_acc","comp_do_approx","comp_redo","comp_redo_min_frac",
   "comp_sberr_warn","comp_steps","condest","convrule","epstol","fastrefac","fhtest",
-  "gpzerodivide","inmemory","jacdump","laA","laD","laDi","ma48u","matsol",
+  "inmemory","jacdump","laA","laD","laDi","ma48u","matsol",
   "maxretries","maxthreads","ndcutcache","nowrites","nsbbdblocks",
   "nsubints","postsim","probefine","probepattern","random_seed",
   "range_test_initial","range_test_updated","refine","residcheck","retryadj","rkchart",
@@ -505,7 +505,6 @@ static void ordering_stats_write(cmf_file_entry *iodata, int niodata, int noutda
     else fprintf(fp,"    \"ma48u\": null,\n");
     fprintf(fp,"    \"ndcutcache\": %d,\n",teems_ndcutcache);
     fprintf(fp,"    \"condest\": %s,\n",teems_condest?"true":"false");
-    fprintf(fp,"    \"gpzerodivide\": %s,\n",teems_gpzerodivide?"true":"false");
     fprintf(fp,"    \"assertions\": \"%s\",\n",mode_names[teems_assertions_mode>=0&&teems_assertions_mode<=2?teems_assertions_mode:2]);
     fprintf(fp,"    \"range_test_initial\": \"%s\",\n",mode_names[teems_range_test_initial>=0&&teems_range_test_initial<=2?teems_range_test_initial:1]);
     fprintf(fp,"    \"range_test_updated\": \"%s\",\n",mode_names[teems_range_test_updated>=0&&teems_range_test_updated<=2?teems_range_test_updated:1]);
@@ -1497,10 +1496,6 @@ int main(int argc,char **args) {
       else logmsg(1,"Note: -refine applies to matrix_method DBBD only; this run's solves are not refined\n");
     }
   }
-  /* -gpzerodivide 1: GEMPACK dual-class ZERODIVIDE semantics in formulas
-     (manual 10.11/10.11.1; plan A1). Default 0 keeps the legacy single
-     conflated default -- adoption is a re-anchor-class change. */
-  PetscOptionsGetInt(NULL,NULL,"-gpzerodivide",&teems_gpzerodivide,NULL);
   /* -zdivshift x: shift every zero-divide default by x*(1+|default|),
      so a second run shows what depends on one (formula.c zdiv_shifted) */
   {

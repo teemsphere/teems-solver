@@ -235,7 +235,10 @@ The solver reads a GEMPACK-style TAB subset (statement syntax per [GM]):
   undeclared condition name or a reference with the wrong argument
   count is a named fatal;
   `zerodivide` defaults honored by `tab_next_statement_resolved()`
-  (both GEMPACK zerodivide classes with `-gpzerodivide`); the [GM] 11.5
+  (the two GEMPACK classes, [GM] 10.11: in a Formula a zero divided by
+  zero takes the zero_by_zero default, initially 0, and a nonzero
+  divided by zero is a named fatal until a nonzero_by_zero default is
+  set; `off` makes the class fatal again); the [GM] 11.5
   intrinsics (ABS/MAX/MIN/SQRT/EXP/LOGE/LOG10/ID01/ID0V/ROUND/TRUNC0/
   TRUNCB and the statistical NORMAL/CUMNORMAL/LOGNORMAL/CUMLOGNORMAL/
   GPERF/GPERFC of [GM] 11.5.3-11.5.5, where the log-normal pair is 0
@@ -364,10 +367,10 @@ Language rules enforced as in GEMPACK (Tier A, 2026-09-28):
   11.1.5); an unbalanced marker is a named fatal.
 - arithmetic ([GM] 34.3/34.4): a Formula or Update value that is NaN
   or infinite, and a non-finite value in a linear-solve solution, is a
-  named fatal naming the statement and the first element; a division
-  of a nonzero value by zero that takes the Zerodivide default under
-  `-gpzerodivide 0` (values unchanged) is reported once per statement
-  (Formula, Update, Equation) with its count.
+  named fatal naming the statement and the first element; an Update
+  division of a nonzero value by zero, or a zero raised to a negative
+  power, takes the most recent Zerodivide default and is reported once
+  per statement with its count.
 - solve accuracy ([GM] 30.1.5, 30.6.1): after each solve on the LU
   paths and `-fastrefac` SBBD the residual ratio of every equation
   (|residual| over the sum of the absolute values of its terms, that
@@ -1313,7 +1316,6 @@ needs corpus calibration.
 | `-rkguard r` | 1e30 | log chart: level ratio beyond which a stage state is rejected |
 | `-assertions {0,1,2}` | 1 | TAB `Assertion` statements: off / warn / fatal |
 | `-range_test_initial`, `-range_test_updated {0,1,2}` | 2 / 1 | coefficient bound checks on initial and updated values: off / warn / fatal |
-| `-gpzerodivide {0,1}` | 0 | GEMPACK's two-class zerodivide semantics (nonzero-by-zero vs zero-by-zero defaults) |
 | `-postsim {0,1}` | 1 | execute the TAB's PostSim section after the simulation |
 | `-comp_steps n`, `-comp_do_approx/-comp_do_acc {0,1}`, `-comp_redo {0,1}`, `-comp_redo_min_frac x`, `-comp_sberr_warn {0,1}` | see log | complementarity ([GM] ch. 51) approximate/accurate run controls |
 | `-nowrites n` | 0 | suppress output writes |

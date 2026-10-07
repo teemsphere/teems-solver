@@ -495,11 +495,9 @@ void mapping_formula_scan(char *fname, map_def *maps, dim_t nmap);
 int mapping_check_onto(map_def *maps, dim_t j, set_def *sets, set_element *set_elems);
 void set_expr_mark_product(char *buf);
 dim_t set_expr_bound(char **pp, set_def *record, dim_t nset, const char *owner, int *err);
-/* GEMPACK dual-class zerodivide state (manual 10.11; plan A1): tracked
-   positionally by the statement scanner, consulted by formula
-   evaluation only under -gpzerodivide 1 (default 0 = the legacy single
-   conflated default, bit-compatible). Initial GEMPACK state: 0/0 -> 0,
-   nonzero/0 -> error. */
+/* GEMPACK dual-class zerodivide state (manual 10.11): tracked
+   positionally by the statement scanner and consulted by formula
+   evaluation. Initial GEMPACK state: 0/0 -> 0, nonzero/0 -> error. */
 typedef struct {
   solve_real zbz_val;
   solve_real nbz_val;
@@ -507,7 +505,6 @@ typedef struct {
   int nbz_on;
 } zdiv_state ;
 extern zdiv_state teems_zdiv_scan;
-extern int teems_gpzerodivide;
 extern long teems_laA_used,teems_laDi_used,teems_laD_used; /* max grown -la* equivalent percent (la auto-sizing) */
 /* MA48 workspace ceiling.  The HSL kernels are built with 32-bit
    integers -- INSIZE and MA48's own LA are integer(4) -- so a workspace

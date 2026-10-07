@@ -128,10 +128,8 @@ long teems_check_viol_assert = 0;
 int teems_rk_softfail = 0;
 int teems_stage_solve_failed = 0;
 
-/* dual-class zerodivide (plan A1): scanner-tracked state + the
-   GEMPACK-semantics switch (-gpzerodivide, default legacy) */
+/* dual-class zerodivide (manual 10.11): scanner-tracked state */
 zdiv_state teems_zdiv_scan = { 0, 0, 1, 0 };
-int teems_gpzerodivide = 0;
 
 /* la* auto-sizing record: max grown -la* equivalent percent observed
    this run (0 = the configured size never grew); reduced across ranks

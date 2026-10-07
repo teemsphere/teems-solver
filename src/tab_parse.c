@@ -8547,9 +8547,9 @@ static char *tab_next_statement_resolved_raw(char *commsyntax, FILE *filehandle,
 
     }
     if (strncmp(line,commsyntax,count1) != 0) {
-      /* dual-class state (plan A1), parsed from a copy BEFORE the
-         legacy strtok chain mangles the line; the legacy single
-         default below stays byte-identical for -gpzerodivide 0 */
+      /* dual-class state (manual 10.11), parsed from a copy BEFORE
+         the strtok chain below mangles the line; that chain keeps the
+         single most recent default, which updates use */
       if (strncmp(line,"zerodivide",10) == 0) {
         char zline[TABLINESIZE];
         char *zp;

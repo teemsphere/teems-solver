@@ -1138,14 +1138,14 @@ static int coef_range_check(array_def *coefs,offset_t index,offset_t offset,offs
    (plan A1): captured from the scanner position by the formula/
    assertion executors, disabled during update and equation
    evaluation (manual 10.11.1: zerodivide never applies there --
-   those keep the legacy single default until their own pass) */
+   those keep the single most recent default) */
 static zdiv_state zdiv_active = { 0, 0, 1, 0 };
 static int zdiv_enabled = 0;
 
-/* nonzero-by-zero divisions that took the legacy single default (the
-   -gpzerodivide 0 path, which never aborts): counted in formula_eval,
-   reported once per statement per run (manual 10.11, 34.3) so the
-   substitution is visible; the values are unchanged */
+/* substitutions of the single default outside the dual-class state
+   (a nonzero divided by zero in an update, zero to a negative power):
+   counted in formula_eval, reported once per statement per run
+   (manual 10.11, 34.3) so the substitution is visible */
 long zdiv_default_hits=0;
 /* -zdivshift x: every zero-divide default substitution returns
    default + x*(1+|default|). Comparing two runs shows which results
@@ -1177,12 +1177,12 @@ void zdiv_default_report(const char *kind, const char *name, const char *stmt, s
     zdiv_warned=realloc(zdiv_warned,zdiv_capwarned*sizeof(uint64_t));
   }
   zdiv_warned[zdiv_nwarned++]=h;
-  printf("Warning: %ld division(s) of a nonzero value by zero in %s %s took the Zerodivide default %g (-gpzerodivide 0; GEMPACK stops unless a ZERODIVIDE (NONZERO_BY_ZERO) default is set, manual 10.11, 34.3): %.160s\n",hits,kind,name,(double)zdefault,stmt);
+  printf("Warning: %ld division(s) of a nonzero value by zero or power(s) of zero to a negative exponent in %s %s took the Zerodivide default %g (manual 10.11, 34.3): %.160s\n",hits,kind,name,(double)zdefault,stmt);
 }
 
 void zdiv_capture(void) {
   zdiv_active=teems_zdiv_scan;
-  zdiv_enabled=teems_gpzerodivide;
+  zdiv_enabled=1;
 }
 
 void zdiv_disable(void) {
