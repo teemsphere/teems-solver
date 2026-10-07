@@ -798,6 +798,10 @@ extern char (*teems_ps_coefnames)[NAMESIZE];
 extern int teems_ps_ncoefs;
 extern bool *teems_coef_is_ps;
 extern int teems_ps_pass;
+extern char (*teems_ps_wlogs)[NAMESIZE];
+extern int teems_ps_nwlogs;
+extern int teems_ps_ran;
+int postsim_write_skipped(const char *logname);
 void postsim_mark_coefs(array_def *coefs, offset_t ncof);
 /* 11.2.1 name uniqueness across coefficient/variable/set/mapping +
    reserved words (the 12.2.2 name-resolution spec pass) */

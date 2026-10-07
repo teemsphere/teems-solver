@@ -82,6 +82,9 @@ char (*teems_ps_coefnames)[NAMESIZE] = NULL;
 int teems_ps_ncoefs = 0;
 bool *teems_coef_is_ps = NULL;
 int teems_ps_pass = 0;
+char (*teems_ps_wlogs)[NAMESIZE] = NULL;
+int teems_ps_nwlogs = 0;
+int teems_ps_ran = 0;
 
 /* statement order (manual 10.1, 11.11.8, 12.2.1) */
 long teems_stmt_start = -1;

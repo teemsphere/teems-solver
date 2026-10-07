@@ -3040,7 +3040,23 @@ int tab_postsim_split(char *newtabfile, char *psfile) {
       fputs(line,fmain);
       continue;
     }
-    if(strncmp(line,"write ",6)==0||strncmp(line,"display ",8)==0) {
+    if(strncmp(line,"write ",6)==0) {
+      /* a PostSim Write joins the ordinary outputs, which are written
+         after the PostSim pass; its file is recorded so a run without
+         that pass skips it instead of writing unset values */
+      char *tf=strstr(line," to file ");
+      if(tf!=NULL) {
+        int k4=0;
+        tf+=9;
+        while(tf[k4]!='\0'&&tf[k4]!=' '&&tf[k4]!=';'&&tf[k4]!='\n'&&k4<NAMESIZE-1)k4++;
+        teems_ps_wlogs=realloc(teems_ps_wlogs,(teems_ps_nwlogs+1)*sizeof(*teems_ps_wlogs));
+        strncpy(teems_ps_wlogs[teems_ps_nwlogs],tf,k4);
+        teems_ps_wlogs[teems_ps_nwlogs++][k4]='\0';
+      }
+      fputs(line,fmain);
+      continue;
+    }
+    if(strncmp(line,"display ",8)==0) {
       /* outputs ride the write-all coefficient dump */
       continue;
     }
@@ -3084,6 +3100,16 @@ int tab_postsim_split(char *newtabfile, char *psfile) {
     return -1;
   }
   return nps;
+}
+
+/* a Write moved out of a PostSim section holds values only the
+   PostSim pass computes: without that pass (no simulation, -postsim 0)
+   its output is skipped */
+int postsim_write_skipped(const char *logname) {
+  int k;
+  if(teems_ps_ran)return 0;
+  for(k=0;k<teems_ps_nwlogs;k++)if(strcmp(teems_ps_wlogs[k],logname)==0)return 1;
+  return 0;
 }
 
 
