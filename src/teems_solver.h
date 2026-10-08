@@ -110,7 +110,7 @@ typedef float store_real;
 enum matrix_method { MM_LU=0, MM_SBBD=1, MM_DBBD=2, MM_NDBBD=3 };
 /* -solmed solution method (GEMPACK manual; Pearson 1991; Schiffmann
    2022 / GEMPACK 26.5 for the Runge-Kutta flavors) */
-enum solution_method { SM_GRAGG=1, SM_EULER=2, SM_RK2=3, SM_RK4=4, SM_BOSHA32=5, SM_DOPRI54=6, SM_HEUN=7, SM_MIDPOINT=8, SM_JOHANSEN=10, SM_PROBE=100, SM_NOSIM=101 };
+enum solution_method { SM_GRAGG=1, SM_EULER=2, SM_RK2=3, SM_RK4=4, SM_BOSHA32=5, SM_DOPRI54=6, SM_HEUN=7, SM_MIDPOINT=8, SM_NEWTON=9, SM_JOHANSEN=10, SM_PROBE=100, SM_NOSIM=101 };
 /* array_def.gltype: bound imposed on levels values */
 enum bound_type { BT_NONE=0, BT_GE=1, BT_GT=2, BT_LE=3, BT_LT=4 };
 /* formula_op.Oper: compiled formula operation */
@@ -429,6 +429,9 @@ extern int teems_assertions_mode;
    fatal; initial leg = formulas passes with IsIni, updated leg = the
    update executors and later formulas passes */
 extern int teems_range_test_initial;
+extern int teems_newton, teems_newton_mode, teems_newton_shock, teems_newton_per_euler, teems_newton_extra, teems_newton_maxit, teems_newton_damp, teems_newton_mixed;
+extern double teems_newton_tol;
+extern long teems_newton_nlevels, teems_newton_nlinear;
 extern int teems_range_test_updated;
 /* Runge-Kutta run controls (main parses -rkchart/-rknorm/-rkctrl/
    -rk_h0/-rkguard; solve_rk.c reads them) */
@@ -675,6 +678,7 @@ extern offset_t teems_comp_active;
 int tab_complementarity_transform(char *fname);
 int complementarities_validate(set_def *sets, dim_t nset, set_element *set_elems);
 int comp_closure_check(closure_entry *closure_vals, array_def *vars, offset_t nvar, offset_t *nexo, set_def *sets, dim_t nset, set_element *set_elems);
+int newton_closure_check(closure_entry *closure_vals, array_def *vars, offset_t nvar, offset_t *nexo);
 /* C2 per-step state machinery (design doc section 8; manual 51.1.2/
    51.2/51.7.3/51.7.5). All three run on rank_hsl only (levels values
    are updated there); the driver broadcasts redo decisions.

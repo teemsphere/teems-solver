@@ -43,7 +43,7 @@ static char help[] = "teems-solver " TEEMS_SOLVER_VERSION ": solves a CGE model 
   -version              print the solver version and exit 0\n\
   -cmdfile <path>       CMF file manifest (default ./reg.cmf)\n\
   -matsol {0,1,2,3}     matrix method LU/SBBD/DBBD/NDBBD\n\
-  -solmed <name>        Gragg|Euler|RK2|Heun|RK4|BoSha32|DoPri54|Johansen|probe|nosim\n\
+  -solmed <name>        Gragg|Euler|RK2|Heun|RK4|BoSha32|DoPri54|Newton|Johansen|probe|nosim\n\
   -jacdump {1,2}        write the base-point Jacobian (<solfiles>.jac + .jac.json); 2 = and stop before the solve\n\
   -step1/-step2/-step3  step counts; -nsubints n; -verbosity {0,1,2}\n\
   Full option table: docs/solver-reference.md section 11.\n\
@@ -147,6 +147,8 @@ static const char *const cli_teems_flags[]={
   "comp_sberr_warn","comp_steps","condest","convrule","epstol","fastrefac","fhtest",
   "inmemory","jacdump","laA","laD","laDi","ma48_cntl2","ma48_cntl4","matsol",
   "maxretries","maxthreads","ndcutcache","nowrites","nsbbdblocks",
+  "newton_damp","newton_extra","newton_maxit","newton_mixed","newton_mode",
+  "newton_per_euler","newton_shock","newton_tol",
   "nsubints","postsim","probefine","probepattern","random_seed",
   "range_test_initial","range_test_updated","refine","residcheck","retryadj","rkchart",
   "rkctrl","rkguard","rk_h0","rknorm","rkscope","single_run","sui","sup","two_run",
@@ -1670,13 +1672,67 @@ int main(int argc,char **args) {
   if(strcmp(solmed,"BoSha32")==0)solmethod=SM_BOSHA32;
   if(strcmp(solmed,"DoPri54")==0)solmethod=SM_DOPRI54;
   if(strcmp(solmed,"Johansen")==0)solmethod=SM_JOHANSEN;
+  if(strcmp(solmed,"Newton")==0)solmethod=SM_NEWTON;
   if(strcmp(solmed,"probe")==0)solmethod=SM_PROBE;
   teems_probe_mode=(solmethod==SM_PROBE)?1:0;
   if(strcmp(solmed,"nosim")==0)solmethod=SM_NOSIM;
   if(solmethod==0) {
-    if(rank==0)errmsg("Error: unknown -solmed %s (valid: Gragg, Midpoint, Euler, RK2, Heun, RK4, BoSha32, DoPri54, Johansen, probe, nosim)\n",solmed);
+    if(rank==0)errmsg("Error: unknown -solmed %s (valid: Gragg, Midpoint, Euler, RK2, Heun, RK4, BoSha32, DoPri54, Newton, Johansen, probe, nosim)\n",solmed);
     PetscFinalize();
     return 1;
+  }
+  /* -solmed Newton (GEMPACK manual 26.6): -step1 Euler steps, each
+     followed by -newton_per_euler Newton steps; -newton_mode 0 adds
+     -newton_extra steps after the last (26.6.5), -newton_mode 1 iterates
+     the final corrections to -newton_tol (at most -newton_maxit) and,
+     with -newton_damp 1, halves a step that does not reduce the
+     residual. One pass, no extrapolation (26.6.3) */
+  {
+    PetscInt ni;
+    PetscReal nr;
+    PetscBool set;
+    const char *nflag[]={"-newton_mode","-newton_shock","-newton_per_euler","-newton_extra","-newton_maxit","-newton_damp","-newton_mixed"};
+    int *nval[]={&teems_newton_mode,&teems_newton_shock,&teems_newton_per_euler,&teems_newton_extra,&teems_newton_maxit,&teems_newton_damp,&teems_newton_mixed};
+    int nlo[]={0,0,0,0,1,0,0},nhi[]={1,1,1000,1000,10000,1,1},any=0;
+    for(i=0;i<7;i++) {
+      ni=*nval[i];
+      PetscOptionsGetInt(NULL,NULL,nflag[i],&ni,&set);
+      if(set)any=1;
+      if(ni<nlo[i]||ni>nhi[i]) {
+        if(rank==0)errmsg("Error: %s must be between %d and %d (got %ld)\n",nflag[i],nlo[i],nhi[i],(long)ni);
+        PetscFinalize();
+        return 1;
+      }
+      *nval[i]=(int)ni;
+    }
+    nr=teems_newton_tol;
+    PetscOptionsGetReal(NULL,NULL,"-newton_tol",&nr,&set);
+    if(set)any=1;
+    if(!(nr>0)) {
+      if(rank==0)errmsg("Error: -newton_tol must be positive (got %g)\n",(double)nr);
+      PetscFinalize();
+      return 1;
+    }
+    teems_newton_tol=(double)nr;
+    if(any&&solmethod!=SM_NEWTON) {
+      if(rank==0)errmsg("Error: the -newton_* options apply to -solmed Newton only (GEMPACK manual 26.6.5)\n");
+      PetscFinalize();
+      return 1;
+    }
+    if(solmethod==SM_NEWTON) {
+      if(teems_two_run) {
+        if(rank==0)errmsg("Error: -solmed Newton takes one pass of -step1 Euler steps; extrapolation (-two_run) does not work with Newton's method (GEMPACK manual 26.6.3)\n");
+        PetscFinalize();
+        return 1;
+      }
+      teems_newton=1;
+      teems_single_run=1;
+      if(mpisize>1) {
+        if(rank==0)errmsg("Error: -solmed Newton runs on one MPI rank (got %ld); use matrix_method LU or SBBD\n",(long)mpisize);
+        PetscFinalize();
+        return 1;
+      }
+    }
   }
   logmsg(2,"Sol med %d\n",solmethod);
   /* -solmed probe measures the system's structure irrespective of the
@@ -1698,7 +1754,7 @@ int main(int argc,char **args) {
       return 1;
     }
     if(solmethod==SM_JOHANSEN||solmethod==SM_PROBE||solmethod==SM_NOSIM) teems_single_run=0;
-    else if(rank==0) printf("Single-pass %s run: %d steps, no extrapolation (-single_run 1)\n",solmed,(int)steps1);
+    else if(rank==0&&solmethod!=SM_NEWTON) printf("Single-pass %s run: %d steps, no extrapolation (-single_run 1)\n",solmed,(int)steps1);
   }
   /* -two_run 1 (GEMPACK "steps = n1 n2;"): extrapolation from two
      multi-step solutions, -step1 and -step2, with no accuracy estimate
@@ -1901,7 +1957,7 @@ int main(int argc,char **args) {
       }
     }
   }
-  if((solmethod==SM_GRAGG||solmethod==SM_MIDPOINT||solmethod==SM_EULER)&&steps1<1) {
+  if((solmethod==SM_GRAGG||solmethod==SM_MIDPOINT||solmethod==SM_EULER||solmethod==SM_NEWTON)&&steps1<1) {
     if(rank==0)errmsg("Error: -step1 must be at least 1 (got %d)\n",steps1);
     PetscFinalize();
     return 1;
@@ -1997,6 +2053,7 @@ int main(int argc,char **args) {
     if(matsol==MM_NDBBD)why="matrix_method NDBBD, which cannot keep its factorization for more solves yet";
     else if(matsol==MM_SBBD&&mc66!=0)why="SBBD under -withmc66 1, which cannot keep its factorization for more solves";
     else if(solmethod==SM_NOSIM)why="-solmed nosim, which runs no simulation";
+    else if(solmethod==SM_NEWTON)why="Newton's method, whose correction steps are not driven by the shocks";
     else if(solmethod!=SM_JOHANSEN&&solmethod!=SM_GRAGG&&solmethod!=SM_MIDPOINT&&solmethod!=SM_EULER&&solmethod!=SM_PROBE)why="a Runge-Kutta method, whose stage combination in the log chart has no settled subtotal convention yet";
     if(why!=NULL) {
       if(rank==0)errmsg("Error: subtotals (GEMPACK manual 29) are not available with %s; use matrix_method LU, SBBD or DBBD with the Johansen, Euler, midpoint or Gragg method\n",why);
@@ -2531,6 +2588,7 @@ int main(int argc,char **args) {
        nexo adjustment ride the closure broadcast below; the 11.14.1
        backsolve guards stay fatal. */
     if(comp_closure_check(closure_vals,vars,nvar,&nexo,sets,nset,set_elems)==-1)MPI_Abort(PETSC_COMM_WORLD,1);
+    if(teems_newton&&newton_closure_check(closure_vals,vars,nvar,&nexo)==-1)MPI_Abort(PETSC_COMM_WORLD,1);
     nexo1=nexo;
   }
   /* every rank dispatches on active-mode complementarities (C2) */
@@ -3645,7 +3703,7 @@ comp_teardown:
 
   FILE* solution;
 
-  if(!comp_dispatch&&(solmethod==SM_GRAGG||solmethod==SM_MIDPOINT||solmethod==SM_EULER))solve_gragg(nohsl,VecSize,&A,dnz,dnnz,onz,onnz,&B,dnzB,dnnzB,onzB,onnzB,&vecb,&vece,rank,rank_hsl,mpisize,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,&elem_vals,ncofele+nvarele,ncofele,nvarele,&closure_vals,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,eq_addr,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,teems_ma48_cntl4,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,(teems_comp_nsub>1)?1:subints,fcomm,solmethod,&xcf);
+  if(!comp_dispatch&&(solmethod==SM_GRAGG||solmethod==SM_MIDPOINT||solmethod==SM_EULER||solmethod==SM_NEWTON))solve_gragg(nohsl,VecSize,&A,dnz,dnnz,onz,onnz,&B,dnzB,dnnzB,onzB,onnzB,&vecb,&vece,rank,rank_hsl,mpisize,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,&elem_vals,ncofele+nvarele,ncofele,nvarele,&closure_vals,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,eq_addr,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,teems_ma48_cntl4,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,(teems_comp_nsub>1)?1:subints,fcomm,solmethod,&xcf);
 
   if(!comp_dispatch&&isrk)solve_rk(nohsl,VecSize,dnz,dnnz,onz,onnz,dnzB,dnnzB,onzB,onnzB,&vece,rank,rank_hsl,mpisize,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,&elem_vals,ncofele,nvarele,&closure_vals,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,eq_addr,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,teems_ma48_cntl4,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,fcomm,solmethod,adaptive,(double)epstol,(double)retryadj,maxretries,&rko,&xcf,&accmetric);
 

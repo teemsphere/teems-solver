@@ -120,6 +120,21 @@ offset_t teems_comp_active = 0;
    25.4.4): 0 = off, 1 = warn (the GEMPACK default outside automatic
    accuracy), 2 = fatal */
 int teems_range_test_initial = 1;
+/* -solmed Newton (GEMPACK manual 26.6): mode 0 follows the manual's
+   fixed schedule (26.6.5), mode 1 iterates the final corrections to
+   -newton_tol with optional step halving; the transform counts the
+   levels and linear equations for the mixed-model rule (26.6.4) */
+int teems_newton = 0;
+int teems_newton_mode = 0;
+int teems_newton_shock = 1;
+int teems_newton_per_euler = 2;
+int teems_newton_extra = 4;
+double teems_newton_tol = 1e-6;
+int teems_newton_maxit = 20;
+int teems_newton_damp = 1;
+int teems_newton_mixed = 0;
+long teems_newton_nlevels = 0;
+long teems_newton_nlinear = 0;
 int teems_range_test_updated = 1;
 teems_rk_stats_t teems_rk_stats;
 int teems_rk_stage_checks = 0;

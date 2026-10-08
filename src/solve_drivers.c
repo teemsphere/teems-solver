@@ -1704,6 +1704,175 @@ static void xac_codes(offset_t nvarele,const int *codes) {
   xac_base=NULL;
 }
 
+/* ---- -solmed Newton (GEMPACK manual 26.6) -------------------------
+   The schedule is a forward-Euler pass of -step1 steps in which some
+   steps are Newton corrections: every exogenous change is zero and
+   del_newton@ is shocked by the step length, so the step removes the
+   levels residuals F carried by the NAME@nw coefficients (levels.c).
+   Mode 0 (26.6.5): each Euler step (Newton-shocked under -newton_shock
+   1) is followed by -newton_per_euler corrections and the last by
+   -newton_extra more. Mode 1: the corrections after the last Euler step
+   repeat until the residual sum is at most -newton_tol (at most
+   -newton_maxit of them); with -newton_damp 1 a correction that does
+   not reduce the sum is undone and retried at half length. */
+typedef struct {
+  int on, neuler, block, total, tdn;
+  long it;
+  double lam, rprev, rlast, rabs;
+  bool step_is_euler;
+  offset_t *nwoff, *nwlen; int nnw;
+  offset_t *nsoff, *nslen; int nns;
+  double rel;
+  elem_value *snap_vals; solve_real *snap_vc;
+} newton_state;
+
+static bool newton_is_euler(const newton_state *ns, int s) {
+  if (teems_newton_mode == 0) return s < ns->neuler * ns->block && s % ns->block == 0;
+  if (s < (ns->neuler - 1) * ns->block) return s % ns->block == 0;
+  return s == (ns->neuler - 1) * ns->block;
+}
+
+/* the sum of |F| over the levels equations (the del_newton terms of
+   26.6.2) and, in ns->rel, that sum relative to the sum of the sides'
+   sizes: single-precision coefficient storage puts a floor near 1e-7
+   under the relative figure, none under the absolute one */
+static double newton_residual(newton_state *ns, const elem_value *elem_vals) {
+  double r = 0, sc = 0;
+  int c;
+  offset_t k;
+  for (c = 0; c < ns->nnw; c++)
+    for (k = 0; k < ns->nwlen[c]; k++) r += fabs((double)elem_vals[ns->nwoff[c] + k].value);
+  for (c = 0; c < ns->nns; c++)
+    for (k = 0; k < ns->nslen[c]; k++) sc += fabs((double)elem_vals[ns->nsoff[c] + k].value);
+  ns->rel = sc > 0 ? r / sc : r;
+  return r;
+}
+
+static void newton_init(newton_state *ns, array_def *coefs, offset_t ncof, array_def *vars, offset_t nvar, int steps1) {
+  offset_t i;
+  memset(ns, 0, sizeof(*ns));
+  ns->on = 1;
+  ns->neuler = steps1;
+  ns->block = 1 + teems_newton_per_euler;
+  ns->total = teems_newton_mode == 0 ? steps1 * ns->block + teems_newton_extra : (steps1 - 1) * ns->block + 2;
+  ns->lam = 1;
+  ns->tdn = -1;
+  for (i = 0; i < nvar; i++) if (strcmp(vars[i].cofname, "del_newton@") == 0) ns->tdn = (int)vars[i].offset;
+  ns->nwoff = (offset_t *)malloc((ncof > 0 ? ncof : 1) * sizeof(offset_t));
+  ns->nwlen = (offset_t *)malloc((ncof > 0 ? ncof : 1) * sizeof(offset_t));
+  ns->nsoff = (offset_t *)malloc((ncof > 0 ? ncof : 1) * sizeof(offset_t));
+  ns->nslen = (offset_t *)malloc((ncof > 0 ? ncof : 1) * sizeof(offset_t));
+  for (i = 0; i < ncof; i++) {
+    size_t l = strlen(coefs[i].cofname);
+    if (l > 3 && strcmp(coefs[i].cofname + l - 3, "@nw") == 0) {
+      ns->nwoff[ns->nnw] = coefs[i].offset;
+      ns->nwlen[ns->nnw] = coefs[i].nelem > 0 ? coefs[i].nelem : 1;
+      ns->nnw++;
+    }
+    if (l > 3 && strcmp(coefs[i].cofname + l - 3, "@ns") == 0) {
+      ns->nsoff[ns->nns] = coefs[i].offset;
+      ns->nslen[ns->nns] = coefs[i].nelem > 0 ? coefs[i].nelem : 1;
+      ns->nns++;
+    }
+  }
+}
+
+/* the step's exogenous changes: the Euler step's share of each shock
+   (as the Euler driver computes it) on an Euler step, zero on a
+   correction; del_newton@ carries the step length */
+static void newton_step_begin(newton_state *ns, int stepcount, array_def *vars, offset_t nvar, elem_value *elem_vals1, const solve_real *varchange, closure_entry *closure_vals, Vec vece, solve_real *exo_z, dim_t subindx, solve_real vpercents, offset_t ncofvar, elem_value *elem_vals) {
+  offset_t i;
+  fortran_int t;
+  solve_real scale, sb, t1, shk;
+  ns->step_is_euler = newton_is_euler(ns, stepcount);
+  scale = ns->step_is_euler ? 1 : 0;
+  for (i = 0; i < nvar; i++) {
+    for (t = vars[i].offset; t < vars[i].nelem + vars[i].offset; t++) {
+      if (!CL_EXO(t)) continue;
+      if ((int)t == ns->tdn) {
+        sb = ns->step_is_euler ? (teems_newton_shock ? 1 : 0) : (solve_real)ns->lam;
+        elem_vals1[t].substep_base = 0;
+      } else if (vars[i].change_real) {
+        sb = scale * CL_SHOCK(t) / ns->neuler;
+        elem_vals1[t].substep_base = sb;
+      } else {
+        shk = CL_SHOCK(t);
+        t1 = ((100 + (subindx + 1) * shk) / (100 + subindx * shk) - 1) * vpercents;
+        sb = scale * t1 / (1 + varchange[t] / 100);
+        elem_vals1[t].substep_base = sb;
+      }
+      VecSetValue(vece, closure_vals[t].exo_index, sb, INSERT_VALUES);
+      if (exo_z != NULL) exo_z[t] = sb;
+    }
+  }
+  VecAssemblyBegin(vece);
+  VecAssemblyEnd(vece);
+  if (!ns->step_is_euler && teems_newton_mode == 1 && teems_newton_damp) {
+    if (ns->snap_vals == NULL) ns->snap_vals = (elem_value *)malloc(ncofvar * sizeof(elem_value));
+    memcpy(ns->snap_vals, elem_vals, ncofvar * sizeof(elem_value));
+  }
+}
+
+/* accumulate the step: endogenous and backsolved elements as the Euler
+   driver does; exogenous elements by the step's own change (zero on a
+   correction); del_newton@ never accumulates */
+static void newton_update(newton_state *ns, array_def *vars, offset_t nvar, elem_value *elem_vals1, solve_real *varchange, const solve_real *x1, const solve_real *bsvals, closure_entry *closure_vals) {
+  offset_t i;
+  fortran_int t;
+  solve_real d;
+  for (i = 0; i < nvar; i++) {
+    for (t = vars[i].offset; t < vars[i].nelem + vars[i].offset; t++) {
+      if ((int)t == ns->tdn) continue;
+      if (CL_EXO(t)) d = elem_vals1[t].substep_base;
+      else if (CL_BS(t)) d = bsvals[closure_vals[t].exo_index];
+      else d = x1[closure_vals[t].exo_index];
+      if (!CL_EXO(t)) elem_vals1[t].substep_base = d;
+      if (vars[i].change_real) {
+        varchange[t] += d;
+        elem_vals1[t].value += d;
+      } else {
+        varchange[t] += d * (100 + varchange[t]) / 100;
+        elem_vals1[t].value = (100 + varchange[t]) / 100 * elem_vals1[t].initial;
+      }
+    }
+  }
+}
+
+/* after the step's Updates and Formulas: report the residual sum
+   (26.6.2) and, in mode 1, accept/halve and test convergence. Returns
+   1 when the step must be redone (state restored), 0 otherwise; may
+   lower or raise *nsteps. */
+static int newton_step_end(newton_state *ns, int stepcount, int *nsteps, elem_value *elem_vals, offset_t ncofvar, solve_real *varchange, offset_t nvarele) {
+  double r = newton_residual(ns, elem_vals);
+  bool final = teems_newton_mode == 1 ? stepcount > (ns->neuler - 1) * ns->block : false;
+  if (!ns->step_is_euler && teems_newton_mode == 1 && teems_newton_damp && r >= ns->rprev && ns->lam > 1.0 / 1024) {
+    printf("Newton: correction rejected (residual sum %.6e, was %.6e); retrying at step length %g\n", r, ns->rprev, ns->lam / 2);
+    memcpy(elem_vals, ns->snap_vals, ncofvar * sizeof(elem_value));
+    memcpy(varchange, ns->snap_vc, nvarele * sizeof(solve_real));
+    ns->lam /= 2;
+    return 1;
+  }
+  if (ns->step_is_euler) printf("Newton: after Euler step %d of %d the sum of absolute values of the del_newton terms is %.6e (relative %.3e)\n", stepcount / ns->block + 1, ns->neuler, r, ns->rel);
+  else printf("Newton: after correction %ld (step length %g) the sum of absolute values of the del_newton terms is %.6e (relative %.3e)\n", ++ns->it, ns->lam, r, ns->rel);
+  ns->lam = 1;
+  ns->rprev = r;
+  ns->rlast = ns->rel;
+  ns->rabs = r;
+  if (final) {
+    if (ns->rel <= teems_newton_tol) *nsteps = stepcount + 1;
+    else if (ns->it >= teems_newton_maxit) *nsteps = stepcount + 1;
+    else *nsteps = stepcount + 2;
+  }
+  return 0;
+}
+
+static void newton_snapshot_vc(newton_state *ns, const solve_real *varchange, offset_t nvarele) {
+  if (!ns->step_is_euler && teems_newton_mode == 1 && teems_newton_damp) {
+    if (ns->snap_vc == NULL) ns->snap_vc = (solve_real *)malloc(nvarele * sizeof(solve_real));
+    memcpy(ns->snap_vc, varchange, nvarele * sizeof(solve_real));
+  }
+}
+
 bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt* dnnz,PetscInt onz,PetscInt* onnz,Mat* B1,PetscInt dnzB,PetscInt* dnnzB,PetscInt onzB,PetscInt* onnzB,Vec* vecb1,Vec *vece1,PetscInt rank,PetscInt rank_hsl,PetscInt mpisize,char* tabfile, char *commsyntax,set_def *sets,dim_t nset, set_element *set_elems, array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar, elem_value **elem_vals2,offset_t ncofvar,offset_t ncofele,offset_t nvarele,closure_entry **closure_vals2,offset_t alltimeset,offset_t allregset,offset_t nintraeq,dim_t matsol,PetscInt Istart,PetscInt Iend,  offset_t nreg, offset_t ntime, PetscInt *eq_addr, offset_t ndblock, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laDi,dim_t laD,PetscReal ma48_cntl4,dim_t nesteddbbd,int localsize,PetscInt *ndbbddrank1,fortran_int* indata,dim_t mc66,fortran_int *ptx,struct timeval begintime,dim_t subints,MPI_Fint fcomm,int solmethod,solve_real **xcf2){ /* multistep driver: Gragg (smoothed modified midpoint, Pearson 1991 eq. 6.1 / Alg. 7.1.2) or forward Euler, per solmethod */
   char tempfilenam[256],tempchar[256],solchar[255];
   PetscScalar *vals;
@@ -1746,6 +1915,14 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
      smoothing pass) and an h — not h^2 — truncation error series, so
      the Richardson weights below use the step ratios unsquared */
   bool euler=(solmethod==SM_EULER);
+  /* -solmed Newton rides the Euler path (newton_* helpers above) */
+  bool newton=(solmethod==SM_NEWTON);
+  newton_state ns;
+  memset(&ns,0,sizeof(ns));
+  if(newton) {
+    euler=true;
+    newton_init(&ns,coefs,ncof,vars,nvar,steps1);
+  }
   /* midpoint: Gragg's leapfrog without the terminal smoothing pass --
      N passes for N steps, the result is the last leapfrog point (manual
      30.2); it never takes the exogenous variables past their end point */
@@ -1801,6 +1978,13 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
         if(sol==1) nsteps=(int)llround(steps1*step_ratio2);
         if(sol==2) nsteps=(int)llround(steps1*step_ratio3);
         vpercents=(solve_real)100/nsteps;
+        if(newton) {
+          nsteps=ns.total;
+          vpercents=(solve_real)100/ns.neuler;
+          ns.rprev=ns.rabs=newton_residual(&ns,elem_vals);
+          ns.rlast=ns.rel;
+          if(rank==rank_hsl)printf("Newton: initial sum of absolute values of the del_newton terms is %.6e (relative %.3e; GEMPACK manual 26.6.2)\n",ns.rabs,ns.rel);
+        }
         for(stepcount=0; stepcount<nsteps; stepcount++) {
           logmsg(2,"rank %d subint %d sol %d stepcount %d nsteps %d\n",rank,subindx,sol,stepcount,nsteps);
           MPI_Barrier(PETSC_COMM_WORLD);
@@ -1887,6 +2071,10 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
             CHKERRQ(ierr);
             ierr = VecAssemblyEnd(vece);
             CHKERRQ(ierr);
+          }
+          if(newton&&rank==rank_hsl) {
+            newton_step_begin(&ns,stepcount,vars,nvar,elem_vals+ncofele,varchange,closure_vals,vece,exo_z,subindx,vpercents,ncofvar,elem_vals);
+            newton_snapshot_vc(&ns,varchange,nvarele);
           }
           if(rank==rank_hsl) {
 
@@ -2318,7 +2506,10 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
              variable's change (GEMPACK 14.1.3) */
           if(rank==rank_hsl&&nbselems>0)backsolve_recover(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele,closure_vals,x1,exo_z,bsvals);
           if(teems_sub_active&&rank==0)sub_update(stepcount==0?SUB_FIRST:(euler?SUB_EULER:SUB_LEAP),tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele,closure_vals,nvarele,exo_z,varchange);
-          if(stepcount==0) {
+          if(newton) {
+            newton_update(&ns,vars,nvar,elem_vals1,varchange,x1,bsvals,closure_vals);
+          }
+          else if(stepcount==0) {
             for(i=0; i<nvar; i++) {
               if(vars[i].change_real) {
                 for(tindx1=vars[i].offset; tindx1<vars[i].nelem+vars[i].offset; tindx1++) {
@@ -2494,6 +2685,10 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
             IsIni=false;
             statements_execute(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,IsIni,0);
           }
+          if(newton&&rank==rank_hsl&&newton_step_end(&ns,stepcount,&nsteps,elem_vals,ncofvar,varchange,nvarele)) {
+            stepcount--;
+            continue;
+          }
           MPI_Barrier(PETSC_COMM_WORLD);
           ierr = PetscGetCPUTime(&time1);
           CHKERRQ(ierr);
@@ -2503,6 +2698,16 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
           CHKERRQ(ierr);
         }
 
+        if(newton&&rank==rank_hsl) {
+          if(ns.rlast>teems_newton_tol) {
+            if(teems_newton_mode==1) {
+              errmsg("Error: Newton's method did not converge: after %ld correction(s) the del_newton terms sum to %.6e, %.3e relative to the equations' sides (-newton_tol %g, -newton_maxit %d); try more Euler steps (-step1) or -newton_damp 1 (GEMPACK manual 26.6.2)\n",ns.it,ns.rabs,ns.rlast,teems_newton_tol,teems_newton_maxit);
+              MPI_Abort(PETSC_COMM_WORLD,1);
+            }
+            printf("Warning: after the last Newton correction the del_newton terms sum to %.6e, %.3e relative to the equations' sides, above -newton_tol %g: the levels equations are not yet satisfied (GEMPACK manual 26.6.2)\n",ns.rabs,ns.rlast,teems_newton_tol);
+          }
+          else logmsg(1,"Newton: converged after %ld correction(s): residual sum %.6e, relative %.3e\n",ns.it,ns.rabs,ns.rlast);
+        }
         strcpy(commsyntax,"equation");
         /* Gragg's terminal smoothing pass: one more Jacobian build and
            solve at the final state, then the half-sum correction. Euler
@@ -3442,7 +3647,7 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
    }
     }
     if(teems_single_run) {
-      if(rank==0)printf("Accuracy estimates: not available for a single-pass run (-single_run 1; they need three multi-step solutions)\n");
+      if(rank==0)printf("Accuracy estimates: not available for a single-pass run (%s; they need three multi-step solutions)\n",teems_newton?"-solmed Newton, whose extrapolation does not work (GEMPACK manual 26.6.3)":"-single_run 1");
     }
     else if(teems_two_run) {
       if(rank==0)printf("Accuracy estimates: not available from two solutions (-two_run 1; they need three multi-step solutions, GEMPACK manual 26.2.3)\n");

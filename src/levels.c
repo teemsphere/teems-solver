@@ -112,6 +112,7 @@ typedef struct {
   /* ADD_HOMOTOPY (manual 26.7.4-26.7.6): homotopy levels variables in
      use; decl = declared by the transform (not by the TAB) */
   char homo[LV_MAXSUM][NAMESIZE]; bool homodecl[LV_MAXSUM], homoemitted[LV_MAXSUM]; int nhomo;
+  bool nwdecl;                  /* del_newton@ declared (Newton runs) */
   /* per-statement expression workspace */
   lv_node nodes[LV_MAXNODES]; int nnodes;
   lv_term terms[LV_MAXTERMS]; int nterms;
@@ -1108,6 +1109,26 @@ static int lv_prod_expand(lv_ctx *c, char *buf, size_t cap) {
   }
 }
 
+/* "(i,r)" from "(all,i,I)(all,r,R)": the equation's quantifier indices
+   as the argument list of a coefficient declared over them */
+static int lv_quant_args(lv_ctx *c, const char *quants, int quantslen, char *args, size_t cap) {
+  const char *g = quants;
+  args[0] = '\0';
+  while (g < quants + quantslen) {
+    const char *a1, *a2;
+    if (*g != '(') { g++; continue; }
+    a1 = strchr(g, ',');
+    if (a1 == NULL) break;
+    a1++;
+    a2 = strchr(a1, ',');
+    if (a2 == NULL) break;
+    if (lv_strcat_b(args, args[0] ? "," : "(", cap) < 0 || lv_ncat_b(args, a1, (int)(a2 - a1), cap) < 0) return lv_err(c, "too many quantifiers");
+    g += lv_group_end(g) + 1;
+  }
+  if (args[0] != '\0' && lv_strcat_b(args, ")", cap) < 0) return lv_err(c, "too many quantifiers");
+  return 0;
+}
+
 static int lv_emit_linearized(lv_ctx *c, const char *p, FILE *fout, const char *hname) {
   char out[DATREADLINE], pbuf[DATREADLINE];
   const char *name, *label = NULL, *quants, *lhs;
@@ -1175,21 +1196,8 @@ static int lv_emit_linearized(lv_ctx *c, const char *p, FILE *fout, const char *
        the pre-simulation data satisfy the modified equation, and a
        shock of 1 to its change variable removes the term */
     char args[DATREADLINE], hcoef[NAMESIZE], rhsnew[DATREADLINE];
-    const char *g = quants;
     int hi;
-    args[0] = '\0';
-    while (g < quants + quantslen) {
-      const char *a1, *a2;
-      if (*g != '(') { g++; continue; }
-      a1 = strchr(g, ',');
-      if (a1 == NULL) break;
-      a1++;
-      a2 = strchr(a1, ',');
-      if (a2 == NULL) break;
-      if (lv_strcat_b(args, args[0] ? "," : "(", sizeof(args)) < 0 || lv_ncat_b(args, a1, (int)(a2 - a1), sizeof(args)) < 0) return lv_err(c, "too many quantifiers");
-      g += lv_group_end(g) + 1;
-    }
-    if (args[0] != '\0' && lv_strcat_b(args, ")", sizeof(args)) < 0) return lv_err(c, "too many quantifiers");
+    if (lv_quant_args(c, quants, quantslen, args, sizeof(args)) < 0) return -1;
     if (namelen + 3 > NAMESIZE) return lv_err(c, "equation name too long for its ADD_HOMOTOPY coefficient");
     snprintf(hcoef, sizeof(hcoef), "%.*s@h", namelen, name);
     if (lv_find_cf(c, hcoef, (int)strlen(hcoef)) < 0) {
@@ -1227,6 +1235,27 @@ static int lv_emit_linearized(lv_ctx *c, const char *p, FILE *fout, const char *
   if (lv_diff_side(c, lhs, out, sizeof(out)) < 0) return -1;
   if (lv_strcat_b(out, " = ", sizeof(out)) < 0) return lv_err(c, "output too large");
   if (lv_diff_side(c, rhsbuf, out, sizeof(out)) < 0) return -1;
+  teems_newton_nlevels++;
+  if (teems_newton) {
+    /* Newton correction (manual 26.6): dF = -F*$del_newton for F = LHS -
+       RHS, F at the current levels values (a Formula recomputed every
+       step); a shock of 1 to del_newton@ asks the step to remove F */
+    char args[DATREADLINE], ncoef[NAMESIZE], term[DATREADLINE];
+    if (namelen + 4 > NAMESIZE) return lv_err(c, "equation name too long for its Newton coefficients");
+    if (lv_quant_args(c, quants, quantslen, args, sizeof(args)) < 0) return -1;
+    snprintf(ncoef, sizeof(ncoef), "%.*s@nw", namelen, name);
+    if (!c->nwdecl) {
+      fprintf(fout, "variable (change) del_newton@ ;\n");
+      c->nwdecl = true;
+    }
+    fprintf(fout, "coefficient (non_parameter) %.*s %s%s ;\n", quantslen, quants, ncoef, args);
+    fprintf(fout, "formula (always) %.*s %s%s = (%s) - (%s) ;\n", quantslen, quants, ncoef, args, lhsbuf, rhsbuf);
+    /* NAME@ns: the size of the equation's two sides, the scale of the
+       relative residual -newton_tol applies to */
+    fprintf(fout, "coefficient (non_parameter) %.*s %.*s@ns%s ;\n", quantslen, quants, namelen, name, args);
+    fprintf(fout, "formula (always) %.*s %.*s@ns%s = abs[%s] + abs[%s] ;\n", quantslen, quants, namelen, name, args, lhsbuf, rhsbuf);
+    if (snprintf(term, sizeof(term), " - %s%s*p_del_newton@", ncoef, args) >= (int)sizeof(term) || lv_strcat_b(out, term, sizeof(out)) < 0) return lv_err(c, "output too large");
+  }
   if (lv_strcat_b(out, " ;", sizeof(out)) < 0) return lv_err(c, "output too large");
   /* sibling generated sums can share an index name inside one
      statement; the preprocess dedup pass has already run, so apply it
@@ -1733,6 +1762,51 @@ static int cp_pos_map(offset_t tset, offset_t sset, set_def *sets, set_element *
    EXOGENOUS the dummy stays endogenous and absorbs the row (the C1
    inert closures keep solving unchanged). No '@' variable and no X
    component may be backsolved (11.14.1). */
+/* -solmed Newton (manual 26.6): the correction terms live on levels
+   equations only, so the model needs some; a mixed model (levels and
+   linear equations) can converge to a point that is not a solution of
+   the levels model (26.6.4): a warning in the manual's mode, refused in
+   the converging mode unless -newton_mixed 1. del_newton@ is exogenous
+   and never shocked by the user (26.6 point 3). */
+int newton_closure_check(closure_entry *closure_vals, array_def *vars, offset_t nvar, offset_t *nexo) {
+  offset_t i, j;
+  if (teems_newton_nlevels == 0) {
+    errmsg("Error: -solmed Newton needs Equation (levels) statements: the Newton correction is added to levels equations only (GEMPACK manual 26.6)\n");
+    return -1;
+  }
+  if (teems_ncomp > 0) {
+    errmsg("Error: -solmed Newton is not available in a model with complementarities\n");
+    return -1;
+  }
+  if (teems_newton_nlinear > 0) {
+    if (teems_newton_mode == 1 && !teems_newton_mixed) {
+      errmsg("Error: -solmed Newton with -newton_mode 1 needs a model of levels equations only; this one also has %ld linear equation(s), and Newton's method can converge to a point that solves the levels equations but not the model (GEMPACK manual 26.6.4) -- set -newton_mixed 1 to run it anyway\n", teems_newton_nlinear);
+      return -1;
+    }
+    printf("Warning: -solmed Newton on a mixed model (%ld levels, %ld linear equation(s)): only the levels equations are corrected, and the run can converge to a point that is not a solution of the model (GEMPACK manual 26.6.4)\n", teems_newton_nlevels, teems_newton_nlinear);
+  }
+  for (i = 0; i < nvar; i++) {
+    if (strcmp(vars[i].cofname, "del_newton@") != 0) continue;
+    for (j = 0; j < vars[i].nelem; j++) {
+      if (CL_BS(vars[i].offset + j)) {
+        errmsg("Error: del_newton@ cannot be backsolved\n");
+        return -1;
+      }
+      if (!CL_EXO(vars[i].offset + j)) {
+        CL_SET_EXO(vars[i].offset + j, true);
+        (*nexo)++;
+      }
+      /* the exogenous block keeps shocked columns only (jacobian.c,
+         6.16(c)); a correction shocks del_newton@ by its step length,
+         which the Newton driver sets per step */
+      CL_SHOCK(vars[i].offset + j) = 1;
+    }
+    return 0;
+  }
+  errmsg("Error: -solmed Newton: del_newton@ not found after reading declarations (internal)\n");
+  return -1;
+}
+
 int comp_closure_check(closure_entry *closure_vals, array_def *vars, offset_t nvar, offset_t *nexo, set_def *sets, dim_t nset, set_element *set_elems) {
   offset_t i, j, xi, di;
   dim_t k, d;
@@ -2460,12 +2534,14 @@ int tab_levels_transform(char *fname) {
         while (*q == ' ') q++;
         if (eq_default_levels) { rc = lv_err(c, "only (linear) or (levels) may qualify an equation under Equation (default=levels)"); break; }
         if (strncmp(q, "(levels", 7) == 0) { rc = lv_err(c, "unsupported qualifier combination on Equation (levels)"); break; }
+        teems_newton_nlinear++;
         fprintf(fout, "%s\n", stmt);
         continue;
       }
       if (glev && glin) { rc = lv_err(c, "an Equation is either LINEAR or LEVELS"); break; }
       if (!(glev || (!glin && eq_default_levels))) {
         if (ghomo != -1) { rc = lv_err(c, "ADD_HOMOTOPY and NOT_ADD_HOMOTOPY qualify levels equations only (GEMPACK manual 26.7.5)"); break; }
+        teems_newton_nlinear++;
         fprintf(fout, "%s\n", stmt);
         continue;
       }
