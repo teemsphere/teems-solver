@@ -617,11 +617,14 @@ enum { SUM_FOLD_SUM=0, SUM_FOLD_PROD=1, SUM_FOLD_MAXS=2, SUM_FOLD_MINS=3 };
 /* empty-set values: PROD 1, MAXS a very large negative number, MINS a
    very large positive one (11.4.4) */
 static inline solve_real sum_fold_init(int f) { return f==SUM_FOLD_PROD?1:f==SUM_FOLD_MAXS?-FLT_MAX:f==SUM_FOLD_MINS?FLT_MAX:0; }
+/* MAXS/MINS keep a non-finite term (a comparison would drop a NaN), so it
+   reaches the checked result as it does through SUM and PROD (manual 34.3) */
+static inline int sum_fold_nonfinite(double x) { uint64_t u; memcpy(&u,&x,sizeof u); return (u&0x7ff0000000000000ULL)==0x7ff0000000000000ULL; }
 static inline solve_real sum_fold(int f, solve_real a, solve_real v) {
   switch (f) {
   case SUM_FOLD_PROD: return a*v;
-  case SUM_FOLD_MAXS: return v>a?v:a;
-  case SUM_FOLD_MINS: return v<a?v:a;
+  case SUM_FOLD_MAXS: return (sum_fold_nonfinite((double)a)||(!sum_fold_nonfinite((double)v)&&!(v>a)))?a:v;
+  case SUM_FOLD_MINS: return (sum_fold_nonfinite((double)a)||(!sum_fold_nonfinite((double)v)&&!(v<a)))?a:v;
   default: return a+v;
   }
 }
@@ -976,6 +979,12 @@ void zdiv_default_report(const char *kind, const char *name, const char *stmt, s
 /* NaN/Inf tests on the bits: -Ofast (finite-math) folds isfinite/isnan */
 static inline int teems_nonfinite(double x) { uint64_t u; memcpy(&u,&x,sizeof u); return (u&0x7ff0000000000000ULL)==0x7ff0000000000000ULL; }
 static inline int teems_isnan_bits(double x) { uint64_t u; memcpy(&u,&x,sizeof u); return (u&0x7ff0000000000000ULL)==0x7ff0000000000000ULL&&(u&0x000fffffffffffffULL)!=0; }
+/* NaN or infinite, by bits (-Ofast assumes finite math, so isfinite() may fold) */
+static inline int teems_nonfinite_bits(double x) { uint64_t u; memcpy(&u,&x,sizeof u); return (u&0x7ff0000000000000ULL)==0x7ff0000000000000ULL; }
+/* statement whose expressions are being evaluated, named in the
+   evaluator's arithmetic-error aborts (formula.c eval_ctx_set) */
+void eval_ctx_set(const char *kind, const char *name);
+void eval_nonfinite_fatal(const char *what, double v);
 int formula_compile(char *fomulain, set_def *sets,array_def *coefs, offset_t ncof, array_def *vars,offset_t nvar,offset_t ncofele,sum_def *sum_cof,dim_t totalsum,formula_op *ops,dim_t *nops,quantifier *arSet,dim_t fdim);
 solve_real formula_eval(elem_value *record, set_def *sets,set_element *set_elems,sum_value *sum_vals,formula_op *ops,int nops,quantifier *arSet,dim_t fdim, solve_real zerodivide);
 int sum_cond_general_test(const sum_cofcond *cc, void *own[2], elem_value *elem_vals, set_def *sets, set_element *set_elems, sum_value *sum_vals, quantifier *frame, dim_t nframe, solve_real zerodivide);

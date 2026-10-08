@@ -387,6 +387,7 @@ static void stmt_prog_execute(stmt_prog *st, offset_t matrow, PetscInt *eq_addr,
             }
           }
           vval=formula_eval(elem_vals,sets,set_elems,st->sum_vals,ops1,lv->nops,arSet1,lv->fdimlin,st->zerodivide);
+          if(teems_nonfinite_bits((double)vval))eval_nonfinite_fatal("a coefficient",(double)vval);
           if (jdrow!=NULL) {
             if (vval!=0) {
               jdrow[jdk].row=matrow+i5;
@@ -1415,6 +1416,7 @@ static int jacobian_fill_rows(char *fname, char *commsyntax,set_def *sets,offset
        coefficients whose values change between steps) */
     int sidx=0;
     while (tab_next_statement_resolved(commsyntax,filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
+      eval_ctx_set("Equation",line);
       if (strstr(line,"(default")==NULL) {
         stmt_cache[sidx].zerodivide=zerodivide;
         zdiv_default_hits=0;
@@ -1424,11 +1426,13 @@ static int jacobian_fill_rows(char *fname, char *commsyntax,set_def *sets,offset
         sidx++;
       }
     }
+    eval_ctx_set(NULL,NULL);
     fclose(filehandle);
     return 1;
   }
 
   while (tab_next_statement_resolved(commsyntax,filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
+    eval_ctx_set("Equation",line);
     if (strstr(line,"(default")==NULL) {
       stmt_cache=realloc(stmt_cache,(stmt_cache_n+1)*sizeof(stmt_prog));
       stp=&stmt_cache[stmt_cache_n];
@@ -1451,6 +1455,7 @@ static int jacobian_fill_rows(char *fname, char *commsyntax,set_def *sets,offset
   stmt_cache_built=true;
   stmt_cache_Istart=Istart1;
   stmt_cache_Iend=Iend1;
+  eval_ctx_set(NULL,NULL);
   fclose(filehandle);
   return 1;
 }
@@ -1730,6 +1735,7 @@ static void bs_prog_execute(bs_prog *bp, set_def *sets, set_element *set_elems,
             }
           }
           vval=formula_eval(elem_vals,sets,set_elems,st->sum_vals,ops1,lv->nops,arSet1,lv->fdimlin,st->zerodivide);
+          if(teems_nonfinite_bits((double)vval))eval_nonfinite_fatal("a coefficient",(double)vval);
           gidx=vars[lv->LinVarIndx].offset+li3;
           if (lv->LinVarIndx==bd->varindx) {
             /* pivot: same-pattern occurrences (possibly on both sides)
@@ -1862,8 +1868,10 @@ int backsolve_recover(char *fname, char *commsyntax,set_def *sets,offset_t nset,
   fclose(filehandle);
   backsolve_scan_mode=BS_SCAN_SKIP;
   for (i=0; i<bs_cache_n; i++) {
+    eval_ctx_set("Backsolve of",vars[backsolves[bs_cache[i].pair].varindx].cofname);
     bs_prog_execute(&bs_cache[i],sets,set_elems,elem_vals,closure_vals,vars,x,exo_z,bsvals);
   }
+  eval_ctx_set(NULL,NULL);
   return 1;
 }
 

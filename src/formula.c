@@ -1282,7 +1282,23 @@ static int op_feeds(const formula_op *ops, int root, int target) {
    those raised inside its v, and the rest take effect when the formula's
    value is known, exactly as they did when raised (fatal, error, counted
    for the default warning). */
-enum { EH_NBZ=0, EH_ZBZ=1, EH_FRACPOW=2, EH_DEFAULT=3 };
+enum { EH_NBZ=0, EH_ZBZ=1, EH_FRACPOW=2, EH_DEFAULT=3, EH_SIMDIV=4, EH_NONFINITE=5 };
+
+/* "Equation E_qo", "Update VDFB", ...: set by the statement drivers before
+   they evaluate, read only in the aborts below */
+static char eval_ctx[200]="";
+void eval_ctx_set(const char *kind, const char *name) {
+  if(kind==NULL)eval_ctx[0]='\0';
+  else snprintf(eval_ctx,sizeof(eval_ctx),"%.20s %.170s",kind,name?name:"");
+}
+
+/* a non-finite value read where it would otherwise vanish (an equation
+   coefficient, a condition operand): GEMPACK stops on the arithmetic
+   error that produced it (manual 34.3) */
+void eval_nonfinite_fatal(const char *what, double v) {
+  errmsg("Error: %s %s%s is not finite (%s): a division, LOGE, SQRT or power left its domain or the value overflowed (arithmetic error, GEMPACK manual 34.3)\n",what,eval_ctx[0]?"in ":"",eval_ctx,teems_isnan_bits(v)?"NaN":"infinite");
+  MPI_Abort(PETSC_COMM_WORLD,1);
+}
 #define EVAL_PENDING_MAX 64
 typedef struct { int n; int op[EVAL_PENDING_MAX]; char kind[EVAL_PENDING_MAX]; } eval_pending;
 
@@ -1324,6 +1340,14 @@ static void eval_pending_flush_one(int kind) {
   case EH_FRACPOW:
     errmsg("Error: fractional power of a negative number in formula evaluation\n");
     break;
+  case EH_SIMDIV:
+    errmsg("Error: division by zero in %s, where it is never allowed (GEMPACK manual 10.11.1; Zerodivide statements apply to Formulas only) -- guard the denominator with ID01 or ID0V\n",eval_ctx[0]?eval_ctx:"an Equation, Backsolve or Update");
+    MPI_Abort(PETSC_COMM_WORLD,1);
+    break;
+  case EH_NONFINITE:
+    errmsg("Error: an IF condition operand %s%s is not finite: a division, LOGE, SQRT or power left its domain or the value overflowed (arithmetic error, GEMPACK manual 34.3)\n",eval_ctx[0]?"in ":"",eval_ctx);
+    MPI_Abort(PETSC_COMM_WORLD,1);
+    break;
   default:
     #pragma omp atomic
     zdiv_default_hits++;
@@ -1333,7 +1357,7 @@ static void eval_pending_flush_one(int kind) {
 static void eval_pending_flush(const eval_pending *ep) {
   int k;
   for(k=0; k<ep->n; k++)if(ep->kind[k]==EH_DEFAULT||ep->kind[k]==EH_FRACPOW)eval_pending_flush_one(ep->kind[k]);
-  for(k=0; k<ep->n; k++)if(ep->kind[k]==EH_ZBZ||ep->kind[k]==EH_NBZ)eval_pending_flush_one(ep->kind[k]);
+  for(k=0; k<ep->n; k++)if(ep->kind[k]==EH_ZBZ||ep->kind[k]==EH_NBZ||ep->kind[k]==EH_SIMDIV||ep->kind[k]==EH_NONFINITE)eval_pending_flush_one(ep->kind[k]);
 }
 
 solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,sum_value *sum_vals,formula_op *ops,int nops,quantifier *arSet,dim_t fdim, solve_real zerodivide) {
@@ -1489,8 +1513,8 @@ solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,
             }
           }
         } else {
-          ops[i].TmpVarVal=zdiv_shifted(zerodivide);
-          if(eval1!=0)eval_pending_add(&zpend,i,EH_DEFAULT);
+          ops[i].TmpVarVal=0;
+          eval_pending_add(&zpend,i,EH_SIMDIV);
         }
       } else {
         ops[i].TmpVarVal=eval1/eval2;
@@ -1592,8 +1616,13 @@ solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,
       if(ops[i].Var2Type==OT_CONST) eval2=ops[i].Var2Val;
       if(ops[i].Var2Type==OT_CHANGE) eval2=record[ops[i].Var2BegAdd+l1].substep_base;
       if(eval1==0&&eval2<0) {
-        ops[i].TmpVarVal=zdiv_shifted(zerodivide);
-        eval_pending_add(&zpend,i,EH_DEFAULT);
+        if(zdiv_enabled) {
+          ops[i].TmpVarVal=zdiv_shifted(zerodivide);
+          eval_pending_add(&zpend,i,EH_DEFAULT);
+        } else {
+          ops[i].TmpVarVal=0;
+          eval_pending_add(&zpend,i,EH_SIMDIV);
+        }
       } else {
         if(eval1<0&&eval2-floor(eval2)!=0)eval_pending_add(&zpend,i,EH_FRACPOW);
         ops[i].TmpVarVal=pow(eval1,eval2);
@@ -1605,7 +1634,11 @@ solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,
       /* multi-arg intrinsic folds: operands are always compiled temps */
       eval1=ops[ops[i].Var1BegAdd].TmpVarVal;
       eval2=ops[ops[i].Var2BegAdd].TmpVarVal;
-      if(ops[i].Oper==OP_MAXF)ops[i].TmpVarVal=(eval1>eval2)?eval1:eval2;
+      /* a non-finite operand passes through (a comparison would drop a
+         NaN), so it reaches the checked result (manual 34.3) */
+      if(ops[i].Oper!=OP_ID0VF&&teems_nonfinite_bits(eval1))ops[i].TmpVarVal=eval1;
+      else if(ops[i].Oper!=OP_ID0VF&&teems_nonfinite_bits(eval2))ops[i].TmpVarVal=eval2;
+      else if(ops[i].Oper==OP_MAXF)ops[i].TmpVarVal=(eval1>eval2)?eval1:eval2;
       else if(ops[i].Oper==OP_MINF)ops[i].TmpVarVal=(eval1<eval2)?eval1:eval2;
       else ops[i].TmpVarVal=(eval1!=0)?eval1:eval2;
       break;
@@ -1670,6 +1703,7 @@ solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,
         l=dims_offset(ops[i].Var3Dims,arSet,fdim,sets,set_elems);
         eval3=record[ops[i].Var3BegAdd+l].substep_base;
       }
+      if(teems_nonfinite_bits(eval1)||teems_nonfinite_bits(eval2))eval_pending_add(&zpend,i,EH_NONFINITE);
       if(ops[i].Oper==OP_IF_EQ){ if(eval1==eval2)ops[i].TmpVarVal=eval3;else ops[i].TmpVarVal=0; }
       if(ops[i].Oper==OP_IF_GT){ if(eval1>eval2)ops[i].TmpVarVal=eval3;else ops[i].TmpVarVal=0; }
       if(ops[i].Oper==OP_IF_LT){ if(eval1<eval2)ops[i].TmpVarVal=eval3;else ops[i].TmpVarVal=0; }
@@ -2736,6 +2770,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
      pass its fresh initial state (manual 12.2.4) */
   zdiv_scan_reset();
   while (tab_next_statement_resolved(commsyntax,filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
+    eval_ctx_set("Formula",line);
     long spos=teems_stmt_start;
     /* mapping calls lower to flat map~idx tokens before any brace
        tokenizer runs (manual 11.9.4; design doc M2); sum carried-dim
@@ -3378,6 +3413,8 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
               if(condgen[i1]) {
                 eval=formula_eval(elem_vals,sets,set_elems,sum_vals,cops[i1][0],condnops[i1][0],arSet1,fdim-1,zerodivide);
                 cv=formula_eval(elem_vals,sets,set_elems,sum_vals,cops[i1][1],condnops[i1][1],arSet1,fdim-1,zerodivide);
+                if(teems_nonfinite_bits((double)eval))eval_nonfinite_fatal("a condition operand",(double)eval);
+                if(teems_nonfinite_bits((double)cv))eval_nonfinite_fatal("a condition operand",(double)cv);
               } else {
               index=0;
               for(i=0; i<fdim-1; i++){
@@ -3520,6 +3557,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
       }
     }
   }
+  eval_ctx_set(NULL,NULL);
   fclose(filehandle);
   /* zerodivide never applies outside formulas (manual 10.11.1) --
      downstream update/equation evaluation must see it off */
@@ -3884,6 +3922,8 @@ static int upd_cond_hold(const upd_conds *uc, formula_op *own[][2], elem_value *
   for (i=0; i<uc->n; i++) {
     solve_real a=formula_eval(elem_vals,sets,set_elems,sum_vals,own[i][0],uc->nops[i][0],arSet,nframe,zerodivide);
     solve_real b=formula_eval(elem_vals,sets,set_elems,sum_vals,own[i][1],uc->nops[i][1],arSet,nframe,zerodivide);
+    if(teems_nonfinite_bits((double)a))eval_nonfinite_fatal("a condition operand",(double)a);
+    if(teems_nonfinite_bits((double)b))eval_nonfinite_fatal("a condition operand",(double)b);
     int ok=(uc->op[i]==1)?(a==b):(uc->op[i]==2)?(a>b):(uc->op[i]==3)?(a<b):(uc->op[i]==4)?(a!=b):(uc->op[i]==5)?(a<=b):(a>=b);
     if (!ok) return 0;
   }
@@ -4055,6 +4095,7 @@ offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_el
   upd_conds uc;
   filehandle = teems_fopen(fname,"r");
   while (tab_next_statement_resolved(commsyntax,filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
+    eval_ctx_set("Update",line);
     /* a mapped argument on the RHS lowers to map~idx and binds through
        the formula operand binder like any expression (manual 11.9.4;
        GTAP-E NCTAXLEV(r) = del_nctaxb(REGTOBLOC(r))); on the LHS it
@@ -4348,6 +4389,7 @@ offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_el
         stmt++;
     
   }
+  eval_ctx_set(NULL,NULL);
   fclose(filehandle);
   upd_pass_flush(coefs,elem_vals);
   upd_nonfinite_scan(coefs,elem_vals);
@@ -4378,6 +4420,7 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
   upd_conds uc;
   filehandle = teems_fopen(fname,"r");
   while (tab_next_statement_resolved(commsyntax,filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
+    eval_ctx_set("Update",line);
     /* a mapped argument on the RHS lowers to map~idx and binds through
        the formula operand binder like any expression (manual 11.9.4;
        GTAP-E NCTAXLEV(r) = del_nctaxb(REGTOBLOC(r))); on the LHS it
@@ -4648,6 +4691,7 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
         stmt++;
     
   }
+  eval_ctx_set(NULL,NULL);
   fclose(filehandle);
   upd_pass_flush(coefs,elem_vals);
   upd_nonfinite_scan(coefs,elem_vals);
@@ -4739,6 +4783,8 @@ void sum_cond_general_free(sum_cofcond *cc) {
 int sum_cond_general_test(const sum_cofcond *cc, void *own[2], elem_value *elem_vals, set_def *sets, set_element *set_elems, sum_value *sum_vals, quantifier *frame, dim_t nframe, solve_real zerodivide) {
   solve_real a=formula_eval(elem_vals,sets,set_elems,sum_vals,(formula_op *)own[0],cc->gnops[0],frame,nframe,zerodivide);
   solve_real b=formula_eval(elem_vals,sets,set_elems,sum_vals,(formula_op *)own[1],cc->gnops[1],frame,nframe,zerodivide);
+  if(teems_nonfinite_bits((double)a))eval_nonfinite_fatal("a condition operand",(double)a);
+  if(teems_nonfinite_bits((double)b))eval_nonfinite_fatal("a condition operand",(double)b);
   switch (cc->op) {
   case 1: return a==b;
   case 2: return a!=b;
@@ -5057,6 +5103,7 @@ offset_t assertions_execute(char *fname,set_def *sets,dim_t nset,set_element *se
   zdiv_scan_reset();
   strcpy(sumsyntax,"sum(");
   while (tab_next_statement_resolved("assertion",filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
+    eval_ctx_set("Assertion",line);
     if (teems_ord_lo>=0&&(teems_stmt_start<teems_ord_lo||teems_stmt_start>=teems_ord_hi)) continue;
     isctl=(strstr(line,"(loopctl)")!=NULL);
     if(isctl!=probe)continue;
@@ -5087,6 +5134,7 @@ offset_t assertions_execute(char *fname,set_def *sets,dim_t nset,set_element *se
     /* assertions are formula-class statements: the dual-class
        zerodivide state as of this file position applies (plan A1) */
     zdiv_capture();
+    zdiv_default_hits=0;
     /* optional # message #, captured before whitespace stripping */
     msg[0]='\0';
     p=strchr(line,'#');
@@ -5339,6 +5387,7 @@ offset_t assertions_execute(char *fname,set_def *sets,dim_t nset,set_element *se
           solve_real cr;
           if(cond_ops[dcount]==NULL)continue;
           cr=formula_eval(elem_vals,sets,set_elems,NULL,cond_ops[dcount],cond_nops[dcount],arSet,dcount+1,zerodivide);
+          if(teems_nonfinite_bits((double)cr))eval_nonfinite_fatal("a condition operand",(double)cr);
           if(cond_relop[dcount]==1)cond_ok=(cr==0);
           if(cond_relop[dcount]==2)cond_ok=(cr!=0);
           if(cond_relop[dcount]==3)cond_ok=(cr>=0);
@@ -5384,12 +5433,14 @@ offset_t assertions_execute(char *fname,set_def *sets,dim_t nset,set_element *se
         MPI_Abort(PETSC_COMM_WORLD,1);
       }
     }
+    if(zdiv_default_hits>0)zdiv_default_report("Assertion",(msg[0]!='\0')?msg:"",linecopy,zerodivide);
     for(dcount=0; dcount<nq; dcount++)if(cond_ops[dcount]!=NULL)free(cond_ops[dcount]);
     free(arSet);
     free(sum_cof);
     free(sum_vals);
     free(ops);
   }
+  eval_ctx_set(NULL,NULL);
   fclose(filehandle);
   zdiv_disable();
   if(mode==1&&total_fail>0)printf("Warning: %ld assertion failure%s in this pass (-assertions 1)\n",(long)total_fail,(total_fail==1)?"":"s");
