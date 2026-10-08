@@ -178,7 +178,7 @@ int tab_loop_transform(char *fname) {
     if (strcmp(kw, "loop") != 0) {
       if (top < 0 && (strcmp(kw, "break") == 0 || strcmp(kw, "cycle") == 0)) {
         lt_trim(s);
-        errmsg("Error: %s outside any loop (manual 11.18): %.120s\n", kw[0] == 'b' ? "BREAK" : "CYCLE", s);
+        errmsg("Error: %s outside any loop (GEMPACK manual 11.18): %.120s\n", kw[0] == 'b' ? "BREAK" : "CYCLE", s);
         rc = -1;
         goto done;
       }
@@ -190,7 +190,7 @@ int tab_loop_transform(char *fname) {
     while (*p == ' ') p++;
     if (*p != '(' || lt_group_end(p) == NULL) {
       lt_trim(s);
-      errmsg("Error: a Loop statement needs (BEGIN) or (END) (manual 11.18): %.120s\n", s);
+      errmsg("Error: a Loop statement needs (BEGIN) or (END) (GEMPACK manual 11.18): %.120s\n", s);
       rc = -1;
       goto done;
     }
@@ -203,7 +203,7 @@ int tab_loop_transform(char *fname) {
       g[gl] = '\0';
       if (lt_qual(g, &b, &e, &an, &ev, nm) < 0 || an || ev || b == e) {
         lt_trim(s);
-        errmsg("Error: malformed Loop qualifier %s; Loop (BEGIN[, name=LoopName]) (all,index,set) or Loop (END) (manual 11.18): %.120s\n", g, s);
+        errmsg("Error: malformed Loop qualifier %s; Loop (BEGIN[, name=LoopName]) (all,index,set) or Loop (END) (GEMPACK manual 11.18): %.120s\n", g, s);
         rc = -1;
         goto done;
       }
@@ -216,14 +216,14 @@ int tab_loop_transform(char *fname) {
       strcpy(q, p);
       lt_trim(q);
       if (strncmp(q, "(all,", 5) != 0 || lt_group_end(q) == NULL || *lt_group_end(q) != '\0') {
-        errmsg("Error: Loop (BEGIN) takes exactly one quantifier (all,index,set) (manual 11.18): %.120s\n", s);
+        errmsg("Error: Loop (BEGIN) takes exactly one quantifier (all,index,set) (GEMPACK manual 11.18): %.120s\n", s);
         rc = -1;
         goto done;
       }
       a = q + 5;
       c = strchr(a, ',');
       if (c == NULL || strchr(a, ':') != NULL) {
-        errmsg("Error: Loop (BEGIN) takes a plain quantifier (all,index,set), without a condition (manual 11.18): %.120s\n", s);
+        errmsg("Error: Loop (BEGIN) takes a plain quantifier (all,index,set), without a condition (GEMPACK manual 11.18): %.120s\n", s);
         rc = -1;
         goto done;
       }
@@ -248,12 +248,12 @@ int tab_loop_transform(char *fname) {
       L->depth = top + 1;
       for (j = 0; j <= top; j++) {
         if (strcmp(lp[stack[j]].idx, L->idx) == 0) {
-          errmsg("Error: nested loops reuse the index %s (manual 11.18): %.120s\n", L->idx, s);
+          errmsg("Error: nested loops reuse the index %s (GEMPACK manual 11.18): %.120s\n", L->idx, s);
           rc = -1;
           goto done;
         }
         if (nm[0] && strcmp(lp[stack[j]].name, nm) == 0) {
-          errmsg("Error: nested loops share the name %s (manual 11.18)\n", nm);
+          errmsg("Error: nested loops share the name %s (GEMPACK manual 11.18)\n", nm);
           rc = -1;
           goto done;
         }
@@ -262,7 +262,7 @@ int tab_loop_transform(char *fname) {
     }
     else {
       if (top < 0) {
-        errmsg("Error: Loop (END) without a matching Loop (BEGIN) (manual 11.18)\n");
+        errmsg("Error: Loop (END) without a matching Loop (BEGIN) (GEMPACK manual 11.18)\n");
         rc = -1;
         goto done;
       }
@@ -270,7 +270,7 @@ int tab_loop_transform(char *fname) {
     }
   }
   if (top >= 0) {
-    errmsg("Error: Loop (BEGIN) over %s has no matching Loop (END) (manual 11.18)\n", lp[stack[top]].set);
+    errmsg("Error: Loop (BEGIN) over %s has no matching Loop (END) (GEMPACK manual 11.18)\n", lp[stack[top]].set);
     rc = -1;
     goto done;
   }
@@ -312,9 +312,9 @@ int tab_loop_transform(char *fname) {
     if (lt_allowed[k] == NULL) {
       lt_trim(s);
       if (strcmp(kw, "write") == 0)
-        errmsg("Error: Write inside a loop is not supported (TEEMS writes once, after the pass); move it after Loop (END) (manual 11.18): %.120s\n", s);
+        errmsg("Error: Write inside a loop is not supported (TEEMS writes once, after the pass); move it after Loop (END) (GEMPACK manual 11.18): %.120s\n", s);
       else
-        errmsg("Error: a %s statement is not allowed inside a loop; only Formula, Assertion, Break, Cycle and ZeroDivide are (manual 11.18): %.120s\n", kw, s);
+        errmsg("Error: a %s statement is not allowed inside a loop; only Formula, Assertion, Break, Cycle and ZeroDivide are (GEMPACK manual 11.18): %.120s\n", kw, s);
       rc = -1;
       break;
     }
@@ -363,7 +363,7 @@ int tab_loop_transform(char *fname) {
           g[gl] = '\0';
           if (lt_qual(g, &b, &e, &an, &ev, nm) < 0 || b || e || (an && ev)) {
             lt_trim(s);
-            errmsg("Error: malformed %s qualifier %s; (EVERY|ANY[, name=LoopName]) (manual 11.18): %.120s\n", kw, g, s);
+            errmsg("Error: malformed %s qualifier %s; (EVERY|ANY[, name=LoopName]) (GEMPACK manual 11.18): %.120s\n", kw, g, s);
             rc = -1;
             break;
           }
@@ -374,7 +374,7 @@ int tab_loop_transform(char *fname) {
           for (j = top; j >= 0; j--) if (strcmp(lp[stack[j]].name, nm) == 0) break;
           if (j < 0) {
             lt_trim(s);
-            errmsg("Error: %s names loop %s, which does not enclose it (manual 11.18): %.120s\n", kw, nm, s);
+            errmsg("Error: %s names loop %s, which does not enclose it (GEMPACK manual 11.18): %.120s\n", kw, nm, s);
             rc = -1;
             break;
           }
@@ -384,7 +384,7 @@ int tab_loop_transform(char *fname) {
         lt_trim(rest);
         if (rest[0] == '\0') {
           lt_trim(s);
-          errmsg("Error: %s needs a condition (manual 11.18): %.120s\n", kw, s);
+          errmsg("Error: %s needs a condition (GEMPACK manual 11.18): %.120s\n", kw, s);
           rc = -1;
           break;
         }
@@ -447,7 +447,7 @@ int tab_loop_sets_link(set_element *se, set_def *sets, dim_t nset) {
       return -1;
     }
     if (par == nset) {
-      errmsg("Error: Loop over %s, which is not a declared set (manual 11.18)\n", teems_loop_syns[k].parent);
+      errmsg("Error: Loop over %s, which is not a declared set (GEMPACK manual 11.18)\n", teems_loop_syns[k].parent);
       return -1;
     }
     if (sets[par].size == 0) sets[s].size = 0;

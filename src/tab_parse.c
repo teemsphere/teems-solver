@@ -783,7 +783,7 @@ static void rd_put(elem_store *store, offset_t at, solve_real val, int kind) {
     return;
   }
   if (kind!=rd_win.kind||at<rd_win.lo||at>=rd_win.lo+rd_win.n) {
-    errmsg("Error: internal: a deferred Read wrote outside its target (statement order, manual 11.11.8)\n");
+    errmsg("Error: internal: a deferred Read wrote outside its target (statement order, GEMPACK manual 11.11.8)\n");
     MPI_Abort(PETSC_COMM_WORLD,1);
     return;
   }
@@ -2049,19 +2049,19 @@ int names_validate(set_def *sets, dim_t nset, array_def *coefs, offset_t ncof, a
            coefficient sharing the name is a genuine clash. */
         if(vars[j].level_par&&
            !((vars[j].cofname[0]=='p'||vars[j].cofname[0]=='c')&&vars[j].cofname[1]=='_'))continue;
-        errmsg("Error: name %s is declared as both a coefficient and a variable; names are case-insensitive and must be unique (manual 11.2.1)\n",coefs[i].cofname);
+        errmsg("Error: name %s is declared as both a coefficient and a variable; names are case-insensitive and must be unique (GEMPACK manual 11.2.1)\n",coefs[i].cofname);
         return -1;
       }
     for(k=0; k<nset; k++)if(strcmp(coefs[i].cofname,sets[k].setname)==0) {
-        errmsg("Error: name %s is declared as both a coefficient and a set (manual 11.2.1)\n",coefs[i].cofname);
+        errmsg("Error: name %s is declared as both a coefficient and a set (GEMPACK manual 11.2.1)\n",coefs[i].cofname);
         return -1;
       }
     for(j=i+1; j<ncof; j++)if(strcmp(coefs[i].cofname,coefs[j].cofname)==0) {
-        errmsg("Error: coefficient %s is declared more than once (manual 11.2.1)\n",coefs[i].cofname);
+        errmsg("Error: coefficient %s is declared more than once (GEMPACK manual 11.2.1)\n",coefs[i].cofname);
         return -1;
       }
     for(r=0; reserved[r]!=NULL; r++)if(strcmp(coefs[i].cofname,reserved[r])==0) {
-        errmsg("Error: coefficient name %s is a reserved word (manual 11.2.1)\n",coefs[i].cofname);
+        errmsg("Error: coefficient name %s is a reserved word (GEMPACK manual 11.2.1)\n",coefs[i].cofname);
         return -1;
       }
     /* a levels variable X brings the linear variable p_X (percent
@@ -2071,7 +2071,7 @@ int names_validate(set_def *sets, dim_t nset, array_def *coefs, offset_t ncof, a
     if((coefs[i].cofname[0]=='c'&&coefs[i].cofname[1]=='_')||(coefs[i].cofname[0]=='p'&&coefs[i].cofname[1]=='@')) {
       int ischg=(coefs[i].cofname[0]=='c');
       for(j=0; j<nvar; j++)if(vars[j].level_par&&(vars[j].change_real?1:0)==ischg&&strcmp(vars[j].cofname,coefs[i].cofname+2)==0) {
-          errmsg("Error: coefficient %c_%s has the name of the linear variable of levels variable %s (manual 9.2.2); rename the coefficient\n",coefs[i].cofname[0],coefs[i].cofname+2,vars[j].cofname);
+          errmsg("Error: coefficient %c_%s has the name of the linear variable of levels variable %s (GEMPACK manual 9.2.2); rename the coefficient\n",coefs[i].cofname[0],coefs[i].cofname+2,vars[j].cofname);
           return -1;
         }
     }
@@ -2082,46 +2082,46 @@ int names_validate(set_def *sets, dim_t nset, array_def *coefs, offset_t ncof, a
        any other X the name is free */
     if((vars[i].cofname[0]=='p'||vars[i].cofname[0]=='c')&&vars[i].cofname[1]=='_') {
       for(j=0; j<nvar; j++)if(vars[j].level_par&&(vars[j].change_real?'c':'p')==vars[i].cofname[0]&&strcmp(vars[j].cofname,vars[i].cofname+2)==0) {
-          errmsg("Error: variable %s has the name of the linear variable of levels variable %s (manual 9.2.2); rename it\n",vars[i].cofname,vars[j].cofname);
+          errmsg("Error: variable %s has the name of the linear variable of levels variable %s (GEMPACK manual 9.2.2); rename it\n",vars[i].cofname,vars[j].cofname);
           return -1;
         }
     }
     for(k=0; k<nset; k++)if(strcmp(vars[i].cofname,sets[k].setname)==0) {
-        errmsg("Error: name %s is declared as both a variable and a set (manual 11.2.1)\n",vars[i].cofname);
+        errmsg("Error: name %s is declared as both a variable and a set (GEMPACK manual 11.2.1)\n",vars[i].cofname);
         return -1;
       }
     for(j=i+1; j<nvar; j++)if(strcmp(vars[i].cofname,vars[j].cofname)==0) {
-        errmsg("Error: variable %s is declared more than once (manual 11.2.1)\n",vars[i].cofname);
+        errmsg("Error: variable %s is declared more than once (GEMPACK manual 11.2.1)\n",vars[i].cofname);
         return -1;
       }
     for(r=0; reserved[r]!=NULL; r++)if(strcmp(vars[i].cofname,reserved[r])==0) {
-        errmsg("Error: variable name %s is a reserved word (manual 11.2.1)\n",vars[i].cofname);
+        errmsg("Error: variable name %s is a reserved word (GEMPACK manual 11.2.1)\n",vars[i].cofname);
         return -1;
       }
   }
   for(k=0; k<nset; k++)for(r=0; reserved[r]!=NULL; r++)if(strcmp(sets[k].setname,reserved[r])==0) {
-      errmsg("Error: set name %s is a reserved word (manual 11.2.1)\n",sets[k].setname);
+      errmsg("Error: set name %s is a reserved word (GEMPACK manual 11.2.1)\n",sets[k].setname);
       return -1;
     }
   for(k=0; k<nmap; k++) {
     for(i=0; i<ncof; i++)if(strcmp(maps[k].mapname,coefs[i].cofname)==0) {
-        errmsg("Error: name %s is declared as both a mapping and a coefficient (manual 11.2.1)\n",maps[k].mapname);
+        errmsg("Error: name %s is declared as both a mapping and a coefficient (GEMPACK manual 11.2.1)\n",maps[k].mapname);
         return -1;
       }
     for(i=0; i<nvar; i++)if(strcmp(maps[k].mapname,vars[i].cofname)==0) {
-        errmsg("Error: name %s is declared as both a mapping and a variable (manual 11.2.1)\n",maps[k].mapname);
+        errmsg("Error: name %s is declared as both a mapping and a variable (GEMPACK manual 11.2.1)\n",maps[k].mapname);
         return -1;
       }
     for(j=0; j<nset; j++)if(strcmp(maps[k].mapname,sets[j].setname)==0) {
-        errmsg("Error: name %s is declared as both a mapping and a set (manual 11.2.1)\n",maps[k].mapname);
+        errmsg("Error: name %s is declared as both a mapping and a set (GEMPACK manual 11.2.1)\n",maps[k].mapname);
         return -1;
       }
     for(j=k+1; j<nmap; j++)if(strcmp(maps[k].mapname,maps[j].mapname)==0) {
-        errmsg("Error: mapping %s is declared more than once (manual 11.2.1)\n",maps[k].mapname);
+        errmsg("Error: mapping %s is declared more than once (GEMPACK manual 11.2.1)\n",maps[k].mapname);
         return -1;
       }
     for(r=0; reserved[r]!=NULL; r++)if(strcmp(maps[k].mapname,reserved[r])==0) {
-        errmsg("Error: mapping name %s is a reserved word (manual 11.2.1)\n",maps[k].mapname);
+        errmsg("Error: mapping name %s is a reserved word (GEMPACK manual 11.2.1)\n",maps[k].mapname);
         return -1;
       }
   }
@@ -2176,7 +2176,7 @@ offset_t postsim_reads_execute(char *psname, int niodata, cmf_file_entry *iodata
     for(i=0; i<ncof; i++)if(strcmp(coefs[i].cofname,name)==0)break;
     if(i<ncof) {
       if(teems_coef_is_ps==NULL||!teems_coef_is_ps[i]) {
-        errmsg("Error: PostSim Read into ordinary coefficient %s; targets must be PostSim Coefficients (manual 12.2.3)\n",name);
+        errmsg("Error: PostSim Read into ordinary coefficient %s; targets must be PostSim Coefficients (GEMPACK manual 12.2.3)\n",name);
         fclose(f);
         free(docopy);
         return -1;
@@ -2186,7 +2186,7 @@ offset_t postsim_reads_execute(char *psname, int niodata, cmf_file_entry *iodata
     }
     for(j=0; j<nvar; j++)if(strcmp(vars[j].cofname,name)==0)break;
     if(j<nvar) {
-      errmsg("Error: PostSim Read into variable %s; simulation results cannot be changed (manual 12.2.3)\n",name);
+      errmsg("Error: PostSim Read into variable %s; simulation results cannot be changed (GEMPACK manual 12.2.3)\n",name);
       fclose(f);
       free(docopy);
       return -1;
@@ -2455,7 +2455,7 @@ int ord_plan_build(char *fname, int postsim, array_def *coefs, offset_t ncof, ar
   free(st);
   ord_set_free(&seen);
   ord_set_free(&sega);
-  if (pl->needed) logmsg(1,"Statement order: %d Read(s) replayed at their file position, %d formula/assertion segment(s) (%s; manual 10.1, 11.11.8)\n",pl->nrd,nseg,postsim?"PostSim":"TAB");
+  if (pl->needed) logmsg(1,"Statement order: %d Read(s) replayed at their file position, %d formula/assertion segment(s) (%s; GEMPACK manual 10.1, 11.11.8)\n",pl->nrd,nseg,postsim?"PostSim":"TAB");
   return pl->needed;
 }
 
@@ -2679,7 +2679,7 @@ static int lp_range(lp_plan *P, lp_ctx *X, long lo, long hi, int inloop, int *tg
     if (kind==1) {
       lp_rt *L=&P->l[which];
       if (L->epos<0||L->epos>=hi) {
-        errmsg("Error: a loop runs across a statement-order split (manual 10.1, 11.18); internal\n");
+        errmsg("Error: a loop runs across a statement-order split (GEMPACK manual 10.1, 11.18); internal\n");
         MPI_Abort(PETSC_COMM_WORLD,1);
       }
       if (L->fused) lp_plain(X,L->bpos+1,L->epos);
@@ -2863,13 +2863,13 @@ int mappings_read(char *fname, map_def *maps, dim_t nmap, set_def *sets, dim_t n
       set_def *fs=&sets[maps[j].fromset];
       dim_t k,n1,p1=teems_set_prod1[maps[j].fromset],p2=teems_set_prod2[maps[j].fromset];
       if (!teems_set_isprod[maps[j].fromset]) {
-        errmsg("Error: Mapping (project) %s: set %s is not defined as a set product A x B (manual 10.13.2)\n",maps[j].mapname,fs->setname);
+        errmsg("Error: Mapping (project) %s: set %s is not defined as a set product A x B (GEMPACK manual 10.13.2)\n",maps[j].mapname,fs->setname);
         fclose(filehandle);
         MPI_Abort(PETSC_COMM_WORLD,1);
         return -1;
       }
       if ((dim_t)maps[j].toset!=p1&&(dim_t)maps[j].toset!=p2) {
-        errmsg("Error: Mapping (project) %s: set %s is not a factor of the product %s (manual 10.13.2)\n",maps[j].mapname,sets[maps[j].toset].setname,fs->setname);
+        errmsg("Error: Mapping (project) %s: set %s is not a factor of the product %s (GEMPACK manual 10.13.2)\n",maps[j].mapname,sets[maps[j].toset].setname,fs->setname);
         fclose(filehandle);
         MPI_Abort(PETSC_COMM_WORLD,1);
         return -1;
@@ -2939,7 +2939,7 @@ int mapping_values_read(char *fname, int niodata, cmf_file_entry *iodata, map_de
     for (j=0; j<nmap; j++) if (strcmp(target,maps[j].mapname)==0) break;
     if (j==nmap) {
       if (byele) {
-        errmsg("Error: Read (by_elements) target %s is not a declared mapping (manual 11.9.1)\n",target);
+        errmsg("Error: Read (by_elements) target %s is not a declared mapping (GEMPACK manual 11.9.1)\n",target);
         fclose(filehandle);
         MPI_Abort(PETSC_COMM_WORLD,1);
         return -1;
@@ -2961,7 +2961,7 @@ int mapping_values_read(char *fname, int niodata, cmf_file_entry *iodata, map_de
         dim_t sup;
         for (sup=0; sup<MAXSUPSET; sup++) if (sets[sub].subsetid[sup]==maps[j].fromset) break;
         if (sup==MAXSUPSET) {
-          errmsg("Error: %s for mapping %s: set %s is not the domain %s or a declared subset of it (manual 11.9.11)\n",kind,maps[j].mapname,qset,sets[maps[j].fromset].setname);
+          errmsg("Error: %s for mapping %s: set %s is not the domain %s or a declared subset of it (GEMPACK manual 11.9.11)\n",kind,maps[j].mapname,qset,sets[maps[j].fromset].setname);
           fclose(filehandle);
           MPI_Abort(PETSC_COMM_WORLD,1);
           return -1;
@@ -2969,7 +2969,7 @@ int mapping_values_read(char *fname, int niodata, cmf_file_entry *iodata, map_de
       }
       snprintf(want,sizeof(want),"(%s)",qidx);
       if (strstr(q,want)==NULL) {
-        errmsg("Error: %s for mapping %s: its argument must be the quantifier index %s (manual 11.9.11)\n",kind,maps[j].mapname,qidx);
+        errmsg("Error: %s for mapping %s: its argument must be the quantifier index %s (GEMPACK manual 11.9.11)\n",kind,maps[j].mapname,qidx);
         fclose(filehandle);
         MPI_Abort(PETSC_COMM_WORLD,1);
         return -1;
@@ -3001,7 +3001,7 @@ int mapping_values_read(char *fname, int niodata, cmf_file_entry *iodata, map_de
     {
       char *h1=strchr(linecopy+str_find_ci(linecopy,"from file "),'"'),*h2=(h1==NULL)?NULL:strchr(h1+1,'"');
       if (h1==NULL||h2==NULL||h2-h1-1>=HEADERSIZE||h2==h1+1) {
-        errmsg("Error: %s for mapping %s needs a header (manual 11.9.1)\n",kind,maps[j].mapname);
+        errmsg("Error: %s for mapping %s needs a header (GEMPACK manual 11.9.1)\n",kind,maps[j].mapname);
         fclose(filehandle);
         MPI_Abort(PETSC_COMM_WORLD,1);
         return -1;
@@ -3029,7 +3029,7 @@ int mapping_values_read(char *fname, int niodata, cmf_file_entry *iodata, map_de
         for (k=0; k<sets[maps[j].toset].size; k++)
           if (strcmp(matvar1[i].ch,set_elems[sets[maps[j].toset].offset+k].setele)==0) break;
         if (k==sets[maps[j].toset].size) {
-          errmsg("Error: %s in the data for mapping %s is not an element of set %s (manual 11.9.2)\n",matvar1[i].ch,maps[j].mapname,sets[maps[j].toset].setname);
+          errmsg("Error: %s in the data for mapping %s is not an element of set %s (GEMPACK manual 11.9.2)\n",matvar1[i].ch,maps[j].mapname,sets[maps[j].toset].setname);
           free(matvar1);
           fclose(filehandle);
           MPI_Abort(PETSC_COMM_WORLD,1);
@@ -3042,7 +3042,7 @@ int mapping_values_read(char *fname, int niodata, cmf_file_entry *iodata, map_de
         v=strtod(t,&end);
         while (end!=NULL&&*end==' ') end++;
         if (end==t||end==NULL||*end!='\0'||v!=floor(v)||v<1||v>(double)sets[maps[j].toset].size) {
-          errmsg("Error: value %s in the data for mapping %s is not an element number of set %s (1 to %ld; manual 11.9.1c, 11.9.2)\n",matvar1[i].ch,maps[j].mapname,sets[maps[j].toset].setname,(long)sets[maps[j].toset].size);
+          errmsg("Error: value %s in the data for mapping %s is not an element number of set %s (1 to %ld; GEMPACK manual 11.9.1c, 11.9.2)\n",matvar1[i].ch,maps[j].mapname,sets[maps[j].toset].setname,(long)sets[maps[j].toset].size);
           free(matvar1);
           fclose(filehandle);
           MPI_Abort(PETSC_COMM_WORLD,1);
@@ -3108,7 +3108,7 @@ int mapping_use_guards(char *fname, map_def *maps, dim_t nmap) {
       sprintf(gfind,"%s(",maps[gm].mapname);
       gpos=str_find_ci(line,gfind);
       if (gpos==0||(gpos>0&&!isalnum((int)line[gpos-1])&&line[gpos-1]!='_')) {
-        errmsg("Error: a set mapping on the left-hand side of an Update statement is not supported (mapping %s; manual 11.9.9)\n",maps[gm].mapname);
+        errmsg("Error: a set mapping on the left-hand side of an Update statement is not supported (mapping %s; GEMPACK manual 11.9.9)\n",maps[gm].mapname);
         fclose(filehandle);
         MPI_Abort(PETSC_COMM_WORLD,1);
         return -1;
@@ -3146,7 +3146,7 @@ static dim_t mapping_synth_register(int kind, dim_t a, dim_t b, int k) {
     if (sy->kind==kind&&sy->a==a&&sy->b==b&&sy->k==k) return m;
   }
   if (teems_nmap-teems_nmap_user>=MAP_SYNTH_MAX) {
-    errmsg("Error: more than %d distinct mapping compositions and offsets on mapped indices (manual 11.9.6); simplify the index expressions\n",MAP_SYNTH_MAX);
+    errmsg("Error: more than %d distinct mapping compositions and offsets on mapped indices (GEMPACK manual 11.9.6); simplify the index expressions\n",MAP_SYNTH_MAX);
     MPI_Abort(PETSC_COMM_WORLD,1);
   }
   m=teems_nmap;
@@ -3156,14 +3156,14 @@ static dim_t mapping_synth_register(int kind, dim_t a, dim_t b, int k) {
   if (kind==MAP_SYNTH_COMPOSE) {
     ss=teems_maps[b].toset==teems_maps[a].fromset?0:set_supset_slot(teems_sets,teems_maps[b].toset,teems_maps[a].fromset);
     if (ss<0) {
-      errmsg("Error: %s(%s(...)): mapping %s maps into %s, which is neither the domain %s of %s nor a declared subset of it (manual 11.9.6)\n",teems_maps[a].mapname,teems_maps[b].mapname,teems_maps[b].mapname,teems_sets[teems_maps[b].toset].setname,teems_sets[teems_maps[a].fromset].setname,teems_maps[a].mapname);
+      errmsg("Error: %s(%s(...)): mapping %s maps into %s, which is neither the domain %s of %s nor a declared subset of it (GEMPACK manual 11.9.6)\n",teems_maps[a].mapname,teems_maps[b].mapname,teems_maps[b].mapname,teems_sets[teems_maps[b].toset].setname,teems_sets[teems_maps[a].fromset].setname,teems_maps[a].mapname);
       MPI_Abort(PETSC_COMM_WORLD,1);
     }
     md->fromset=teems_maps[b].fromset;
     md->toset=teems_maps[a].toset;
   } else {
     if (!teems_sets[teems_maps[a].toset].intertemp) {
-      errmsg("Error: an offset %+d on the mapped index %s(...) needs an intertemporal codomain; %s maps into %s (manual 11.9.6, 16.2)\n",k,teems_maps[a].mapname,teems_maps[a].mapname,teems_sets[teems_maps[a].toset].setname);
+      errmsg("Error: an offset %+d on the mapped index %s(...) needs an intertemporal codomain; %s maps into %s (GEMPACK manual 11.9.6, 16.2)\n",k,teems_maps[a].mapname,teems_maps[a].mapname,teems_sets[teems_maps[a].toset].setname);
       MPI_Abort(PETSC_COMM_WORLD,1);
     }
     md->fromset=teems_maps[a].fromset;
@@ -3221,7 +3221,7 @@ void mapping_frame_check(dim_t m, dim_t frame_setid, dim_t dss, int leadlag, con
     di+=leadlag;
     if (di<0||di>=teems_sets[md->fromset].size) continue;
     if (md->values[di]<0) {
-      errmsg("Error: an index expression through a mapping in %s runs outside set %s at element %s of %s (an offset on a mapped index must stay in the codomain; manual 11.9.6, 16.4)\n",symname,teems_sets[md->toset].setname,teems_set_elems[teems_sets[frame_setid].offset+e].setele,teems_sets[frame_setid].setname);
+      errmsg("Error: an index expression through a mapping in %s runs outside set %s at element %s of %s (an offset on a mapped index must stay in the codomain; GEMPACK manual 11.9.6, 16.4)\n",symname,teems_sets[md->toset].setname,teems_set_elems[teems_sets[frame_setid].offset+e].setele,teems_sets[frame_setid].setname);
       MPI_Abort(PETSC_COMM_WORLD,1);
     }
   }
@@ -3489,7 +3489,7 @@ void sum_cond_parse(char *settok, const char *sumindx, int *cond_mapid, char *co
     char *endp=NULL;
     double cval;
     if (sc==NULL) {
-      errmsg("Error: unsupported sum condition '%s' on a sum containing variables; only a mapping equality MAPPING(index) = value is supported there (manual 11.4.11)\n",lhs);
+      errmsg("Error: unsupported sum condition '%s' on a sum containing variables; only a mapping equality MAPPING(index) = value is supported there (GEMPACK manual 11.4.11)\n",lhs);
       MPI_Abort(PETSC_COMM_WORLD,1);
       return;
     }
@@ -3563,7 +3563,7 @@ badcond:
         }
       }
     }
-    errmsg("Error: unsupported sum condition '%s'; supported forms are MAPPING(index) = value and COEF[(args)] <op> <numeric const> (manual 11.4.11)\n",lhs);
+    errmsg("Error: unsupported sum condition '%s'; supported forms are MAPPING(index) = value and COEF[(args)] <op> <numeric const> (GEMPACK manual 11.4.11)\n",lhs);
     MPI_Abort(PETSC_COMM_WORLD,1);
     return;
   }
@@ -3583,7 +3583,7 @@ void sum_cond_coef_resolve(sum_def *sc, quantifier *frame, dim_t nframe, set_def
   if (sc->cond_coef[0]=='\0') return;
   for (ci=0; ci<ncof; ci++) if (strcmp(coefs[ci].cofname,sc->cond_coef)==0) break;
   if (ci==ncof) {
-    errmsg("Error: sum condition coefficient %s is not declared (manual 11.4.11)\n",sc->cond_coef);
+    errmsg("Error: sum condition coefficient %s is not declared (GEMPACK manual 11.4.11)\n",sc->cond_coef);
     MPI_Abort(PETSC_COMM_WORLD,1);
     return;
   }
@@ -3609,7 +3609,7 @@ void sum_cond_coef_resolve(sum_def *sc, quantifier *frame, dim_t nframe, set_def
     if (strcmp(sc->cond_cofargs[d],sc->sumindx)==0) {
       dim_t ss=set_supset_slot(sets,(dim_t)sc->sumsetid,coefs[ci].setid[d]);
       if (ss<0) {
-        errmsg("Error: sum condition %s: the summed index %s must range over the coefficient's dimension set %s or a declared subset of it (manual 11.4.11)\n",sc->cond_coef,sc->sumindx,sets[coefs[ci].setid[d]].setname);
+        errmsg("Error: sum condition %s: the summed index %s must range over the coefficient's dimension set %s or a declared subset of it (GEMPACK manual 11.4.11)\n",sc->cond_coef,sc->sumindx,sets[coefs[ci].setid[d]].setname);
         MPI_Abort(PETSC_COMM_WORLD,1);
         return;
       }
@@ -3622,7 +3622,7 @@ void sum_cond_coef_resolve(sum_def *sc, quantifier *frame, dim_t nframe, set_def
     if (l<nframe) {
       dim_t ss=set_supset_slot(sets,(dim_t)frame[l].setid,coefs[ci].setid[d]);
       if (ss<0) {
-        errmsg("Error: sum condition %s: index %s must range over the coefficient's dimension set %s or a declared subset of it (manual 11.4.11)\n",sc->cond_coef,sc->cond_cofargs[d],sets[coefs[ci].setid[d]].setname);
+        errmsg("Error: sum condition %s: index %s must range over the coefficient's dimension set %s or a declared subset of it (GEMPACK manual 11.4.11)\n",sc->cond_coef,sc->cond_cofargs[d],sets[coefs[ci].setid[d]].setname);
         MPI_Abort(PETSC_COMM_WORLD,1);
         return;
       }
@@ -3635,7 +3635,7 @@ void sum_cond_coef_resolve(sum_def *sc, quantifier *frame, dim_t nframe, set_def
     for (l=0; l<(dim_t)sets[coefs[ci].setid[d]].size; l++)
       if (strcmp(set_elems[sets[coefs[ci].setid[d]].offset+l].setele,sc->cond_cofargs[d])==0) break;
     if (l==(dim_t)sets[coefs[ci].setid[d]].size) {
-      errmsg("Error: sum condition %s: argument %s is neither the summed index, a quantifier index nor an element of %s (manual 11.4.11)\n",sc->cond_coef,sc->cond_cofargs[d],sets[coefs[ci].setid[d]].setname);
+      errmsg("Error: sum condition %s: argument %s is neither the summed index, a quantifier index nor an element of %s (GEMPACK manual 11.4.11)\n",sc->cond_coef,sc->cond_cofargs[d],sets[coefs[ci].setid[d]].setname);
       MPI_Abort(PETSC_COMM_WORLD,1);
       return;
     }
@@ -3896,7 +3896,7 @@ static int ct_parse(const char *s, cond_tree *t, const char *ctx) {
   t->s=s;
   ct_or(t);
   if (t->err||s[t->pos]!='\0') {
-    errmsg("Error: malformed condition '%s' (AND, OR and NOT join comparisons; at most %d comparisons; manual 11.4.5) in %s\n",s,ICOND_MAXLEAF,ctx);
+    errmsg("Error: malformed condition '%s' (AND, OR and NOT join comparisons; at most %d comparisons; GEMPACK manual 11.4.5) in %s\n",s,ICOND_MAXLEAF,ctx);
     MPI_Abort(PETSC_COMM_WORLD,1);
     return -1;
   }
@@ -4022,7 +4022,7 @@ static void cond_leaf_kinds(char *a, char *c, size_t cap, quantifier *frame, dim
 static dim_t cond_common_set(dim_t a, dim_t b, set_def *sets, const char *cond, const char *ctx) {
   if (a==b||set_supset_slot(sets,a,b)>=0) return b;
   if (set_supset_slot(sets,b,a)>=0) return a;
-  errmsg("Error: the condition %s compares an index over set %s with one over set %s; one set must equal or be a declared subset of the other (manual 11.4.11) in %s\n",cond,sets[a].setname,sets[b].setname,ctx);
+  errmsg("Error: the condition %s compares an index over set %s with one over set %s; one set must equal or be a declared subset of the other (GEMPACK manual 11.4.11) in %s\n",cond,sets[a].setname,sets[b].setname,ctx);
   MPI_Abort(PETSC_COMM_WORLD,1);
   return a;
 }
@@ -4046,7 +4046,7 @@ int icond_compile(const char *cond, quantifier *frame, dim_t nframe, set_def *se
   for (k=0; k<t.nleaf; k++) {
     int op,kind[2],slot[2],mp[2];
     if (ct_leaf_split(cond,t.lb[k],t.le[k],side[0],side[1],sizeof(side[0]),&op)<0) {
-      errmsg("Error: the condition %.*s has no comparison (=, <>, <, >, <=, >=; manual 11.4.5) in %s\n",t.le[k]-t.lb[k],cond+t.lb[k],ctx);
+      errmsg("Error: the condition %.*s has no comparison (=, <>, <, >, <=, >=; GEMPACK manual 11.4.5) in %s\n",t.le[k]-t.lb[k],cond+t.lb[k],ctx);
       MPI_Abort(PETSC_COMM_WORLD,1);
       return 0;
     }
@@ -4060,7 +4060,7 @@ int icond_compile(const char *cond, quantifier *frame, dim_t nframe, set_def *se
     ct_leaf_split(cond,t.lb[k],t.le[k],side[0],side[1],sizeof(side[0]),&op);
     cond_leaf_kinds(side[0],side[1],sizeof(side[0]),frame,nframe,&kind[0],&kind[1],&slot[0],&slot[1],&mp[0],&mp[1]);
     if (kind[0]==CS_QUOTE&&kind[1]==CS_QUOTE) {
-      errmsg("Error: the condition %s=%s compares two elements (manual 11.4.11) in %s\n",side[0],side[1],ctx);
+      errmsg("Error: the condition %s=%s compares two elements (GEMPACK manual 11.4.11) in %s\n",side[0],side[1],ctx);
       MPI_Abort(PETSC_COMM_WORLD,1);
       return 0;
     }
@@ -4083,7 +4083,7 @@ int icond_compile(const char *cond, quantifier *frame, dim_t nframe, set_def *se
           return 0;
         }
         if (!mapping_ready((dim_t)(mp[sd]-1))) {
-          errmsg("Error: mapping %s is used (in a condition) before a Formula has assigned all of its values (manual 10.13.1/11.9.1) in %s\n",md->mapname,ctx);
+          errmsg("Error: mapping %s is used (in a condition) before a Formula has assigned all of its values (GEMPACK manual 10.13.1/11.9.1) in %s\n",md->mapname,ctx);
           MPI_Abort(PETSC_COMM_WORLD,1);
           return 0;
         }
@@ -4098,7 +4098,7 @@ int icond_compile(const char *cond, quantifier *frame, dim_t nframe, set_def *se
     if (kind[0]!=CS_QUOTE&&kind[1]!=CS_QUOTE) S=cond_common_set(base[0],base[1],sets,cond,ctx);
     else S=(kind[0]==CS_QUOTE)?base[1]:base[0];
     if (op>2&&!sets[S].intertemp) {
-      errmsg("Error: the condition %s orders positions in set %s, which is not intertemporal; indices compare by <, >, <= and >= only over intertemporal sets (manual 11.4.11) in %s\n",cond,sets[S].setname,ctx);
+      errmsg("Error: the condition %s orders positions in set %s, which is not intertemporal; indices compare by <, >, <= and >= only over intertemporal sets (GEMPACK manual 11.4.11) in %s\n",cond,sets[S].setname,ctx);
       MPI_Abort(PETSC_COMM_WORLD,1);
       return 0;
     }
@@ -4109,7 +4109,7 @@ int icond_compile(const char *cond, quantifier *frame, dim_t nframe, set_def *se
         quote_strip(side[sd],el);
         for (e=0; e<sets[S].size; e++) if (strcmp(el,set_elems[sets[S].offset+e].setele)==0) break;
         if (e==sets[S].size) {
-          errmsg("Error: %s in the condition %s is not an element of set %s (manual 11.4.11) in %s\n",el,cond,sets[S].setname,ctx);
+          errmsg("Error: %s in the condition %s is not an element of set %s (GEMPACK manual 11.4.11) in %s\n",el,cond,sets[S].setname,ctx);
           MPI_Abort(PETSC_COMM_WORLD,1);
           return 0;
         }
@@ -4197,7 +4197,7 @@ int cond_lower_numeric(const char *cond, char *out, size_t cap, quantifier *fram
       char a[TABREADLINE],c[TABREADLINE];
       int op,ka,kc,sa,sc2,ma,mc,w;
       if (ct_leaf_split(cond,t.lb[v],t.le[v],a,c,sizeof(a),&op)<0) {
-        errmsg("Error: the condition %.*s has no comparison (=, <>, <, >, <=, >=; manual 11.4.5) in %s\n",t.le[v]-t.lb[v],cond+t.lb[v],ctx);
+        errmsg("Error: the condition %.*s has no comparison (=, <>, <, >, <=, >=; GEMPACK manual 11.4.5) in %s\n",t.le[v]-t.lb[v],cond+t.lb[v],ctx);
         MPI_Abort(PETSC_COMM_WORLD,1);
       }
       cond_leaf_kinds(a,c,sizeof(a),frame,nframe,&ka,&kc,&sa,&sc2,&ma,&mc);
@@ -4353,7 +4353,7 @@ int cond_text_lower(char *text, size_t cap, quantifier *frame, dim_t nframe, con
         if (ct_open(text[j2])) dd++;
         else if (ct_shut(text[j2])) dd--;
         else if (dd==0&&text[j2]==',') {
-          errmsg("Error: IF takes a condition and one value, IF(condition, value) (manual 11.4.6), in %s: %.200s\n",ctx,text);
+          errmsg("Error: IF takes a condition and one value, IF(condition, value) (GEMPACK manual 11.4.6), in %s: %.200s\n",ctx,text);
           return 0;
         }
       }
@@ -4504,7 +4504,7 @@ void mapping_reject_lhs(char *line, const char *what) {
     sprintf(find,"%s(",teems_maps[m].mapname);
     k=str_find_ci(line,find);
     if (k==0||(k>0&&!isalnum((int)line[k-1])&&line[k-1]!='_')) {
-      errmsg("Error: a set mapping on the left-hand side of an %s statement is not supported (mapping %s; manual 11.9.9)\n",what,teems_maps[m].mapname);
+      errmsg("Error: a set mapping on the left-hand side of an %s statement is not supported (mapping %s; GEMPACK manual 11.9.9)\n",what,teems_maps[m].mapname);
       MPI_Abort(PETSC_COMM_WORLD,1);
     }
   }
@@ -4543,7 +4543,7 @@ int mapping_check_onto(map_def *maps, dim_t j, set_def *sets, set_element *set_e
   bool *hit= (bool *) calloc (tosize>0?tosize:1,sizeof(bool));
   for (i=0; i<sets[maps[j].fromset].size; i++) hit[maps[j].values[i]]=true;
   for (i=0; i<tosize; i++) if (!hit[i]) {
-      errmsg("Error: mapping %s is not onto: element %s of set %s is not mapped to (manual 11.9.3)\n",maps[j].mapname,set_elems[sets[maps[j].toset].offset+i].setele,sets[maps[j].toset].setname);
+      errmsg("Error: mapping %s is not onto: element %s of set %s is not mapped to (GEMPACK manual 11.9.3)\n",maps[j].mapname,set_elems[sets[maps[j].toset].offset+i].setele,sets[maps[j].toset].setname);
       free(hit);
       return -1;
     }
@@ -4564,11 +4564,11 @@ int mappings_validate(map_def *maps, dim_t nmap, set_def *sets, set_element *set
       if (maps[j].formula_assigned) continue;
       if (maps[j].nassigned>0) {
         for (i=0; i<sets[maps[j].fromset].size&&maps[j].assigned[i]; i++) {}
-        errmsg("Error: mapping %s has values for %ld of the %ld elements of set %s; element %s gets none (manual 11.9.1, 11.9.11)\n",maps[j].mapname,(long)maps[j].nassigned,(long)sets[maps[j].fromset].size,sets[maps[j].fromset].setname,set_elems[sets[maps[j].fromset].offset+i].setele);
+        errmsg("Error: mapping %s has values for %ld of the %ld elements of set %s; element %s gets none (GEMPACK manual 11.9.1, 11.9.11)\n",maps[j].mapname,(long)maps[j].nassigned,(long)sets[maps[j].fromset].size,sets[maps[j].fromset].setname,set_elems[sets[maps[j].fromset].offset+i].setele);
         MPI_Abort(PETSC_COMM_WORLD,1);
         return -1;
       }
-      errmsg("Error: mapping %s is never given values (manual 11.9.1)\n",maps[j].mapname);
+      errmsg("Error: mapping %s is never given values (GEMPACK manual 11.9.1)\n",maps[j].mapname);
       MPI_Abort(PETSC_COMM_WORLD,1);
       return -1;
     }
@@ -4577,7 +4577,7 @@ int mappings_validate(map_def *maps, dim_t nmap, set_def *sets, set_element *set
       bool *hit= (bool *) calloc (tosize>0?tosize:1,sizeof(bool));
       for (i=0; i<sets[maps[j].fromset].size; i++) hit[maps[j].values[i]]=true;
       for (i=0; i<tosize; i++) if (!hit[i]) {
-          errmsg("Error: mapping %s is not onto: element %s of set %s is not mapped to (manual 11.9.3)\n",maps[j].mapname,set_elems[sets[maps[j].toset].offset+i].setele,sets[maps[j].toset].setname);
+          errmsg("Error: mapping %s is not onto: element %s of set %s is not mapped to (GEMPACK manual 11.9.3)\n",maps[j].mapname,set_elems[sets[maps[j].toset].offset+i].setele,sets[maps[j].toset].setname);
           free(hit);
           MPI_Abort(PETSC_COMM_WORLD,1);
           return -1;
@@ -4602,7 +4602,7 @@ static offset_t closure_var_find(char *vname, array_def *vars, offset_t nvar) {
      mention any of [them] in your Command file"); '@' is legal in user
      names (11.2.1), so only the exact derived forms are rejected */
   if (name_is_comp_derived(vname)) {
-    errmsg("Error: %s is a solver-managed derived complementarity variable and cannot appear in closure or shock files (manual 51.7.2)\n",vname);
+    errmsg("Error: %s is a solver-managed derived complementarity variable and cannot appear in closure or shock files (GEMPACK manual 51.7.2)\n",vname);
     MPI_Abort(PETSC_COMM_WORLD,1);
   }
   for (j=0; j<nvar; j++) if (strcmp(vname,vars[j].cofname)==0) return j;
@@ -4620,12 +4620,12 @@ static offset_t closure_var_find(char *vname, array_def *vars, offset_t nvar) {
   if ((vname[0]=='p'||vname[0]=='c')&&vname[1]=='_') {
     const char *lin=levels_linear_of(vname+2);
     if (lin!=NULL) {
-      errmsg("Error: %s names no variable: the linear variable of levels variable %s is %s (LINEAR_NAME/LINEAR_VAR, manual 9.2.2)\n",vname,vname+2,lin);
+      errmsg("Error: %s names no variable: the linear variable of levels variable %s is %s (LINEAR_NAME/LINEAR_VAR, GEMPACK manual 9.2.2)\n",vname,vname+2,lin);
       MPI_Abort(PETSC_COMM_WORLD,1);
     }
     for (j=0; j<nvar; j++) if (strcmp(vname+2,vars[j].cofname)==0) {
         if (vars[j].level_par&&(vars[j].change_real?'c':'p')==vname[0]) return j;
-        errmsg("Error: %s names no variable: %s is %s, named %s%s (manual 9.2.2)\n",vname,vars[j].cofname,
+        errmsg("Error: %s names no variable: %s is %s, named %s%s (GEMPACK manual 9.2.2)\n",vname,vars[j].cofname,
                !vars[j].level_par?"a linear variable":vars[j].change_real?"a change levels variable":"a percentage-change levels variable",
                !vars[j].level_par?"":vars[j].change_real?"c_":"p_",vars[j].cofname);
         MPI_Abort(PETSC_COMM_WORLD,1);
@@ -4881,7 +4881,7 @@ static void shock_component_set(array_def *vars, offset_t j, offset_t e, solve_r
   char lab[4*NAMESIZE];
   if (!CL_EXO(x)) {
     array_element_label(&vars[j],e,lab,sizeof(lab));
-    errmsg("Error: the shock statement for %s names component %s, which is endogenous; only exogenous components can be shocked (manual 24, 24.14.1; shock file)\n",vars[j].cofname,lab);
+    errmsg("Error: the shock statement for %s names component %s, which is endogenous; only exogenous components can be shocked (GEMPACK manual 24, 24.14.1; shock file)\n",vars[j].cofname,lab);
     MPI_Abort(PETSC_COMM_WORLD,1);
   }
   if (seen[x]) {
@@ -4915,17 +4915,17 @@ int shocks_check_floor(array_def *vars, offset_t nvar, dim_t subints, int solmet
       tot=(double)CL_SHOCK(x)*subints;
       if (tot<-100-1e-4) {
         array_element_label(&vars[i],e,lab,sizeof(lab));
-        errmsg("Error: %s is shocked by %g percent; a percentage change below -100 would make its levels value negative (manual 30.2; shock file)\n",lab,tot);
+        errmsg("Error: %s is shocked by %g percent; a percentage change below -100 would make its levels value negative (GEMPACK manual 30.2; shock file)\n",lab,tot);
         return -1;
       }
       if (tot<=-100+1e-4&&solmethod==SM_GRAGG) {
         array_element_label(&vars[i],e,lab,sizeof(lab));
-        errmsg("Error: %s is shocked by -100 percent, which Gragg's method cannot take: its final pass carries the variable past its end point, through zero (manual 30.2); use the midpoint or Euler method\n",lab);
+        errmsg("Error: %s is shocked by -100 percent, which Gragg's method cannot take: its final pass carries the variable past its end point, through zero (GEMPACK manual 30.2); use the midpoint or Euler method\n",lab);
         return -1;
       }
       if (tot<=-100+1e-4&&(solmethod==SM_RK2||solmethod==SM_HEUN||solmethod==SM_RK4||solmethod==SM_BOSHA32||solmethod==SM_DOPRI54)) {
         array_element_label(&vars[i],e,lab,sizeof(lab));
-        errmsg("Error: %s is shocked by -100 percent, which the Runge-Kutta methods cannot take: each step that reaches zero is rejected and retried at half the size without end (manual 30.2); use the midpoint or Euler method\n",lab);
+        errmsg("Error: %s is shocked by -100 percent, which the Runge-Kutta methods cannot take: each step that reaches zero is rejected and retried at half the size without end (GEMPACK manual 30.2); use the midpoint or Euler method\n",lab);
         return -1;
       }
     }
@@ -4990,7 +4990,7 @@ static offset_t sub_item(FILE *f,const char *label,char *item,array_def *vars,of
       }
     }
     *nnamed=vars[j].nelem;
-    if (nshk==0) sub_fatal(f,"Error: subtotal \"%s\" names %s, which has no shocked components; a subtotal is made of shocked exogenous components (manual 29.1; subtotals file)%s\n",label,vars[j].cofname,"");
+    if (nshk==0) sub_fatal(f,"Error: subtotal \"%s\" names %s, which has no shocked components; a subtotal is made of shocked exogenous components (GEMPACK manual 29.1; subtotals file)%s\n",label,vars[j].cofname,"");
     return nshk;
   }
   p=strtok(args,",");
@@ -5055,7 +5055,7 @@ static offset_t sub_item(FILE *f,const char *label,char *item,array_def *vars,of
     } else if (total==1) {
       array_element_label(&vars[j],x-vars[j].offset,lab,sizeof(lab));
       for (d=0; d<nd; d++) free(pos[d]);
-      errmsg("Error: subtotal \"%s\" names %s, which is %s; a subtotal is made of shocked exogenous components (manual 29.1; subtotals file)\n",label,lab,CL_EXO(x)?"exogenous but not shocked":"not exogenous");
+      errmsg("Error: subtotal \"%s\" names %s, which is %s; a subtotal is made of shocked exogenous components (GEMPACK manual 29.1; subtotals file)\n",label,lab,CL_EXO(x)?"exogenous but not shocked":"not exogenous");
       if (f!=NULL) fclose(f);
       MPI_Abort(PETSC_COMM_WORLD,1);
       return 0;
@@ -5066,7 +5066,7 @@ static offset_t sub_item(FILE *f,const char *label,char *item,array_def *vars,of
     }
   }
   for (d=0; d<nd; d++) free(pos[d]);
-  if (nshk==0) sub_fatal(f,"Error: subtotal \"%s\" names %s over components none of which is shocked; a subtotal is made of shocked exogenous components (manual 29.1; subtotals file)%s\n",label,item,"");
+  if (nshk==0) sub_fatal(f,"Error: subtotal \"%s\" names %s over components none of which is shocked; a subtotal is made of shocked exogenous components (GEMPACK manual 29.1; subtotals file)%s\n",label,item,"");
   return nshk;
 }
 
@@ -5238,7 +5238,7 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
             dim_t d;
             for (e=0; e<nel; e++) if (CL_EXO(vars[j].offset+e)) nexov++;
             if (nexov==0) {
-              errmsg("Error: %s has no exogenous components, so it cannot be shocked (manual 24, 24.6.3; shock file)\n",vars[j].cofname);
+              errmsg("Error: %s has no exogenous components, so it cannot be shocked (GEMPACK manual 24, 24.6.3; shock file)\n",vars[j].cofname);
               fclose(filehandle);
               MPI_Abort(PETSC_COMM_WORLD,1);
               return -1;
@@ -5271,7 +5271,7 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
                   if (nval<nel) errmsg("Error: shock statement for variable %s supplies %ld value(s) for its %ld components; give one value per component or use \"uniform\" (shock file)\n",vars[j].cofname,(long)nval,(long)nel);
                   else errmsg("Error: shock statement for variable %s supplies more values than its %ld components (shock file)\n",vars[j].cofname,(long)nel);
                 } else {
-                  errmsg("Error: shock statement for variable %s supplies %ld value(s); it has %ld exogenous of %ld components: give one value per exogenous component or one per component, or use \"uniform\" (manual 24.14.1; shock file)\n",vars[j].cofname,(long)nval,(long)nexov,(long)nel);
+                  errmsg("Error: shock statement for variable %s supplies %ld value(s); it has %ld exogenous of %ld components: give one value per exogenous component or one per component, or use \"uniform\" (GEMPACK manual 24.14.1; shock file)\n",vars[j].cofname,(long)nval,(long)nexov,(long)nel);
                 }
                 fclose(filehandle);
                 MPI_Abort(PETSC_COMM_WORLD,1);
@@ -6245,7 +6245,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
             }
             fclose(filehandle);
             if (k1<0) {
-              errmsg("Error: the size of intertemporal set %s comes from coefficient %s, which no Read statement reads from a file; give the count by a Read, or write the elements out (manual 10.1)\n",record[j].setname,varname);
+              errmsg("Error: the size of intertemporal set %s comes from coefficient %s, which no Read statement reads from a file; give the count by a Read, or write the elements out (GEMPACK manual 10.1)\n",record[j].setname,varname);
               return -1;
             }
             if (k1>=niodata) {
@@ -6324,7 +6324,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
             }
             fclose(filehandle);
             if (k1<0) {
-              errmsg("Error: the size of intertemporal set %s comes from coefficient %s, which no Read statement reads from a file; give the count by a Read, or write the elements out (manual 10.1)\n",record[j].setname,varname);
+              errmsg("Error: the size of intertemporal set %s comes from coefficient %s, which no Read statement reads from a file; give the count by a Read, or write the elements out (GEMPACK manual 10.1)\n",record[j].setname,varname);
               return -1;
             }
             if (k1>=niodata) {
@@ -6400,7 +6400,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
             }
             fclose(filehandle);
             if (k1<0) {
-              errmsg("Error: the size of intertemporal set %s comes from coefficient %s, which no Read statement reads from a file; give the count by a Read, or write the elements out (manual 10.1)\n",record[j].setname,varname);
+              errmsg("Error: the size of intertemporal set %s comes from coefficient %s, which no Read statement reads from a file; give the count by a Read, or write the elements out (GEMPACK manual 10.1)\n",record[j].setname,varname);
               return -1;
             }
             if (k1>=niodata) {
@@ -6503,7 +6503,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
             }
             fclose(filehandle);
             if (k1<0) {
-              errmsg("Error: the size of intertemporal set %s comes from coefficient %s, which no Read statement reads from a file; give the count by a Read, or write the elements out (manual 10.1)\n",record[j].setname,varname);
+              errmsg("Error: the size of intertemporal set %s comes from coefficient %s, which no Read statement reads from a file; give the count by a Read, or write the elements out (GEMPACK manual 10.1)\n",record[j].setname,varname);
               return -1;
             }
             if (k1>=niodata) {
@@ -6582,7 +6582,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
             }
             fclose(filehandle);
             if (k1<0) {
-              errmsg("Error: the size of intertemporal set %s comes from coefficient %s, which no Read statement reads from a file; give the count by a Read, or write the elements out (manual 10.1)\n",record[j].setname,varname);
+              errmsg("Error: the size of intertemporal set %s comes from coefficient %s, which no Read statement reads from a file; give the count by a Read, or write the elements out (GEMPACK manual 10.1)\n",record[j].setname,varname);
               return -1;
             }
             if (k1>=niodata) {
@@ -6658,7 +6658,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
             }
             fclose(filehandle);
             if (k1<0) {
-              errmsg("Error: the size of intertemporal set %s comes from coefficient %s, which no Read statement reads from a file; give the count by a Read, or write the elements out (manual 10.1)\n",record[j].setname,varname);
+              errmsg("Error: the size of intertemporal set %s comes from coefficient %s, which no Read statement reads from a file; give the count by a Read, or write the elements out (GEMPACK manual 10.1)\n",record[j].setname,varname);
               return -1;
             }
             if (k1>=niodata) {
@@ -6758,7 +6758,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
             }
             fclose(filehandle);
             if (k1<0) {
-              errmsg("Error: the size of intertemporal set %s comes from coefficient %s, which no Read statement reads from a file; give the count by a Read, or write the elements out (manual 10.1)\n",record[j].setname,varname);
+              errmsg("Error: the size of intertemporal set %s comes from coefficient %s, which no Read statement reads from a file; give the count by a Read, or write the elements out (GEMPACK manual 10.1)\n",record[j].setname,varname);
               return -1;
             }
             if (k1>=niodata) {
@@ -6838,7 +6838,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
             }
             fclose(filehandle);
             if (k1<0) {
-              errmsg("Error: the size of intertemporal set %s comes from coefficient %s, which no Read statement reads from a file; give the count by a Read, or write the elements out (manual 10.1)\n",record[j].setname,varname);
+              errmsg("Error: the size of intertemporal set %s comes from coefficient %s, which no Read statement reads from a file; give the count by a Read, or write the elements out (GEMPACK manual 10.1)\n",record[j].setname,varname);
               return -1;
             }
             if (k1>=niodata) {
@@ -6914,7 +6914,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
             }
             fclose(filehandle);
             if (k1<0) {
-              errmsg("Error: the size of intertemporal set %s comes from coefficient %s, which no Read statement reads from a file; give the count by a Read, or write the elements out (manual 10.1)\n",record[j].setname,varname);
+              errmsg("Error: the size of intertemporal set %s comes from coefficient %s, which no Read statement reads from a file; give the count by a Read, or write the elements out (GEMPACK manual 10.1)\n",record[j].setname,varname);
               return -1;
             }
             if (k1>=niodata) {
@@ -7014,16 +7014,16 @@ int elem_list_expand(const char *in, char *out, size_t cap, const char *setname)
     }
     *dash='\0';
     if (sscanf(item," %255s",a)!=1||sscanf(dash+1," %255s",b)!=1||strchr(dash+1,'-')!=NULL) {
-      errmsg("Error: malformed element range '%s-%s' in set %s (manual 11.2.2: name1 - name9)\n",item,dash+1,setname);
+      errmsg("Error: malformed element range '%s-%s' in set %s (GEMPACK manual 11.2.2: name1 - name9)\n",item,dash+1,setname);
       return -1;
     }
     if (elem_range_split(a,pa,&da)<0||elem_range_split(b,pb,&db)<0||strcmp(pa,pb)!=0) {
-      errmsg("Error: element range '%s - %s' in set %s needs two names with the same stem and a number at the end (manual 11.2.2)\n",a,b,setname);
+      errmsg("Error: element range '%s - %s' in set %s needs two names with the same stem and a number at the end (GEMPACK manual 11.2.2)\n",a,b,setname);
       return -1;
     }
     if ((strlen(da)>1&&da[0]=='0')||(strlen(db)>1&&db[0]=='0')) {
       if (strlen(da)!=strlen(db)) {
-        errmsg("Error: element range '%s - %s' in set %s: a zero-padded range needs the same number of digits at both ends (manual 11.2.2)\n",a,b,setname);
+        errmsg("Error: element range '%s - %s' in set %s: a zero-padded range needs the same number of digits at both ends (GEMPACK manual 11.2.2)\n",a,b,setname);
         return -1;
       }
       width=(int)strlen(da);
@@ -7035,7 +7035,7 @@ int elem_list_expand(const char *in, char *out, size_t cap, const char *setname)
     lo=strtol(da,NULL,10);
     hi=strtol(db,NULL,10);
     if (hi<lo) {
-      errmsg("Error: element range '%s - %s' in set %s runs backwards (manual 11.2.2)\n",a,b,setname);
+      errmsg("Error: element range '%s - %s' in set %s runs backwards (GEMPACK manual 11.2.2)\n",a,b,setname);
       return -1;
     }
     for (v=lo; v<=hi; v++) {
@@ -7439,11 +7439,11 @@ int sets_read(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,
               if (sscanf(p,"%255[^ ;]",tok)!=1) tok[0]='\0';
               if (tok[0]>='0'&&tok[0]<='9') n=atol(tok);
               else if (tok[0]!='\0'&&tab_int_coef_read(fname,tok,niodata,iodata,&n)<0) {
-                errmsg("Error: the size of set %s comes from %s, which no Read statement supplies as an integer from a data file (manual 10.1 style (4))\n",record[j].setname,tok);
+                errmsg("Error: the size of set %s comes from %s, which no Read statement supplies as an integer from a data file (GEMPACK manual 10.1 style (4))\n",record[j].setname,tok);
                 return -1;
               }
               if (n<0) {
-                errmsg("Error: malformed size in the declaration of set %s (manual 10.1 style (3))\n",record[j].setname);
+                errmsg("Error: malformed size in the declaration of set %s (GEMPACK manual 10.1 style (3))\n",record[j].setname);
                 return -1;
               }
               snprintf(record[j].readele,sizeof(record[j].readele),"#%ld",n);
@@ -7727,8 +7727,8 @@ void tab_wordops_normalize(char *line) {
    input file class for the message ("closure file"), NULL for TAB. */
 void set_supset_fatal(const char *idx, const char *symname, const char *where, set_def *sets, dim_t sub, dim_t sup) {
   const char *wo=(where!=NULL)?" (":"",*ww=(where!=NULL)?where:"",*wc=(where!=NULL)?")":"";
-  if (idx!=NULL) errmsg("Error: index %s of %s ranges over set %s, which is not %s (the declared set at that argument position) or a declared subset of it; add 'Subset %s is subset of %s;' (manual 10.2)%s%s%s\n",idx,symname,sets[sub].setname,sets[sup].setname,sets[sub].setname,sets[sup].setname,wo,ww,wc);
-  else errmsg("Error: %s is qualified by set %s at an argument position declared over %s, and %s is not a declared subset of %s; add 'Subset %s is subset of %s;' (manual 10.2)%s%s%s\n",symname,sets[sub].setname,sets[sup].setname,sets[sub].setname,sets[sup].setname,sets[sub].setname,sets[sup].setname,wo,ww,wc);
+  if (idx!=NULL) errmsg("Error: index %s of %s ranges over set %s, which is not %s (the declared set at that argument position) or a declared subset of it; add 'Subset %s is subset of %s;' (GEMPACK manual 10.2)%s%s%s\n",idx,symname,sets[sub].setname,sets[sup].setname,sets[sub].setname,sets[sup].setname,wo,ww,wc);
+  else errmsg("Error: %s is qualified by set %s at an argument position declared over %s, and %s is not a declared subset of %s; add 'Subset %s is subset of %s;' (GEMPACK manual 10.2)%s%s%s\n",symname,sets[sub].setname,sets[sup].setname,sets[sub].setname,sets[sup].setname,sets[sub].setname,sets[sup].setname,wo,ww,wc);
   MPI_Abort(PETSC_COMM_WORLD,1);
 }
 
@@ -7885,7 +7885,7 @@ static int set_product_names(char (*a)[NAMESIZE], dim_t n1, const char *nm1,
     }
   }
   for (k=1; k<n1*n2; k++) for (i=0; i<k; i++) if (strcmp(out[i],out[k])==0) {
-      errmsg("Error: set product in the definition of %s produces the duplicate element name %s (manual 11.7.11); rename the factor elements\n",owner,out[k]);
+      errmsg("Error: set product in the definition of %s produces the duplicate element name %s (GEMPACK manual 11.7.11); rename the factor elements\n",owner,out[k]);
       return 0;
     }
   return 1;

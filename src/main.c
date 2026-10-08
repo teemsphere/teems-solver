@@ -1653,7 +1653,7 @@ int main(int argc,char **args) {
     strcpy(solmed,"Gragg");
   }
   if(strcmp(solmed,"Mmid")==0) {/* transitional alias: the multi-step method has always been Gragg's smoothed modified midpoint (Pearson 1991) */
-    if(rank==0)printf("Warning: -solmed Mmid is deprecated and runs Gragg's method (smoothed modified midpoint) — use -solmed Gragg, or -solmed Midpoint for the midpoint method without the smoothing pass (manual 30.2)\n");
+    if(rank==0)printf("Warning: -solmed Mmid is deprecated and runs Gragg's method (smoothed modified midpoint) — use -solmed Gragg, or -solmed Midpoint for the midpoint method without the smoothing pass (GEMPACK manual 30.2)\n");
     strcpy(solmed,"Gragg");
   }
   if(strcmp(solmed,"NoSol")==0) {/* transitional alias: renamed — it is a structure probe, not a degenerate solve */
@@ -1740,12 +1740,12 @@ int main(int argc,char **args) {
     return 1;
   }
   if(teems_sup&&solmethod!=SM_GRAGG&&solmethod!=SM_MIDPOINT&&solmethod!=SM_EULER) {
-    errmsg("Error: -sup saves the updated data of separate multi-step solutions, so it applies to -solmed Euler, Midpoint or Gragg (manual 26.8.1)\n");
+    errmsg("Error: -sup saves the updated data of separate multi-step solutions, so it applies to -solmed Euler, Midpoint or Gragg (GEMPACK manual 26.8.1)\n");
     PetscFinalize();
     return 1;
   }
   if(teems_sup&&subints>1) {
-    errmsg("Error: -sup cannot be used with more than one subinterval (manual 26.8.1)\n");
+    errmsg("Error: -sup cannot be used with more than one subinterval (GEMPACK manual 26.8.1)\n");
     PetscFinalize();
     return 1;
   }
@@ -1999,7 +1999,7 @@ int main(int argc,char **args) {
     else if(solmethod==SM_NOSIM)why="-solmed nosim, which runs no simulation";
     else if(solmethod!=SM_JOHANSEN&&solmethod!=SM_GRAGG&&solmethod!=SM_MIDPOINT&&solmethod!=SM_EULER&&solmethod!=SM_PROBE)why="a Runge-Kutta method, whose stage combination in the log chart has no settled subtotal convention yet";
     if(why!=NULL) {
-      if(rank==0)errmsg("Error: subtotals (manual 29) are not available with %s; use matrix_method LU, SBBD or DBBD with the Johansen, Euler, midpoint or Gragg method\n",why);
+      if(rank==0)errmsg("Error: subtotals (GEMPACK manual 29) are not available with %s; use matrix_method LU, SBBD or DBBD with the Johansen, Euler, midpoint or Gragg method\n",why);
       MPI_Barrier(PETSC_COMM_WORLD);
       MPI_Abort(PETSC_COMM_WORLD,1);
     }
@@ -2089,7 +2089,7 @@ int main(int argc,char **args) {
     if(rank==0)neqstmt=(long)tab_count_statements(tabfile,"equation");
     MPI_Bcast(&neqstmt,1,MPI_LONG,0,PETSC_COMM_WORLD);
     if(neqstmt==0&&solmethod!=SM_NOSIM) {
-      if(rank==0)logmsg(1,"The TAB has no equations: running it as a data program (reads, formulas, assertions and writes; no closure, shocks or solve; manual 5.1.2)\n");
+      if(rank==0)logmsg(1,"The TAB has no equations: running it as a data program (reads, formulas, assertions and writes; no closure, shocks or solve; GEMPACK manual 5.1.2)\n");
       solmethod=SM_NOSIM;
       strcpy(solmed,"nosim");
     }
@@ -2102,7 +2102,7 @@ int main(int argc,char **args) {
         MPI_Barrier(PETSC_COMM_WORLD);
         MPI_Abort(PETSC_COMM_WORLD,1);
       }
-      if(rank==0&&neqstmt>0)logmsg(1,"No-simulation run (-solmed nosim): %ld equation statement(s) are not solved; reads, formulas, assertions and writes only (manual 25.1.8)\n",neqstmt);
+      if(rank==0&&neqstmt>0)logmsg(1,"No-simulation run (-solmed nosim): %ld equation statement(s) are not solved; reads, formulas, assertions and writes only (GEMPACK manual 25.1.8)\n",neqstmt);
     }
   }
   if(nohsl) {
@@ -2131,7 +2131,7 @@ int main(int argc,char **args) {
       snprintf(ls->readele,sizeof(ls->readele),"~%s",teems_loop_syns[i].parent);
       for (par=0; par<nset-teems_loop_nsyn; par++) if (strcmp(sets[par].setname,teems_loop_syns[i].parent)==0) break;
       if (par==nset-teems_loop_nsyn) {
-        errmsg("Error: Loop over %s, which is not a declared set (manual 11.18)\n",teems_loop_syns[i].parent);
+        errmsg("Error: Loop over %s, which is not a declared set (GEMPACK manual 11.18)\n",teems_loop_syns[i].parent);
         MPI_Abort(PETSC_COMM_WORLD,1);
       }
       ls->size=(sets[par].size>0)?1:0;
@@ -2516,7 +2516,7 @@ int main(int argc,char **args) {
     if(shocks_check_floor(vars,nvar,subints,solmethod)<0)MPI_Abort(PETSC_COMM_WORLD,1);
     if(has_sub) {
       if(subtotals_read(subfile,vars,nvar,sets,nset,set_elems,nvarele)<0)MPI_Abort(PETSC_COMM_WORLD,1);
-      logmsg(1,"Subtotals: %d shock group(s) from %s (manual 29)\n",teems_nsub,subfile);
+      logmsg(1,"Subtotals: %d shock group(s) from %s (GEMPACK manual 29)\n",teems_nsub,subfile);
     }
     /* backsolve statements: mark the eliminated elements (the flags ride
        the closure broadcast) and check the condensed system's references
@@ -2539,7 +2539,7 @@ int main(int argc,char **args) {
     int hc=(teems_ncomp>0);
     MPI_Bcast(&hc,1,MPI_INT,0,PETSC_COMM_WORLD);
     if(hc) {
-      if(rank==0)errmsg("Error: subtotals (manual 29) are not available in a model with complementarities yet: the approximate and accurate runs change the closure and the states between steps, so the step right-hand sides are not the shocks alone (manual 52)\n");
+      if(rank==0)errmsg("Error: subtotals (GEMPACK manual 29) are not available in a model with complementarities yet: the approximate and accurate runs change the closure and the states between steps, so the step right-hand sides are not the shocks alone (GEMPACK manual 52)\n");
       MPI_Barrier(PETSC_COMM_WORLD);
       MPI_Abort(PETSC_COMM_WORLD,1);
     }
@@ -2575,7 +2575,7 @@ int main(int argc,char **args) {
     iopt=comp_steps;
     PetscOptionsGetInt(NULL,NULL,"-comp_steps",&iopt,NULL);
     if(iopt<1) {
-      if(rank==0)errmsg("Error: -comp_steps must be a positive Euler step count (manual 51.6)\n");
+      if(rank==0)errmsg("Error: -comp_steps must be a positive Euler step count (GEMPACK manual 51.6)\n");
       MPI_Abort(PETSC_COMM_WORLD,1);
     }
     comp_steps=(int)iopt;
@@ -2584,7 +2584,7 @@ int main(int argc,char **args) {
     comp_redo=iopt?1:0;
     PetscOptionsGetReal(NULL,NULL,"-comp_redo_min_frac",&minfrac_opt,NULL);
     if(minfrac_opt<=0||minfrac_opt>1) {
-      if(rank==0)errmsg("Error: -comp_redo_min_frac must lie in (0,1] (manual 51.6)\n");
+      if(rank==0)errmsg("Error: -comp_redo_min_frac must lie in (0,1] (GEMPACK manual 51.6)\n");
       MPI_Abort(PETSC_COMM_WORLD,1);
     }
     comp_minfrac=(double)minfrac_opt;
@@ -2678,7 +2678,7 @@ int main(int argc,char **args) {
   if(solmethod==SM_NOSIM) {
     if(rank==0) {
       if(npostsim>0||tab_has_postsim_assertions(tabfile))
-        printf("Warning: PostSim statements and assertions are not run without a simulation (manual 12.1); %d PostSim statement(s) skipped\n",npostsim);
+        printf("Warning: PostSim statements and assertions are not run without a simulation (GEMPACK manual 12.1); %d PostSim statement(s) skipped\n",npostsim);
       if(structure_files_write(teems_sol_stem,vars,nvar,sets,nset,set_elems,nsetspace,nvarele)==0) {
         int cofdumped=0,wr;
         long nsets_w=0,nother_w=0,nskip_w=0;
@@ -2881,7 +2881,7 @@ comp_accurate_reentry:
       offset_t neqrows=0;
       for(i=0; i<neq; i++)neqrows+=eq_defs[i].nelem;
       if(neqrows!=(offset_t)VecSize) {
-        errmsg("Error: initial closure check: %ld endogenous components is not equal to the number of equation rows (%ld); %ld variable components, %ld exogenous, %ld backsolved -- make %ld more component(s) %s (manual 23.2.7)\n",(long)VecSize,(long)neqrows,(long)nvarele,(long)nexo,(long)nbselems,(long)(neqrows>(offset_t)VecSize?neqrows-(offset_t)VecSize:(offset_t)VecSize-neqrows),neqrows>(offset_t)VecSize?"endogenous":"exogenous");
+        errmsg("Error: initial closure check: %ld endogenous components is not equal to the number of equation rows (%ld); %ld variable components, %ld exogenous, %ld backsolved -- make %ld more component(s) %s (GEMPACK manual 23.2.7)\n",(long)VecSize,(long)neqrows,(long)nvarele,(long)nexo,(long)nbselems,(long)(neqrows>(offset_t)VecSize?neqrows-(offset_t)VecSize:(offset_t)VecSize-neqrows),neqrows>(offset_t)VecSize?"endogenous":"exogenous");
         MPI_Abort(PETSC_COMM_WORLD,1);
       }
     }
@@ -3527,7 +3527,7 @@ comp_accurate_reentry:
       }
     }
     if(teems_comp_nsub>1) {
-      if(rank==0)printf("Complementarity: subinterval %d of %d -- an approximate and an accurate run (manual 51.7.4)\n",comp_sub+1,teems_comp_nsub);
+      if(rank==0)printf("Complementarity: subinterval %d of %d -- an approximate and an accurate run (GEMPACK manual 51.7.4)\n",comp_sub+1,teems_comp_nsub);
       /* this subinterval's shocks relative to its start: the shares are
          linear in the pre-simulation levels, as for any subinterval run */
       if(rank==rank_hsl)for(i=0; i<nvar; i++) {
@@ -3541,8 +3541,8 @@ comp_accurate_reentry:
       }
     }
     if(comp_do_approx) {
-      if(rank==0)printf("Complementarity: %ld active (endogenous) component(s); approximate simulation as forward Euler with %d steps (manual 51.1.2)\n",(long)teems_comp_active,comp_steps);
-      if(rank==0&&subints>1&&!comp_do_acc)printf("Warning: without an accurate run the complementarity approximate run treats the simulation as one interval (manual 51.7.4 pairs need the accurate run)\n");
+      if(rank==0)printf("Complementarity: %ld active (endogenous) component(s); approximate simulation as forward Euler with %d steps (GEMPACK manual 51.1.2)\n",(long)teems_comp_active,comp_steps);
+      if(rank==0&&subints>1&&!comp_do_acc)printf("Warning: without an accurate run the complementarity approximate run treats the simulation as one interval (GEMPACK manual 51.7.4 pairs need the accurate run)\n");
       solve_comp_approx(nohsl,VecSize,dnz,dnnz,onz,onnz,dnzB,dnnzB,onzB,onnzB,&vece,rank,rank_hsl,mpisize,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,&elem_vals,ncofele,nvarele,&closure_vals,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,eq_addr,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,teems_ma48_cntl4,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,fcomm,comp_steps,comp_redo,comp_minfrac,&xcf);
       if(rank==0&&comp_do_acc&&xcf!=NULL) {
         free(comp_approx_col);
@@ -3561,7 +3561,7 @@ comp_accurate_reentry:
       }
     }
     else {
-      if(rank==0)printf("Complementarity: -comp_do_approx 0; taking the pre-simulation states as the accurate run's targets (manual 51.6)\n");
+      if(rank==0)printf("Complementarity: -comp_do_approx 0; taking the pre-simulation states as the accurate run's targets (GEMPACK manual 51.6)\n");
       VecDestroy(&vece); /* the skipped approximate driver would have consumed it */
     }
     if(comp_do_acc) {
@@ -3598,12 +3598,12 @@ comp_accurate_reentry:
           for(e=0; e<vars[i].nelem; e++)if(CL_EXO(vars[i].offset+e)&&CL_SHOCK(vars[i].offset+e)<=-100+1e-4) {
             char lab[4*NAMESIZE];
             array_element_label(&vars[i],e,lab,sizeof(lab));
-            errmsg("Error: the complementarity accurate run (manual 51.7.1) shocks %s by -100 percent to reach its bound of zero, which the %s method cannot take (manual 30.2); declare %s (change,levels), or use the midpoint or Euler method\n",lab,solmed,vars[i].cofname);
+            errmsg("Error: the complementarity accurate run (GEMPACK manual 51.7.1) shocks %s by -100 percent to reach its bound of zero, which the %s method cannot take (GEMPACK manual 30.2); declare %s (change,levels), or use the midpoint or Euler method\n",lab,solmed,vars[i].cofname);
             MPI_Abort(PETSC_COMM_WORLD,1);
           }
         }
       }
-      if(rank==0)printf("Complementarity: accurate simulation with the %s method (closure/shocks modified per manual 51.7.1)\n",solmed);
+      if(rank==0)printf("Complementarity: accurate simulation with the %s method (closure/shocks modified per GEMPACK manual 51.7.1)\n",solmed);
       teems_comp_xac_base=comp_tot;
       comp_next_phase=1;
       /* tear down pass-1 state and re-enter the closure-dependent
@@ -3638,7 +3638,7 @@ comp_teardown:
       goto comp_accurate_reentry;
     }
     else {
-      if(rank==0)printf("Complementarity: -comp_do_acc 0; the approximate run's solution is the simulation result (manual 51.6)\n");
+      if(rank==0)printf("Complementarity: -comp_do_acc 0; the approximate run's solution is the simulation result (GEMPACK manual 51.6)\n");
       comp_states_free();
     }
   }
@@ -3659,9 +3659,9 @@ comp_teardown:
     offset_t comp_nbad=0;
     if(rank==rank_hsl)comp_nbad=comp_verify_states(sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,comp_sberr_warn);
     if(rank==rank_hsl&&comp_nbad>0) {
-      if(comp_sberr_warn)printf("Warning: %ld complementarity state/bound error(s) after the accurate run (treated as warnings per -comp_sberr_warn; check the log carefully, manual 51.6)\n",(long)comp_nbad);
+      if(comp_sberr_warn)printf("Warning: %ld complementarity state/bound error(s) after the accurate run (treated as warnings per -comp_sberr_warn; check the log carefully, GEMPACK manual 51.6)\n",(long)comp_nbad);
       else {
-        errmsg("Error: %ld complementarity state/bound error(s) after the accurate run; rerun with more Euler steps (-comp_steps) or smaller shocks, or downgrade with -comp_sberr_warn 1 (manual 51.5.4/51.6)\n",(long)comp_nbad);
+        errmsg("Error: %ld complementarity state/bound error(s) after the accurate run; rerun with more Euler steps (-comp_steps) or smaller shocks, or downgrade with -comp_sberr_warn 1 (GEMPACK manual 51.5.4/51.6)\n",(long)comp_nbad);
         MPI_Abort(PETSC_COMM_WORLD,1);
       }
     }
@@ -3847,13 +3847,13 @@ comp_teardown:
     MPI_Allreduce(&teems_resid_max,&rmax,1,MPI_DOUBLE,MPI_MAX,PETSC_COMM_WORLD);
     MPI_Allreduce(rl,rls,3,MPI_LONG,MPI_SUM,PETSC_COMM_WORLD);
     if(rank==0&&(rls[0]>0||rls[2]>0)) {
-      if(rls[0]>0)logmsg(1,"Maximum residual ratio across the whole simulation is %.8e (%ld solves checked; manual 30.1.5)\n",rmax,rls[0]);
+      if(rls[0]>0)logmsg(1,"Maximum residual ratio across the whole simulation is %.8e (%ld solves checked; GEMPACK manual 30.1.5)\n",rmax,rls[0]);
       if(rls[2]>0)logmsg(1,"Residual ratios not checked for %ld solve(s): this matrix method releases the LHS matrix before the solve completes\n",rls[2]);
       stats_resid_patch(iodata,niodata,noutdata,nsoldata,rmax,rls[0],rls[1],rls[2]);
-      if(rls[1]>0)printf("Warning: there have been %ld warnings about equations not being satisfied very accurately; the more there are, the more likely it is that the solution is not valid (manual 30.6.1)\n",rls[1]);
+      if(rls[1]>0)printf("Warning: there have been %ld warnings about equations not being satisfied very accurately; the more there are, the more likely it is that the solution is not valid (GEMPACK manual 30.6.1)\n",rls[1]);
       /* GEMPACK finishes and saves every file, then ends with an error
          (30.6.1); errmsg sets the exit status without aborting */
-      if(rls[1]>100)errmsg("Error: more than 100 equations were not satisfied very accurately (%ld warnings); all files are written, but the solution may not be valid (manual 30.6.1)\n",rls[1]);
+      if(rls[1]>100)errmsg("Error: more than 100 equations were not satisfied very accurately (%ld warnings); all files are written, but the solution may not be valid (GEMPACK manual 30.6.1)\n",rls[1]);
     }
   }
   {

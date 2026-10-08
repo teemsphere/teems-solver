@@ -963,20 +963,20 @@ static int pc_tokens_line(char *line, const char *tabfile, int rewrite) {
     {
       int w=pc_find(tok+2,strlen(tok+2));
       if (w>=0&&pc_vars[w].kind==4) {
-        errmsg("Error: %s names no variable: the linear variable of levels variable %s is %s (LINEAR_NAME/LINEAR_VAR, manual 9.2.2): %.200s\n",tok,tok+2,pc_vars[w].lin,line);
+        errmsg("Error: %s names no variable: the linear variable of levels variable %s is %s (LINEAR_NAME/LINEAR_VAR, GEMPACK manual 9.2.2): %.200s\n",tok,tok+2,pc_vars[w].lin,line);
         return -1;
       }
     }
     if (kind==1) {
-      errmsg("Error: %s refers to linear variable %s; a linear variable is named by itself (p_/c_ names belong to levels variables, manual 9.2.2): %.200s\n",tok,tok+2,line);
+      errmsg("Error: %s refers to linear variable %s; a linear variable is named by itself (p_/c_ names belong to levels variables, GEMPACK manual 9.2.2): %.200s\n",tok,tok+2,line);
       return -1;
     }
     if (kind==2&&tok[0]=='c') {
-      errmsg("Error: %s: levels variable %s is a percentage-change variable; its linear variable is p_%s (manual 9.2.2): %.200s\n",tok,tok+2,tok+2,line);
+      errmsg("Error: %s: levels variable %s is a percentage-change variable; its linear variable is p_%s (GEMPACK manual 9.2.2): %.200s\n",tok,tok+2,tok+2,line);
       return -1;
     }
     if (kind==3&&tok[0]=='p') {
-      errmsg("Error: %s: levels variable %s is a change variable; its linear variable is c_%s (manual 9.2.2): %.200s\n",tok,tok+2,tok+2,line);
+      errmsg("Error: %s: levels variable %s is a change variable; its linear variable is c_%s (GEMPACK manual 9.2.2): %.200s\n",tok,tok+2,tok+2,line);
       return -1;
     }
     if (kind==3&&rewrite) n[0]='p';
@@ -1033,7 +1033,7 @@ static int reduce_linvar_check(const char *line) {
       kd=pc_kind(s0,len);
       pre=(len>2&&(s0[0]=='p'||s0[0]=='c')&&s0[1]=='_'&&pc_kind(s0+2,len-2)>=2);
       if (kd==1||pre) {
-        errmsg("Error: linear variable %.*s inside PROD, MAXS or MINS; linear variables are not permitted there (manual 11.4.4)\n",(int)len,s0);
+        errmsg("Error: linear variable %.*s inside PROD, MAXS or MINS; linear variables are not permitted there (GEMPACK manual 11.4.4)\n",(int)len,s0);
         return -1;
       }
     }
@@ -1263,7 +1263,7 @@ static int num_exp_expand(char *s, size_t cap) {
         char num[TABREADLINE];
         long p,q,m=0;
         if (k>99||nd+(size_t)k+3>=sizeof(num)) {
-          errmsg("Error: numeric constant %.*s is out of the supported range (exponent notation, manual 11.4.9)\n",(int)(ee-ms)>200?200:(int)(ee-ms),s+ms);
+          errmsg("Error: numeric constant %.*s is out of the supported range (exponent notation, GEMPACK manual 11.4.9)\n",(int)(ee-ms)>200?200:(int)(ee-ms),s+ms);
           return -1;
         }
         p=(long)dp+(neg?-k:k);
@@ -1432,7 +1432,7 @@ static int if_in_lower(char *s, size_t cap, char *pre, size_t precap, int *seq) 
     cond[cm-o-1]='\0';
     if (sscanf(cond," %255[a-z0-9_@] in %255[a-z0-9_@] %n",idx,set,&n)<2||cond[n]!='\0') {
       if (strstr(cond," in ")!=NULL&&strpbrk(cond,"&|`")!=NULL) {
-        errmsg("Error: a condition \"index IN set\" cannot be combined with AND, OR or NOT (manual 11.4.7 rule 5): %.200s\n",cond);
+        errmsg("Error: a condition \"index IN set\" cannot be combined with AND, OR or NOT (GEMPACK manual 11.4.7 rule 5): %.200s\n",cond);
         return -1;
       }
       continue;
@@ -1457,7 +1457,7 @@ static int if_in_lower(char *s, size_t cap, char *pre, size_t precap, int *seq) 
       if (sscanf(s+p,"%255[a-z0-9_@]",rng)!=1) rng[0]='\0';
     }
     if (rng[0]=='\0') {
-      errmsg("Error: index %s in \"%s in %s\" is not active where the IF stands; it must come from an ALL quantifier or an enclosing SUM (manual 11.4.7 rule 1)\n",idx,idx,set);
+      errmsg("Error: index %s in \"%s in %s\" is not active where the IF stands; it must come from an ALL quantifier or an enclosing SUM (GEMPACK manual 11.4.7 rule 1)\n",idx,idx,set);
       return -1;
     }
     (*seq)++;
@@ -1481,7 +1481,7 @@ static int if_in_lower(char *s, size_t cap, char *pre, size_t precap, int *seq) 
       strcpy(tail,s+c+1);
       s[k]='\0';
       if ((size_t)snprintf(out,sizeof(out),"%ssum(%s,%s: %s = %s,%s)%s",s,jidx,nset,jidx,idx,val,tail)>=cap) {
-        errmsg("Error: statement too long after rewriting \"%s in %s\" (manual 11.4.7)\n",idx,set);
+        errmsg("Error: statement too long after rewriting \"%s in %s\" (GEMPACK manual 11.4.7)\n",idx,set);
         return -1;
       }
       strcpy(s,out);
@@ -1613,7 +1613,7 @@ static int tab_preprocess_run(char *filename, char *newtabfile) {
         for (z=rawline; *z!='\0'; z++) if (*z=='\032'||*z=='\t'||*z=='\f'||*z=='\v') *z=' ';
       }
       if (strong_comment_strip(rawline,&sdepth)<0) {
-        errmsg("Error: '!]]!' at line %ld of the TAB file closes a strong comment that was never opened (manual 11.1.5)\n",rawno);
+        errmsg("Error: '!]]!' at line %ld of the TAB file closes a strong comment that was never opened (GEMPACK manual 11.1.5)\n",rawno);
         fclose(filehandle);
         fclose(fout);
         return -1;
@@ -1732,7 +1732,7 @@ static int tab_preprocess_run(char *filename, char *newtabfile) {
         /* Subset (BY_ELEMENTS) is the default reading (manual 10.2);
            (BY_NUMBERS) is obsolete */
         if(str_find_ci(readline,"(by_numbers)")>-1) {
-          errmsg("Error: Subset (by_numbers) is obsolete and not supported; list the subset's elements by name (manual 10.2)\n");
+          errmsg("Error: Subset (by_numbers) is obsolete and not supported; list the subset's elements by name (GEMPACK manual 10.2)\n");
           fclose(filehandle);
           fclose(fout);
           return -1;
@@ -1846,7 +1846,7 @@ static int tab_preprocess_run(char *filename, char *newtabfile) {
           if (kwless_unknown(readline,commsyntax,uw,sizeof(uw))) {
             char *t=readline;
             while (*t==' ') t++;
-            errmsg("Error: unknown statement keyword '%s' (a statement without a keyword continues the previous %s statement, manual 11.1.1, and this one cannot): %.120s\n",uw,commsyntax,t);
+            errmsg("Error: unknown statement keyword '%s' (a statement without a keyword continues the previous %s statement, GEMPACK manual 11.1.1, and this one cannot): %.120s\n",uw,commsyntax,t);
             fclose(filehandle);
             fclose(fout);
             return -1;
@@ -1856,8 +1856,8 @@ static int tab_preprocess_run(char *filename, char *newtabfile) {
       if (strchr(readline,';')!=NULL&&(strcmp(commsyntax,"display")==0||strcmp(commsyntax,"transfer")==0)) {
         char *t=readline;
         while (*t==' ') t++;
-        if (commsyntax[0]=='d') printf("Warning: DISPLAY statement ignored (TEEMS writes every coefficient to the coefficient dump; manual 10.12): %.120s\n",t);
-        else printf("Warning: TRANSFER statement ignored (TEEMS writes no Header Array output files; manual 10.15): %.120s\n",t);
+        if (commsyntax[0]=='d') printf("Warning: DISPLAY statement ignored (TEEMS writes every coefficient to the coefficient dump; GEMPACK manual 10.12): %.120s\n",t);
+        else printf("Warning: TRANSFER statement ignored (TEEMS writes no Header Array output files; GEMPACK manual 10.15): %.120s\n",t);
         readline[0]='\0';
         continue;
       }
@@ -1941,7 +1941,7 @@ static int tab_preprocess_run(char *filename, char *newtabfile) {
     }
   }
   if (sdepth>0) {
-    errmsg("Error: a strong comment opened with '![[!' in the TAB file is never closed by '!]]!' (%d still open at the end of the file; manual 11.1.5)\n",sdepth);
+    errmsg("Error: a strong comment opened with '![[!' in the TAB file is never closed by '!]]!' (%d still open at the end of the file; GEMPACK manual 11.1.5)\n",sdepth);
     fclose(filehandle);
     fclose(fout);
     return -1;
@@ -2484,7 +2484,7 @@ int outputs_write_csv(char *filename, char *newdatlogname, char *newdatfile,set_
             map_def *md=&teems_maps[mm];
             dim_t n1=sets[md->fromset].size;
             if (!mapping_ready(mm)) {
-              errmsg("Error: mapping %s is written before all of its values are assigned (manual 11.9.10)\n",md->mapname);
+              errmsg("Error: mapping %s is written before all of its values are assigned (GEMPACK manual 11.9.10)\n",md->mapname);
               fclose(filehandle);
               fclose(fout);
               return -1;
@@ -2627,7 +2627,7 @@ int tab_write_variables(char *filename, char *newtabfile,array_def *vars,offset_
         while((qf=str_find_ci(&line[qk],"(all,"))>-1) {
           for(qk=qk+qf+5; line[qk]!='\0'&&line[qk]!=')'; qk++) {
             if(line[qk]==':') {
-              errmsg("Error: conditions on Equation quantifiers are not supported (row pruning); put the condition on a sum inside the equation (manual 11.4.11)\n");
+              errmsg("Error: conditions on Equation quantifiers are not supported (row pruning); put the condition on a sum inside the equation (GEMPACK manual 11.4.11)\n");
               fclose(filehandle);
               fclose(fout);
               MPI_Abort(PETSC_COMM_WORLD,1);
@@ -2643,7 +2643,7 @@ int tab_write_variables(char *filename, char *newtabfile,array_def *vars,offset_
     if ((eqpos==0||eqpos==1||updpos==0||updpos==1)&&strstr(line,"if")!=NULL) {
       char badv[NAMESIZE];
       if (if_cond_linear_var(line,vars,nvar,badv)) {
-        errmsg("Error: an IF condition reads variable %s; conditions take coefficients and levels variables, not linear variables (manual 11.4.5): %.200s\n",badv,line);
+        errmsg("Error: an IF condition reads variable %s; conditions take coefficients and levels variables, not linear variables (GEMPACK manual 11.4.5): %.200s\n",badv,line);
         fclose(filehandle);
         fclose(fout);
         MPI_Abort(PETSC_COMM_WORLD,1);
@@ -2990,7 +2990,7 @@ int tab_postsim_split(char *newtabfile, char *psfile) {
         scan[si]='\0';
       }
       for(k=0;k<npsn;k++)if(line_has_ident(scan,psnames[k])) {
-        errmsg("Error: ordinary statement references PostSim-declared name %s (manual 12.2.1): %s",psnames[k],line);
+        errmsg("Error: ordinary statement references PostSim-declared name %s (GEMPACK manual 12.2.1): %s",psnames[k],line);
         fclose(fin);
         fclose(fmain);
         fclose(fps);
@@ -3010,7 +3010,7 @@ int tab_postsim_split(char *newtabfile, char *psfile) {
       continue;
     }
     if(strncmp(line,"variable ",9)==0||strncmp(line,"equation ",9)==0||strncmp(line,"update ",7)==0||strncmp(line,"transfer ",9)==0||strncmp(line,"omit ",5)==0||strncmp(line,"substitute ",11)==0||strncmp(line,"backsolve ",10)==0||strncmp(line,"complementarity",15)==0||strstr(line,"(default")!=NULL) {
-      errmsg("Error: statement not allowed in a PostSim section (manual 12.2.1): %s",line);
+      errmsg("Error: statement not allowed in a PostSim section (GEMPACK manual 12.2.1): %s",line);
       fclose(fin);
       fclose(fmain);
       fclose(fps);
@@ -3085,7 +3085,7 @@ int tab_postsim_split(char *newtabfile, char *psfile) {
   for(k=0;k<npslog;k++) {
     int k2;
     for(k2=0;k2<nordlog;k2++)if(strcmp(pslogs[k],ordlogs[k2])==0) {
-      errmsg("Error: file %s is read in both the ordinary and PostSim parts (manual 12.2.3); split the data across two files\n",pslogs[k]);
+      errmsg("Error: file %s is read in both the ordinary and PostSim parts (GEMPACK manual 12.2.3); split the data across two files\n",pslogs[k]);
       free(psnames);
       free(ordlogs);
       free(pslogs);
@@ -3682,7 +3682,7 @@ static int sb_leaf_keep(char *fname, cmf_file_entry *iodata, int niodata, const 
         }
       }
       if (oi<0) {
-        errmsg("Error: set builder %s: unsupported condition '%s' (supported: COEF(...) <op> const, or a mapping-conditional sum <op> const; manual 10.1.3)\n",name,cond);
+        errmsg("Error: set builder %s: unsupported condition '%s' (supported: COEF(...) <op> const, or a mapping-conditional sum <op> const; GEMPACK manual 10.1.3)\n",name,cond);
         return -1;
       }
       strncpy(op,cond+oi,olen);
@@ -3692,7 +3692,7 @@ static int sb_leaf_keep(char *fname, cmf_file_entry *iodata, int niodata, const 
         cval=strtod(cond+oi+olen,&endp);
         while (endp!=NULL&&*endp==' ') endp++;
         if (endp==cond+oi+olen||endp==NULL||*endp!='\0') {
-          errmsg("Error: set builder %s: unsupported condition '%s' (a single comparison against a numeric constant; compound conditions are not supported; manual 10.1.3)\n",name,cond);
+          errmsg("Error: set builder %s: unsupported condition '%s' (a single comparison against a numeric constant; compound conditions are not supported; GEMPACK manual 10.1.3)\n",name,cond);
           return -1;
         }
       }
@@ -3725,7 +3725,7 @@ static int sb_leaf_keep(char *fname, cmf_file_entry *iodata, int niodata, const 
             a2[tl]='\0';
           }
           if (!sb_eqi(a1,idx)) {
-            errmsg("Error: set builder %s: $POS(%s) must take the builder's index %s (manual 11.5.6)\n",name,a1,idx);
+            errmsg("Error: set builder %s: $POS(%s) must take the builder's index %s (GEMPACK manual 11.5.6)\n",name,a1,idx);
             ok=0;
           }
           if (ok&&a2[0]!='\0') {
@@ -3742,7 +3742,7 @@ static int sb_leaf_keep(char *fname, cmf_file_entry *iodata, int niodata, const 
               int e;
               for (e=0; e<ns; e++) if (sb_eqi(sele[e],srcele[k])) break;
               if (e==ns) {
-                errmsg("Error: set builder %s: element %s of %s is not in %s; $POS(%s,%s) needs %s to range over a subset of %s (manual 11.5.6)\n",name,srcele[k],src,a2,a1,a2,a1,a2);
+                errmsg("Error: set builder %s: element %s of %s is not in %s; $POS(%s,%s) needs %s to range over a subset of %s (GEMPACK manual 11.5.6)\n",name,srcele[k],src,a2,a1,a2,a1,a2);
                 ok=0;
                 break;
               }
@@ -3818,7 +3818,7 @@ static int sb_leaf_keep(char *fname, cmf_file_entry *iodata, int niodata, const 
           free(mlab);
           free(v2);
           if (!ok) {
-            errmsg("Error: set builder %s: cannot evaluate the mapping-conditional sum '%s' (the mapping must be file-Read and the summed coefficient file-Read or an indicator assigned only constants; manual 10.1.3)\n",name,opnd);
+            errmsg("Error: set builder %s: cannot evaluate the mapping-conditional sum '%s' (the mapping must be file-Read and the summed coefficient file-Read or an indicator assigned only constants; GEMPACK manual 10.1.3)\n",name,opnd);
             return -1;
           }
         }
@@ -3856,7 +3856,7 @@ static int sb_leaf_keep(char *fname, cmf_file_entry *iodata, int niodata, const 
               cv=NULL;
               ok=2;
             } else {
-              errmsg("Error: set builder %s: condition coefficient %s must be Read from an input file or be an indicator assigned only constants (formula-computed operands cannot drive set resolution; manual 10.1.3)\n",name,coef);
+              errmsg("Error: set builder %s: condition coefficient %s must be Read from an input file or be an indicator assigned only constants (formula-computed operands cannot drive set resolution; GEMPACK manual 10.1.3)\n",name,coef);
               return -1;
             }
           }
@@ -3914,7 +3914,7 @@ static int sb_leaf_keep(char *fname, cmf_file_entry *iodata, int niodata, const 
             free(cv);
           }
           if (!ok) {
-            errmsg("Error: set builder %s: cannot evaluate condition '%s' (declaration/read/dimension resolution failed; manual 10.1.3)\n",name,cond);
+            errmsg("Error: set builder %s: cannot evaluate condition '%s' (declaration/read/dimension resolution failed; GEMPACK manual 10.1.3)\n",name,cond);
             return -1;
           }
         }

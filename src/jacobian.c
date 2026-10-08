@@ -537,7 +537,7 @@ static icond *linvar_icond(const char *cond, const char *vname, quantifier *fram
   icond *ic=(icond *)malloc(sizeof(icond));
   snprintf(ctx,sizeof(ctx),"a sum over variable %s",vname);
   if (ic==NULL||!icond_compile(cond,frame,nframe,sets,set_elems,ic,ctx)) {
-    errmsg("Error: unsupported sum condition '%s' on a sum containing variables (variable %s); only comparisons of indices, set mappings of indices and elements, joined by AND, OR and NOT, are supported there (manual 11.4.11)\n",cond,vname);
+    errmsg("Error: unsupported sum condition '%s' on a sum containing variables (variable %s); only comparisons of indices, set mappings of indices and elements, joined by AND, OR and NOT, are supported there (GEMPACK manual 11.4.11)\n",cond,vname);
     MPI_Abort(PETSC_COMM_WORLD,1);
   }
   return ic;
@@ -671,13 +671,13 @@ static void linvar_map_dim_check(eq_var_ref *ref, dim_t d, offset_t frame_setid,
   if((offset_t)md->toset!=argset) {
     *css=set_supset_slot(sets,md->toset,(dim_t)argset);
     if(*css<0) {
-      errmsg("Error: mapping %s does not map into the argument set at that position of %s (its codomain %s is neither %s nor a declared subset of it; manual 11.9.7)\n",md->mapname,ref->LinVarName,sets[md->toset].setname,sets[argset].setname);
+      errmsg("Error: mapping %s does not map into the argument set at that position of %s (its codomain %s is neither %s nor a declared subset of it; GEMPACK manual 11.9.7)\n",md->mapname,ref->LinVarName,sets[md->toset].setname,sets[argset].setname);
       MPI_Abort(PETSC_COMM_WORLD,1);
     }
   }
   offset_range_check((dim_t)frame_setid,*dss,md->fromset,ref->dimleadlag[d],md->mapname,ref->LinVarName);
   if(!mapping_ready((dim_t)(ref->dimmapid[d]-1))) {
-    errmsg("Error: mapping %s is used (in %s) before a Formula has assigned all of its values (manual 10.13.1/11.9.1)\n",md->mapname,ref->LinVarName);
+    errmsg("Error: mapping %s is used (in %s) before a Formula has assigned all of its values (GEMPACK manual 10.13.1/11.9.1)\n",md->mapname,ref->LinVarName);
     MPI_Abort(PETSC_COMM_WORLD,1);
   }
   mapping_frame_check((dim_t)(ref->dimmapid[d]-1),(dim_t)frame_setid,*dss,ref->dimleadlag[d],ref->LinVarName);
@@ -731,7 +731,7 @@ static int lin_isnamec(char ch) {
 
 static void lin_fatal(lin_ctx *c, const char *what) {
   if(c->fail) return;
-  errmsg("Error: equation %s is not linear in its variables: %s. A linear equation may use a linear variable only as coefficient-expression * variable (manual 11.4.8); a nonlinear relation between levels is written as Equation (Levels) over Variable (Levels) declarations (manual 9.2, 18.1)\n",c->eqname,what);
+  errmsg("Error: equation %s is not linear in its variables: %s. A linear equation may use a linear variable only as coefficient-expression * variable (GEMPACK manual 11.4.8); a nonlinear relation between levels is written as Equation (Levels) over Variable (Levels) declarations (GEMPACK manual 9.2, 18.1)\n",c->eqname,what);
   c->fail=1;
 }
 
@@ -897,7 +897,7 @@ static void eq_linearity_check(const char *text, const char *eqname, array_def *
     lin_fatal_tok(&c,"unexpected text at",c.p,n>40?40:n);
   }
   if(!c.fail&&d==0) {
-    errmsg("Error: equation %s contains no linear variable (manual 11.4.8: every term of a linear equation is coefficient-expression * variable)\n",eqname);
+    errmsg("Error: equation %s contains no linear variable (GEMPACK manual 11.4.8: every term of a linear equation is coefficient-expression * variable)\n",eqname);
     c.fail=1;
   }
   if(c.fail) MPI_Abort(PETSC_COMM_WORLD,1);
@@ -1876,7 +1876,7 @@ static void eq_reduce_linvar_check(const char *sumtext) {
     size_t q;
     snprintf(shown,sizeof(shown),"%s",sumtext);
     for (q=0; shown[q]!='\0'; q++) if (sum_mark_fold(shown[q])!=SUM_FOLD_SUM) shown[q]=' ';
-    errmsg("Error: linear variables are not permitted inside PROD, MAXS or MINS (manual 11.4.4): %s\n",shown);
+    errmsg("Error: linear variables are not permitted inside PROD, MAXS or MINS (GEMPACK manual 11.4.4): %s\n",shown);
     MPI_Abort(PETSC_COMM_WORLD,1);
   }
 }

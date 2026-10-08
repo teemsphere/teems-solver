@@ -302,7 +302,7 @@ static int lv_homo_default(const char *defval, char *cur) {
 static int lv_homo_note(lv_ctx *c, const char *hname) {
   int i;
   for (i = 0; i < c->nhomo; i++) if (strcmp(c->homo[i], hname) == 0) return 0;
-  if (c->nhomo >= LV_MAXSUM) { errmsg("Error: more than %d ADD_HOMOTOPY variable names (manual 26.7.5)\n", LV_MAXSUM); return -1; }
+  if (c->nhomo >= LV_MAXSUM) { errmsg("Error: more than %d ADD_HOMOTOPY variable names (GEMPACK manual 26.7.5)\n", LV_MAXSUM); return -1; }
   strcpy(c->homo[c->nhomo++], hname);
   return 0;
 }
@@ -528,7 +528,7 @@ static int lv_parse_primary(lv_cur *cur) {
         if (f == 7) continue;
         if ((int)strlen(lv_funcs[f]) == nmlen && strncmp(nm, lv_funcs[f], nmlen) == 0) {
           cur->fail = 1;
-          lv_err(c, "only SQRT, EXP, LOGE, LOG10 and IF may appear in levels equations (manual 11.4.10); linearize this one by hand");
+          lv_err(c, "only SQRT, EXP, LOGE, LOG10 and IF may appear in levels equations (GEMPACK manual 11.4.10); linearize this one by hand");
           return -1;
         }
       }
@@ -552,13 +552,13 @@ static int lv_parse_primary(lv_cur *cur) {
         if (k >= 0) {
           if (!c->cf[k].param) {
             cur->fail = 1;
-            lv_err(c, "non-parameter coefficient in a levels equation (manual 11.4.8: only levels variables, parameters and constants)");
+            lv_err(c, "non-parameter coefficient in a levels equation (GEMPACK manual 11.4.8: only levels variables, parameters and constants)");
             return -1;
           }
           c->nodes[n].refkind = LR_PARAM;
         } else if (lv_find_linvar(c, c->nodes[n].name, c->nodes[n].namelen) >= 0) {
           cur->fail = 1;
-          lv_err(c, "linear variable in a levels equation (manual 11.4.8)");
+          lv_err(c, "linear variable in a levels equation (GEMPACK manual 11.4.8)");
           return -1;
         } else {
           cur->fail = 1;
@@ -880,7 +880,7 @@ static int lv_scan(lv_ctx *c, char *fname, bool *any) {
         if (h.has_change) ch = true;
         if (h.has_percent) ch = false;
         if (!lv && (h.linname[0] != '\0' || h.linvar[0] != '\0')) {
-          errmsg("Error: variable %.*s: LINEAR_NAME= and LINEAR_VAR= qualify levels variables only (manual 9.2.2)\n", h.namelen, h.name);
+          errmsg("Error: variable %.*s: LINEAR_NAME= and LINEAR_VAR= qualify levels variables only (GEMPACK manual 9.2.2)\n", h.namelen, h.name);
           fclose(f);
           return -1;
         }
@@ -898,7 +898,7 @@ static int lv_scan(lv_ctx *c, char *fname, bool *any) {
           strcpy(e->valname, e->decl);
           e->change = ch;
           if (h.linname[0] != '\0' && h.linvar[0] != '\0') {
-            errmsg("Error: levels variable %s takes LINEAR_NAME= or LINEAR_VAR=, not both (manual 9.2.2)\n", e->decl);
+            errmsg("Error: levels variable %s takes LINEAR_NAME= or LINEAR_VAR=, not both (GEMPACK manual 9.2.2)\n", e->decl);
             fclose(f);
             return -1;
           }
@@ -907,7 +907,7 @@ static int lv_scan(lv_ctx *c, char *fname, bool *any) {
             bool taken = lv_find_linvar(c, h.linname, (int)strlen(h.linname)) >= 0 || lv_find_cf(c, h.linname, (int)strlen(h.linname)) >= 0;
             for (k = 0; k < c->nlv && !taken; k++) if (strcmp(c->lv[k].name, h.linname) == 0 || strcmp(c->lv[k].decl, h.linname) == 0) taken = true;
             if (taken) {
-              errmsg("Error: LINEAR_NAME=%s of levels variable %s: a variable or coefficient %s is already declared (manual 9.2.2)\n", h.linname, e->decl, h.linname);
+              errmsg("Error: LINEAR_NAME=%s of levels variable %s: a variable or coefficient %s is already declared (GEMPACK manual 9.2.2)\n", h.linname, e->decl, h.linname);
               fclose(f);
               return -1;
             }
@@ -921,12 +921,12 @@ static int lv_scan(lv_ctx *c, char *fname, bool *any) {
           } else {
             k = lv_find_linvar(c, h.linvar, (int)strlen(h.linvar));
             if (k < 0) {
-              errmsg("Error: LINEAR_VAR=%s of levels variable %s: no linear variable %s is declared before it (manual 9.2.2)\n", h.linvar, e->decl, h.linvar);
+              errmsg("Error: LINEAR_VAR=%s of levels variable %s: no linear variable %s is declared before it (GEMPACK manual 9.2.2)\n", h.linvar, e->decl, h.linvar);
               fclose(f);
               return -1;
             }
             if (strcmp(c->linsets[k], sig) != 0) {
-              errmsg("Error: LINEAR_VAR=%s of levels variable %s: its arguments range over (%s), the levels variable's over (%s); they must match (manual 9.2.2)\n", h.linvar, e->decl, c->linsets[k], sig);
+              errmsg("Error: LINEAR_VAR=%s of levels variable %s: its arguments range over (%s), the levels variable's over (%s); they must match (GEMPACK manual 9.2.2)\n", h.linvar, e->decl, c->linsets[k], sig);
               fclose(f);
               return -1;
             }
@@ -1091,7 +1091,7 @@ static int lv_prod_expand(lv_ctx *c, char *buf, size_t cap) {
     for (b = buf; *b != '\0'; b++)
       if (*b == SUM_MARK_PROD || *b == SUM_MARK_MAXS || *b == SUM_MARK_MINS) { m = b; break; }
     if (m == NULL) return 0;
-    if (*m != SUM_MARK_PROD) return lv_err(c, "MAXS and MINS may not appear in levels equations (manual 11.4.4); only PROD may hold levels variables");
+    if (*m != SUM_MARK_PROD) return lv_err(c, "MAXS and MINS may not appear in levels equations (GEMPACK manual 11.4.4); only PROD may hold levels variables");
     b = m - 1;
     if (b - 3 < buf) return lv_err(c, "internal: malformed PROD");
     for (e = b; *e != '\0'; e++) {
@@ -1149,7 +1149,7 @@ static int lv_emit_linearized(lv_ctx *c, const char *p, FILE *fout, const char *
     {
       const char *q;
       for (q = p; q <= p + ge; q++)
-        if (*q == ':') return lv_err(c, "conditions on Equation quantifiers are not supported (manual 11.4.11)");
+        if (*q == ':') return lv_err(c, "conditions on Equation quantifiers are not supported (GEMPACK manual 11.4.11)");
     }
     p += ge + 1;
     while (*p == ' ') p++;
@@ -1317,7 +1317,7 @@ static int cp_parse_stmt(lv_ctx *c, char *line, comp_def *cp, char *expr, size_t
   c->stmt = line;
   memset(cp, 0, sizeof(*cp));
   while (*p == ' ') p++;
-  if (*p != '(') return lv_err(c, "Complementarity needs a (variable = ..., lower_bound/upper_bound = ...) qualifier (manual 10.17)");
+  if (*p != '(') return lv_err(c, "Complementarity needs a (variable = ..., lower_bound/upper_bound = ...) qualifier (GEMPACK manual 10.17)");
   ge = lv_group_end(p);
   if (ge < 0) return lv_err(c, "unbalanced Complementarity qualifier");
   {
@@ -1363,11 +1363,11 @@ static int cp_parse_stmt(lv_ctx *c, char *line, comp_def *cp, char *expr, size_t
                 }
               } else if (lv_find_cf(c, val, (int)strlen(val)) >= 0) {
                 if (!c->cf[lv_find_cf(c, val, (int)strlen(val))].param)
-                  return lv_err(c, "a Complementarity bound must be a levels variable, a Coefficient(parameter) or a real constant (manual 10.17); non-parameter coefficient");
+                  return lv_err(c, "a Complementarity bound must be a levels variable, a Coefficient(parameter) or a real constant (GEMPACK manual 10.17); non-parameter coefficient");
                 if (lower) { cp->lower_kind = 3; strcpy(cp->lower_name, val); strcpy(cp->lval, val); }
                 else { cp->upper_kind = 3; strcpy(cp->upper_name, val); strcpy(cp->uval, val); }
               } else if (lv_find_linvar(c, val, (int)strlen(val)) >= 0) {
-                return lv_err(c, "a Complementarity bound must be a levels variable, a Coefficient(parameter) or a real constant (manual 10.17); linear variable");
+                return lv_err(c, "a Complementarity bound must be a levels variable, a Coefficient(parameter) or a real constant (GEMPACK manual 10.17); linear variable");
               } else {
                 return lv_err(c, "unknown name as Complementarity bound (must be a levels variable, a Coefficient(parameter) or a real constant)");
               }
@@ -1381,18 +1381,18 @@ static int cp_parse_stmt(lv_ctx *c, char *line, comp_def *cp, char *expr, size_t
     }
   }
   p += ge + 1;
-  if (cp->varname[0] == '\0') return lv_err(c, "Complementarity needs a VARIABLE qualifier (manual 11.14)");
-  if (cp->lower_kind == 0 && cp->upper_kind == 0) return lv_err(c, "Complementarity needs at least one of LOWER_BOUND/UPPER_BOUND (manual 10.17)");
+  if (cp->varname[0] == '\0') return lv_err(c, "Complementarity needs a VARIABLE qualifier (GEMPACK manual 11.14)");
+  if (cp->lower_kind == 0 && cp->upper_kind == 0) return lv_err(c, "Complementarity needs at least one of LOWER_BOUND/UPPER_BOUND (GEMPACK manual 10.17)");
   /* X must be a LEVELS variable */
   {
     int xvi = lv_find_lv(c, cp->varname, (int)strlen(cp->varname));
     if (xvi < 0) xvi = lv_find_lv_decl(c, cp->varname, (int)strlen(cp->varname));
     if (xvi < 0) {
       if (lv_find_linvar(c, cp->varname, (int)strlen(cp->varname)) >= 0)
-        return lv_err(c, "the Complementarity variable must be a LEVELS variable (manual 11.14); linear variable");
+        return lv_err(c, "the Complementarity variable must be a LEVELS variable (GEMPACK manual 11.14); linear variable");
       if (lv_find_cf(c, cp->varname, (int)strlen(cp->varname)) >= 0)
-        return lv_err(c, "the Complementarity variable must be a LEVELS variable (manual 11.14); coefficient");
-      return lv_err(c, "the Complementarity variable is not declared (must be a LEVELS variable, manual 11.14)");
+        return lv_err(c, "the Complementarity variable must be a LEVELS variable (GEMPACK manual 11.14); coefficient");
+      return lv_err(c, "the Complementarity variable is not declared (must be a LEVELS variable, GEMPACK manual 11.14)");
     }
     strcpy(cp->varname, c->lv[xvi].name);
     strcpy(cp->xval, c->lv[xvi].valname);
@@ -1405,8 +1405,8 @@ static int cp_parse_stmt(lv_ctx *c, char *line, comp_def *cp, char *expr, size_t
     int nmlen;
     while (lv_isnamec(*p)) p++;
     nmlen = (int)(p - nm);
-    if (nmlen == 0) return lv_err(c, "missing Complementarity name (manual 10.17)");
-    if (nmlen > 10) return lv_err(c, "Complementarity name is limited to 10 characters (manual 11.14/11.2.1)");
+    if (nmlen == 0) return lv_err(c, "missing Complementarity name (GEMPACK manual 10.17)");
+    if (nmlen > 10) return lv_err(c, "Complementarity name is limited to 10 characters (GEMPACK manual 11.14/11.2.1)");
     strncpy(cp->name, nm, nmlen);
     cp->name[nmlen] = '\0';
   }
@@ -1445,7 +1445,7 @@ static int cp_parse_stmt(lv_ctx *c, char *line, comp_def *cp, char *expr, size_t
     if (semi == NULL) return lv_err(c, "missing ; in Complementarity statement");
     el = (int)(semi - p);
     while (el > 0 && p[el - 1] == ' ') el--;
-    if (el <= 0) return lv_err(c, "missing Complementarity expression (manual 10.17)");
+    if (el <= 0) return lv_err(c, "missing Complementarity expression (GEMPACK manual 10.17)");
     if ((size_t)el >= exprcap) return lv_err(c, "Complementarity expression too long");
     strncpy(expr, p, el);
     expr[el] = '\0';
@@ -1478,7 +1478,7 @@ static int cp_fill_decl_sets(lv_ctx *c, char *fname) {
       if (isvar && (int)strlen(cp->varname) == h.namelen && strncmp(cp->varname, h.name, h.namelen) == 0) {
         if (cp_argsets(c, &h, argsets, &nargs) < 0) { fclose(f); return -1; }
         if (nargs != cp->nquant) {
-          errmsg("Error: Complementarity %s has %d quantifiers but its variable %s has %d arguments (manual 11.14)\n", cp->name, (int)cp->nquant, cp->varname, (int)nargs);
+          errmsg("Error: Complementarity %s has %d quantifiers but its variable %s has %d arguments (GEMPACK manual 11.14)\n", cp->name, (int)cp->nquant, cp->varname, (int)nargs);
           fclose(f);
           return -1;
         }
@@ -1488,7 +1488,7 @@ static int cp_fill_decl_sets(lv_ctx *c, char *fname) {
           (int)strlen(cp->lower_name) == h.namelen && strncmp(cp->lower_name, h.name, h.namelen) == 0) {
         if (cp_argsets(c, &h, argsets, &nargs) < 0) { fclose(f); return -1; }
         if (nargs != cp->nquant) {
-          errmsg("Error: Complementarity %s has %d quantifiers but its lower bound %s has %d arguments (manual 11.14)\n", cp->name, (int)cp->nquant, cp->lower_name, (int)nargs);
+          errmsg("Error: Complementarity %s has %d quantifiers but its lower bound %s has %d arguments (GEMPACK manual 11.14)\n", cp->name, (int)cp->nquant, cp->lower_name, (int)nargs);
           fclose(f);
           return -1;
         }
@@ -1498,7 +1498,7 @@ static int cp_fill_decl_sets(lv_ctx *c, char *fname) {
           (int)strlen(cp->upper_name) == h.namelen && strncmp(cp->upper_name, h.name, h.namelen) == 0) {
         if (cp_argsets(c, &h, argsets, &nargs) < 0) { fclose(f); return -1; }
         if (nargs != cp->nquant) {
-          errmsg("Error: Complementarity %s has %d quantifiers but its upper bound %s has %d arguments (manual 11.14)\n", cp->name, (int)cp->nquant, cp->upper_name, (int)nargs);
+          errmsg("Error: Complementarity %s has %d quantifiers but its upper bound %s has %d arguments (GEMPACK manual 11.14)\n", cp->name, (int)cp->nquant, cp->upper_name, (int)nargs);
           fclose(f);
           return -1;
         }
@@ -1680,7 +1680,7 @@ static int cp_ordered_subset(const char *small, const char *big, set_def *sets, 
   for (i = 0; i < (dim_t)sets[si].size; i++) {
     while (j < (dim_t)sets[bi].size && strcmp(se[sets[si].offset + i].setele, se[sets[bi].offset + j].setele) != 0) j++;
     if (j == (dim_t)sets[bi].size) {
-      errmsg("Error: Complementarity %s: quantifier set %s is not an equal or same-ordered subset of %s (%s) (manual 11.14)\n", compname, small, big, ofwhat);
+      errmsg("Error: Complementarity %s: quantifier set %s is not an equal or same-ordered subset of %s (%s) (GEMPACK manual 11.14)\n", compname, small, big, ofwhat);
       return -1;
     }
     j++;
@@ -1789,7 +1789,7 @@ int comp_closure_check(closure_entry *closure_vals, array_def *vars, offset_t nv
         l2 = l2 % vars[di].strides[d];
       }
       if (CL_BS(vars[xi].offset + xoff)) {
-        errmsg("Error: the Complementarity variable %s must not be backsolved (manual 11.14.1)\n", cp->varname);
+        errmsg("Error: the Complementarity variable %s must not be backsolved (GEMPACK manual 11.14.1)\n", cp->varname);
         for (d = 0; d < vars[di].size; d++) free(pmap[d]);
         return -1;
       }
@@ -1957,7 +1957,7 @@ static int cp_rt_init(set_def *sets, dim_t nset, set_element *se, array_def *coe
       if (cp_exact_state(X, E, L, U) == 0) {
         char tn[NAMESIZE * MAXVARDIM];
         cp_tuple_name(rt, sets, se, coefs, j, tn, sizeof(tn));
-        printf("Warning: Complementarity %s%s: the pre-simulation data is not accurately in any state (X %.6g, expression %.6g, bounds %.6g/%.6g; manual 51.7.5)\n",
+        printf("Warning: Complementarity %s%s: the pre-simulation data is not accurately in any state (X %.6g, expression %.6g, bounds %.6g/%.6g; GEMPACK manual 51.7.5)\n",
                cp->name, tn, X, E, L <= -CP_INF ? -9e99 : L, U >= CP_INF ? 9e99 : U);
       }
     }
@@ -2070,10 +2070,10 @@ int comp_states_report(set_def *sets, dim_t nset, set_element *set_elems, array_
       if (cp_exact_state(X, E, L, U) == 0)
       {
         if (teems_comp_no_acc)
-          printf("Warning: Complementarity %s%s: the post-simulation point is not accurately in any state (X %.6g, expression %.6g, bounds %.6g/%.6g; no accurate run, manual 51.5.6/51.7.5)\n",
+          printf("Warning: Complementarity %s%s: the post-simulation point is not accurately in any state (X %.6g, expression %.6g, bounds %.6g/%.6g; no accurate run, GEMPACK manual 51.5.6/51.7.5)\n",
                  cp->name, tn, X, E, L <= -CP_INF ? -9e99 : L, U >= CP_INF ? 9e99 : U);
         else
-          logmsg(1, "Complementarity %s%s: the approximate run ends off the exact state graph (X %.6g, expression %.6g, bounds %.6g/%.6g); the accurate run puts it on (manual 51.7.1)\n",
+          logmsg(1, "Complementarity %s%s: the approximate run ends off the exact state graph (X %.6g, expression %.6g, bounds %.6g/%.6g); the accurate run puts it on (GEMPACK manual 51.7.1)\n",
                  cp->name, tn, X, E, L <= -CP_INF ? -9e99 : L, U >= CP_INF ? 9e99 : U);
       }
     }
@@ -2208,7 +2208,7 @@ int comp_accurate_closure(closure_entry *closure_vals, array_def *vars, offset_t
       {
         char tn[NAMESIZE * MAXVARDIM];
         cp_tuple_name(rt, sets, set_elems, coefs, j, tn, sizeof(tn));
-        logmsg(1, "Complementarity %s%s: accurate run in state %d -- exogenizing %s with shock %.6g (manual 51.7.1)\n",
+        logmsg(1, "Complementarity %s%s: accurate run in state %d -- exogenizing %s with shock %.6g (GEMPACK manual 51.7.1)\n",
                cp->name, tn, s,
                s == 2 ? "the expression variable" : ((s == 1 && cp->lower_kind == 2) || (s == 3 && cp->upper_kind == 2)) ? "the bound-difference variable" : "the complementarity variable",
                shock);
@@ -2240,17 +2240,17 @@ offset_t comp_verify_states(set_def *sets, dim_t nset, set_element *set_elems, a
       tol = 1e-4 * (fabs(X) > 1 ? fabs(X) : 1);
       cp_tuple_name(rt, sets, set_elems, coefs, j, tn, sizeof(tn));
       if (s != rt->finstate[j]) {
-        if (warn_only) printf("Warning: Complementarity %s%s: post-simulation state %d differs from the approximate run's state %d (manual 51.5.4)\n", cp->name, tn, s, (int)rt->finstate[j]);
-        else errmsg("Error: Complementarity %s%s: post-simulation state %d differs from the approximate run's state %d (manual 51.5.4)\n", cp->name, tn, s, (int)rt->finstate[j]);
+        if (warn_only) printf("Warning: Complementarity %s%s: post-simulation state %d differs from the approximate run's state %d (GEMPACK manual 51.5.4)\n", cp->name, tn, s, (int)rt->finstate[j]);
+        else errmsg("Error: Complementarity %s%s: post-simulation state %d differs from the approximate run's state %d (GEMPACK manual 51.5.4)\n", cp->name, tn, s, (int)rt->finstate[j]);
         nbad++;
       } else if (X < L - tol || X > U + tol) {
-        if (warn_only) printf("Warning: Complementarity %s%s: the variable value %.6g lies outside the bounds %.6g/%.6g after the accurate run (manual 51.7.5)\n",
+        if (warn_only) printf("Warning: Complementarity %s%s: the variable value %.6g lies outside the bounds %.6g/%.6g after the accurate run (GEMPACK manual 51.7.5)\n",
                cp->name, tn, X, L <= -CP_INF ? -9e99 : L, U >= CP_INF ? 9e99 : U);
-        else errmsg("Error: Complementarity %s%s: the variable value %.6g lies outside the bounds %.6g/%.6g after the accurate run (manual 51.7.5)\n",
+        else errmsg("Error: Complementarity %s%s: the variable value %.6g lies outside the bounds %.6g/%.6g after the accurate run (GEMPACK manual 51.7.5)\n",
                cp->name, tn, X, L <= -CP_INF ? -9e99 : L, U >= CP_INF ? 9e99 : U);
         nbad++;
       } else if (cp_exact_state(X, E, L, U) == 0) {
-        printf("Warning: Complementarity %s%s: the post-simulation point is not accurately in any state (X %.6g, expression %.6g; manual 51.7.5)\n", cp->name, tn, X, E);
+        printf("Warning: Complementarity %s%s: the post-simulation point is not accurately in any state (X %.6g, expression %.6g; GEMPACK manual 51.7.5)\n", cp->name, tn, X, E);
       } else if (s != rt->prestate[j]) {
         printf("Complementarity %s%s: state change %d -> %d over the simulation (X %.6g, expression %.6g)\n", cp->name, tn, (int)rt->prestate[j], s, X, E);
       }
@@ -2306,14 +2306,14 @@ int tab_levels_transform(char *fname) {
       k = lv_find_lv_decl(c, c->homo[i], len);
       if (k >= 0) {
         if (!c->lv[k].change || c->lv[k].kind != 0) {
-          errmsg("Error: %s, the ADD_HOMOTOPY variable, is declared in the TAB but not as a plain (levels,change) variable (manual 26.7.4)\n", c->homo[i]);
+          errmsg("Error: %s, the ADD_HOMOTOPY variable, is declared in the TAB but not as a plain (levels,change) variable (GEMPACK manual 26.7.4)\n", c->homo[i]);
           free(c);
           return -1;
         }
         continue;
       }
       if (lv_find_linvar(c, c->homo[i], len) >= 0 || lv_find_cf(c, c->homo[i], len) >= 0) {
-        errmsg("Error: %s, the ADD_HOMOTOPY variable, is already declared as a linear variable or coefficient (manual 26.7.5)\n", c->homo[i]);
+        errmsg("Error: %s, the ADD_HOMOTOPY variable, is already declared as a linear variable or coefficient (GEMPACK manual 26.7.5)\n", c->homo[i]);
         free(c);
         return -1;
       }
@@ -2465,7 +2465,7 @@ int tab_levels_transform(char *fname) {
       }
       if (glev && glin) { rc = lv_err(c, "an Equation is either LINEAR or LEVELS"); break; }
       if (!(glev || (!glin && eq_default_levels))) {
-        if (ghomo != -1) { rc = lv_err(c, "ADD_HOMOTOPY and NOT_ADD_HOMOTOPY qualify levels equations only (manual 26.7.5)"); break; }
+        if (ghomo != -1) { rc = lv_err(c, "ADD_HOMOTOPY and NOT_ADD_HOMOTOPY qualify levels equations only (GEMPACK manual 26.7.5)"); break; }
         fprintf(fout, "%s\n", stmt);
         continue;
       }

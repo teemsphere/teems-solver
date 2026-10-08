@@ -155,7 +155,7 @@ void solve_x_check(const solve_real *x, PetscInt n, int doit) {
   for(i=0; i<n; i++) if(teems_nonfinite((double)x[i])) {
       char lab[(MAXVARDIM+2)*NAMESIZE];
       probe_col_label(i,lab,sizeof(lab));
-      errmsg("Error: the linear solve gave a value that is not finite (%s) for %s: the LHS matrix is singular or badly scaled at this step, or a coefficient overflowed (manual 34.1, 34.3)\n",teems_isnan_bits((double)x[i])?"NaN":"infinite",lab);
+      errmsg("Error: the linear solve gave a value that is not finite (%s) for %s: the LHS matrix is singular or badly scaled at this step, or a coefficient overflowed (GEMPACK manual 34.1, 34.3)\n",teems_isnan_bits((double)x[i])?"NaN":"infinite",lab);
       MPI_Abort(PETSC_COMM_WORLD,1);
     }
 }
@@ -185,11 +185,11 @@ static void solve_residual_check(Mat A, const PetscScalar *b, const solve_real *
       if(nw<=TEEMS_RESID_WARN_PRINT) {
         char lab[(4*MAXVARDIM+2)*NAMESIZE];
         probe_row_label(i,lab,sizeof(lab));
-        printf("Warning: equation %s is not satisfied very accurately (residual ratio %.3e: the sum of its terms is %.6g while the sum of their absolute values is %.6g); this may be because the LHS matrix is not really invertible (manual 30.6.1)\n",lab,q,sum-(double)b[i],sabs);
+        printf("Warning: equation %s is not satisfied very accurately (residual ratio %.3e: the sum of its terms is %.6g while the sum of their absolute values is %.6g); this may be because the LHS matrix is not really invertible (GEMPACK manual 30.6.1)\n",lab,q,sum-(double)b[i],sabs);
       }
     }
   }
-  if(nw>TEEMS_RESID_WARN_PRINT) printf("Warning: ... %ld more equations of this solve are not satisfied very accurately (manual 30.6.1)\n",nw-TEEMS_RESID_WARN_PRINT);
+  if(nw>TEEMS_RESID_WARN_PRINT) printf("Warning: ... %ld more equations of this solve are not satisfied very accurately (GEMPACK manual 30.6.1)\n",nw-TEEMS_RESID_WARN_PRINT);
   if(worst>teems_resid_max) teems_resid_max=worst;
   teems_resid_solves++;
   teems_resid_warn+=nw;
@@ -303,9 +303,9 @@ static double solve_residual_check_mpi(Mat A,const solve_real *bloc,PetscInt bst
     for(k=0; k<tot/4&&k<TEEMS_RESID_WARN_PRINT; k++) {
       char lab[(4*MAXVARDIM+2)*NAMESIZE];
       probe_row_label((PetscInt)all[4*k],lab,sizeof(lab));
-      printf("Warning: equation %s is not satisfied very accurately (residual ratio %.3e: the sum of its terms is %.6g while the sum of their absolute values is %.6g); this may be because the LHS matrix is not really invertible (manual 30.6.1)\n",lab,all[4*k+1],all[4*k+2],all[4*k+3]);
+      printf("Warning: equation %s is not satisfied very accurately (residual ratio %.3e: the sum of its terms is %.6g while the sum of their absolute values is %.6g); this may be because the LHS matrix is not really invertible (GEMPACK manual 30.6.1)\n",lab,all[4*k+1],all[4*k+2],all[4*k+3]);
     }
-    if(gnw>TEEMS_RESID_WARN_PRINT)printf("Warning: ... %ld more equations of this solve are not satisfied very accurately (manual 30.6.1)\n",gnw-TEEMS_RESID_WARN_PRINT);
+    if(gnw>TEEMS_RESID_WARN_PRINT)printf("Warning: ... %ld more equations of this solve are not satisfied very accurately (GEMPACK manual 30.6.1)\n",gnw-TEEMS_RESID_WARN_PRINT);
     if(gworst>teems_resid_max)teems_resid_max=gworst;
     teems_resid_solves++;
     teems_resid_warn+=gnw;
@@ -1757,7 +1757,7 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
   dim_t convrule=0;
   PetscOptionsGetInt(NULL,NULL,"-convrule",&convrule,NULL);
   if(convrule&&(teems_single_run||teems_two_run||teems_sub_active)) {
-    if(rank==0)errmsg("Error: -convrule 1 applies to a run extrapolating from three solutions without subtotals (manual 26.2.5)\n");
+    if(rank==0)errmsg("Error: -convrule 1 applies to a run extrapolating from three solutions without subtotals (GEMPACK manual 26.2.5)\n");
     MPI_Abort(PETSC_COMM_WORLD,1);
   }
   conv_n[0]=conv_n[1]=conv_n[2]=0;
@@ -3445,7 +3445,7 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
       if(rank==0)printf("Accuracy estimates: not available for a single-pass run (-single_run 1; they need three multi-step solutions)\n");
     }
     else if(teems_two_run) {
-      if(rank==0)printf("Accuracy estimates: not available from two solutions (-two_run 1; they need three multi-step solutions, manual 26.2.3)\n");
+      if(rank==0)printf("Accuracy estimates: not available from two solutions (-two_run 1; they need three multi-step solutions, GEMPACK manual 26.2.3)\n");
     }
     else if(rank==0)printf("Accurate at 6 digits        %ld\nAccurate at 5 digits        %ld\nAccurate at 4 digits        %ld\nAccurate at 3 digits        %ld\nAccurate at 2 digits        %ld\nAccurate at 1 digit or none %ld\n",precis[5],precis[4],precis[3],precis[2],precis[1],precis[0]);
     }
@@ -3465,7 +3465,7 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
     free(bsvals);
     gettimeofday(&endtime, NULL);
     if(convrule&&rank==rank_hsl) {
-      logmsg(1,"Convergence rule (-convrule 1, manual 26.2.5): %ld component result(s) extrapolated, %ld averaged (results very close or near zero), %ld taken from the %d-step solution (poor convergence)\n",(long)conv_n[0],(long)conv_n[1],(long)conv_n[2],(int)llround(steps1*step_ratio3));
+      logmsg(1,"Convergence rule (-convrule 1, GEMPACK manual 26.2.5): %ld component result(s) extrapolated, %ld averaged (results very close or near zero), %ld taken from the %d-step solution (poor convergence)\n",(long)conv_n[0],(long)conv_n[1],(long)conv_n[2],(int)llround(steps1*step_ratio3));
       for(i=0; i<3; i++) { free(conv_c[i]); conv_c[i]=NULL; }
     }
     if(rank==0)logmsg(1,"%s solve time %.2f s\n",euler?"Euler":midpoint?"Midpoint":"Gragg",(endtime.tv_sec - begintime.tv_sec)+((double)(endtime.tv_usec - begintime.tv_usec))/ 1000000);
