@@ -1274,43 +1274,70 @@ static int op_feeds(const formula_op *ops, int root, int target) {
   return 0;
 }
 
-/* A division by zero without a Zerodivide default is fatal only where its
-   value is used: GEMPACK never evaluates IF[c, v]'s v where c fails
-   (manual 11.4.6), but the op list computes v first, so the error waits
-   until the formula's value is known, an IF whose condition fails clears
-   the errors raised inside its v, and any left abort. */
-#define ZDIV_PENDING_MAX 64
-typedef struct { int n; int op[ZDIV_PENDING_MAX]; char zbz[ZDIV_PENDING_MAX]; } zdiv_pending;
+/* Evaluation hazards count only where the value is used: GEMPACK never
+   evaluates IF[c, v]'s v where c fails (manual 11.4.6), but the op list
+   computes v first. So a division by zero without a Zerodivide default, a
+   fractional power of a negative number and a Zerodivide default
+   substitution are recorded as pending; an IF whose condition fails drops
+   those raised inside its v, and the rest take effect when the formula's
+   value is known, exactly as they did when raised (fatal, error, counted
+   for the default warning). */
+enum { EH_NBZ=0, EH_ZBZ=1, EH_FRACPOW=2, EH_DEFAULT=3 };
+#define EVAL_PENDING_MAX 64
+typedef struct { int n; int op[EVAL_PENDING_MAX]; char kind[EVAL_PENDING_MAX]; } eval_pending;
 
-/* past ZDIV_PENDING_MAX the list stops growing and IFs stop clearing it,
-   so the formula aborts (never a silent default) */
-static void zdiv_pending_add(zdiv_pending *zp, int op, int zbz) {
-  if(zp->n==ZDIV_PENDING_MAX)return;
-  zp->op[zp->n]=op;
-  zp->zbz[zp->n]=(char)zbz;
-  zp->n++;
+/* past EVAL_PENDING_MAX the list stops growing and IFs stop clearing it,
+   so a full list takes effect as raised (never a silent drop); an entry
+   that does not fit is applied at once */
+static void eval_pending_flush_one(int kind);
+static void eval_pending_add(eval_pending *ep, int op, int kind) {
+  if(ep->n==EVAL_PENDING_MAX) {
+    eval_pending_flush_one(kind);
+    return;
+  }
+  ep->op[ep->n]=op;
+  ep->kind[ep->n]=(char)kind;
+  ep->n++;
 }
 
-static void zdiv_pending_drop(zdiv_pending *zp, const formula_op *ops, int ifop) {
+static void eval_pending_drop(eval_pending *ep, const formula_op *ops, int ifop) {
   int k,m=0;
-  if(zp->n==0||zp->n==ZDIV_PENDING_MAX||!op_temp_ref(ops[ifop].Var3Type))return;
-  for(k=0; k<zp->n; k++)if(!op_feeds(ops,(int)ops[ifop].Var3BegAdd,zp->op[k])) {
-      zp->op[m]=zp->op[k];
-      zp->zbz[m]=zp->zbz[k];
+  if(ep->n==0||ep->n==EVAL_PENDING_MAX||!op_temp_ref(ops[ifop].Var3Type))return;
+  for(k=0; k<ep->n; k++)if(!op_feeds(ops,(int)ops[ifop].Var3BegAdd,ep->op[k])) {
+      ep->op[m]=ep->op[k];
+      ep->kind[m]=ep->kind[k];
       m++;
     }
-  zp->n=m;
+  ep->n=m;
 }
 
-static void zdiv_pending_abort(const zdiv_pending *zp) {
-  if(zp->n==0)return;
-  if(zp->zbz[0])errmsg("Error: zero divided by zero in a formula while Zerodivide (zero_by_zero) is off\n");
-  else errmsg("Error: division by zero in a formula; Zerodivide (nonzero_by_zero) is off -- set a default with Zerodivide (nonzero_by_zero) default <value> or guard with ID01\n");
-  MPI_Abort(PETSC_COMM_WORLD,1);
+static void eval_pending_flush_one(int kind) {
+  switch(kind) {
+  case EH_ZBZ:
+    errmsg("Error: zero divided by zero in a formula while Zerodivide (zero_by_zero) is off\n");
+    MPI_Abort(PETSC_COMM_WORLD,1);
+    break;
+  case EH_NBZ:
+    errmsg("Error: division by zero in a formula; Zerodivide (nonzero_by_zero) is off -- set a default with Zerodivide (nonzero_by_zero) default <value> or guard with ID01\n");
+    MPI_Abort(PETSC_COMM_WORLD,1);
+    break;
+  case EH_FRACPOW:
+    errmsg("Error: fractional power of a negative number in formula evaluation\n");
+    break;
+  default:
+    #pragma omp atomic
+    zdiv_default_hits++;
+  }
+}
+
+static void eval_pending_flush(const eval_pending *ep) {
+  int k;
+  for(k=0; k<ep->n; k++)if(ep->kind[k]==EH_DEFAULT||ep->kind[k]==EH_FRACPOW)eval_pending_flush_one(ep->kind[k]);
+  for(k=0; k<ep->n; k++)if(ep->kind[k]==EH_ZBZ||ep->kind[k]==EH_NBZ)eval_pending_flush_one(ep->kind[k]);
 }
 
 solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,sum_value *sum_vals,formula_op *ops,int nops,quantifier *arSet,dim_t fdim, solve_real zerodivide) {
-  zdiv_pending zpend;
+  eval_pending zpend;
   zpend.n=0;
   int i;
   offset_t l=0,l1=0;
@@ -1452,21 +1479,18 @@ solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,
             if(zdiv_active.zbz_on)ops[i].TmpVarVal=zdiv_shifted(zdiv_active.zbz_val);
             else {
               ops[i].TmpVarVal=0;
-              zdiv_pending_add(&zpend,i,1);
+              eval_pending_add(&zpend,i,EH_ZBZ);
             }
           } else {
             if(zdiv_active.nbz_on)ops[i].TmpVarVal=zdiv_shifted(zdiv_active.nbz_val);
             else {
               ops[i].TmpVarVal=0;
-              zdiv_pending_add(&zpend,i,0);
+              eval_pending_add(&zpend,i,EH_NBZ);
             }
           }
         } else {
           ops[i].TmpVarVal=zdiv_shifted(zerodivide);
-          if(eval1!=0) {
-            #pragma omp atomic
-            zdiv_default_hits++;
-          }
+          if(eval1!=0)eval_pending_add(&zpend,i,EH_DEFAULT);
         }
       } else {
         ops[i].TmpVarVal=eval1/eval2;
@@ -1569,10 +1593,9 @@ solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,
       if(ops[i].Var2Type==OT_CHANGE) eval2=record[ops[i].Var2BegAdd+l1].substep_base;
       if(eval1==0&&eval2<0) {
         ops[i].TmpVarVal=zdiv_shifted(zerodivide);
-        #pragma omp atomic
-        zdiv_default_hits++;
+        eval_pending_add(&zpend,i,EH_DEFAULT);
       } else {
-        if(eval1<0&&eval2-floor(eval2)!=0)errmsg("Error: fractional power of a negative number in formula evaluation\n");
+        if(eval1<0&&eval2-floor(eval2)!=0)eval_pending_add(&zpend,i,EH_FRACPOW);
         ops[i].TmpVarVal=pow(eval1,eval2);
       }
       break;
@@ -1655,11 +1678,11 @@ solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,
       if(ops[i].Oper==OP_IF_GE){ if(eval1>=eval2)ops[i].TmpVarVal=eval3;else ops[i].TmpVarVal=0; }
       if(zpend.n>0&&!((ops[i].Oper==OP_IF_EQ&&eval1==eval2)||(ops[i].Oper==OP_IF_GT&&eval1>eval2)||(ops[i].Oper==OP_IF_LT&&eval1<eval2)||
                       (ops[i].Oper==OP_IF_NE&&eval1!=eval2)||(ops[i].Oper==OP_IF_LE&&eval1<=eval2)||(ops[i].Oper==OP_IF_GE&&eval1>=eval2)))
-        zdiv_pending_drop(&zpend,ops,i);
+        eval_pending_drop(&zpend,ops,i);
       break;
     }
   }
-  zdiv_pending_abort(&zpend);
+  eval_pending_flush(&zpend);
   return ops[i-1].TmpVarVal;
 }
 
