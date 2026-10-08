@@ -1134,6 +1134,30 @@ static int coef_range_check(array_def *coefs,offset_t index,offset_t offset,offs
   return glviol;
 }
 
+/* range test of initial values (manual 25.4.2): once the Reads and
+   Formulas of the first step are done, every coefficient with a
+   declared range -- read or computed -- is tested; all are reported,
+   then the run stops under -range_test_initial 2 (the GEMPACK default).
+   PostSim coefficients are tested when their pass computes them. */
+int coefs_range_test_initial(array_def *coefs, offset_t ncof, elem_value *elem_vals) {
+  int mode=teems_range_test_initial, nviol=0, viol;
+  offset_t i, n;
+  if(mode<=0)return 0;
+  for(i=0; i<ncof; i++) {
+    if(teems_coef_is_ps!=NULL&&teems_coef_is_ps[i])continue;
+    n=coefs[i].nelem>0?coefs[i].nelem:1;
+    viol=0;
+    if(coefs[i].gltype>0)viol|=coef_range_check(coefs,i,coefs[i].offset,n,elem_vals,mode,coefs[i].gltype,coefs[i].glval,0);
+    if(teems_coef_gltype2!=NULL&&teems_coef_gltype2[i]>0)viol|=coef_range_check(coefs,i,coefs[i].offset,n,elem_vals,mode,teems_coef_gltype2[i],teems_coef_glval2[i],0);
+    nviol+=viol;
+  }
+  if(nviol>0&&mode==2) {
+    errmsg("Error: %d coefficient(s) have initial values outside their declared range (GEMPACK manual 25.4.2: tested once the initial Reads and Formulas are done); -range_test_initial 1 reports them as warnings instead\n",nviol);
+    MPI_Abort(PETSC_COMM_WORLD,1);
+  }
+  return nviol;
+}
+
 /* active dual-class zerodivide state for the CURRENT statement
    (plan A1): captured from the scanner position by the formula/
    assertion executors, disabled during update and equation
@@ -3540,6 +3564,9 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
         }
         zdiv_default_report("Formula",check10?vars[index].cofname:coefs[index].cofname,linecopy,zerodivide);
         int glmode=IsIni?teems_range_test_initial:teems_range_test_updated;
+        /* initial values are tested once, after every Read and Formula of
+           the first step (coefs_range_test_initial, manual 25.4.2) */
+        if(IsIni&&!teems_ps_pass)glmode=0;
         if(teems_rk_stage_checks&&glmode==2)glmode=1;   /* RK stage state: warn and let the driver retry */
         if(glmode>0){
           int glviol=0;

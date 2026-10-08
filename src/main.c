@@ -2715,6 +2715,7 @@ int main(int argc,char **args) {
   bool IsIni=true;
   if(rank==0) {
     statements_execute(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,IsIni,0);
+    coefs_range_test_initial(coefs,ncof,elem_vals);
     if(cofdump&&elem_vals!=NULL)coefficients_dump_phase(teems_sol_stem,".cbin0",0,ncof,ncofele,elem_vals); /* reported, not fatal: the run goes on and exits 1 without a completion marker */
   }
   /* formula-assigned mappings (manual 10.13.1) got their values on rank

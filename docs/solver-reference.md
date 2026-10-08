@@ -1284,9 +1284,12 @@ method (basis of the golden-run verification, below).
   Division by zero in an Equation, Backsolve or Update, and a non-finite
   equation coefficient or condition operand, stop the run and name the
   statement ([GM] 34.3).
-- Declared coefficient bounds are checked, not enforced: after each
-  Formula and Update a violation warns or stops per `-range_test_*`;
-  values are never clamped.
+- Declared coefficient bounds are checked, not enforced: every
+  coefficient, read or computed, once the initial Reads and Formulas are
+  done ([GM] 25.4.2; all violators are reported, then the run stops
+  under `-range_test_initial 2`, the default), and every updated value
+  after each step's Updates and Formulas (`-range_test_updated`, warn
+  by default); values are never clamped.
 - **BLAS kernel pin.** Debian's `libopenblas` is built `DYNAMIC_ARCH`
   and selects its kernels from CPUID at run time, so an unpinned image
   produced different last digits per host: measured on the same image,
@@ -1395,7 +1398,7 @@ needs corpus calibration.
 | `-rk_h0 h` | 0 | first step length; 0 = `1/step1` capped from the initial gradient (exp(5) level ratio in the log chart, 90 points in the percent chart) |
 | `-rkguard r` | 1e30 | log chart: level ratio beyond which a stage state is rejected |
 | `-assertions {0,1,2}` | 2 | TAB `Assertion` statements: off / warn / fatal |
-| `-range_test_initial`, `-range_test_updated {0,1,2}` | 1 / 1 | coefficient bound checks on initial and updated values: off / warn / fatal |
+| `-range_test_initial`, `-range_test_updated {0,1,2}` | 2 / 1 | coefficient bound checks on initial values (every coefficient, after the initial Reads and Formulas; [GM] 25.4.2) and on updated values: off / warn / fatal |
 | `-postsim {0,1}` | 1 | execute the TAB's PostSim section after the simulation |
 | `-comp_steps n`, `-comp_do_approx/-comp_do_acc {0,1}`, `-comp_redo {0,1}`, `-comp_redo_min_frac x`, `-comp_sberr_warn {0,1}` | steps: the accurate run's step sum (10 if below 1); 1, 1, 1, 0.005 in (0,1], 0 | complementarity ([GM] ch. 51) approximate/accurate run controls |
 | `-nowrites n` | 0 | nonzero: skip the CMF output data files (the solution binaries, `.cof` and `stats.json` are still written) |

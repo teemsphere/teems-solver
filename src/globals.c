@@ -117,9 +117,11 @@ dim_t teems_ncomp = 0;
 offset_t teems_comp_active = 0;
 
 /* -range_test_initial/-range_test_updated run switches (manual
-   25.4.4): 0 = off, 1 = warn (the GEMPACK default outside automatic
-   accuracy), 2 = fatal */
-int teems_range_test_initial = 1;
+   25.4.4): 0 = off, 1 = warn, 2 = fatal. GEMPACK stops on an initial
+   value out of range ("range test initial values = yes", 25.4.2) and
+   warns on an updated one outside automatic accuracy */
+int teems_range_test_initial = 2;
+int teems_range_test_updated = 1;
 /* -solmed Newton (GEMPACK manual 26.6): mode 0 follows the manual's
    fixed schedule (26.6.5), mode 1 iterates the final corrections to
    -newton_tol with optional step halving; the transform counts the
@@ -135,7 +137,6 @@ int teems_newton_damp = 1;
 int teems_newton_mixed = 0;
 long teems_newton_nlevels = 0;
 long teems_newton_nlinear = 0;
-int teems_range_test_updated = 1;
 teems_rk_stats_t teems_rk_stats;
 int teems_rk_stage_checks = 0;
 long teems_check_viol_range = 0;
