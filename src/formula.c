@@ -1299,6 +1299,12 @@ void eval_nonfinite_fatal(const char *what, double v) {
   errmsg("Error: %s %s%s is not finite (%s): a division, LOGE, SQRT or power left its domain or the value overflowed (arithmetic error, GEMPACK manual 34.3)\n",what,eval_ctx[0]?"in ":"",eval_ctx,teems_isnan_bits(v)?"NaN":"infinite");
   MPI_Abort(PETSC_COMM_WORLD,1);
 }
+/* a Jacobian row PETSc would not take (an entry outside the row's
+   preallocation): continuing would solve without it */
+void eval_insert_fatal(const char *block, long row) {
+  errmsg("Error: the %s-column entries of Jacobian row %ld%s%s could not be stored (PETSc rejected the insertion; internal preallocation error) -- the run stops rather than solve without them\n",block,row,eval_ctx[0]?" from ":"",eval_ctx);
+  MPI_Abort(PETSC_COMM_WORLD,1);
+}
 #define EVAL_PENDING_MAX 64
 typedef struct { int n; int op[EVAL_PENDING_MAX]; char kind[EVAL_PENDING_MAX]; } eval_pending;
 

@@ -442,8 +442,8 @@ static void stmt_prog_execute(stmt_prog *st, offset_t matrow, PetscInt *eq_addr,
           }
           continue;
         }
-        if(i3>0)MatSetValues(A,1,&Jindx,i3,jcn,value,ADD_VALUES);
-        if(sj>0)MatSetValues(B,1,&Jindx,sj,jcnb,valueb,ADD_VALUES);
+        if(i3>0&&MatSetValues(A,1,&Jindx,i3,jcn,value,ADD_VALUES))eval_insert_fatal("endogenous",(long)Jindx);
+        if(sj>0&&MatSetValues(B,1,&Jindx,sj,jcnb,valueb,ADD_VALUES))eval_insert_fatal("exogenous",(long)Jindx);
         }
       }
       free(value);

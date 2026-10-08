@@ -3438,13 +3438,11 @@ comp_accurate_reentry:
   dnzB=0;
   onz=0;
   onzB=0;
+  /* the per-row counts are already capped at the block widths
+     (jacobian_preallocate); a further "full row" decrement made a row
+     that references every exogenous (or every endogenous) column one
+     slot short, and PETSc rejected its last insertion */
   for (i=Istart; i<Iend; i++) {
-    if (dnnzB[i-Istart]+onnzB[i-Istart]>nexo-1&&dnnzB[i-Istart]>1) {
-      dnnzB[i-Istart]--;
-    }
-    if (dnnz[i-Istart]+onnz[i-Istart]>nvarele-nexo&&dnnz[i-Istart]>1) {
-      dnnz[i-Istart]--;
-    }
     if (dnnz[i-Istart]>dnz) {
       dnz=dnnz[i-Istart];
     }

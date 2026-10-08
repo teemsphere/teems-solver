@@ -985,6 +985,7 @@ static inline int teems_nonfinite_bits(double x) { uint64_t u; memcpy(&u,&x,size
    evaluator's arithmetic-error aborts (formula.c eval_ctx_set) */
 void eval_ctx_set(const char *kind, const char *name);
 void eval_nonfinite_fatal(const char *what, double v);
+void eval_insert_fatal(const char *block, long row);
 int formula_compile(char *fomulain, set_def *sets,array_def *coefs, offset_t ncof, array_def *vars,offset_t nvar,offset_t ncofele,sum_def *sum_cof,dim_t totalsum,formula_op *ops,dim_t *nops,quantifier *arSet,dim_t fdim);
 solve_real formula_eval(elem_value *record, set_def *sets,set_element *set_elems,sum_value *sum_vals,formula_op *ops,int nops,quantifier *arSet,dim_t fdim, solve_real zerodivide);
 int sum_cond_general_test(const sum_cofcond *cc, void *own[2], elem_value *elem_vals, set_def *sets, set_element *set_elems, sum_value *sum_vals, quantifier *frame, dim_t nframe, solve_real zerodivide);
