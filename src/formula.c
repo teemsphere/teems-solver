@@ -1258,7 +1258,60 @@ static double teems_rand_draw(uint64_t key, const quantifier *arSet, dim_t fdim)
   return (double)(h>>11)*0x1.0p-53;
 }
 
+/* operand types whose value is an earlier op's result (OT_POS is a
+   quantifier slot, not a temp) */
+static inline int op_temp_ref(dim_t t) {
+  return t==OT_TEMP||(t>=OT_TEMP_ID01&&t<=OT_TEMP_TRUNCB)||(t>=OT_TEMP_NORMAL&&t<=OT_TEMP_GPERFC);
+}
+
+/* 1 = op target feeds op root's value (temps only reference earlier ops) */
+static int op_feeds(const formula_op *ops, int root, int target) {
+  if(root==target)return 1;
+  if(target>root)return 0;
+  if(op_temp_ref(ops[root].Var1Type)&&op_feeds(ops,(int)ops[root].Var1BegAdd,target))return 1;
+  if(op_temp_ref(ops[root].Var2Type)&&op_feeds(ops,(int)ops[root].Var2BegAdd,target))return 1;
+  if(ops[root].Oper>=OP_IF_EQ&&ops[root].Oper<=OP_IF_GE&&op_temp_ref(ops[root].Var3Type)&&op_feeds(ops,(int)ops[root].Var3BegAdd,target))return 1;
+  return 0;
+}
+
+/* A division by zero without a Zerodivide default is fatal only where its
+   value is used: GEMPACK never evaluates IF[c, v]'s v where c fails
+   (manual 11.4.6), but the op list computes v first, so the error waits
+   until the formula's value is known, an IF whose condition fails clears
+   the errors raised inside its v, and any left abort. */
+#define ZDIV_PENDING_MAX 64
+typedef struct { int n; int op[ZDIV_PENDING_MAX]; char zbz[ZDIV_PENDING_MAX]; } zdiv_pending;
+
+/* past ZDIV_PENDING_MAX the list stops growing and IFs stop clearing it,
+   so the formula aborts (never a silent default) */
+static void zdiv_pending_add(zdiv_pending *zp, int op, int zbz) {
+  if(zp->n==ZDIV_PENDING_MAX)return;
+  zp->op[zp->n]=op;
+  zp->zbz[zp->n]=(char)zbz;
+  zp->n++;
+}
+
+static void zdiv_pending_drop(zdiv_pending *zp, const formula_op *ops, int ifop) {
+  int k,m=0;
+  if(zp->n==0||zp->n==ZDIV_PENDING_MAX||!op_temp_ref(ops[ifop].Var3Type))return;
+  for(k=0; k<zp->n; k++)if(!op_feeds(ops,(int)ops[ifop].Var3BegAdd,zp->op[k])) {
+      zp->op[m]=zp->op[k];
+      zp->zbz[m]=zp->zbz[k];
+      m++;
+    }
+  zp->n=m;
+}
+
+static void zdiv_pending_abort(const zdiv_pending *zp) {
+  if(zp->n==0)return;
+  if(zp->zbz[0])errmsg("Error: zero divided by zero in a formula while Zerodivide (zero_by_zero) is off\n");
+  else errmsg("Error: division by zero in a formula; Zerodivide (nonzero_by_zero) is off -- set a default with Zerodivide (nonzero_by_zero) default <value> or guard with ID01\n");
+  MPI_Abort(PETSC_COMM_WORLD,1);
+}
+
 solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,sum_value *sum_vals,formula_op *ops,int nops,quantifier *arSet,dim_t fdim, solve_real zerodivide) {
+  zdiv_pending zpend;
+  zpend.n=0;
   int i;
   offset_t l=0,l1=0;
   solve_real eval1=0,eval2=0,eval3=0;
@@ -1398,14 +1451,14 @@ solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,
           if(eval1==0) {
             if(zdiv_active.zbz_on)ops[i].TmpVarVal=zdiv_shifted(zdiv_active.zbz_val);
             else {
-              errmsg("Error: zero divided by zero in a formula while Zerodivide (zero_by_zero) is off\n");
-              MPI_Abort(PETSC_COMM_WORLD,1);
+              ops[i].TmpVarVal=0;
+              zdiv_pending_add(&zpend,i,1);
             }
           } else {
             if(zdiv_active.nbz_on)ops[i].TmpVarVal=zdiv_shifted(zdiv_active.nbz_val);
             else {
-              errmsg("Error: division by zero in a formula; Zerodivide (nonzero_by_zero) is off (GEMPACK default) -- set a default or guard with ID01\n");
-              MPI_Abort(PETSC_COMM_WORLD,1);
+              ops[i].TmpVarVal=0;
+              zdiv_pending_add(&zpend,i,0);
             }
           }
         } else {
@@ -1600,9 +1653,13 @@ solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,
       if(ops[i].Oper==OP_IF_NE){ if(eval1!=eval2)ops[i].TmpVarVal=eval3;else ops[i].TmpVarVal=0; }
       if(ops[i].Oper==OP_IF_LE){ if(eval1<=eval2)ops[i].TmpVarVal=eval3;else ops[i].TmpVarVal=0; }
       if(ops[i].Oper==OP_IF_GE){ if(eval1>=eval2)ops[i].TmpVarVal=eval3;else ops[i].TmpVarVal=0; }
+      if(zpend.n>0&&!((ops[i].Oper==OP_IF_EQ&&eval1==eval2)||(ops[i].Oper==OP_IF_GT&&eval1>eval2)||(ops[i].Oper==OP_IF_LT&&eval1<eval2)||
+                      (ops[i].Oper==OP_IF_NE&&eval1!=eval2)||(ops[i].Oper==OP_IF_LE&&eval1<=eval2)||(ops[i].Oper==OP_IF_GE&&eval1>=eval2)))
+        zdiv_pending_drop(&zpend,ops,i);
       break;
     }
   }
+  zdiv_pending_abort(&zpend);
   return ops[i-1].TmpVarVal;
 }
 

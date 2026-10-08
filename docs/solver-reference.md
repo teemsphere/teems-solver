@@ -238,7 +238,9 @@ The solver reads a GEMPACK-style TAB subset (statement syntax per [GM]):
   (the two GEMPACK classes, [GM] 10.11: in a Formula a zero divided by
   zero takes the zero_by_zero default, initially 0, and a nonzero
   divided by zero is a named fatal until a nonzero_by_zero default is
-  set; `off` makes the class fatal again); the [GM] 11.5
+  set; `off` makes the class fatal again; the fatal applies only where
+  the division's value is used: inside `IF[c, v]` it is dropped where `c`
+  fails, since GEMPACK never evaluates `v` there, [GM] 11.4.6); the [GM] 11.5
   intrinsics (ABS/MAX/MIN/SQRT/EXP/LOGE/LOG10/ID01/ID0V/ROUND/TRUNC0/
   TRUNCB and the statistical NORMAL/CUMNORMAL/LOGNORMAL/CUMLOGNORMAL/
   GPERF/GPERFC of [GM] 11.5.3-11.5.5, where the log-normal pair is 0
