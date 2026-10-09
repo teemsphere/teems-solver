@@ -3844,7 +3844,7 @@ comp_teardown:
       fclose(solution);
       outputs_note(solchar,"rk_error_estimate",0);
     }
-    if(solmethod!=SM_PROBE&&structure_files_write(tempchar,vars,nvar,sets,nset,set_elems,nsetspace,nvarele))return 1;
+    if((solmethod!=SM_PROBE||jac_only)&&structure_files_write(tempchar,vars,nvar,sets,nset,set_elems,nsetspace,nvarele))return 1;
     if(rank==0&&comp_approx_col!=NULL&&xcf!=NULL) {
       char label[96];
       const solve_real *cp[1]={comp_approx_col};
