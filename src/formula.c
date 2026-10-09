@@ -1316,6 +1316,49 @@ void eval_ctx_set(const char *kind, const char *name) {
   else snprintf(eval_ctx,sizeof(eval_ctx),"%.20s %.170s",kind,name?name:"");
 }
 
+/* the same from a statement's text: an Equation's name, a Formula's or
+   Update's target coefficient, an Assertion's label */
+void eval_ctx_stmt(const char *kind, const char *stmt) {
+  const char *p=stmt;
+  char name[NAMESIZE+2];
+  int k=0,depth;
+  bool assertion=(strcmp(kind,"Assertion")==0);
+  name[0]='\0';
+  while (*p==' ') p++;
+  while (isalpha((unsigned char)*p)) p++;
+  for (;;) {
+    while (*p==' ') p++;
+    if (*p=='#') {
+      const char *c=strchr(p+1,'#');
+      if (c==NULL) break;
+      if (assertion&&name[0]=='\0') {
+        const char *b=p+1;
+        while (*b==' ') b++;
+        name[k++]='"';
+        while (b<c&&k<NAMESIZE) name[k++]=*b++;
+        while (k>1&&name[k-1]==' ') k--;
+        name[k++]='"';
+        name[k]='\0';
+      }
+      p=c+1;
+      continue;
+    }
+    if (*p=='('&&!(strcmp(kind,"Equation")==0&&strncmp(p,"(all,",5)==0)) {
+      for (depth=0; *p!='\0'; p++) {
+        if (*p=='(') depth++;
+        else if (*p==')'&&--depth==0) { p++; break; }
+      }
+      continue;
+    }
+    break;
+  }
+  if (!assertion) {
+    while (*p!='\0'&&*p!=' '&&*p!='('&&*p!='#'&&*p!='='&&k<NAMESIZE-1) name[k++]=*p++;
+    name[k]='\0';
+  }
+  eval_ctx_set(kind,name);
+}
+
 /* a non-finite value read where it would otherwise vanish (an equation
    coefficient, a condition operand): GEMPACK stops on the arithmetic
    error that produced it (manual 34.3) */
@@ -2800,7 +2843,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
      pass its fresh initial state (manual 12.2.4) */
   zdiv_scan_reset();
   while (tab_next_statement_resolved(commsyntax,filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
-    eval_ctx_set("Formula",line);
+    eval_ctx_stmt("Formula",line);
     long spos=teems_stmt_start;
     /* mapping calls lower to flat map~idx tokens before any brace
        tokenizer runs (manual 11.9.4; design doc M2); sum carried-dim
@@ -4128,7 +4171,7 @@ offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_el
   upd_conds uc;
   filehandle = teems_fopen(fname,"r");
   while (tab_next_statement_resolved(commsyntax,filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
-    eval_ctx_set("Update",line);
+    eval_ctx_stmt("Update",line);
     /* a mapped argument on the RHS lowers to map~idx and binds through
        the formula operand binder like any expression (manual 11.9.4;
        GTAP-E NCTAXLEV(r) = del_nctaxb(REGTOBLOC(r))); on the LHS it
@@ -4453,7 +4496,7 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
   upd_conds uc;
   filehandle = teems_fopen(fname,"r");
   while (tab_next_statement_resolved(commsyntax,filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
-    eval_ctx_set("Update",line);
+    eval_ctx_stmt("Update",line);
     /* a mapped argument on the RHS lowers to map~idx and binds through
        the formula operand binder like any expression (manual 11.9.4;
        GTAP-E NCTAXLEV(r) = del_nctaxb(REGTOBLOC(r))); on the LHS it
@@ -5136,7 +5179,7 @@ offset_t assertions_execute(char *fname,set_def *sets,dim_t nset,set_element *se
   zdiv_scan_reset();
   strcpy(sumsyntax,"sum(");
   while (tab_next_statement_resolved("assertion",filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
-    eval_ctx_set("Assertion",line);
+    eval_ctx_stmt("Assertion",line);
     if (teems_ord_lo>=0&&(teems_stmt_start<teems_ord_lo||teems_stmt_start>=teems_ord_hi)) continue;
     isctl=(strstr(line,"(loopctl)")!=NULL);
     if(isctl!=probe)continue;

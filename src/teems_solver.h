@@ -988,6 +988,7 @@ static inline int teems_nonfinite_bits(double x) { uint64_t u; memcpy(&u,&x,size
 /* statement whose expressions are being evaluated, named in the
    evaluator's arithmetic-error aborts (formula.c eval_ctx_set) */
 void eval_ctx_set(const char *kind, const char *name);
+void eval_ctx_stmt(const char *kind, const char *stmt);
 void eval_nonfinite_fatal(const char *what, double v);
 void eval_insert_fatal(const char *block, long row);
 int coefs_range_test_initial(array_def *coefs, offset_t ncof, elem_value *elem_vals);

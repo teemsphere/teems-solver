@@ -1416,7 +1416,7 @@ static int jacobian_fill_rows(char *fname, char *commsyntax,set_def *sets,offset
        coefficients whose values change between steps) */
     int sidx=0;
     while (tab_next_statement_resolved(commsyntax,filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
-      eval_ctx_set("Equation",line);
+      eval_ctx_stmt("Equation",line);
       if (strstr(line,"(default")==NULL) {
         stmt_cache[sidx].zerodivide=zerodivide;
         zdiv_default_hits=0;
@@ -1432,7 +1432,7 @@ static int jacobian_fill_rows(char *fname, char *commsyntax,set_def *sets,offset
   }
 
   while (tab_next_statement_resolved(commsyntax,filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
-    eval_ctx_set("Equation",line);
+    eval_ctx_stmt("Equation",line);
     if (strstr(line,"(default")==NULL) {
       stmt_cache=realloc(stmt_cache,(stmt_cache_n+1)*sizeof(stmt_prog));
       stp=&stmt_cache[stmt_cache_n];
