@@ -1662,7 +1662,9 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
           break;
         }
       }
-      if(count2==0&&i==ncof){
+      /* the coefficient loop runs first here, then the variable loop:
+         exhausted means i==nvar (it compared against ncof) */
+      if(count2==0&&i==nvar){
         errmsg("Error: %s is not a declared variable, coefficient, or parameter\n",vname);
         return -1;
       }
@@ -5868,6 +5870,12 @@ offset_t variables_read(char *fname, char *commsyntax, array_def *record, offset
               break;
             }
           }
+          if (l==nset) {
+            /* used to fall through with setid 0: the array silently
+               ranged over the first declared set */
+            errmsg("Error: set %s in the declaration of %s is not declared (GEMPACK manual 10.3, 10.4)\n",readitem,record[j].cofname);
+            return -1;
+          }
         }
         record[j].offset=addi;
         record[j].size=dcount;
@@ -6077,6 +6085,12 @@ offset_t coefficients_read(char *fname, char *commsyntax, array_def *record, off
               record[j].setid[m]=l;
               break;
             }
+          }
+          if (l==nset) {
+            /* used to fall through with setid 0: the array silently
+               ranged over the first declared set */
+            errmsg("Error: set %s in the declaration of %s is not declared (GEMPACK manual 10.3, 10.4)\n",readitem,record[j].cofname);
+            return -1;
           }
         }
         record[j].offset=addi;
@@ -6691,7 +6705,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
           if(sign[0]==1) {
             intvar[0]=intindx[0]+intindx[1];
           } else {
-            intvar[0]=intindx[0]+intindx[1];
+            intvar[0]=intindx[0]-intindx[1];
           }
         } else {
           intvar[0]=intindx[0];
@@ -8459,7 +8473,12 @@ static char *tab_next_statement_raw(char *commsyntax, FILE *filehandle, char *re
     for ( i = 0; i<count1; i++) {
       upperlinecomm[ i ] = toupper( (int) linecomm[ i ] );
     }
-    if (strncmp(upperlinecomm,uppercomsyn,count1) == 0&&check1==0) {
+    /* a key that ends in a name character ("read nt" from the
+       intertemporal/size readers) must end at a name boundary: it used to
+       match the first Read whose target merely starts with the name */
+    if (strncmp(upperlinecomm,uppercomsyn,count1) == 0&&check1==0&&
+        (!(isalnum((unsigned char)commsyntax[count1-1])||commsyntax[count1-1]=='_')||
+         !(isalnum((unsigned char)line[count1])||line[count1]=='_'))) {
       check1=1;
       teems_stmt_start=lp;
       n=strstr(line,finditem);//ha_cgefendofc
@@ -8579,7 +8598,9 @@ static char *tab_next_statement_resolved_raw(char *commsyntax, FILE *filehandle,
         p=strtok(&line[18],";");
         *zerodivide=formula_subst_scalar(p,record,coefs,ncof);//atof(p);
       }
-      if (strncmp(line,zerosyntax1,12) == 0||strncmp(line,zerosyntax2,11) == 0) {
+      /* OFF carries no value: the token walk below handed the parser the
+         statement's trailing newline, which used to resolve to 0 silently */
+      if ((strncmp(line,zerosyntax1,12) == 0||strncmp(line,zerosyntax2,11) == 0)&&strstr(line,"default")!=NULL) {
         p=strtok(line,")");
         p=strtok(NULL,"default");
         p=strtok(NULL," ");

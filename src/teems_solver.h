@@ -99,9 +99,16 @@ typedef long int fortran_int;/* INTEGER(8) interop with hsl_kernels.f90 */
    file formats and MPI messages carry solve_real or structs of it. */
 #ifdef TEEMS_STORE_F64
 typedef double store_real;
+/* TAB Write CSVs: every digit the stored value carries (round-trips
+   exactly); "%f" printed six fixed decimals, so values below 5e-7 were
+   written as 0.000000 */
+#define TEEMS_WRITE_FMT_COMMA "%.17g,"
+#define TEEMS_WRITE_FMT_NL "%.17g\n"
 #define TEEMS_STORE_PRECISION "double"
 #else
 typedef float store_real;
+#define TEEMS_WRITE_FMT_COMMA "%.9g,"
+#define TEEMS_WRITE_FMT_NL "%.9g\n"
 #define TEEMS_STORE_PRECISION "single"
 #endif
 

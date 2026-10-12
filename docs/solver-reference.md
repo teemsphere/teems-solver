@@ -72,8 +72,9 @@ Solver outputs, consumed by `ems_compose()`:
 - `out/sets/*.csv` — set listings; `out/coefficients/*.csv` /
   `out/postsim/*.csv` — updated coefficient values, one CSV per
   `Write` statement in the TAB (opt-in from teems-R since the
-  coefficient dump below became the default transport; `%f`
-  formatting, six fixed decimals).
+  coefficient dump below became the default transport; `%.9g`
+  formatting in the single-precision build, `%.17g` in the f64 build,
+  so every stored digit is written and a value round-trips exactly).
 - Solution binaries (prefix from `soldata`, default `solution`):
 
 | file | contents |
@@ -86,7 +87,7 @@ Solver outputs, consumed by `ems_compose()`:
 | `.cof` | coefficient dump header + declarations (`-cofdump`, default on): 4 × long `{version=1, ncof, ncofele, reserved}`, then `ncof × array_def` (same struct as `.var`), then `ncof × uint8 kind` (bit 0 = PostSim coefficient, bit 1 = `(parameter)`). Written after PostSim, so PostSim coefficients carry their computed values |
 | `.cbin` | `ncofele × double` — updated (post-simulation) coefficient values, the coefficient slice of the value vector in `array_def.offset` order; the coefficient twin of `.bin`. Together with `.cof` this replaces the per-coefficient CSVs as teems-R's coefficient transport (2026-08) |
 | `.cbin0` | pre-simulation coefficient values (`-cofdump`, Tier B2): 4 × long `{version=1, ncof, ncofele, phase=0}` (phase 0 = after the initial Reads and Formulas, before any step), then `ncofele × double` in the same order as `.cbin`; the declarations are the run's `.cof`. Unblocks levels results, `ORIG_LEVEL`, AVC-style averages and level-value shocks on the R side |
-| `.xac` | Gragg/Midpoint/Euler extrapolation record (Tier B2; GEMPACK's XAC file, [GM] 26.2.3), three-pass runs only: 4 × long `{version=1, nrow=nvarele, npass=3, nsubints}`, then `3 × nrow` doubles (pass by pass, `.bin` order: each pass's solution; with subintervals, the last subinterval's pass compounded onto the extrapolated result before it, so the Richardson weights of the passes give `.bin` exactly), then `nrow × int32` accuracy codes (6 = the passes agree to 6+ figures … 1 = one or none; minimum over subintervals; their histogram is the log's accuracy summary) |
+| `.xac` | Gragg/Midpoint/Euler extrapolation record (Tier B2; GEMPACK's XAC file, [GM] 26.2.3), three-pass runs only: 4 × long `{version=1, nrow=nvarele, npass=3, nsubints}`, then `3 × nrow` doubles (pass by pass, `.bin` order: each pass's solution; with subintervals, the last subinterval's pass compounded onto the extrapolated result before it, so the Richardson weights of the passes give `.bin` exactly), then `nrow × int32` accuracy codes (significant figures to which the two two-pass extrapolations agree, [GM] 26.2.1: 6 = 6 or more … 1 = one or none, 7 = both extrapolations below 1e-6 in magnitude, judged zero; minimum over subintervals; their histogram is the log's accuracy summary) |
 | `.cols` + `.cols.json` | extra solution columns (Tier B2): 4 × long `{version=1, ncol, nrow, kind}`, `nrow × long` row offsets (element offsets in `.bin` order), `ncol × nrow` doubles column by column; kind 0 mixed, 1 subtotal, 2 sagem_individual, 3 approx_cumulative, 4 pass_solution. The JSON carries `version/ncol/nrow/kind` and per column `index/kind/label/shocked`. Written for a complementarity run with both runs (the approximate (Euler) run's solution, kind 3) and for shock-group subtotals (Tier B3, one column per group in file order, kind 1; kind 2, SAGEM individual columns, when the run is one-step Johansen; the JSON `shocked` field is the group's item list). Per-subinterval pass solutions (kind 4) are not written |
 | `.jac` + `.jac.json` | base-point Jacobian (`-jacdump 1`, Tier B5): the linearized system C·z = 0 over every variable element, assembled once before the first step (after the initial Reads and Formulas) with the solve's own compiled equation programs, every row owned and every nonzero kept whatever the closure (endogenous, exogenous shocked or not), each entry with the equation's own sign (the solve's A / −B split undone). 4 × long `{version=1, nrow, ncol, nnz}`, then `nnz` long rows, `nnz` long columns, `nnz` doubles, sorted by row then column; repeated insertions into one (row, column) are summed (an exact cancellation stays as a stored 0, as in the probe pattern's `=0`). Rows are the condensed system's equation elements (backsolved defining equations excluded), equations in TAB order and GEMPACK order within each (first index fastest); columns are variable elements in `.bin` order (`ncol = nvarele`). The JSON carries `version/point/nrow/ncol/nnz` and per equation `name/first_row/nrows/sets`. The same bytes from every matrix method, rank count, thread count and driver; complementarity rows take their pre-simulation state branch (the probe's), and the state weights are restored before the solve. Costs 24 bytes per entry on rank 0 while it is built |
 | `.outputs.json` | completion marker (Tier B2), the run's LAST write and only after a run that printed no `Error:` line on any rank: `{version=1, solver_version, run_id, complete: true, files: [{name, path, kind, format_version}]}` listing every file rank 0 wrote (the locked five with `format_version` 0, `.cof` 1, `.cbin` 0, `.cbin0`/`.xac`/`.cols`/`.cols.json`/`.jac`/`.jac.json` 1, `.stats.json`/`.probe.json` 2, the CSVs). Written to a temporary name and renamed. The solver removes a previous run's `.outputs.json` (and `.outputs.json.tmp`), `.cbin0`, `.xac`, `.cols`, `.cols.json`, `.jac`, `.jac.json`, `.ud5`/`.ud6`/`.ud7` before any work, so a failed run leaves no marker; a reader trusts a side-car only when this file lists it |
@@ -1272,7 +1273,15 @@ method (basis of the golden-run verification, below).
   solution vectors and factorizations are double). `teems-solver-f64`
   is the same source built with double coefficient storage for
   accuracy-critical runs (teems-R `precision` argument); both binaries
-  ship in every image.
+  ship in every image. In the default binary every Formula, Update and
+  equation-coefficient intermediate (each operator's result and every
+  literal constant) is also float, where GEMPACK computes intermediates
+  in double and rounds once on storage ([GM] 63.2): `(A + 1) - A` with
+  A = 1e8 gives 0 here and 1 in GEMPACK or `teems-solver-f64`, and a
+  `(change)` Update's increment is formed in float before the double
+  shadow accumulates it, so extrapolated updated data degrades with the
+  step count in the float binary. Runs that need GEMPACK's intermediate
+  precision take `precision = "double"`.
 - Compiled `-Ofast` (includes `-ffast-math`: FP reassociation, no
   NaN/Inf guarantees); the solver's own NaN/Inf tests read the bit
   patterns, so its arithmetic-error stops hold under it. This is the

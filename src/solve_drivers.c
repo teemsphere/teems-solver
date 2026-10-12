@@ -1981,6 +1981,14 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
         if(newton) {
           nsteps=ns.total;
           vpercents=(solve_real)100/ns.neuler;
+          /* a new subinterval starts from zero change, as the stepcount==0
+             branch does for the other methods (newton_update accumulates
+             onto varchange; the subinterval end compounds it onto xcf) */
+          if(subindx>0) {
+            memset(varchange,0,nvarele*sizeof(solve_real));
+            ns.it=0;
+            ns.lam=1;
+          }
           ns.rprev=ns.rabs=newton_residual(&ns,elem_vals);
           ns.rlast=ns.rel;
           if(rank==rank_hsl)printf("Newton: initial sum of absolute values of the del_newton terms is %.6e (relative %.3e; GEMPACK manual 26.6.2)\n",ns.rabs,ns.rel);
@@ -3487,7 +3495,8 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
     if(rank==rank_hsl&&sol==maxsol-1) {
             if(subindx==0){
               xc124=realloc (xc124,nvarele*sizeof(int));
-              for(i=0; i<nvarele; i++)xc124[i]=6;
+              /* 7 = judged zero until a comparison below lowers it */
+              for(i=0; i<nvarele; i++)xc124[i]=7;
             }else{
             if(!inmemory){
             strcpy(tempfilenam,scratch_dir);
@@ -3505,48 +3514,23 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
             }
             }
 
-      /* the figures compare the two two-pass extrapolations, which a
-         single- or two-solution run does not have (xc24 is unset) */
+      /* figures of accuracy (GEMPACK manual 26.2.1): the significant
+         figures to which the two two-pass extrapolations agree (a single-
+         or two-solution run has no xc24). The previous test scaled the
+         first extrapolation down into [1,10) and bucketed the absolute
+         difference, so a result below 1 was never scaled up and the count
+         was decimal places, not figures: 0.00123456 against 0.00123999
+         read as "6 digits". A result whose extrapolations are both below
+         1e-6 in magnitude cannot be judged in figures and keeps its own
+         class (code 7, GEMPACK's "confidence that the result is zero") */
       if(maxsol==3) for(i=0; i<nvarele; i++){
-        j=0;
-        if(xc12[i]>0){
-        while (xc12[i] >= 10){
-          xc12[i] /= 10;
-          j++;
-        }
-        }else{
-        while (xc12[i] <= -10){
-          xc12[i] /= 10;
-          j++;
-        }
-        }
-        xc24[i]/=pow(10,j);
-        /* in double, clamped at the last bucket: two passes of different
-           magnitude (one near zero) overflowed int, and the undefined
-           conversion could land in the 5-digit bucket */
-        {
-          double dj=fabs(floor((xc12[i]-xc24[i])*100000));
-          j=(dj<10000)?(int)dj:10000;
-        }
-        if(j!=0){//}else {
-          if(j<10){
-            if(xc124[i]>5)xc124[i]=5;
-          }else{
-            if(j<100){
-              if(xc124[i]>4)xc124[i]=4;
-            }else {
-              if(j<1000){
-                if(xc124[i]>3)xc124[i]=3;
-              }else {
-                if(j<10000){
-                  if(xc124[i]>2)xc124[i]=2;
-                }else{
-                  if(xc124[i]>1)xc124[i]=1;
-                }
-              }
-            }
-          }
-        }
+        double a=fabs((double)xc12[i]),b=fabs((double)xc24[i]);
+        double sc=(a>b)?a:b,rel;
+        int fig;
+        if(sc<=1e-6) continue;
+        rel=fabs((double)xc12[i]-(double)xc24[i])/sc;
+        if(rel<1e-6)fig=6; else if(rel<1e-5)fig=5; else if(rel<1e-4)fig=4; else if(rel<1e-3)fig=3; else if(rel<1e-2)fig=2; else fig=1;
+        if(xc124[i]>fig)xc124[i]=fig;
       }
       if(rank==0&&maxsol==3&&subindx==subints-1)xac_codes(nvarele,xc124);
       if(subindx!=subints-1){
@@ -3622,11 +3606,14 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
         x1=NULL;
       }
     }
-    long int *precis= (long int *) calloc (6,sizeof(long int));
+    long int *precis= (long int *) calloc (7,sizeof(long int));
     
     if(rank==rank_hsl) {
       for(i=0; i<nvarele; i++){
    switch(xc124[i]) {
+      case 7:
+         precis[6]+=1;
+         break;
       case 6:
          precis[5]+=1;
          break;
@@ -3652,7 +3639,7 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
     else if(teems_two_run) {
       if(rank==0)printf("Accuracy estimates: not available from two solutions (-two_run 1; they need three multi-step solutions, GEMPACK manual 26.2.3)\n");
     }
-    else if(rank==0)printf("Accurate at 6 digits        %ld\nAccurate at 5 digits        %ld\nAccurate at 4 digits        %ld\nAccurate at 3 digits        %ld\nAccurate at 2 digits        %ld\nAccurate at 1 digit or none %ld\n",precis[5],precis[4],precis[3],precis[2],precis[1],precis[0]);
+    else if(rank==0)printf("Figures of accuracy: significant figures agreed by the two two-pass extrapolations (GEMPACK manual 26.2.1)\nAccurate at 6 digits        %ld\nAccurate at 5 digits        %ld\nAccurate at 4 digits        %ld\nAccurate at 3 digits        %ld\nAccurate at 2 digits        %ld\nAccurate at 1 digit or none %ld\nJudged zero (both below 1e-6) %ld\n",precis[5],precis[4],precis[3],precis[2],precis[1],precis[0],precis[6]);
     }
     free(precis);
     xc0=realloc (xc0,sizeof(solve_real));

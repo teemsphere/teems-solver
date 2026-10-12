@@ -1409,6 +1409,17 @@ call teems_apply_ma48_cntl2(CNTL)
       deallocate(ICNTL,INFO,IW)
       RETURN
     END IF
+    IF (INFO(1).GT.0) THEN
+      ! the kept pivot sequence no longer factorizes the block (rank
+      ! deficient after the ICNTL(11) re-pivot): decline so the caller
+      ! re-analyses and the JOB=1 branch above stops with the diagnosis
+      if (teems_verbosity()>=1) WRITE (6,'(A,I3)') &
+        'Note: fast block refactorize declined (rank deficient), MA48B/BD INFO(1) =',INFO(1)
+      REDO(1)=-21
+      deallocate(CNTL,RINFO,W,ERROR1,SOL,JCNB1)
+      deallocate(ICNTL,INFO,IW)
+      RETURN
+    END IF
     IF (INFO(1).LT.0) THEN
       if (teems_verbosity()>=1) WRITE (6,'(A,I3)') &
         'Note: fast block refactorize declined, MA48B/BD INFO(1) =',INFO(1)
@@ -2032,6 +2043,16 @@ SUBROUTINE SPEC48_SSOL2LA_P(INSIZE,IRN,JCN,VA,B,X)
     IF (pINFO(1).EQ.-3) THEN
       INSIZE(5)=-3
       INSIZE(6)=pINFO(4)
+      pready=.false.
+      IF (CONDEST_ON) deallocate(CVA,CB)
+      RETURN
+    END IF
+    IF (pINFO(1).GT.0) THEN
+      ! rank deficient under the kept pivot sequence: decline, the fresh
+      ! analyse (JOB=1 above) stops with the diagnosis
+      if (teems_verbosity()>=1) WRITE (6,'(A,I3)') &
+        'Note: fast refactorize declined (rank deficient), MA48B/BD INFO(1) =',pINFO(1)
+      INSIZE(5)=-21
       pready=.false.
       IF (CONDEST_ON) deallocate(CVA,CB)
       RETURN

@@ -722,6 +722,7 @@ typedef struct {
   array_def *coefs;
   offset_t ncof;
   int fail;
+  int depth;   /* bracket/sum/if nesting of the expression being read */
 } lin_ctx;
 
 static const char *lin_intrinsics[]={"sqrt","exp","loge","log10","abs","max","min","id01","id0v","round","trunc0","truncb","random","normal","cumnormal","lognormal","cumlognormal","gperf","gperfc","maxs","mins","prod",NULL};
@@ -777,7 +778,9 @@ static int lin_primary(lin_ctx *c) {
   if(*p=='(') {
     int d;
     c->p=p+1;
+    c->depth++;
     d=lin_expr(c);
+    c->depth--;
     if(c->fail) return 0;
     if(*c->p!=')') { lin_fatal(c,"unbalanced parentheses"); return 0; }
     c->p++;
@@ -814,7 +817,9 @@ static int lin_primary(lin_ctx *c) {
         if(body==NULL) { lin_fatal_tok(c,"malformed",nm,nmlen); return 0; }
         if(lin_has_var(a,body-1)) { lin_fatal_tok(c,"a linear variable in the conditional part of",nm,nmlen); return 0; }
         c->p=body;
+        c->depth++;
         d=lin_expr(c);
+        c->depth--;
         if(c->fail) return 0;
         if(c->p!=ge-1) { lin_fatal_tok(c,"malformed body of",nm,nmlen); return 0; }
         c->p=ge;
@@ -875,15 +880,41 @@ static int lin_term(lin_ctx *c) {
   return d;
 }
 
+/* a term whose text is a literal zero (the "= 0" side of an equation
+   arrives as "0-(...)") */
+static int lin_term_is_zero(const char *b, const char *e) {
+  char *end=NULL;
+  double v;
+  while(b<e&&(*b=='+'||*b=='-')) b++;
+  if(b>=e) return 0;
+  v=strtod(b,&end);
+  return end==e&&v==0;
+}
+
 static int lin_expr(lin_ctx *c) {
+  const char *b=c->p;
   int d=lin_term(c);
+  int hasvar=d>0,hasconst=d==0&&!lin_term_is_zero(b,c->p);
   if(c->fail) return 0;
   while(*c->p=='+'||*c->p=='-') {
     int e;
     c->p++;
+    b=c->p;
     e=lin_term(c);
     if(c->fail) return 0;
     if(e>d) d=e;
+    if(e>0) hasvar=1;
+    else if(!lin_term_is_zero(b,c->p)) hasconst=1;
+  }
+  /* manual 11.4.8: every term of a linear equation carries a linear
+     variable. Inside a bracket the extractor folded the constant into the
+     variable's coefficient (A*(x+1) became 2A*x): fatal. At the top level
+     the term is dropped; that is what the official GTAPv7 TAB relies on
+     (E_CNTtechrinv: CNTtechr("invest",r) = [0.01*EVSCALFACT(r)]), so it
+     stays a run with a named warning instead of a silent drop */
+  if(hasvar&&hasconst) {
+    if(c->depth>0) { lin_fatal(c,"a term with no linear variable added to a term with one inside a bracket (GEMPACK manual 11.4.8)"); return 0; }
+    printf("Warning: equation %s has a term with no linear variable; the term is dropped (GEMPACK manual 11.4.8: every term of a linear equation must contain a linear variable)\n",c->eqname);
   }
   return d;
 }
@@ -891,7 +922,7 @@ static int lin_expr(lin_ctx *c) {
 static void eq_linearity_check(const char *text, const char *eqname, array_def *coefs, offset_t ncof) {
   lin_ctx c;
   int d;
-  c.p=text; c.eqname=eqname; c.coefs=coefs; c.ncof=ncof; c.fail=0;
+  c.p=text; c.eqname=eqname; c.coefs=coefs; c.ncof=ncof; c.fail=0; c.depth=0;
   d=lin_expr(&c);
   if(!c.fail&&*c.p!='\0') {
     int n=(int)strlen(c.p);

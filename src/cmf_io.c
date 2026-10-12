@@ -2444,7 +2444,7 @@ int outputs_write_csv(char *filename, char *newdatlogname, char *newdatfile,set_
             indx=0;
             if(coefs[i].size<2) {
               for(j=0; j<innerloop; j++) {
-                fprintf(fout,"%f\n",elem_vals[coefs[i].offset+j].value);
+                fprintf(fout,TEEMS_WRITE_FMT_NL,elem_vals[coefs[i].offset+j].value);
               }
               fprintf(fout,"\n");
             } else {
@@ -2464,9 +2464,9 @@ int outputs_write_csv(char *filename, char *newdatlogname, char *newdatfile,set_
                   indx=0;
                   for (l=0; l<coefs[i].size; l++)indx+=coefs[i].strides[l]*setindx[l];
                   if(setindx[1]==sets[coefs[i].setid[1]].size-1){
-                    fprintf(fout,"%f\n",elem_vals[coefs[i].offset+indx].value);
+                    fprintf(fout,TEEMS_WRITE_FMT_NL,elem_vals[coefs[i].offset+indx].value);
                   }else{
-                    fprintf(fout,"%f,",elem_vals[coefs[i].offset+indx].value);
+                    fprintf(fout,TEEMS_WRITE_FMT_COMMA,elem_vals[coefs[i].offset+indx].value);
                   }
                 }
                 fprintf(fout,"\n");
@@ -3449,7 +3449,7 @@ static int sb_coef_read_stmt(char *tabfile, const char *coef, char *logname, cha
     p+=4;
     while (*p==' ') p++;
     if (*p=='(') { p=strchr(p,')'); if (p==NULL) continue; p++; while (*p==' ') p++; }
-    if (strncmp(p,coef,cl)!=0||(p[cl]!=' '&&p[cl]!='f')) continue;
+    if (strncmp(p,coef,cl)!=0||cond_is_namec(p[cl])) continue;
     fl=strstr(p,"file");
     hd=strstr(p,"header");
     if (fl==NULL||hd==NULL) continue;
@@ -3518,7 +3518,7 @@ static int sb_coef_dims(char *tabfile, const char *coef, char dimset[][NAMESIZE]
 
 static int sb_ele_find(char (*ele)[NAMESIZE], int n, const char *name) {
   int i;
-  for (i=0; i<n; i++) if (strcmp(ele[i],name)==0) return i;
+  for (i=0; i<n; i++) if (sb_eqi(ele[i],name)) return i;
   return -1;
 }
 
@@ -3809,7 +3809,7 @@ static int sb_leaf_keep(char *fname, cmf_file_entry *iodata, int niodata, const 
             if (ok) {
               for (k=0; k<nsrc; k++) {
                 double acc=0;
-                for (j=0; j<ns2; j++) if (strcmp(mlab[j].ch,srcele[k])==0) acc+=v2[j];
+                for (j=0; j<ns2; j++) if (sb_eqi(mlab[j].ch,srcele[k])) acc+=v2[j];
                 keep[k]=(char)sb_op_test(acc,op,cval);
               }
             }
@@ -3901,7 +3901,9 @@ static int sb_leaf_keep(char *fname, cmf_file_entry *iodata, int niodata, const 
               lpos=malloc((nsrc>0?nsrc:1)*sizeof(int));
               if (lpos==NULL) ok=0;
               for (k=0; ok&&k<nsrc; k++) {
-                lpos[k]=(dsz[loopdim]==nsrc)?k:sb_ele_find(ldele,dsz[loopdim],srcele[k]);
+                /* always by name: a same-size source set in another
+                   order (or a permuted subset) used to take position k */
+                lpos[k]=sb_ele_find(ldele,dsz[loopdim],srcele[k]);
                 if (lpos[k]<0) {
                   errmsg("Error: set builder %s: element %s of source set %s is not in %s's dimension set %s\n",name,srcele[k],src,coef,dimset[loopdim]);
                   ok=0;

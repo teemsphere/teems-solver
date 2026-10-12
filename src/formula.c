@@ -24,18 +24,25 @@ solve_real formula_subst_scalar(char *var2, elem_value *record, array_def *coefs
   if (var2==NULL) return 0;
   str_delete_char(var2,' ');
   solve_real eval=0;
-  if (var2[0]>='0'&&var2[0]<='9') {
-    eval=atof(var2);
-    return eval;
+  {
+    /* any real constant (sign, leading dot, exponent) -- the old first-
+       character-is-a-digit test sent -1 and .25 to the name lookup, which
+       returned 0 with no message */
+    char *end=NULL;
+    double v=strtod(var2,&end);
+    if (end!=var2&&*end=='\0') return (solve_real)v;
   }
-  if (ncof<=0) return eval; /* no coefficient to resolve against: the do-while below started at coefs[-1] */
-  index=ncof-1;
-  do {
-    if (strcmp(coefs[index].cofname,var2)==0) {
-      eval=record[coefs[index].offset].value;
-      break;
-    }
-  } while (index--);
+  if (ncof>0) { /* no coefficient to resolve against: the do-while below started at coefs[-1] */
+    index=ncof-1;
+    do {
+      if (strcmp(coefs[index].cofname,var2)==0) {
+        eval=record[coefs[index].offset].value;
+        return eval;
+      }
+    } while (index--);
+  }
+  errmsg("Error: Zerodivide default %s is neither a real constant nor a declared scalar coefficient (GEMPACK manual 10.11)\n",var2);
+  MPI_Abort(PETSC_COMM_WORLD,1);
   return eval;
 }
 
@@ -3267,7 +3274,17 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
               break;
             }
           } while (index--);
+          /* both lookups missed (index ran to -1): the write used to land
+             on element 0 of the first coefficient with no message */
+          if (index<0) {
+            errmsg("Error: Formula assigns %s, which is not a declared coefficient (GEMPACK manual 10.8)\n",p);
+            MPI_Abort(PETSC_COMM_WORLD,1);
+          }
         }
+        /* the fast-form condition binder below reuses index; the range
+           test, the arithmetic-error message and the Zerodivide report
+           after the evaluation need the LHS */
+        const offset_t lhs_index=index;
         char *lhsargs=NULL;
         if (varsize>0) {
           char *ta=strtok(NULL,")");
@@ -3416,6 +3433,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
               MPI_Abort(PETSC_COMM_WORLD,1);
             }
           }
+        index=lhs_index;
         /* i: inner condition loop's counter — was shared-by-omission,
            a result-corrupting write-write race at maxthreads>1 */
         #pragma omp parallel if(fsr==SR_PARALLEL) private(l,l2,i,i4,dcount,i3,i1,arSet1,logi,index,eval,ops1) shared(elem_vals,arSet)
@@ -4332,6 +4350,15 @@ offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_el
               break;
             }
           } while (index--);
+          /* an undeclared name used to write element 0 of the first
+             coefficient; a variable LHS ran and wrote the variable's
+             slots between steps (manual 11.12.4: the LHS is a coefficient) */
+          if (index<0) {
+            errmsg("Error: Update assigns %s, which is not a declared coefficient (GEMPACK manual 11.12.4)\n",p);
+            MPI_Abort(PETSC_COMM_WORLD,1);
+          }
+          errmsg("Error: Update assigns variable %s; the left-hand side of an Update must be a coefficient (GEMPACK manual 11.12.4)\n",p);
+          MPI_Abort(PETSC_COMM_WORLD,1);
         }
         char *lhsargs=NULL;
         if (varsize>0) {
@@ -4657,6 +4684,15 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
               break;
             }
           } while (index--);
+          /* an undeclared name used to write element 0 of the first
+             coefficient; a variable LHS ran and wrote the variable's
+             slots between steps (manual 11.12.4: the LHS is a coefficient) */
+          if (index<0) {
+            errmsg("Error: Update assigns %s, which is not a declared coefficient (GEMPACK manual 11.12.4)\n",p);
+            MPI_Abort(PETSC_COMM_WORLD,1);
+          }
+          errmsg("Error: Update assigns variable %s; the left-hand side of an Update must be a coefficient (GEMPACK manual 11.12.4)\n",p);
+          MPI_Abort(PETSC_COMM_WORLD,1);
         }
         char *lhsargs=NULL;
         if (varsize>0) {
