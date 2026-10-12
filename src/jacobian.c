@@ -107,7 +107,7 @@ static int sum_prog_build(char *formulain, char *commsyntax, bool skip_linvar_su
     if (k==-1) {
       return 0;
     }
-    if (k==0||formulain[i+k-1]=='+'||formulain[i+k-1]=='-'||formulain[i+k-1]=='*'||formulain[i+k-1]=='/'||formulain[i+k-1]=='^'||formulain[i+k-1]=='('||formulain[i+k-1]==',') {
+    if (k==0||expr_delim(formulain[i+k-1])) {
       readitem=formulain+i+k;
       strcpy(line,readitem);
       sum_extract(line);
@@ -1448,7 +1448,7 @@ static int jacobian_fill_rows(char *fname, char *commsyntax,set_def *sets,offset
     int sidx=0;
     while (tab_next_statement_resolved(commsyntax,filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
       eval_ctx_stmt("Equation",line);
-      if (strstr(line,"(default")==NULL) {
+      if (!tab_is_default_stmt(line)) {
         stmt_cache[sidx].zerodivide=zerodivide;
         zdiv_default_hits=0;
         stmt_prog_execute(&stmt_cache[sidx],matrow,eq_addr,stmt_cache[sidx].nloops,sets,set_elems,elem_vals,closure_vals,vars,Istart1,Iend1,A,B);
@@ -1464,7 +1464,7 @@ static int jacobian_fill_rows(char *fname, char *commsyntax,set_def *sets,offset
 
   while (tab_next_statement_resolved(commsyntax,filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
     eval_ctx_stmt("Equation",line);
-    if (strstr(line,"(default")==NULL) {
+    if (!tab_is_default_stmt(line)) {
       stmt_cache=realloc(stmt_cache,(stmt_cache_n+1)*sizeof(stmt_prog));
       stp=&stmt_cache[stmt_cache_n];
       stmt_cache_n++;
@@ -1838,7 +1838,7 @@ int backsolve_recover(char *fname, char *commsyntax,set_def *sets,offset_t nset,
   if (bs_cache_built) {
     /* refresh zerodivide defaults, as in the jacobian_fill fast path */
     while (tab_next_statement_resolved(commsyntax,filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
-      if (strstr(line,"(default")==NULL) {
+      if (!tab_is_default_stmt(line)) {
         bs_cache[sidx].st.zerodivide=zerodivide;
         sidx++;
       }
@@ -1846,7 +1846,7 @@ int backsolve_recover(char *fname, char *commsyntax,set_def *sets,offset_t nset,
   }
   else {
     while (tab_next_statement_resolved(commsyntax,filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
-      if (strstr(line,"(default")!=NULL) continue;
+      if (tab_is_default_stmt(line)) continue;
       tab_equation_name(line,eqname);
       pr=-1;
       for (i=0; i<nbacksolve; i++) {
@@ -1965,9 +1965,9 @@ int eq_sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifier 
           if (999<j&&j<10000) {
             strcat(interchar,"gen_sum");
           }
-          if (i>10000) {
-            strcat(interchar,"gen_sum");
-            errmsg("Error: too many sum() terms in one statement\n");
+          if (j>=10000) {
+            errmsg("Error: too many sum() terms in one statement (limit 10000)\n");
+            MPI_Abort(PETSC_COMM_WORLD,1);
           }
           strcat(interchar,interchar1);
           strcpy(sum_cof[j].sumname,interchar);
@@ -2098,7 +2098,7 @@ int eq_sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifier 
       }
 
     }
-    else if (formulain[i+k-1]=='+'||formulain[i+k-1]=='-'||formulain[i+k-1]=='*'||formulain[i+k-1]=='/'||formulain[i+k-1]=='^'||formulain[i+k-1]=='('||formulain[i+k-1]==',') {
+    else if (expr_delim(formulain[i+k-1])) {
       readitem=formulain+i+k;
       strcpy(line,readitem);
       strcpy(line1,readitem);
@@ -2131,9 +2131,9 @@ int eq_sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifier 
           if (999<j&&j<10000) {
             strcat(interchar,"gen_sum");
           }
-          if (i>10000) {
-            strcat(interchar,"gen_sum");
-            errmsg("Error: too many sum() terms in one statement\n");
+          if (j>=10000) {
+            errmsg("Error: too many sum() terms in one statement (limit 10000)\n");
+            MPI_Abort(PETSC_COMM_WORLD,1);
           }
           strcat(interchar,interchar1);
           strcpy(sum_cof[j].sumname,interchar);
@@ -2350,7 +2350,7 @@ int eq_sum_replace(char *formulain, char *commsyntax,int LinIndx, eq_var_ref *Li
         i=i+k+1;
       }
     }
-    else if (formulain[i+k-1]=='+'||formulain[i+k-1]=='-'||formulain[i+k-1]=='*'||formulain[i+k-1]=='/'||formulain[i+k-1]=='^'||formulain[i+k-1]=='('||formulain[i+k-1]==',') {
+    else if (expr_delim(formulain[i+k-1])) {
       readitem=formulain+i+k;
       strcpy(line,readitem);
       sum_extract(line);
@@ -2608,7 +2608,7 @@ int equation_order_read(char *fname, char *commsyntax,set_def *sets,dim_t nset,s
   if (filehandle==NULL) return 0;
 
   while (tab_next_statement_resolved(commsyntax,filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
-    if (strstr(line,"(default")==NULL) {
+    if (!tab_is_default_stmt(line)) {
       str_replace_first(line, commsyntax, "");
       str_replace_first(line, "(linear)", "");
       tab_wordops_normalize(line);
@@ -2638,7 +2638,11 @@ int equation_order_read(char *fname, char *commsyntax,set_def *sets,dim_t nset,s
         strcpy(line,linecopy);
         readitem = strtok(line,"=");
         readitem = strtok(NULL,";");
-        if (readitem==NULL||(readitem-line)+strlen(readitem)+strlen(vname)+4>=sizeof(line)) {
+        if (readitem!=NULL&&(readitem-line)+strlen(readitem)+strlen(vname)+4>=sizeof(line)) {
+          errmsg("Error: %s statement too long: the left-hand side is rewritten onto the right, which exceeds the %d-character statement buffer; shorten the left-hand side: %.80s...\n",commsyntax,TABREADLINE,linecopy);
+          MPI_Abort(PETSC_COMM_WORLD,1);
+        }
+        if (readitem==NULL) {
           errmsg("Error: malformed %s statement in TAB file: %s\n",commsyntax,linecopy);
           fclose(filehandle);
           return 0;
@@ -2670,7 +2674,11 @@ int equation_order_read(char *fname, char *commsyntax,set_def *sets,dim_t nset,s
         strcpy(line,linecopy);
         readitem = strtok(line,"=");
         readitem = strtok(NULL,";");
-        if (readitem==NULL||(readitem-line)+strlen(readitem)+strlen(vname)+4>=sizeof(line)) {
+        if (readitem!=NULL&&(readitem-line)+strlen(readitem)+strlen(vname)+4>=sizeof(line)) {
+          errmsg("Error: %s statement too long: the left-hand side is rewritten onto the right, which exceeds the %d-character statement buffer; shorten the left-hand side: %.80s...\n",commsyntax,TABREADLINE,linecopy);
+          MPI_Abort(PETSC_COMM_WORLD,1);
+        }
+        if (readitem==NULL) {
           errmsg("Error: malformed %s statement in TAB file: %s\n",commsyntax,linecopy);
           fclose(filehandle);
           return 0;
@@ -2967,7 +2975,7 @@ int equation_order_read_nested(char *fname, char *commsyntax,set_def *sets,dim_t
   if (filehandle==NULL) return 0;
 
   while (tab_next_statement_resolved(commsyntax,filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
-    if (strstr(line,"(default")==NULL) {
+    if (!tab_is_default_stmt(line)) {
       str_replace_first(line, commsyntax, "");
       str_replace_first(line, "(linear)", "");
       tab_wordops_normalize(line);
@@ -2997,7 +3005,11 @@ int equation_order_read_nested(char *fname, char *commsyntax,set_def *sets,dim_t
         strcpy(line,linecopy);
         readitem = strtok(line,"=");
         readitem = strtok(NULL,";");
-        if (readitem==NULL||(readitem-line)+strlen(readitem)+strlen(vname)+4>=sizeof(line)) {
+        if (readitem!=NULL&&(readitem-line)+strlen(readitem)+strlen(vname)+4>=sizeof(line)) {
+          errmsg("Error: %s statement too long: the left-hand side is rewritten onto the right, which exceeds the %d-character statement buffer; shorten the left-hand side: %.80s...\n",commsyntax,TABREADLINE,linecopy);
+          MPI_Abort(PETSC_COMM_WORLD,1);
+        }
+        if (readitem==NULL) {
           errmsg("Error: malformed %s statement in TAB file: %s\n",commsyntax,linecopy);
           fclose(filehandle);
           return 0;
@@ -3029,7 +3041,11 @@ int equation_order_read_nested(char *fname, char *commsyntax,set_def *sets,dim_t
         strcpy(line,linecopy);
         readitem = strtok(line,"=");
         readitem = strtok(NULL,";");
-        if (readitem==NULL||(readitem-line)+strlen(readitem)+strlen(vname)+4>=sizeof(line)) {
+        if (readitem!=NULL&&(readitem-line)+strlen(readitem)+strlen(vname)+4>=sizeof(line)) {
+          errmsg("Error: %s statement too long: the left-hand side is rewritten onto the right, which exceeds the %d-character statement buffer; shorten the left-hand side: %.80s...\n",commsyntax,TABREADLINE,linecopy);
+          MPI_Abort(PETSC_COMM_WORLD,1);
+        }
+        if (readitem==NULL) {
           errmsg("Error: malformed %s statement in TAB file: %s\n",commsyntax,linecopy);
           fclose(filehandle);
           return 0;
@@ -3329,7 +3345,7 @@ int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,
   Jindx=0;
 
   while (tab_next_statement_resolved(commsyntax,filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
-    if (strstr(line,"(default")==NULL) {
+    if (!tab_is_default_stmt(line)) {
       if(eqmeta!=NULL)tab_equation_name(line,eqmeta[eqindx].eqname);
       str_replace_first(line, commsyntax, "");
       str_replace_first(line, "(linear)", "");

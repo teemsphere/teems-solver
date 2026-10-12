@@ -1349,7 +1349,7 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
       time(&timeend);
       gettimeofday(&endtime, NULL);
       clock_gettime(CLOCK_REALTIME, &gettime_end);
-      rep_time = ((double)(gettime_end.tv_nsec-gettime_beg.tv_nsec))/1000000000.0;
+      rep_time = (double)(gettime_end.tv_sec-gettime_beg.tv_sec)+((double)(gettime_end.tv_nsec-gettime_beg.tv_nsec))/1000000000.0;
       if(rank==0)logmsg(1,"Step time %.2f s\n",(endtime.tv_sec - begintime.tv_sec)+((double)(endtime.tv_usec - begintime.tv_usec))/ 1000000);
       if(rank==0)logmsg(1,"Step wall time %.2f s\n",rep_time);
       teems_rss_probe("step");

@@ -282,6 +282,11 @@ int datafile_read_labels(char *varname, char *filename,dim_t d1, datafile_labels
           if (count1!=1) {
             readitem = strtok(line,"\n");
             if (readitem != NULL) {
+              /* trailing blanks or tabs are padding, not part of the
+                 label (GEMPACK strings are blank-padded, manual
+                 38.2.8; audit S4-F8) */
+              size_t rl=strlen(readitem);
+              while (rl>0&&(readitem[rl-1]==' '||readitem[rl-1]=='\t')) readitem[--rl]='\0';
               /* the bound was checked only AFTER the write below, so a
                  second block matching the same header re-entered with
                  reccount already at d1 (fuzz batch 14) */
@@ -338,10 +343,64 @@ int cmf_subtotals_file(char *filename, char *out) {
   return n;
 }
 
+/* manifest statements "<kw> \"<logical>\" \"<path>\"" / "<kw> \"<path>\"":
+   every quoted token is located by position and checked, so a missing
+   quote or an unquoted logical name is a named fatal instead of a NULL
+   strtok dereference (SEGV, audit S4-F9); copies are bounded */
+static int cmf_quotes_find(char *line,char *q[4],int want) {
+  char *p=line;
+  int i;
+  for(i=0; i<want; i++) {
+    q[i]=strchr(p,'"');
+    if(q[i]==NULL)return 0;
+    p=q[i]+1;
+  }
+  return 1;
+}
+
+static int cmf_pair_read(char *line,const char *kw,char *logname,char *filname) {
+  char stmt[TABREADLINE];
+  char *q[4];
+  int k;
+  strcpy(stmt,line);
+  if(!cmf_quotes_find(line,q,4)||q[1]==q[0]+1||q[3]==q[2]+1) {
+    errmsg("Error: malformed %s statement in the manifest, expected %s \"<logical name>\" \"<path>\": %s\n",kw,kw,stmt);
+    return -1;
+  }
+  *q[1]='\0';
+  *q[3]='\0';
+  if(cmf_strcpy_bounded(logname,q[0]+1,NAMESIZE)) {
+    errmsg("Error: the logical file name in a %s statement exceeds %d characters: %s\n",kw,NAMESIZE-1,stmt);
+    return -1;
+  }
+  if(cmf_strcpy_bounded(filname,q[2]+1,TABREADLINE)) {
+    errmsg("Error: the path in a %s statement exceeds %d characters: %s\n",kw,TABREADLINE-1,stmt);
+    return -1;
+  }
+  for(k=0; logname[k]!='\0'; k++)logname[k]=tolower((int)logname[k]);
+  return 0;
+}
+
+static int cmf_quoted_read(char *line,const char *kw,char *dst,size_t cap) {
+  char stmt[TABREADLINE];
+  char *q[4];
+  strcpy(stmt,line);
+  if(!cmf_quotes_find(line,q,2)||q[1]==q[0]+1) {
+    errmsg("Error: malformed %s statement in the manifest, expected %s \"<path>\": %s\n",kw,kw,stmt);
+    return -1;
+  }
+  *q[1]='\0';
+  if(cmf_strcpy_bounded(dst,q[0]+1,cap)) {
+    errmsg("Error: the path in a %s statement exceeds %d characters: %s\n",kw,(int)cap-1,stmt);
+    return -1;
+  }
+  return 0;
+}
+
 int cmf_read(char *filename, int niodata, cmf_file_entry *iodata, char *tabfile, char *closure, char *shock) {
   FILE * filehandle;
-  char line[TABREADLINE],*readitem,commsyntax[NAMESIZE];
-  int j=0,k;
+  char line[TABREADLINE],commsyntax[NAMESIZE];
+  int j=0;
   strcpy(commsyntax,"iodata");
   filehandle = teems_fopen(filename,"r");
   if(filehandle==NULL){
@@ -349,18 +408,7 @@ int cmf_read(char *filename, int niodata, cmf_file_entry *iodata, char *tabfile,
     return -1;
   }
   while (tab_next_statement(commsyntax,filehandle,line,TABREADLINE)) {
-    readitem = strtok(line,"\"");
-    readitem = strtok(NULL,"\"");
-    k=0;
-    while (readitem[k]!= '\0') {
-      readitem[k]=tolower((int)readitem[k]);
-      k++;
-    }
-    strcpy(iodata[j].logname,readitem);
-    k=0;
-    readitem = strtok(NULL,"\"");
-    readitem = strtok(NULL,"\"");
-    strcpy(iodata[j].filname,readitem);
+    if(cmf_pair_read(line,commsyntax,iodata[j].logname,iodata[j].filname)) { fclose(filehandle); return -1; }
     j++;
   }
   fclose(filehandle);
@@ -368,18 +416,7 @@ int cmf_read(char *filename, int niodata, cmf_file_entry *iodata, char *tabfile,
   strcpy(commsyntax,"outdata");
   filehandle = teems_fopen(filename,"r");
   while (tab_next_statement(commsyntax,filehandle,line,TABREADLINE)) {
-    readitem = strtok(line,"\"");
-    readitem = strtok(NULL,"\"");
-    k=0;
-    while (readitem[k]!= '\0') {
-      readitem[k]=tolower((int)readitem[k]);
-      k++;
-    }
-    strcpy(iodata[j].logname,readitem);
-    k=0;
-    readitem = strtok(NULL,"\"");
-    readitem = strtok(NULL,"\"");
-    strcpy(iodata[j].filname,readitem);
+    if(cmf_pair_read(line,commsyntax,iodata[j].logname,iodata[j].filname)) { fclose(filehandle); return -1; }
     j++;
   }
   fclose(filehandle);
@@ -387,18 +424,7 @@ int cmf_read(char *filename, int niodata, cmf_file_entry *iodata, char *tabfile,
   strcpy(commsyntax,"soldata");
   filehandle = teems_fopen(filename,"r");
   while (tab_next_statement(commsyntax,filehandle,line,TABREADLINE)) {
-    readitem = strtok(line,"\"");
-    readitem = strtok(NULL,"\"");
-    k=0;
-    while (readitem[k]!= '\0') {
-      readitem[k]=tolower((int)readitem[k]);
-      k++;
-    }
-    strcpy(iodata[j].logname,readitem);
-    k=0;
-    readitem = strtok(NULL,"\"");
-    readitem = strtok(NULL,"\"");
-    strcpy(iodata[j].filname,readitem);
+    if(cmf_pair_read(line,commsyntax,iodata[j].logname,iodata[j].filname)) { fclose(filehandle); return -1; }
     j++;
   }
   fclose(filehandle);
@@ -406,25 +432,19 @@ int cmf_read(char *filename, int niodata, cmf_file_entry *iodata, char *tabfile,
   filehandle = teems_fopen(filename,"r");
   strcpy(commsyntax,"tabfile");
   while (tab_next_statement(commsyntax,filehandle,line,TABREADLINE)) {
-    readitem = strtok(line,"\"");
-    readitem = strtok(NULL,"\"");
-    strcpy(tabfile,readitem);
+    if(cmf_quoted_read(line,commsyntax,tabfile,TABREADLINE)) { fclose(filehandle); return -1; }
   }
   fclose(filehandle);
   filehandle = teems_fopen(filename,"r");
   strcpy(commsyntax,"closure");
   while (tab_next_statement(commsyntax,filehandle,line,TABREADLINE)) {
-    readitem = strtok(line,"\"");
-    readitem = strtok(NULL,"\"");
-    strcpy(closure,readitem);
+    if(cmf_quoted_read(line,commsyntax,closure,TABREADLINE)) { fclose(filehandle); return -1; }
   }
   fclose(filehandle);
   filehandle = teems_fopen(filename,"r");
   strcpy(commsyntax,"shock");
   while (tab_next_statement(commsyntax,filehandle,line,TABREADLINE)) {
-    readitem = strtok(line,"\"");
-    readitem = strtok(NULL,"\"");
-    strcpy(shock,readitem);
+    if(cmf_quoted_read(line,commsyntax,shock,TABREADLINE)) { fclose(filehandle); return -1; }
   }
   fclose(filehandle);
   return 1;
@@ -1497,6 +1517,18 @@ static int if_in_lower(char *s, size_t cap, char *pre, size_t precap, int *seq) 
   return 0;
 }
 
+/* a Write-statement token into a fixed buffer: a missing delimiter
+   (str_find_ci -1) or an over-long name is a named fatal, not a
+   strncpy with SIZE_MAX (audit S4-F11) */
+static void wr_tok(char *dst,size_t cap,const char *src,int len,const char *what,const char *line) {
+  if(len<0||(size_t)len>=cap) {
+    errmsg("Error: cannot read the %s of a Write statement (missing delimiter or over %d characters): %s\n",what,(int)cap-1,line);
+    MPI_Abort(PETSC_COMM_WORLD,1);
+  }
+  memcpy(dst,src,(size_t)len);
+  dst[len]='\0';
+}
+
 /* In an equation, a sum condition naming the index of an enclosing sum
    (sum(s,S, sum(j,T: j = s, w(j))) -- the IN rewrite's shape, and any
    index condition of that form, manual 11.4.11) cannot gate the columns
@@ -2060,7 +2092,13 @@ static int tab_preprocess_run(char *filename, char *newtabfile) {
              SW1, 2026-09-25). A '$' prefix stays with the name so a
              $POS call never resolves to a declaration. */
           {
-            int oe=(int)(n1-line2),os=oe;
+            /* blanks may separate the identifier from its bracket
+               ("x (\"a\")", TABLO ignores them, audit S3-B3): step back
+               over them, then over the identifier; varname carries the
+               '(' the lookup expects */
+            int op=(int)(n1-line2),oe=op,os;
+            while (oe>0&&line2[oe-1]==' ') oe--;
+            os=oe;
             while (os>0&&cond_is_namec(line2[os-1])) os--;
             if (os>0&&line2[os-1]=='$') os--;
             /* no identifier before the '(' (a qualifier group such as
@@ -2071,7 +2109,8 @@ static int tab_preprocess_run(char *filename, char *newtabfile) {
               errmsg("Error: TAB statement too complex in tab_preprocess: %s\n",line);
               return -1;
             }
-            memcpy(varname,&line2[os],oe-os+1);
+            memcpy(varname,&line2[os],oe-os);
+            varname[oe-os]=line2[op];
             varname[oe-os+1]='\0';
           }
           n1=varname;
@@ -2348,13 +2387,11 @@ int outputs_write_csv(char *filename, char *newdatlogname, char *newdatfile,set_
         i=str_find_ci(readline," ");
         readline=readline+i+1;
         i=str_find_ci(readline," ");
-        strncpy(varname,readline,i);
-        varname[i]='\0';
+        wr_tok(varname,sizeof(varname),readline,i,"coefficient or set name",line);
         i=str_find_ci(line,comsyntax);
         readline=line+i+n;
         i=str_find_ci(readline,"\"");
-        strncpy(header,readline,i);
-        header[i]='\0';
+        wr_tok(header,sizeof(header),readline,i,"header",line);
 
         i=str_find_ci(line,"longname \"");
         if(i<0) longname[0]='\0';
@@ -2365,16 +2402,16 @@ int outputs_write_csv(char *filename, char *newdatlogname, char *newdatfile,set_
           strncpy(longname,readline,i);
           longname[i]='\0';
         }
-        setsize[0]='\0';
         for (i=0; i<nset; i++) {
           if (strcmp(sets[i].setname,varname)==0) {
-            sprintf(setsize, "%d", sets[i].size);
-            strcat(setsize," Strings Length 12 Header \"");
-            strcat(setsize,header);
-            strcat(setsize,"\" LongName \"");
-            strcat(setsize,longname);
-            strcat(setsize,"\";\n");
-            fprintf(fout,"%s",setsize);
+            /* GTAP set strings are 12 wide; a longer element widens the
+               record instead of being declared shorter than it is */
+            size_t slen=12;
+            for (j=0; j<sets[i].size; j++) {
+              size_t l1=strlen(set_elems[sets[i].offset+j].setele);
+              if (l1>slen) slen=l1;
+            }
+            fprintf(fout,"%d Strings Length %d Header \"%s\" LongName \"%s\";\n",sets[i].size,(int)slen,header,longname);
             for (j=0; j<sets[i].size; j++)fprintf(fout,"%s\n",set_elems[sets[i].offset+j].setele);
             fprintf(fout,"\n");
           }
@@ -2383,16 +2420,19 @@ int outputs_write_csv(char *filename, char *newdatlogname, char *newdatfile,set_
         int wbyele=0;
         i=str_find_ci(line," ");
         readline=line+i+1;
+        /* "(postsim)" outside a PostSim section (manual 12.1 form 2):
+           the ordinary outputs are written after the PostSim pass
+           anyway; the TAB splitter registers the file when sections
+           exist, and with none there is no pass to wait for */
+        if(strncmp(readline,"(postsim) ",10)==0) readline+=10;
         if(strncmp(readline,"(by_elements) ",14)==0) { wbyele=1; readline+=14; }
         i=str_find_ci(readline," ");
-        strncpy(varname,readline,i);
-        varname[i]='\0';
+        wr_tok(varname,sizeof(varname),readline,i,"coefficient or set name",line);
         i=str_find_ci(line,comsyntax);
         if(i==-1)continue;
         readline=line+i+n;
         i=str_find_ci(readline,"\"");
-        strncpy(header,readline,i);
-        header[i]='\0';
+        wr_tok(header,sizeof(header),readline,i,"header",line);
 
         i=str_find_ci(line,"longname \"");
         if(i<0) longname[0]='\0';
@@ -2810,7 +2850,7 @@ int tab_defaults_validate(char *fname) {
   f=teems_fopen(fname,"r");
   if(f==NULL)return 0;
   while(fgets(line,TABREADLINE,f)) {
-    if(strstr(line,"(default")==NULL)continue;
+    if(!tab_is_default_stmt(line))continue;
     tab_default_value(line,val);
     if(strncmp(line,"coefficient",11)==0) {
       if(strcmp(val,"parameter")==0||strcmp(val,"non_parameter")==0)continue;
@@ -2883,6 +2923,20 @@ static void ps_read_logname(char *line, char *out) {
     p++;
   }
   out[k]='\0';
+}
+
+/* the logical file of a PostSim Write: outputs to it are skipped by a
+   run without the PostSim pass (postsim_write_skipped) */
+static void ps_write_register(const char *line) {
+  const char *tf=strstr(line," to file ");
+  if(tf!=NULL) {
+    int k4=0;
+    tf+=9;
+    while(tf[k4]!='\0'&&tf[k4]!=' '&&tf[k4]!=';'&&tf[k4]!='\n'&&k4<NAMESIZE-1)k4++;
+    teems_ps_wlogs=realloc(teems_ps_wlogs,(teems_ps_nwlogs+1)*sizeof(*teems_ps_wlogs));
+    strncpy(teems_ps_wlogs[teems_ps_nwlogs],tf,k4);
+    teems_ps_wlogs[teems_ps_nwlogs++][k4]='\0';
+  }
 }
 
 /* Split the preprocessed TAB around POSTSIM (BEGIN)/(END) sections
@@ -2968,6 +3022,16 @@ int tab_postsim_split(char *newtabfile, char *psfile) {
       inps=0;
       continue;
     }
+    if(!inps&&(strncmp(line,"write (postsim) ",16)==0||strncmp(line,"write(postsim) ",15)==0)) {
+      /* manual 12.1 form 2: a (postsim) Write outside a section is the
+         sectioned Write's twin -- written with the ordinary outputs after
+         the PostSim pass, skipped when that pass does not run. It used
+         to be dropped silently, "(postsim)" taken as the name (audit
+         S4-F6). */
+      if(line[5]==' ')memmove(line+6,line+16,strlen(line+16)+1);
+      else { memmove(line+6,line+15,strlen(line+15)+1); line[5]=' '; }
+      ps_write_register(line);
+    }
     if(!inps) {
       /* scope isolation (12.2.1): PostSim names are PostSim-only.
          Set element lists and quoted element literals are not names
@@ -3009,7 +3073,7 @@ int tab_postsim_split(char *newtabfile, char *psfile) {
       fputs(line,fmain);
       continue;
     }
-    if(strncmp(line,"variable ",9)==0||strncmp(line,"equation ",9)==0||strncmp(line,"update ",7)==0||strncmp(line,"transfer ",9)==0||strncmp(line,"omit ",5)==0||strncmp(line,"substitute ",11)==0||strncmp(line,"backsolve ",10)==0||strncmp(line,"complementarity",15)==0||strstr(line,"(default")!=NULL) {
+    if(strncmp(line,"variable ",9)==0||strncmp(line,"equation ",9)==0||strncmp(line,"update ",7)==0||strncmp(line,"transfer ",9)==0||strncmp(line,"omit ",5)==0||strncmp(line,"substitute ",11)==0||strncmp(line,"backsolve ",10)==0||strncmp(line,"complementarity",15)==0||tab_is_default_stmt(line)) {
       errmsg("Error: statement not allowed in a PostSim section (GEMPACK manual 12.2.1): %s",line);
       fclose(fin);
       fclose(fmain);
@@ -3044,15 +3108,7 @@ int tab_postsim_split(char *newtabfile, char *psfile) {
       /* a PostSim Write joins the ordinary outputs, which are written
          after the PostSim pass; its file is recorded so a run without
          that pass skips it instead of writing unset values */
-      char *tf=strstr(line," to file ");
-      if(tf!=NULL) {
-        int k4=0;
-        tf+=9;
-        while(tf[k4]!='\0'&&tf[k4]!=' '&&tf[k4]!=';'&&tf[k4]!='\n'&&k4<NAMESIZE-1)k4++;
-        teems_ps_wlogs=realloc(teems_ps_wlogs,(teems_ps_nwlogs+1)*sizeof(*teems_ps_wlogs));
-        strncpy(teems_ps_wlogs[teems_ps_nwlogs],tf,k4);
-        teems_ps_wlogs[teems_ps_nwlogs++][k4]='\0';
-      }
+      ps_write_register(line);
       fputs(line,fmain);
       continue;
     }

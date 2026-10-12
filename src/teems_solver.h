@@ -534,6 +534,7 @@ offset_t ma48_la_from_pct(dim_t pct,offset_t nnz); /* initial LA from a -la* per
    tens of GB, and an unchecked NULL here is a segfault rather than a
    report */
 void *ma48_alloc(offset_t n,size_t sz);
+size_t scratch_read_n(void *p,size_t esz,size_t n,FILE *fp,const char *fn);
 void *ma48_realloc(void *p,offset_t n,size_t sz);
 /* Jacobian/exogenous-block preallocation with the PetscInt ceiling
    named: PETSc sums the row counts into a PetscInt, and the one-rank
@@ -797,6 +798,7 @@ FILE *teems_fopen(const char *path, const char *mode);
 FILE *teems_fopen_opt(const char *path, const char *mode);
 int str_ncmp_ci(const char *a, const char *b, size_t n);
 int str_find_token_ci(const char *base, const char *s, const char *pat);
+int expr_delim(char c);
 int str_count_token_ci(const char *base, const char *s, const char *pat);
 char *str_replace_all(char *line, char *finditem, char *replitem);
 int str_replace_char_all(char *line, int finditem, int replitem);
@@ -892,6 +894,7 @@ offset_t postsim_reads_execute(char *psname, int niodata, cmf_file_entry *iodata
 /* Default-statement helpers (manual 10.19; audit A6): positional
    semantics live in the readers; values are validated once up front */
 int tab_default_value(char *line, char *out);
+int tab_is_default_stmt(const char *line);
 int tab_defaults_validate(char *fname);
 offset_t variables_read(char *fname, char *commsyntax, array_def *record, offset_t ncof, set_def *sets,dim_t nset);
 offset_t set_find_alltime(set_def *sets,dim_t nset);

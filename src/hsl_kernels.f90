@@ -906,7 +906,7 @@ SUBROUTINE SPEC51M_RANK(INSIZE,CNTL4IN,IRN,JCN,VA,IRNA,JCNA,KEEP,W,IW)
   integer (4) INSIZE(*)
   integer (4) JCN(*),IRN(*),JCNA(*),IRNA(*),KEEP(*),IW(*)
   real (kind=DPC) VA(*),CNTL4IN(*),W(*)
-  integer LA,MAXN,RANK1,SGNDET,NEFAC
+  integer LA,MAXN,RANK1,SGNDET,NEFAC,I2
   real (kind=DPC) LOGDET
   real (kind=DPC), pointer :: CNTL(:),RINFO(:)!,W(:),A(:),
   integer, pointer :: ICNTL(:),INFO(:)!,IW(:),KEEP(:),JCN1(:),IRN1(:),COLS(:),ROWS(:)
@@ -991,10 +991,28 @@ SUBROUTINE SPEC51M_RANK(INSIZE,CNTL4IN,IRN,JCN,VA,IRNA,JCNA,KEEP,W,IW)
       if (teems_verbosity()>=2) WRITE(6,'(/,A,F9.3)')&
           ' Determinant is positive; log(determinant) =',LOGDET
           INSIZE(4)=M
+!         full rank: MA51AD is not called, so the row/column permutation
+!         it would fill is the identity (it was left unset: a garbage
+!         index on a square nonsingular block, audit S6-A2)
+          DO I2=1,M
+            IRNA(I2)=I2
+          END DO
+          DO I2=1,N
+            JCNA(I2)=I2
+          END DO
     ELSE IF(SGNDET.LT.0)THEN
         if (teems_verbosity()>=2) WRITE(6,'(/,A,F9.3)')&
           ' Determinant is negative; log(-determinant) =',LOGDET
           INSIZE(4)=M
+!         full rank: MA51AD is not called, so the row/column permutation
+!         it would fill is the identity (it was left unset: a garbage
+!         index on a square nonsingular block, audit S6-A2)
+          DO I2=1,M
+            IRNA(I2)=I2
+          END DO
+          DO I2=1,N
+            JCNA(I2)=I2
+          END DO
       ELSE
         if (teems_verbosity()>=2) WRITE(6,'(/,A)')' Determinant is zero'
 !     Determine the nonsingular submatrix of the factorization
@@ -1064,14 +1082,17 @@ SUBROUTINE SPEC48M_MSOL(INSIZE,IRN,JCN,VA,B,X,IRNC,JCNC,VAC,IRNB,JCNB,VALUESB,VE
   IMPLICIT NONE
 
   integer NEFAC,JOB
-  integer(4) JCN(*),IRN(*),INSIZE(*),BIVINZROW0(*),BIVINZCOL0(*),KEEP(*)!,JCNV(*),IRNV(*)
+  integer(4) JCN(*),IRN(*),INSIZE(*),BIVINZCOL0(*),KEEP(*)!,JCNV(*),IRNV(*)
+  ! dense-border offsets: a border product past 2**31 entries wrapped the
+  ! 32-bit index (audit S6-C1); widened as in PREP48M_MSOL
+  integer(8) BIVINZROW0(*),L3
   integer(4)IRNB(*),JCNB(*)
   integer(4) JCNC(*),IRNC(*)
   integer M,N,NE,T,NC,MC,NEC,RANK,J1!,NV,MV,NEV
   real(kind=DPC) VA(*),VAC(*),B(*),X(*),VALUESB(*),VECBIVI(*)
   !DOUBLE PRECISION LOGDET,SGNDET!,VAV(*)real (8)
   integer LA, MAXN,NBIVI,MBIVI
-  integer(4) I,J,L,L2,L3,MB,NB,NEB,J2,J3
+  integer(4) I,J,L,L2,MB,NB,NEB,J2,J3
   LOGICAL TRANS
   real(kind=DPC), pointer :: CNTL(:),RINFO(:),W(:),ERROR1(:),SOL(:)!,VOUT(:)!,RHS(:)A(:),
   integer, pointer :: ICNTL(:),INFO(:),IW(:),JCNB1(:)!,IRNOUT(:),JCNOUT(:)!,JCN1(:),IRN1(:)
@@ -1281,13 +1302,14 @@ SUBROUTINE SPEC48M_MSOL_P(INSIZE,IRN,JCN,VA,B,X,IRNC,JCNC,VAC,IRNB,JCNB,VALUESB,
   IMPLICIT NONE
 
   integer NEFAC,JOB
-  integer(4) JCN(*),IRN(*),INSIZE(*),BIVINZROW0(*),BIVINZCOL0(*),KEEP(*),REDO(*)
+  integer(4) JCN(*),IRN(*),INSIZE(*),BIVINZCOL0(*),KEEP(*),REDO(*)
+  integer(8) BIVINZROW0(*),L3
   integer(4)IRNB(*),JCNB(*)
   integer(4) JCNC(*),IRNC(*)
   integer M,N,NE,T,NC,MC,NEC,RANK,J1
   real(kind=DPC) VA(*),VAC(*),B(*),X(*),VALUESB(*),VECBIVI(*)
   integer LA, MAXN,NBIVI,MBIVI
-  integer(4) I,J,L,L2,L3,MB,NB,NEB,J2,J3
+  integer(4) I,J,L,L2,MB,NB,NEB,J2,J3
   LOGICAL TRANS
   real(kind=DPC), pointer :: CNTL(:),RINFO(:),W(:),ERROR1(:),SOL(:)
   integer, pointer :: ICNTL(:),INFO(:),IW(:),JCNB1(:)

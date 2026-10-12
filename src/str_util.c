@@ -190,3 +190,14 @@ FILE *teems_fopen_opt(const char *path, const char *mode) {
   if (f==NULL&&errno!=ENOENT) fopen_fatal(path,mode,errno);
   return f;
 }
+
+/* a character that ends an expression operand, so a function or
+   reduction name right after it is a call and not the tail of a longer
+   name: blanks, brackets, arithmetic operators, the comparison
+   operators and the boolean markers. Shared by the sum registration
+   (tab_parse.c, jacobian.c) and the formula compiler: a reduction or
+   ABS/EXP/.. written directly after ">" was skipped at every stage and
+   the call text then failed as an operand (audit S2-B3/B4). */
+int expr_delim(char c) {
+  return c==' '||c=='('||c=='['||c=='{'||c=='+'||c=='-'||c=='*'||c=='/'||c=='^'||c==','||c=='<'||c=='>'||c=='='||c==COND_AND||c==COND_OR||c==COND_NOT;
+}

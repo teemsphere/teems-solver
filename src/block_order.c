@@ -565,7 +565,6 @@ int ndbbd_order_presolve(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt ran
 int ndbbd_order(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscInt Istart, PetscInt Iend,int nreg, int ntime, offset_t nvarele, PetscInt *eq_addr,int *row_order,int *col_order, offset_t ndblock,int *block_sizes, offset_t *countvarintra1, offset_t *counteq, offset_t *counteqnoadd,dim_t laA,dim_t laDi,solve_real ma48_cntl4,PetscInt* ndbbdrank,PetscBool presol) {
   FILE *presolfile;
   char j1name[1024],filename[1024],rankname[1024];
-  size_t frd;
   PetscInt bfirst,bend,nmatin,nmatint;
   PetscInt i,j,j1,j2,j3,j4;
   if(rank<10)strcpy(rankname,"000");
@@ -629,10 +628,11 @@ int ndbbd_order(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscI
       strcat(filename,".bin");
       if((presolfile=teems_fopen(filename, "r"))==NULL) {
         errmsg("Error: cannot open interface file %s; the presolve pass did not produce it (check scratch space)\n",filename);
+        fflush(stdout);
+        MPI_Abort(PETSC_COMM_WORLD,1);
       }
-      frd=fread(insized, sizeof(int), 5, presolfile);
+      scratch_read_n(insized, sizeof(int), 5, presolfile,filename);
       fclose(presolfile);
-      if( frd== 0)errmsg("Error: short read on interface file %s; falling back to the minimum rank assignment\n",filename);
       if(ndbbdrank[j4]>insized[3]) {
         int *irn1=(int *) calloc (insized[0],sizeof(int));
         int *jcn1=(int *) calloc (insized[1],sizeof(int));
@@ -642,9 +642,10 @@ int ndbbd_order(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscI
         strcat(filename,".bin");
         if((presolfile=teems_fopen(filename, "r"))==NULL) {
           errmsg("Error: cannot open interface file %s\n",filename);
+          fflush(stdout);
+          MPI_Abort(PETSC_COMM_WORLD,1);
         }
-        frd=fread(irn1, sizeof(int), insized[0], presolfile);
-        if(frd == 0)errmsg("Error: short read on interface file %s\n",filename);
+        scratch_read_n(irn1, sizeof(int), insized[0], presolfile,filename);
         fclose(presolfile);
         strcpy(filename,scratch_dir);strcat(filename,"_col");
         strcat(filename,rankname);
@@ -652,19 +653,23 @@ int ndbbd_order(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscI
         strcat(filename,".bin");
         if((presolfile=teems_fopen(filename, "r"))==NULL) {
           errmsg("Error: cannot open interface file %s\n",filename);
+          fflush(stdout);
+          MPI_Abort(PETSC_COMM_WORLD,1);
         }
-        frd=fread(jcn1, sizeof(int), insized[0], presolfile);
-        if( frd== 0) errmsg("Error: short read on interface file %s\n",filename);
+        /* the column permutation has ncol (insized[1]) entries, as the
+           presolve wrote it; it was read and applied with the row count
+           (audit S6-C3, harmless while the interface block is square) */
+        scratch_read_n(jcn1, sizeof(int), insized[1], presolfile,filename);
         fclose(presolfile);
-        int *indices= (int *) calloc (insized[0],sizeof(int));
+        int *indices= (int *) calloc (insized[0]>insized[1]?insized[0]:insized[1],sizeof(int));
         for(i=0; i<insized[0]; i++) {
           indices[i]=row_order3[counteq[j3+begblock[rank]]+irn1[i]-1];
         }
         memcpy(&row_order3[counteq[j3+begblock[rank]]],indices,insized[0]*sizeof(int));
-        for(i=0; i<insized[0]; i++) {
+        for(i=0; i<insized[1]; i++) {
           indices[i]=col_order3[countvarintra1[j3+begblock[rank]]+jcn1[i]-1];
         }
-        memcpy(&col_order3[countvarintra1[j3+begblock[rank]]],indices,insized[0]*sizeof(int));
+        memcpy(&col_order3[countvarintra1[j3+begblock[rank]]],indices,insized[1]*sizeof(int));
         ndbbdrank[j4]=insized[3];
         free(indices);
         free(irn1);

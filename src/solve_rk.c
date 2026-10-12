@@ -553,6 +553,13 @@ bool solve_rk(PetscBool nohsl,PetscInt VecSize,PetscInt dnz,PetscInt* dnnz,Petsc
       }
     }
   }
+  if(rko->scope==RK_SCOPE_PCT&&nsteer==0) {
+    /* a model written entirely in change variables has nothing to
+       steer on in the percent scope: the rms metric divided by zero and
+       every step was accepted (audit S5-C1) */
+    if(rank==0)logmsg(1,"%s: no percent-change element to steer on; the error norm runs over all elements\n",scheme.name);
+    rko->scope=RK_SCOPE_ALL;
+  }
   memset(&teems_rk_stats,0,sizeof(teems_rk_stats));
   teems_rk_stats.chart=rko->chart;
   teems_rk_stats.h_min=1;

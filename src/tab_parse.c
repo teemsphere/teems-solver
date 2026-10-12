@@ -32,6 +32,9 @@ static char *strict_getline(char *line,int size,FILE *f,long *pos) {
   cont=midline;
   if (fgets(line,size,f)==NULL) return NULL;
   if (*pos==0&&strncmp(line,"\xEF\xBB\xBF",3)==0) memmove(line,line+3,strlen(line+3)+1);
+  /* a tab is a blank (manual 11.1.2); the statement parsers split on
+     blanks only, so "Shock<TAB>x" used to read as an undeclared name */
+  for (p=line; *p!='\0'; p++) if (*p=='\t') *p=' ';
   len=strlen(line);
   midline=(len>0&&line[len-1]!='\n');
   p=strchr(line,'!');
@@ -874,8 +877,22 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
       return -1;
     }
     k0=str_find_ci(line,"from file ");
-    if(k0>-1) {
-      k1=str_find_ci(line+k0+10," ");
+    if(k0<0) {
+      /* k0 stayed -1 and indexed iodata[-1] (audit S1-B3); GEMPACK's
+         FROM FILE-less form needs a single default input file, which
+         the manifest does not declare */
+      errmsg("Error: Read statement has no FROM FILE clause (use 'Read X from file <logical> header \"H\"'): %s\n",linecopy);
+      return -1;
+    }
+    if(str_find_ci(line," header ")<0&&str_find_ci(line," header\"")<0) {
+      errmsg("Error: Read without a header is not supported (use 'Read X from file <log> header \"H\"'): %s\n",linecopy);
+      return -1;
+    }
+    {
+      /* the logical name ends at a blank or the statement end, not at
+         the next blank only ("from file EXTRA;" kept the ";") */
+      k1=0;
+      while (line[k0+10+k1]!='\0'&&line[k0+10+k1]!=' '&&line[k0+10+k1]!=';'&&line[k0+10+k1]!='\n'&&k1<TABREADLINE-1) k1++;
       strncpy(line1,line+k0+10,k1);
       line1[k1]='\0';
       for (k0=0; k0<niodata; k0++) if (strcmp(line1,iodata[k0].logname)==0) {
@@ -1772,9 +1789,9 @@ offset_t sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
         if (999<j&&j<10000) {
           strcat(interchar,"gen_sum");
         }
-        if (i>10000) {
-          strcat(interchar,"gen_sum");
-          errmsg("Error: too many sum() terms in one statement\n");
+        if (j>=10000) {
+          errmsg("Error: too many sum() terms in one statement (limit 10000)\n");
+          MPI_Abort(PETSC_COMM_WORLD,1);
         }
         strcat(interchar,interchar1);
         strcpy(sum_cof[j].sumname,interchar);
@@ -1897,7 +1914,7 @@ offset_t sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
         sum_cof[j].size=l3;
         return 1;
       }
-    } else if (formulain[i+k-1]=='+'||formulain[i+k-1]=='-'||formulain[i+k-1]=='*'||formulain[i+k-1]=='/'||formulain[i+k-1]=='^'||formulain[i+k-1]=='('||formulain[i+k-1]==',') {
+    } else if (expr_delim(formulain[i+k-1])) {
       readitem=formulain+i+k;
       strcpy(line,readitem);
       strcpy(line1,readitem);
@@ -1923,9 +1940,9 @@ offset_t sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
         if (999<j&&j<10000) {
           strcat(interchar,"gen_sum");
         }
-        if (i>10000) {
-          strcat(interchar,"gen_sum");
-          errmsg("Error: too many sum() terms in one statement\n");
+        if (j>=10000) {
+          errmsg("Error: too many sum() terms in one statement (limit 10000)\n");
+          MPI_Abort(PETSC_COMM_WORLD,1);
         }
         strcat(interchar,interchar1);
         strcpy(sum_cof[j].sumname,interchar);
@@ -2070,7 +2087,7 @@ int sum_count(char *formulain, char *commsyntax) {
       j++;
       i=i+k+4;
       readitem=formulain+i;
-    } else if (formulain[i+k-1]=='+'||formulain[i+k-1]=='-'||formulain[i+k-1]=='*'||formulain[i+k-1]=='/'||formulain[i+k-1]=='^'||formulain[i+k-1]=='('||formulain[i+k-1]==','||formulain[i+k-1]=='='||formulain[i+k-1]=='['||formulain[i+k-1]=='{'||formulain[i+k-1]==' ') {
+    } else if (expr_delim(formulain[i+k-1])) {
       j++;
       i=i+k+4;
       readitem=formulain+i;
@@ -2472,7 +2489,7 @@ int ord_plan_build(char *fname, int postsim, array_def *coefs, offset_t ncof, ar
     int inlp=0,q;
     for (q=0; q<nlp; q++) if (sp>lpb[q]&&sp<lpe[q]) { sp=lpb[q]; inlp=1; break; }
     if (st[i].kind==1) {
-      if (strstr(st[i].text,"(default")!=NULL) continue;
+      if (tab_is_default_stmt(st[i].text)) continue;
       ord_head_name(st[i].text,"formula",name);
       if (name[0]!='\0'&&ord_set_has(&sega,name)) {
         if (seg_fa>0&&sp>seg_lo) { ord_event_push(pl,0,-1,seg_lo,sp); nseg++; }
@@ -2849,7 +2866,7 @@ offset_t tab_count_statements(char *fname, char *commsyntax) {
   filehandle = teems_fopen(fname,"r");
   if (filehandle==NULL) return 0;
   while (tab_next_statement(commsyntax,filehandle,line,TABREADLINE)) {
-    if (strstr(line,"(default")==NULL) {
+    if (!tab_is_default_stmt(line)) {
       j++;
     }
   }
@@ -5596,8 +5613,27 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
    "add_homotopy=h2", ...) into out (NAMESIZE); returns 1 for a
    default statement, 0 otherwise. Value validation is centralized in
    tab_defaults_validate (audit A6). */
+/* a Default statement is "<keyword> (default ...": the keyword, blanks,
+   an opening bracket and the word default as a whole word. The old
+   strstr(line,"(default") test matched anywhere in the text, so a
+   coefficient DEFAULTS(r) written right after "(" turned a Formula or
+   Equation into a Default statement (audit S1-B1). */
+int tab_is_default_stmt(const char *line) {
+  const char *p=line;
+  while(*p==' '||*p=='\t')p++;
+  if(!isalpha((unsigned char)*p)&&*p!='_')return 0;
+  while(isalnum((unsigned char)*p)||*p=='_')p++;
+  while(*p==' '||*p=='\t')p++;
+  if(*p!='(')return 0;
+  p++;
+  while(*p==' '||*p=='\t')p++;
+  if(strncasecmp(p,"default",7)!=0)return 0;
+  p+=7;
+  return !(isalnum((unsigned char)*p)||*p=='_');
+}
+
 int tab_default_value(char *line, char *out) {
-  char *p=strstr(line,"(default");
+  char *p=tab_is_default_stmt(line)?strstr(line,"(default"):NULL;
   int k=0;
   out[0]='\0';
   if(p==NULL)return 0;
@@ -8809,7 +8845,7 @@ int backsolve_validate_refs(char *fname, array_def *vars) {
     return -1;
   }
   while (tab_next_statement_raw(commsyntax,filehandle,line,TABREADLINE,NULL)) {
-    if (strstr(line,"(default")!=NULL) continue;
+    if (tab_is_default_stmt(line)) continue;
     if (!tab_equation_name(line,eqname)) continue;
     hit=-1;
     for (i=0; i<nbacksolve; i++) {

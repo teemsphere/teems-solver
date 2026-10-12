@@ -1,5 +1,6 @@
 #include <teems_solver.h>
 
+
 /* Formulas are recompiled every step, so a per-bind warning would repeat
    thousands of times over a solve; warn once per array. */
 static char *novalue_warned[2]={NULL,NULL};   /* [0] coefficients, [1] variables */
@@ -388,7 +389,7 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
     }
   }
   index=ncof-1;
-  if(!PairSkipCoefs) do {
+  if(!PairSkipCoefs&&ncof>0) do {
     if (strcmp(coefs[index].cofname,p)==0) {
       if((int)coefs[index].size!=nargs_tok) {
         errmsg("Error: coefficient %s is declared with %d %s but is referenced with %d in %s; a reference must carry exactly the declared indices (GEMPACK manual 10.3, 11.4.10)\n",coefs[index].cofname,(int)coefs[index].size,coefs[index].size==1?"index":"indices",nargs_tok,tokcopy);
@@ -910,10 +911,10 @@ int formula_compile(char *fomulain, set_def *sets,array_def *coefs, offset_t nco
        number, then fold pairwise; ID0V(x,v) = x unless x is 0 */
     int fnmulti=0;
     j=strlen(fpart1);
-    if (j>=3&&strncmp(fpart1+j-3,"max",3)==0&&(j==3||fpart1[j-4]==' '||fpart1[j-4]=='('||fpart1[j-4]=='+'||fpart1[j-4]=='-'||fpart1[j-4]=='*'||fpart1[j-4]=='/'||fpart1[j-4]=='^'||fpart1[j-4]==','))fnmulti=1;
-    if (j>=3&&strncmp(fpart1+j-3,"min",3)==0&&(j==3||fpart1[j-4]==' '||fpart1[j-4]=='('||fpart1[j-4]=='+'||fpart1[j-4]=='-'||fpart1[j-4]=='*'||fpart1[j-4]=='/'||fpart1[j-4]=='^'||fpart1[j-4]==','))fnmulti=2;
-    if (j>=4&&strncmp(fpart1+j-4,"id0v",4)==0&&(j==4||fpart1[j-5]==' '||fpart1[j-5]=='('||fpart1[j-5]=='+'||fpart1[j-5]=='-'||fpart1[j-5]=='*'||fpart1[j-5]=='/'||fpart1[j-5]=='^'||fpart1[j-5]==','))fnmulti=3;
-    if (j>=6&&strncmp(fpart1+j-6,"random",6)==0&&(j==6||fpart1[j-7]==' '||fpart1[j-7]=='('||fpart1[j-7]=='+'||fpart1[j-7]=='-'||fpart1[j-7]=='*'||fpart1[j-7]=='/'||fpart1[j-7]=='^'||fpart1[j-7]==','))fnmulti=4;
+    if (j>=3&&strncmp(fpart1+j-3,"max",3)==0&&(j==3||expr_delim(fpart1[j-4])))fnmulti=1;
+    if (j>=3&&strncmp(fpart1+j-3,"min",3)==0&&(j==3||expr_delim(fpart1[j-4])))fnmulti=2;
+    if (j>=4&&strncmp(fpart1+j-4,"id0v",4)==0&&(j==4||expr_delim(fpart1[j-5])))fnmulti=3;
+    if (j>=6&&strncmp(fpart1+j-6,"random",6)==0&&(j==6||expr_delim(fpart1[j-7])))fnmulti=4;
     if (fnmulti>0) {
       char abuf[TABREADLINE];
       offset_t argres[16];
@@ -1042,7 +1043,7 @@ int formula_compile(char *fomulain, set_def *sets,array_def *coefs, offset_t nco
         ops[*nops].Var1Type=OT_TEMP_ABS;
         fpart1[j-3]='\0';
       }
-    if (j>3) if (fpart1[j-1]=='s'&&fpart1[j-2]=='b'&&fpart1[j-3]=='a') if(j==3||fpart1[j-4]==' '||fpart1[j-4]=='('||fpart1[j-4]=='+'||fpart1[j-4]=='-'||fpart1[j-4]=='*'||fpart1[j-4]=='/'||fpart1[j-4]=='^'||fpart1[j-4]==',') {
+    if (j>3) if (fpart1[j-1]=='s'&&fpart1[j-2]=='b'&&fpart1[j-3]=='a') if(j==3||expr_delim(fpart1[j-4])) {
           ops[*nops].Var1Type=OT_TEMP_ABS;
           fpart1[j-3]='\0';
         }
@@ -1050,28 +1051,28 @@ int formula_compile(char *fomulain, set_def *sets,array_def *coefs, offset_t nco
        plan 3.1) -- same reversed-name recognition as loge/abs/id01,
        with the delimiter boundary check so names merely ending in a
        function word cannot trigger */
-    if (j>=3) if (fpart1[j-1]=='p'&&fpart1[j-2]=='x'&&fpart1[j-3]=='e') if(j==3||fpart1[j-4]==' '||fpart1[j-4]=='('||fpart1[j-4]=='+'||fpart1[j-4]=='-'||fpart1[j-4]=='*'||fpart1[j-4]=='/'||fpart1[j-4]=='^'||fpart1[j-4]==',') {
+    if (j>=3) if (fpart1[j-1]=='p'&&fpart1[j-2]=='x'&&fpart1[j-3]=='e') if(j==3||expr_delim(fpart1[j-4])) {
           ops[*nops].Var1Type=OT_TEMP_EXP;
           fpart1[j-3]='\0';
         }
-    if (j>=4) if (fpart1[j-1]=='t'&&fpart1[j-2]=='r'&&fpart1[j-3]=='q'&&fpart1[j-4]=='s') if(j==4||fpart1[j-5]==' '||fpart1[j-5]=='('||fpart1[j-5]=='+'||fpart1[j-5]=='-'||fpart1[j-5]=='*'||fpart1[j-5]=='/'||fpart1[j-5]=='^'||fpart1[j-5]==',') {
+    if (j>=4) if (fpart1[j-1]=='t'&&fpart1[j-2]=='r'&&fpart1[j-3]=='q'&&fpart1[j-4]=='s') if(j==4||expr_delim(fpart1[j-5])) {
           ops[*nops].Var1Type=OT_TEMP_SQRT;
           fpart1[j-4]='\0';
         }
-    if (j>=5) if (fpart1[j-1]=='0'&&fpart1[j-2]=='1'&&fpart1[j-3]=='g'&&fpart1[j-4]=='o'&&fpart1[j-5]=='l') if(j==5||fpart1[j-6]==' '||fpart1[j-6]=='('||fpart1[j-6]=='+'||fpart1[j-6]=='-'||fpart1[j-6]=='*'||fpart1[j-6]=='/'||fpart1[j-6]=='^'||fpart1[j-6]==',') {
+    if (j>=5) if (fpart1[j-1]=='0'&&fpart1[j-2]=='1'&&fpart1[j-3]=='g'&&fpart1[j-4]=='o'&&fpart1[j-5]=='l') if(j==5||expr_delim(fpart1[j-6])) {
           ops[*nops].Var1Type=OT_TEMP_LOG10;
           fpart1[j-5]='\0';
         }
-    if (j>=5) if (fpart1[j-1]=='d'&&fpart1[j-2]=='n'&&fpart1[j-3]=='u'&&fpart1[j-4]=='o'&&fpart1[j-5]=='r') if(j==5||fpart1[j-6]==' '||fpart1[j-6]=='('||fpart1[j-6]=='+'||fpart1[j-6]=='-'||fpart1[j-6]=='*'||fpart1[j-6]=='/'||fpart1[j-6]=='^'||fpart1[j-6]==',') {
+    if (j>=5) if (fpart1[j-1]=='d'&&fpart1[j-2]=='n'&&fpart1[j-3]=='u'&&fpart1[j-4]=='o'&&fpart1[j-5]=='r') if(j==5||expr_delim(fpart1[j-6])) {
           ops[*nops].Var1Type=OT_TEMP_ROUND;
           fpart1[j-5]='\0';
         }
     /* trunc0 (toward zero) / truncb (toward -inf) -- plan 3.1 */
-    if (j>=6) if (strncmp(fpart1+j-6,"trunc0",6)==0) if(j==6||fpart1[j-7]==' '||fpart1[j-7]=='('||fpart1[j-7]=='+'||fpart1[j-7]=='-'||fpart1[j-7]=='*'||fpart1[j-7]=='/'||fpart1[j-7]=='^'||fpart1[j-7]==',') {
+    if (j>=6) if (strncmp(fpart1+j-6,"trunc0",6)==0) if(j==6||expr_delim(fpart1[j-7])) {
           ops[*nops].Var1Type=OT_TEMP_TRUNC0;
           fpart1[j-6]='\0';
         }
-    if (j>=6) if (strncmp(fpart1+j-6,"truncb",6)==0) if(j==6||fpart1[j-7]==' '||fpart1[j-7]=='('||fpart1[j-7]=='+'||fpart1[j-7]=='-'||fpart1[j-7]=='*'||fpart1[j-7]=='/'||fpart1[j-7]=='^'||fpart1[j-7]==',') {
+    if (j>=6) if (strncmp(fpart1+j-6,"truncb",6)==0) if(j==6||expr_delim(fpart1[j-7])) {
           ops[*nops].Var1Type=OT_TEMP_TRUNCB;
           fpart1[j-6]='\0';
         }
@@ -1083,7 +1084,7 @@ int formula_compile(char *fomulain, set_def *sets,array_def *coefs, offset_t nco
       int sf,sl;
       for (sf=0; sf<6; sf++) {
         sl=(int)strlen(statfn[sf]);
-        if (j>=sl&&strncmp(fpart1+j-sl,statfn[sf],sl)==0&&(j==sl||fpart1[j-sl-1]==' '||fpart1[j-sl-1]=='('||fpart1[j-sl-1]=='+'||fpart1[j-sl-1]=='-'||fpart1[j-sl-1]=='*'||fpart1[j-sl-1]=='/'||fpart1[j-sl-1]=='^'||fpart1[j-sl-1]==',')) {
+        if (j>=sl&&strncmp(fpart1+j-sl,statfn[sf],sl)==0&&(j==sl||expr_delim(fpart1[j-sl-1]))) {
           ops[*nops].Var1Type=stattype[sf];
           fpart1[j-sl]='\0';
           break;
@@ -1094,7 +1095,7 @@ int formula_compile(char *fomulain, set_def *sets,array_def *coefs, offset_t nco
         if(!formula_compile_if(fpart2,sets,2,i,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,nops,arSet,fdim))return 0;
         fpart1[j-2]='\0';
       }
-    if (j>2) if (fpart1[j-1]=='f'&&fpart1[j-2]=='i') if(j==2||fpart1[j-3]==' '||fpart1[j-3]=='('||fpart1[j-3]=='+'||fpart1[j-3]=='-'||fpart1[j-3]=='*'||fpart1[j-3]=='/'||fpart1[j-3]=='^'||fpart1[j-3]==',') {
+    if (j>2) if (fpart1[j-1]=='f'&&fpart1[j-2]=='i') if(j==2||expr_delim(fpart1[j-3])) {
           if(!formula_compile_if(fpart2,sets,2,i,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,nops,arSet,fdim))return 0;
           fpart1[j-2]='\0';
         }
@@ -1133,9 +1134,14 @@ static int coef_range_check(array_def *coefs,offset_t index,offset_t offset,offs
     if(gltype==BT_GT&&elem_vals[offset+l].value<=glval)bad=1;
     if(gltype==BT_LE&&elem_vals[offset+l].value>glval)bad=1;
     if(gltype==BT_LT&&elem_vals[offset+l].value>=glval)bad=1;
-    if(bad&&!glviol) {
-      printf("%s: coefficient %s has %s %s %f\n",glmode==2?"Error":"Warning",coefs[index].cofname,phase,msg,(double)glval);
-      glviol=1;
+    if(bad) {
+      #pragma omp critical
+      {
+        if(!glviol) {
+          printf("%s: coefficient %s has %s %s %g\n",glmode==2?"Error":"Warning",coefs[index].cofname,phase,msg,(double)glval);
+          glviol=1;
+        }
+      }
     }
   }
   return glviol;
@@ -1410,15 +1416,16 @@ static void eval_pending_drop(eval_pending *ep, const formula_op *ops, int ifop)
 static void eval_pending_flush_one(int kind) {
   switch(kind) {
   case EH_ZBZ:
-    errmsg("Error: zero divided by zero in a formula while Zerodivide (zero_by_zero) is off\n");
+    errmsg("Error: zero divided by zero in %s while Zerodivide (zero_by_zero) is off (GEMPACK manual 34.3)\n",eval_ctx[0]?eval_ctx:"a formula");
     MPI_Abort(PETSC_COMM_WORLD,1);
     break;
   case EH_NBZ:
-    errmsg("Error: division by zero in a formula; Zerodivide (nonzero_by_zero) is off -- set a default with Zerodivide (nonzero_by_zero) default <value> or guard with ID01\n");
+    errmsg("Error: division by zero in %s; Zerodivide (nonzero_by_zero) is off -- set a default with Zerodivide (nonzero_by_zero) default <value> or guard with ID01 (GEMPACK manual 34.3)\n",eval_ctx[0]?eval_ctx:"a formula");
     MPI_Abort(PETSC_COMM_WORLD,1);
     break;
   case EH_FRACPOW:
-    errmsg("Error: fractional power of a negative number in formula evaluation\n");
+    errmsg("Error: fractional power of a negative number in %s (arithmetic error, GEMPACK manual 34.3)\n",eval_ctx[0]?eval_ctx:"a formula");
+    MPI_Abort(PETSC_COMM_WORLD,1);
     break;
   case EH_SIMDIV:
     errmsg("Error: division by zero in %s, where it is never allowed (GEMPACK manual 10.11.1; Zerodivide statements apply to Formulas only) -- guard the denominator with ID01 or ID0V\n",eval_ctx[0]?eval_ctx:"an Equation, Backsolve or Update");
@@ -3366,7 +3373,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
             index=ncof-1;
             p=strtok(condvar[i1],"(");
             b=0;
-            do {
+            if(ncof>0) do {
               if (strcmp(coefs[index].cofname,condvar[i1])==0) {
                 if(!coefs[index].suplval)warn_no_values(coefs[index].cofname,index,0);
                 logivarindx[i1]=index;
@@ -4759,13 +4766,17 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
                 }
               }
             }
-      temp1=formula_eval(elem_vals,sets,set_elems,sum_vals,ops1,nops,arSet1,fdim-1,zerodivide);
-        if(IsChange)temp1+=(double)elem_vals[offset+l2].value;
-      if(pathv!=NULL)temp1=pathv[l2];
+      /* the quantifier condition first, as updates_apply does: an
+         element the condition excludes is never evaluated (manual
+         11.4.5), so a division the condition guards cannot stop the
+         post-extrapolation pass (audit S2-B0) */
       if(uc.n>0&&!upd_cond_hold(&uc,ucops,elem_vals,sets,set_elems,sum_vals,arSet1,fdim-1,zerodivide)) {
         if(dfr){ upd_pend_off[pb+l]=-1; upd_pend_sidx[pb+l]=-1; }
         continue;
       }
+      temp1=formula_eval(elem_vals,sets,set_elems,sum_vals,ops1,nops,arSet1,fdim-1,zerodivide);
+        if(IsChange)temp1+=(double)elem_vals[offset+l2].value;
+      if(pathv!=NULL)temp1=pathv[l2];
       if(teems_nonfinite(temp1))upd_nf_hit(offset+l2);
       if(dfr){
         store_real v0=elem_vals[offset+l2].value,nv=v0;
@@ -5045,7 +5056,7 @@ int sum_eval(char *formulain, char *commsyntax,set_def *sets,dim_t nset, set_ele
         free(arSet);
         return 1;
       }
-    } else if (formulain[i+k-1]=='+'||formulain[i+k-1]=='-'||formulain[i+k-1]=='*'||formulain[i+k-1]=='/'||formulain[i+k-1]=='^'||formulain[i+k-1]=='('||formulain[i+k-1]==',') {
+    } else if (expr_delim(formulain[i+k-1])) {
       readitem=formulain+i+k;
       strcpy(line,readitem);
       sum_extract(line);
@@ -5512,7 +5523,9 @@ offset_t assertions_execute(char *fname,set_def *sets,dim_t nset,set_element *se
         }
         if(!cond_ok)continue;
       }
+      eval_ctx_set("Assertion",(msg[0]!='\0')?msg:linecopy);
       r=formula_eval(elem_vals,sets,set_elems,sum_vals,ops,nops,arSet,nq,zerodivide);
+      if(teems_nonfinite_bits((double)r))eval_nonfinite_fatal("the assertion residual",(double)r);
       ok=true;
       if(relop==1)ok=(r==0);
       if(relop==2)ok=(r!=0);

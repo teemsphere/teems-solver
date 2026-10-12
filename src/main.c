@@ -1,4 +1,5 @@
 #include <teems_solver.h>
+#include <limits.h>
 #include <strings.h>
 /* -solmed probe: the structure-detection lines carry the probe prefix so
    the probe log reads as one diagnosis; solve logs are unchanged */
@@ -39,11 +40,21 @@ static void outputs_summary_log(int cofdumped,array_def *coefs,offset_t ncof,off
 }
 
 
+/* a numeric option outside its range is a named error on rank 0 (the
+   caller finalizes and returns 1); -matsol 7 used to dispatch into a
+   segfault and -zdivshift nan to turn every default into NaN (audit
+   S7-B2/B3) */
+static int opt_range_bad(int rank,const char *name,long v,long lo,long hi,const char *meaning) {
+  if(v>=lo&&v<=hi)return 0;
+  if(rank==0)errmsg("Error: %s must be %s, got %ld\n",name,meaning,v);
+  return 1;
+}
+
 static char help[] = "teems-solver " TEEMS_SOLVER_VERSION ": solves a CGE model (TABLO/CMF) in parallel.\n\
   -version              print the solver version and exit 0\n\
   -cmdfile <path>       CMF file manifest (default ./reg.cmf)\n\
   -matsol {0,1,2,3}     matrix method LU/SBBD/DBBD/NDBBD\n\
-  -solmed <name>        Gragg|Euler|RK2|Heun|RK4|BoSha32|DoPri54|Newton|Johansen|probe|nosim\n\
+  -solmed <name>        Gragg|Euler|Midpoint|RK2|Heun|RK4|BoSha32|DoPri54|Newton|Johansen|probe|nosim\n\
   -jacdump {1,2}        write the base-point Jacobian (<solfiles>.jac + .jac.json); 2 = and stop before the solve\n\
   -step1/-step2/-step3  step counts; -nsubints n; -verbosity {0,1,2}\n\
   Full option table: docs/solver-reference.md section 11.\n\
@@ -63,6 +74,7 @@ static int coefficients_dump(const char *stem, array_def *coefs, offset_t ncof, 
   char path[TABREADLINE];
   FILE *fp;
   offset_t i,hdr[4];
+  int bad=0;
   strcpy(path,stem);
   strcat(path,".cof");
   if((fp=fopen(path,"wb"))==NULL) {
@@ -70,22 +82,26 @@ static int coefficients_dump(const char *stem, array_def *coefs, offset_t ncof, 
     return 1;
   }
   hdr[0]=1; hdr[1]=ncof; hdr[2]=ncofele; hdr[3]=0;
-  fwrite(hdr,sizeof(offset_t),4,fp);
+  if(fwrite(hdr,sizeof(offset_t),4,fp)!=4)bad=1;
   for(i=0; i<ncof; i++) {
     /* a p_NAME coefficient runs as p@NAME (pcoef_rename): report the
        declared name */
     array_def rec=coefs[i];
     if(rec.cofname[0]=='p'&&rec.cofname[1]=='@')rec.cofname[1]='_';
-    fwrite(&rec,sizeof(array_def),1,fp);
+    if(fwrite(&rec,sizeof(array_def),1,fp)!=1)bad=1;
   }
   for(i=0; i<ncof; i++) {
     unsigned char kind=0;
     if(teems_coef_is_ps!=NULL&&teems_coef_is_ps[i])kind|=1;
     if(teems_coef_is_param!=NULL&&teems_coef_is_param[i])kind|=2;
     if(teems_sui&&teems_coef_is_fini!=NULL&&teems_coef_is_fini[i])kind|=4;
-    fwrite(&kind,1,1,fp);
+    if(fwrite(&kind,1,1,fp)!=1)bad=1;
   }
-  fclose(fp);
+  if(fclose(fp)!=0)bad=1;
+  if(bad) {
+    errmsg("Error: cannot write %s: %s (disk full or quota reached?)\n",path,strerror(errno));
+    return 1;
+  }
   outputs_note(path,"coefficient_declarations",1);
   strcpy(path,stem);
   strcat(path,".cbin");
@@ -102,11 +118,15 @@ static int coefficients_dump(const char *stem, array_def *coefs, offset_t ncof, 
     while(k<ncofele) {
       n=ncofele-k; if(n>CHUNK)n=CHUNK;
       for(i=0; i<n; i++)buf[i]=(solve_real)elem_vals[k+i].value;
-      fwrite(buf,sizeof(solve_real),n,fp);
+      if(fwrite(buf,sizeof(solve_real),n,fp)!=(size_t)n)bad=1;
       k+=n;
     }
   }
-  fclose(fp);
+  if(fclose(fp)!=0)bad=1;
+  if(bad) {
+    errmsg("Error: cannot write %s: %s (disk full or quota reached?)\n",path,strerror(errno));
+    return 1;
+  }
   outputs_note(path,"coefficients",0);
   return 0;
 }
@@ -358,8 +378,11 @@ static int structure_files_write(const char *stem, array_def *vars, offset_t nva
       free(vout);
       return 1;
     }
-    fwrite(data[f],size[f],count[f],solution);
-    fclose(solution);
+    if(fwrite(data[f],size[f],count[f],solution)!=(size_t)count[f]||fclose(solution)!=0) {
+      errmsg("Error: cannot write %s: %s (disk full or quota reached?)\n",solchar,strerror(errno));
+      free(vout);
+      return 1;
+    }
     outputs_note(solchar,kind[f],0);
   }
   free(vout);
@@ -372,8 +395,10 @@ static int structure_files_write(const char *stem, array_def *vars, offset_t nva
     errmsg("Error: cannot open %s for writing: %s (the solver runs as uid %d)\n",solchar,strerror(errno),(int)getuid());
     return 1;
   }
-  fwrite(modeldes, sizeof(offset_t),4, solution);
-  fclose(solution);
+  if(fwrite(modeldes, sizeof(offset_t),4, solution)!=4||fclose(solution)!=0) {
+    errmsg("Error: cannot write %s: %s (disk full or quota reached?)\n",solchar,strerror(errno));
+    return 1;
+  }
   outputs_note(solchar,"model_description",0);
   return 0;
 }
@@ -1018,7 +1043,7 @@ static int chain_refs_scan(char *fname, set_def *sets, dim_t nset, array_def *co
   filehandle=teems_fopen(fname,"r");
   if(filehandle==NULL)return 0;
   while (tab_next_statement_resolved(commsyntax,filehandle,line,elem_vals,coefs,ncof,&zerodivide,TABREADLINE)) {
-    if (strstr(line,"(default")!=NULL)continue;
+    if (tab_is_default_stmt(line))continue;
     str_replace_first(line, commsyntax, "");
     str_replace_first(line, "(linear)", "");
     while (str_replace_all(line,"  ", " "));
@@ -1033,6 +1058,12 @@ static int chain_refs_scan(char *fname, set_def *sets, dim_t nset, array_def *co
       strcpy(line,linecopy);
       readitem = strtok(line,"=");
       readitem = strtok(NULL,";");
+      /* the guarded equation reader runs after this probe: stop here
+         before the rewrite overruns the statement buffer (audit S3-C1) */
+      if (readitem==NULL||(readitem-line)+strlen(readitem)+strlen(vname)+4>=sizeof(line)) {
+        errmsg("Error: equation statement too long for the partition probe: the left-hand side is rewritten onto the right, which exceeds the %d-character statement buffer; shorten the left-hand side: %.80s...\n",TABREADLINE,linecopy);
+        MPI_Abort(PETSC_COMM_WORLD,1);
+      }
       strcat(readitem,"-");
       strcat(readitem,"(");
       strcat(readitem,vname);
@@ -1049,6 +1080,12 @@ static int chain_refs_scan(char *fname, set_def *sets, dim_t nset, array_def *co
       strcpy(line,linecopy);
       readitem = strtok(line,"=");
       readitem = strtok(NULL,";");
+      /* the guarded equation reader runs after this probe: stop here
+         before the rewrite overruns the statement buffer (audit S3-C1) */
+      if (readitem==NULL||(readitem-line)+strlen(readitem)+strlen(vname)+4>=sizeof(line)) {
+        errmsg("Error: equation statement too long for the partition probe: the left-hand side is rewritten onto the right, which exceeds the %d-character statement buffer; shorten the left-hand side: %.80s...\n",TABREADLINE,linecopy);
+        MPI_Abort(PETSC_COMM_WORLD,1);
+      }
       strcat(readitem,"-");
       strcat(readitem,"(");
       strcat(readitem,vname);
@@ -1300,7 +1337,10 @@ static offset_t partition_auto_select(char *tabfile, set_def *sets, dim_t nset, 
     else logmsg(1,"%sPartition detection: no candidate sets to probe\n",PROBE_PFX);
   }
   {
-    size_t cap=256+(size_t)ncand*256;
+    /* one entry is ~130 characters plus the set name (up to NAMESIZE),
+       and the trailer carries another name: sized from that so no name
+       length can overrun it (audit S7-C3) */
+    size_t cap=512+NAMESIZE+(size_t)ncand*(256+NAMESIZE);
     char *js=(char *) malloc (cap);
     size_t off=0;
     off+=snprintf(js+off,cap-off,"  \"partition_auto\": {\n    \"candidates\": [");
@@ -1310,7 +1350,6 @@ static offset_t partition_auto_select(char *tabfile, set_def *sets, dim_t nset, 
       off+=snprintf(js+off,cap-off,"%s\n      {\"set\": \"%s\", \"size\": %d, \"nblocks\": %ld, \"netcut\": %ld, \"block_min\": %ld, \"block_max\": %ld, \"viable\": %s}",
                     j?",":"",sets[s].setname,sets[s].size,cnblocks[s],cnetcut[s],cmin[s],cmax[s],viable[s]?"true":"false");
       j++;
-      if(off>=cap-256)break;
     }
     if(chosen>=0)off+=snprintf(js+off,cap-off,"\n    ],\n    \"chosen\": \"%s\"\n  },\n",sets[chosen].setname);
     else off+=snprintf(js+off,cap-off,"\n    ],\n    \"chosen\": null\n  },\n");
@@ -1427,7 +1466,8 @@ int main(int argc,char **args) {
   char tabfile[TABREADLINE],newtabfile[TABREADLINE]="_temp_tab_file",newtabfile1[TABREADLINE]="_temp_tab_new_file",closure[TABREADLINE]="",shock[TABREADLINE]="",filename[TABREADLINE],longname[TABREADLINE],vname[NAMESIZE],copyline[TABREADLINE];
   char psfile[TABREADLINE]="\0";
   int npostsim=0,postsim_on=1;
-  char tempchar[255],solmed[NAMESIZE],solchar[255];
+  char tempchar[TABREADLINE],solmed[NAMESIZE],solchar[TABREADLINE+8];
+  int scratch_auto_shm=0;
   int niodata=0,nj,noutdata=0,nsoldata=0,nowrites=0,cofdump=1;
   offset_t nsetspace=0,ndblock=0,netcut=0,ndblock1,nreg=0,ntime=0;
   dim_t nset=0,vsize,dim1,nlength=0,matsol=0,laA=2,laDi=2,laD=2,nsbbdblocks=2,nesteddbbd=0,mc66=0,subints=1;
@@ -1452,6 +1492,7 @@ int main(int argc,char **args) {
   strcat(newtabfile,".tab");
   strcat(newtabfile1,".tab");
   PetscOptionsGetInt(NULL,NULL,"-matsol",&matsol,NULL);/* enum matrix_method; >=MM_SBBD needs a regional or time set (first reg set orders variables) */
+  if(opt_range_bad(rank,"-matsol",matsol,MM_LU,MM_NDBBD,"0 (LU), 1 (SBBD), 2 (DBBD) or 3 (NDBBD)")) { PetscFinalize(); return 1; }
   if(matsol==MM_DBBD)nohsl=true;
   if(matsol==MM_NDBBD)nohsl=true;
   if(matsol==MM_NDBBD) {
@@ -1473,7 +1514,11 @@ int main(int argc,char **args) {
   if(laD==0)laD=2;
   PetscOptionsGetInt(NULL,NULL,"-laDi",&laDi,NULL);
   if(laDi==0)laDi=2;
+  if(opt_range_bad(rank,"-laA",laA,1,LONG_MAX,"a positive workspace multiplier")||
+     opt_range_bad(rank,"-laD",laD,1,LONG_MAX,"a positive workspace multiplier")||
+     opt_range_bad(rank,"-laDi",laDi,1,LONG_MAX,"a positive workspace multiplier")) { PetscFinalize(); return 1; }
   PetscOptionsGetInt(NULL,NULL,"-withmc66",&mc66,NULL);
+  if(opt_range_bad(rank,"-withmc66",mc66,0,1,"0 or 1")) { PetscFinalize(); return 1; }
   /* Tier B3 (factor once, solve many): -residcheck 1 keeps the LHS
      matrix of one-shot SBBD/DBBD/NDBBD solves so the residual check
      (manual 30.1.5) covers every solve, at the cost of holding the
@@ -1505,6 +1550,11 @@ int main(int argc,char **args) {
   {
     PetscReal zs=0;
     PetscOptionsGetReal(NULL,NULL,"-zdivshift",&zs,NULL);
+    if(teems_nonfinite_bits((double)zs)) {
+      if(rank==0)errmsg("Error: -zdivshift must be a finite number\n");
+      PetscFinalize();
+      return 1;
+    }
     teems_zdiv_shift=(double)zs;
   }
   PetscOptionsGetInt(NULL,NULL,"-step1",&steps1,NULL);
@@ -1532,23 +1582,32 @@ int main(int argc,char **args) {
   section_threads=0;
   max_threads=1;
   PetscOptionsGetInt(NULL,NULL,"-maxthreads",&max_threads,NULL);
-  if(max_threads>1&&max_threads<=omp_get_max_threads( )){
-    omp_set_num_threads(max_threads);
-  }else{
-    if(max_threads>1)printf("Warning: -maxthreads %d exceeds the OpenMP thread limit %d; using 1 thread\n",max_threads,omp_get_max_threads());
-    max_threads=1;
-    omp_set_num_threads(max_threads);
+  if(opt_range_bad(rank,"-maxthreads",max_threads,0,LONG_MAX,"a non-negative thread count")) { PetscFinalize(); return 1; }
+  /* above the runtime's limit (the cpuset) the count is capped, not
+     dropped to one thread (audit S7-B6: n_threads = 4 on a 2-CPU
+     Docker Desktop ran single-threaded) */
+  if(max_threads>omp_get_max_threads()) {
+    if(rank==0)printf("Warning: -maxthreads %d exceeds the OpenMP thread limit %d; using %d threads\n",max_threads,omp_get_max_threads(),omp_get_max_threads());
+    max_threads=omp_get_max_threads();
   }
+  if(max_threads<1)max_threads=1;
+  omp_set_num_threads(max_threads);
   PetscOptionsGetInt(NULL,NULL,"-smllthreads",&section_threads,NULL);
   if(section_threads==0)section_threads=max_threads;
+  if(opt_range_bad(rank,"-smllthreads",section_threads,1,LONG_MAX,"a positive thread count")) { PetscFinalize(); return 1; }
   PetscOptionsGetInt(NULL,NULL,"-nsubints",&subints,NULL);
+  if(opt_range_bad(rank,"-nsubints",subints,1,LONG_MAX,"a positive subinterval count")) { PetscFinalize(); return 1; }
   PetscOptionsGetInt(NULL,NULL,"-nsbbdblocks",&nsbbdblocks,NULL);
+  if(opt_range_bad(rank,"-nsbbdblocks",nsbbdblocks,1,LONG_MAX,"a positive block count")) { PetscFinalize(); return 1; }
   nesteddbbd=(matsol==MM_NDBBD)?1:0;/* nested ordering exists only for the NDBBD solve; any other pairing is broken */
   PetscOptionsGetInt(NULL,NULL,"-nowrites",&nowrites,NULL);
+  if(opt_range_bad(rank,"-nowrites",nowrites,0,1,"0 or 1")) { PetscFinalize(); return 1; }
   PetscOptionsGetInt(NULL,NULL,"-cofdump",&cofdump,NULL); /* <stem>.cof/.cbin coefficient dump, default on */
+  if(opt_range_bad(rank,"-cofdump",cofdump,0,1,"0 or 1")) { PetscFinalize(); return 1; }
   {
     PetscInt verb=verbosity;
     PetscOptionsGetInt(NULL,NULL,"-verbosity",&verb,NULL);/* 0 errors/results, 1 progress (default), 2 debug */
+    if(opt_range_bad(rank,"-verbosity",verb,0,2,"0 (errors and results), 1 (progress) or 2 (debug)")) { PetscFinalize(); return 1; }
     verbosity=(int)verb;
     char verbstr[8];
     sprintf(verbstr,"%d",verbosity);
@@ -1593,7 +1652,9 @@ int main(int argc,char **args) {
   }
   inmemory=-1;
   PetscOptionsGetInt(NULL,NULL,"-inmemory",&inmemory,NULL);/* keep value arrays resident instead of spilling to scratch */
+  if(opt_range_bad(rank,"-inmemory",inmemory,-1,1,"0 or 1")) { PetscFinalize(); return 1; }
   PetscOptionsGetInt(NULL,NULL,"-ndcutcache",&teems_ndcutcache,NULL);/* NDBBD: reuse the rank cuts across steps (1) or re-probe every step (0) */
+  if(opt_range_bad(rank,"-ndcutcache",teems_ndcutcache,0,1,"0 or 1")) { PetscFinalize(); return 1; }
   if(inmemory<0)inmemory=(matsol==MM_NDBBD)?0:1;/* default: resident except NDBBD, whose factor-file I/O wants the page cache that spilling frees (measured; LU/SBBD gain, DBBD neutral on both domains) */
   {
     /* Scratch directory for solver temp files: -tempdir option, else
@@ -1629,6 +1690,7 @@ int main(int argc,char **args) {
        by the Fortran kernels never touch disk. */
     if(inmemory&&!tmpflg&&access("/dev/shm/",W_OK)==0) {
       strcpy(scratch_dir,"/dev/shm/");
+      scratch_auto_shm=1;
       if(rank==0)logmsg(1,"inmemory: scratch on tmpfs (%s)\n",scratch_dir);
     }
     /* export for the Fortran kernels, which build their factor-file
@@ -1749,7 +1811,7 @@ int main(int argc,char **args) {
      already; the Runge-Kutta family has its own step control. */
   if(teems_single_run) {
     if(solmethod==SM_RK2||solmethod==SM_HEUN||solmethod==SM_RK4||solmethod==SM_BOSHA32||solmethod==SM_DOPRI54) {
-      errmsg("Error: -single_run 1 applies to -solmed Euler, Midpoint or Gragg; the Runge-Kutta methods (%s) are single-pass already and take their steps from -step1/-adaptive\n",solmed);
+      if(rank==0)errmsg("Error: -single_run 1 applies to -solmed Euler, Midpoint or Gragg; the Runge-Kutta methods (%s) are single-pass already and take their steps from -step1/-adaptive\n",solmed);
       PetscFinalize();
       return 1;
     }
@@ -1761,14 +1823,14 @@ int main(int argc,char **args) {
      (manual 26.1.2, 26.2.3) */
   if(teems_two_run) {
     if(teems_single_run) {
-      errmsg("Error: -two_run 1 and -single_run 1 exclude each other\n");
+      if(rank==0)errmsg("Error: -two_run 1 and -single_run 1 exclude each other\n");
       PetscFinalize();
       return 1;
     }
     if(solmethod!=SM_GRAGG&&solmethod!=SM_MIDPOINT&&solmethod!=SM_EULER) {
       if(solmethod==SM_JOHANSEN||solmethod==SM_PROBE||solmethod==SM_NOSIM) teems_two_run=0;
       else {
-        errmsg("Error: -two_run 1 applies to -solmed Euler, Midpoint or Gragg (%s takes its steps from -step1/-adaptive)\n",solmed);
+        if(rank==0)errmsg("Error: -two_run 1 applies to -solmed Euler, Midpoint or Gragg (%s takes its steps from -step1/-adaptive)\n",solmed);
         PetscFinalize();
         return 1;
       }
@@ -1786,27 +1848,27 @@ int main(int argc,char **args) {
   PetscOptionsGetInt(NULL,NULL,"-sui",&teems_sui,NULL);
   teems_sui=(teems_sui!=0);
   if(teems_sui&&!cofdump) {
-    errmsg("Error: -sui marks Formula (Initial) coefficients in the coefficient dump, so it needs -cofdump 1\n");
+    if(rank==0)errmsg("Error: -sui marks Formula (Initial) coefficients in the coefficient dump, so it needs -cofdump 1\n");
     PetscFinalize();
     return 1;
   }
   if(teems_sup<0||teems_sup>2) {
-    errmsg("Error: -sup takes 0 (none), 1 (last) or 2 (all)\n");
+    if(rank==0)errmsg("Error: -sup takes 0 (none), 1 (last) or 2 (all)\n");
     PetscFinalize();
     return 1;
   }
   if(teems_sup&&solmethod!=SM_GRAGG&&solmethod!=SM_MIDPOINT&&solmethod!=SM_EULER) {
-    errmsg("Error: -sup saves the updated data of separate multi-step solutions, so it applies to -solmed Euler, Midpoint or Gragg (GEMPACK manual 26.8.1)\n");
+    if(rank==0)errmsg("Error: -sup saves the updated data of separate multi-step solutions, so it applies to -solmed Euler, Midpoint or Gragg (GEMPACK manual 26.8.1)\n");
     PetscFinalize();
     return 1;
   }
   if(teems_sup&&subints>1) {
-    errmsg("Error: -sup cannot be used with more than one subinterval (GEMPACK manual 26.8.1)\n");
+    if(rank==0)errmsg("Error: -sup cannot be used with more than one subinterval (GEMPACK manual 26.8.1)\n");
     PetscFinalize();
     return 1;
   }
   if(teems_sup&&!cofdump) {
-    errmsg("Error: -sup needs the coefficient dump (-cofdump 1): the .cof declarations index the updated-data files\n");
+    if(rank==0)errmsg("Error: -sup needs the coefficient dump (-cofdump 1): the .cof declarations index the updated-data files\n");
     PetscFinalize();
     return 1;
   }
@@ -1814,6 +1876,7 @@ int main(int argc,char **args) {
      report (strongly connected components of the well-determined block) */
   dim_t probefine=0;
   PetscOptionsGetInt(NULL,NULL,"-probefine",&probefine,NULL);
+  if(opt_range_bad(rank,"-probefine",probefine,0,1,"0 or 1")) { PetscFinalize(); return 1; }
   /* -jacdump 1 (Tier B5): the base-point Jacobian of the condensed
      system over every variable element, written before the first step
      (jacobian.c jacobian_dump); the run then goes on as asked. -jacdump
@@ -1872,6 +1935,17 @@ int main(int argc,char **args) {
     PetscOptionsGetReal(NULL,NULL,"-epstol",&epstol,NULL);
     PetscOptionsGetReal(NULL,NULL,"-retryadj",&retryadj,NULL);
     PetscOptionsGetInt(NULL,NULL,"-maxretries",&maxretries,NULL);
+    if(teems_nonfinite_bits((double)epstol)||!(epstol>0)) {
+      if(rank==0)errmsg("Error: -epstol must be a positive number, got %g\n",(double)epstol);
+      PetscFinalize();
+      return 1;
+    }
+    if(!(retryadj>0&&retryadj<1)) {
+      if(rank==0)errmsg("Error: -retryadj must lie strictly between 0 and 1, got %g\n",(double)retryadj);
+      PetscFinalize();
+      return 1;
+    }
+    if(opt_range_bad(rank,"-maxretries",maxretries,0,LONG_MAX,"a non-negative retry count")) { PetscFinalize(); return 1; }
     /* -rkchart log|percent: the state chart the stages combine in (log
        levels: positivity unconditional, Munthe-Kaas 1999; percent: the
        GEMPACK-orientation arithmetic); -rknorm max|rms: the per-step
@@ -1978,14 +2052,14 @@ int main(int argc,char **args) {
       step_ratio2=steps2/(double)2;
       i=(offset_t)steps2/2;
       if(step_ratio2==i){
-        errmsg("Error: -step1/-step2/-step3 must be all odd or all even (got %d %d %d)\n",steps1,steps2,steps3);
+        if(rank==0)errmsg("Error: -step1/-step2/-step3 must be all odd or all even (got %d %d %d)\n",steps1,steps2,steps3);
         PetscFinalize();
         return 1;
       }
       step_ratio2=steps3/(double)2;
       i=(offset_t)steps3/2;
       if(step_ratio2==i){
-        errmsg("Error: -step1/-step2/-step3 must be all odd or all even (got %d %d %d)\n",steps1,steps2,steps3);
+        if(rank==0)errmsg("Error: -step1/-step2/-step3 must be all odd or all even (got %d %d %d)\n",steps1,steps2,steps3);
         PetscFinalize();
         return 1;
       }
@@ -1994,27 +2068,27 @@ int main(int argc,char **args) {
       step_ratio2=steps2/(double)2;
       i=(offset_t)steps2/2;
       if(step_ratio2!=i){
-        errmsg("Error: -step1/-step2/-step3 must be all odd or all even (got %d %d %d)\n",steps1,steps2,steps3);
+        if(rank==0)errmsg("Error: -step1/-step2/-step3 must be all odd or all even (got %d %d %d)\n",steps1,steps2,steps3);
         PetscFinalize();
         return 1;
       }
       step_ratio2=steps3/(double)2;
       i=(offset_t)steps3/2;
       if(step_ratio2!=i){
-        errmsg("Error: -step1/-step2/-step3 must be all odd or all even (got %d %d %d)\n",steps1,steps2,steps3);
+        if(rank==0)errmsg("Error: -step1/-step2/-step3 must be all odd or all even (got %d %d %d)\n",steps1,steps2,steps3);
         PetscFinalize();
         return 1;
       }
     }
   }
   if((solmethod==SM_GRAGG||solmethod==SM_MIDPOINT||solmethod==SM_EULER)&&teems_two_run&&!(steps1<steps2)) {
-    errmsg("Error: -step1/-step2 must be strictly increasing (got %d %d)\n",steps1,steps2);
+    if(rank==0)errmsg("Error: -step1/-step2 must be strictly increasing (got %d %d)\n",steps1,steps2);
     PetscFinalize();
     return 1;
   }
   if((solmethod==SM_GRAGG||solmethod==SM_MIDPOINT||solmethod==SM_EULER)&&!teems_single_run&&!teems_two_run&&!(steps1<steps2&&steps2<steps3)) {
     /* extrapolation needs three distinct step sizes (GEMPACK: i<j<k) */
-    errmsg("Error: -step1/-step2/-step3 must be strictly increasing (got %d %d %d)\n",steps1,steps2,steps3);
+    if(rank==0)errmsg("Error: -step1/-step2/-step3 must be strictly increasing (got %d %d %d)\n",steps1,steps2,steps3);
     PetscFinalize();
     return 1;
   }
@@ -3548,6 +3622,14 @@ comp_accurate_reentry:
     if(avail>0&&2*need>avail) {
       if(rank==0)printf("Warning: -inmemory needs ~%ld MB per rank but only ~%ld MB is available; using scratch files instead\n",need/1048576,avail/1048576);
       inmemory=0;
+      if(scratch_auto_shm) {
+        /* the spill is about `need` bytes: tmpfs was chosen for the
+           small factor handoffs, not for the value arrays, and a
+           container's /dev/shm is 64 MB (audit S7-B8) */
+        strcpy(scratch_dir,"/tmp/");
+        setenv("TEEMS_SCRATCH",scratch_dir,1);
+        if(rank==0)logmsg(1,"scratch moved from tmpfs to %s for the spilled value arrays\n",scratch_dir);
+      }
     } else if(rank==0)logmsg(1,"inmemory: keeping ~%ld MB of value arrays resident per rank\n",need/1048576);
   }
   /* C2/C3 (manual 51.1.3): endogenous complementarity-variable
@@ -3793,7 +3875,10 @@ comp_teardown:
   free(backsolves);
 
 
-  if(rank==rank_hsl) {
+  /* every rank holds the full solution; under DBBD/NDBBD (nohsl,
+     rank_hsl==rank) all of them used to truncate and rewrite the same
+     files at once (audit S7-C2) */
+  if(rank==0) {
     for (i=niodata+noutdata; i<niodata+noutdata+nsoldata; i++) {
       if (strcmp("solfiles",iodata[i].logname)==0) {
         strcpy(tempchar,iodata[i].filname);
@@ -3813,8 +3898,10 @@ comp_teardown:
         errmsg("Error: cannot open %s for writing: %s (the solver runs as uid %d)\n",solchar,strerror(errno),(int)getuid());
         return 1;
       }
-      fwrite(xcf, sizeof(solve_real),nvarele, solution);
-      fclose(solution);
+      if(fwrite(xcf, sizeof(solve_real),nvarele, solution)!=(size_t)nvarele||fclose(solution)!=0) {
+        errmsg("Error: cannot write %s: %s (disk full or quota reached?)\n",solchar,strerror(errno));
+        return 1;
+      }
       outputs_note(solchar,"solution",0);
     }
     if(xcf!=NULL&&accmetric==NULL) {
@@ -3840,8 +3927,10 @@ comp_teardown:
         errmsg("Error: cannot open %s for writing: %s (the solver runs as uid %d)\n",solchar,strerror(errno),(int)getuid());
         return 1;
       }
-      fwrite(accmetric, sizeof(solve_real),nvarele, solution);
-      fclose(solution);
+      if(fwrite(accmetric, sizeof(solve_real),nvarele, solution)!=(size_t)nvarele||fclose(solution)!=0) {
+        errmsg("Error: cannot write %s: %s (disk full or quota reached?)\n",solchar,strerror(errno));
+        return 1;
+      }
       outputs_note(solchar,"rk_error_estimate",0);
     }
     if((solmethod!=SM_PROBE||jac_only)&&structure_files_write(tempchar,vars,nvar,sets,nset,set_elems,nsetspace,nvarele))return 1;
