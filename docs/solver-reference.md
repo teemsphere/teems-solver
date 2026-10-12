@@ -131,7 +131,8 @@ The solver reads a GEMPACK-style TAB subset (statement syntax per [GM]):
   condition may also compare a position, `$POS(i) > 1` or
   `$POS(i,S) > 2`, where `i` is the builder index and `S` a superset
   of its source set — an element of the source not in `S` is a named
-  fatal, [GM] 11.5.6), and
+  fatal, [GM] 11.5.6; a builder source of more than 4,096 elements is
+  a named fatal rather than a truncated selection), and
   intertemporal set declarations (`(intertemporal)`),
   which mark the time dimension used by the bordered orderings, and
   set products `Set P = A x B` ([GM] 10.1.6; elements `a_b`, first

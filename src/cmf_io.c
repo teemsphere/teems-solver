@@ -3153,6 +3153,14 @@ static char *sb_iodata_path(cmf_file_entry *iodata, int nio, const char *logname
    stops a malformed tab looping */
 #define SB_MAXDEPTH 8
 
+/* the resolver's element buffers are SB_MAXELE deep; a source set past
+   that was silently cut at the cap, so every builder over it selected
+   from a truncated set (audit 1011 S4-F5) */
+static void sb_cap_abort(const char *setname) {
+  errmsg("Error: set %s has more than %d elements, the most a set-builder source can hold; a builder over it would select from a truncated set\n",setname,SB_MAXELE);
+  MPI_Abort(PETSC_COMM_WORLD,1);
+}
+
 static int sb_elements_d(char *tabfile, cmf_file_entry *iodata, int nio, const char *setname, char (*ele)[NAMESIZE], int depth);
 
 static int sb_eqi(const char *a, const char *b) {
@@ -3170,7 +3178,7 @@ static int sb_expr_form(const char *p) {
   return 1;
 }
 
-static int sb_expr_elements(char *tabfile, cmf_file_entry *iodata, int nio, const char *p, char (*ele)[NAMESIZE], int depth) {
+static int sb_expr_elements(char *tabfile, cmf_file_entry *iodata, int nio, const char *setname, const char *p, char (*ele)[NAMESIZE], int depth) {
   char (*tmp)[NAMESIZE];
   int n=0,first=1,op='+';
   if (depth>=SB_MAXDEPTH) return -1;
@@ -3197,11 +3205,14 @@ static int sb_expr_elements(char *tabfile, cmf_file_entry *iodata, int nio, cons
       nt=sb_elements_d(tabfile,iodata,nio,tok,tmp,depth+1);
       if (nt<0) { free(tmp); return -1; }
     }
-    if (first) { for (i=0; i<nt&&n<SB_MAXELE; i++) strcpy(ele[n++],tmp[i]); first=0; continue; }
+    if (first) { for (i=0; i<nt; i++) strcpy(ele[n++],tmp[i]); first=0; continue; }
     if (op=='+') {
       for (i=0; i<nt; i++) {
         for (j=0; j<n; j++) if (sb_eqi(ele[j],tmp[i])) break;
-        if (j==n&&n<SB_MAXELE) strcpy(ele[n++],tmp[i]);
+        if (j==n) {
+          if (n>=SB_MAXELE) { free(tmp); sb_cap_abort(setname); return -1; }
+          strcpy(ele[n++],tmp[i]);
+        }
       }
     } else {
       int m=0;
@@ -3248,12 +3259,15 @@ static int sb_elements_d(char *tabfile, cmf_file_entry *iodata, int nio, const c
       lst[e-p-1]='\0';
       if (elem_list_expand(lst,line,sizeof(line),setname)<0) break;
       n=0;
-      for (q=line; *q!='\0'&&n<SB_MAXELE; ) {
+      for (q=line; *q!='\0'; ) {
+        char tok[NAMESIZE];
         int tl=0;
         while (*q==' '||*q==',') q++;
-        while (*q!='\0'&&*q!=','&&*q!=' '&&tl<NAMESIZE-1) ele[n][tl++]=*q++;
-        ele[n][tl]='\0';
-        if (tl>0) n++;
+        while (*q!='\0'&&*q!=','&&*q!=' '&&tl<NAMESIZE-1) tok[tl++]=*q++;
+        tok[tl]='\0';
+        if (tl==0) continue;
+        if (n>=SB_MAXELE) { fclose(f); sb_cap_abort(setname); return -1; }
+        strcpy(ele[n++],tok);
       }
       break;
     }
@@ -3276,13 +3290,15 @@ static int sb_elements_d(char *tabfile, cmf_file_entry *iodata, int nio, const c
       path=sb_iodata_path(iodata,nio,logname);
       if (path==NULL) break;
       {
-        datafile_labels *lab=(datafile_labels *)calloc(SB_MAXELE,sizeof(datafile_labels));
+        /* one slot past the cap: a label landing there is the overflow */
+        datafile_labels *lab=(datafile_labels *)calloc(SB_MAXELE+1,sizeof(datafile_labels));
         int i;
         if (lab==NULL) break;
-        datafile_read_labels(header,path,SB_MAXELE,lab);
+        datafile_read_labels(header,path,SB_MAXELE+1,lab);
         n=0;
-        for (i=0; i<SB_MAXELE&&lab[i].ch[0]!='\0'; i++) {
+        for (i=0; i<=SB_MAXELE&&lab[i].ch[0]!='\0'; i++) {
           int j;
+          if (i>=SB_MAXELE) { free(lab); fclose(f); sb_cap_abort(setname); return -1; }
           /* data-file labels enter the synthesized set in lowercase,
              the case sets_read gives every other element */
           for (j=0; j<NAMESIZE-1&&lab[i].ch[j]!='\0'; j++) ele[n][j]=(char)tolower((int)lab[i].ch[j]);
@@ -3297,7 +3313,7 @@ static int sb_elements_d(char *tabfile, cmf_file_entry *iodata, int nio, const c
       /* a derived source set, A + B, A union B, A - B, A intersect B,
          or a plain copy (evaluated left to right over the resolvable
          sets; vetting G-S6: REG = DST intersect ORG) */
-      n=sb_expr_elements(tabfile,iodata,nio,p+1,ele,depth);
+      n=sb_expr_elements(tabfile,iodata,nio,setname,p+1,ele,depth);
       break;
     }
     if (*p=='=') {
