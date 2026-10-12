@@ -796,6 +796,28 @@ static int rd_filter_skip(char *fname, long pos) {
   return ord_read_deferred(fname,pos);
 }
 
+/* a header's value block must hold exactly the target's element count
+   (GEMPACK stops on a size mismatch): values past the count used to be
+   written past the array, extra rows were ignored, and a short last
+   header left the remaining elements unchanged, all silently */
+static int rd_size_fail(const char *header,const char *name,long dims,long got) {
+  if (got<0) errmsg("Error: header \"%s\" holds more values than the %ld element(s) of %s\n",header,dims,name);
+  else errmsg("Error: header \"%s\" holds %ld value(s); %s has %ld element(s)\n",header,got,name,dims);
+  return -1;
+}
+static int rd_block_check(FILE *fh,const char *header,const char *name,long dims,long got,int datend) {
+  char line[DATREADLINE],*q;
+  if (got<dims) return rd_size_fail(header,name,dims,got);
+  if (datend) return 0;
+  while (fgets(line,DATREADLINE,fh)) {
+    for (q=line; *q==' '||*q=='\t'||*q=='\r'; q++);
+    if (*q=='\n'||*q=='\0') continue;
+    if (strchr(q,'"')!=NULL) return 0;   /* the next header */
+    return rd_size_fail(header,name,dims,-1);
+  }
+  return 0;
+}
+
 offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char *commsyntax,set_def *sets,dim_t nset, set_element *set_elems,array_def *coefs,offset_t ncof, elem_store *coef_store,offset_t ncofele,array_def *vars,offset_t nvar, elem_store *var_store,offset_t nvarele) {
   FILE * filehandle, * filehandle1;
   char line[DATREADLINE]="\0",linecopy[DATREADLINE],line1[TABREADLINE],*p,*p1;//,line1[DATREADLINE]
@@ -805,6 +827,8 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
   char *readitem=NULL,*copyvar;
   solve_real val;
   int k0,k1;
+  char *rd_name=NULL;
+  int datend=0;
 
   filehandle = teems_fopen(fname,"r");
   if(filehandle==NULL){
@@ -947,6 +971,8 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
             if (readitem != NULL) {
               if (str_cmp_ci(header,vname) == 0) {
                 count2=4;
+                rd_name=vars[i].cofname;
+                datend=0;
                 recount=0;
                 while (fgets(line,DATREADLINE,filehandle1)) {
                   count1=0;
@@ -959,6 +985,11 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
                   }
                   if (*copyvar=='\n') {
                     count1=1;
+                  }
+                  if (count1!=1&&strchr(copyvar,'"')!=NULL) {
+                    /* the next header: this block ended short */
+                    datend=1;
+                    break;
                   }
                   if (count1!=1) {
                     n=str_count_char(line,',');
@@ -1014,6 +1045,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
                         }
                         rd_put(var_store,vars[i].offset+recount1,val,1);
                         recount++;
+                        if (recount>=dims) return rd_size_fail(header,vars[i].cofname,dims,-1);
                       }
                       readitem = strtok(NULL,"\n");
                       val=teems_value_checked(readitem,"data value",vars[i].cofname);
@@ -1043,6 +1075,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
                   }
 
                 }
+                if (rd_block_check(filehandle1,header,rd_name,dims,recount,datend)) return -1;
                 break;
               }
 
@@ -1115,6 +1148,8 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
               }
               if (str_ncmp_ci(vname,header,strlen(header))==0&&strlen(header)==strlen(vname)) {
                 count2=2;
+                rd_name=coefs[i].cofname;
+                datend=0;
                 recount=0;
                 while (fgets(line,DATREADLINE,filehandle1)) {
                   count1=0;
@@ -1127,6 +1162,11 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
                   }
                   if (*copyvar=='\n') {
                     count1=1;
+                  }
+                  if (count1!=1&&strchr(copyvar,'"')!=NULL) {
+                    /* the next header: this block ended short */
+                    datend=1;
+                    break;
                   }
                   if (count1!=1) {
                     n=str_count_char(line,',');
@@ -1182,6 +1222,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
                         }
                         rd_put(coef_store,coefs[i].offset+recount1,val,0);
                         recount++;
+                        if (recount>=dims) return rd_size_fail(header,coefs[i].cofname,dims,-1);
                       }
                       readitem = strtok(NULL,"\n");
                       val=teems_value_checked(readitem,"data value",coefs[i].cofname);
@@ -1211,6 +1252,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
                   }
 
                 }
+                if (rd_block_check(filehandle1,header,rd_name,dims,recount,datend)) return -1;
                 break;
               }
 
@@ -1362,6 +1404,8 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
               if (str_ncmp_ci(hdrlabel,header,strlen(header)) == 0&&strlen(header)==strlen(hdrlabel)) {
                 logmsg(2,"dim %s\n",readitem);
                 count2=2;
+                rd_name=coefs[i].cofname;
+                datend=0;
                 recount=0;
                 while (fgets(line,DATREADLINE,filehandle1)) {
                   count1=0;
@@ -1374,6 +1418,11 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
                   }
                   if (*copyvar=='\n') {
                     count1=1;
+                  }
+                  if (count1!=1&&strchr(copyvar,'"')!=NULL) {
+                    /* the next header: this block ended short */
+                    datend=1;
+                    break;
                   }
                   if (count1!=1) {
                     n=str_count_char(line,',');
@@ -1429,6 +1478,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
                         }
                         rd_put(coef_store,coefs[i].offset+recount1,val,0);
                         recount++;
+                        if (recount>=dims) return rd_size_fail(header,coefs[i].cofname,dims,-1);
                       }
                       readitem = strtok(NULL,"\n");
                       val=teems_value_checked(readitem,"data value",coefs[i].cofname);
@@ -1458,6 +1508,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
                   }
 
                 }
+                if (rd_block_check(filehandle1,header,rd_name,dims,recount,datend)) return -1;
               }
 
             }
@@ -1546,6 +1597,8 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
               }
               if (str_ncmp_ci(hdrlabel,header,strlen(header)) == 0&&strlen(header)==strlen(hdrlabel)) {
                 count2=4;
+                rd_name=vars[i].cofname;
+                datend=0;
                 recount=0;
                 while (fgets(line,DATREADLINE,filehandle1)) {
                   count1=0;
@@ -1558,6 +1611,11 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
                   }
                   if (*copyvar=='\n') {
                     count1=1;
+                  }
+                  if (count1!=1&&strchr(copyvar,'"')!=NULL) {
+                    /* the next header: this block ended short */
+                    datend=1;
+                    break;
                   }
                   if (count1!=1) {
                     n=str_count_char(line,',');
@@ -1613,6 +1671,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
                         }
                         rd_put(var_store,vars[i].offset+recount1,val,1);
                         recount++;
+                        if (recount>=dims) return rd_size_fail(header,vars[i].cofname,dims,-1);
                       }
                       readitem = strtok(NULL,"\n");
                       val=teems_value_checked(readitem,"data value",vars[i].cofname);
@@ -1642,6 +1701,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
                   }
 
                 }
+                if (rd_block_check(filehandle1,header,rd_name,dims,recount,datend)) return -1;
               }
 
             }

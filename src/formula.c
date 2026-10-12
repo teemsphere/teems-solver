@@ -4269,12 +4269,11 @@ offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_el
       strcat(line1,")/100)");
       readitem=line1;
     }
-    if(IsChange==true) {
-      strcpy(line1,vname);
-      if(readitem[0]!='+'&&readitem[0]!='-') strcat(line1,"+");
-      strcat(line1,readitem);
-      readitem=line1;
-    }
+    /* a (change) Update's RHS is compiled alone: compiling V + (RHS)
+       formed the new value in the evaluator's float, which quantised the
+       increment to ulp(V) before the double shadow saw it, so the
+       extrapolated updated data degraded with the step count. The
+       increment is added to the stored value in double below */
     npow=str_count_char(readitem, '^');
     nmul=str_count_char(readitem, '*');
     ndiv=str_count_char(readitem, '/');
@@ -4427,9 +4426,10 @@ offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_el
       if(dfr){
         store_real v0=elem_vals[offset+l2].value,nv=v0;
         temp1=formula_eval(elem_vals,sets,set_elems,sum_vals,ops1,nops,arSet1,fdim-1,zerodivide);
+        if(IsChange)temp1+=(double)elem_vals[offset+l2].value;
         if(teems_nonfinite(temp1))upd_nf_hit(offset+l2);
         if(midpoint==2)nv=0.5*(elem_vals[offset+l2].substep_base+temp1);
-        else if(temp1-v0>0.000000001||temp1-v0<-0.000000001)nv=midpoint?elem_vals[offset+l2].substep_base+2*(temp1-v0):temp1;
+        else if(temp1!=(solve_real)v0)nv=midpoint?elem_vals[offset+l2].substep_base+2*(temp1-v0):temp1;
         upd_pend_off[pb+l]=offset+l2;
         upd_pend_val[pb+l]=nv;
         upd_pend_base[pb+l]=v0;
@@ -4447,20 +4447,23 @@ offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_el
         /* Gragg terminal smoothing of the data: (C[n-1] + C[n] + dC)/2 */
         temp2=elem_vals[offset+l2].value;
         temp1=formula_eval(elem_vals,sets,set_elems,sum_vals,ops1,nops,arSet1,fdim-1,zerodivide);
+        if(IsChange)temp1+=(double)elem_vals[offset+l2].value;
         if(teems_nonfinite(temp1))upd_nf_hit(offset+l2);
         elem_vals[offset+l2].value=0.5*(elem_vals[offset+l2].substep_base+temp1);
         elem_vals[offset+l2].substep_base=temp2;
       }else if(midpoint){
         temp2=elem_vals[offset+l2].value;
         temp1=formula_eval(elem_vals,sets,set_elems,sum_vals,ops1,nops,arSet1,fdim-1,zerodivide);
+        if(IsChange)temp1+=(double)elem_vals[offset+l2].value;
         if(teems_nonfinite(temp1))upd_nf_hit(offset+l2);
-        if(temp1-elem_vals[offset+l2].value>0.000000001||temp1-elem_vals[offset+l2].value<-0.000000001)elem_vals[offset+l2].value=elem_vals[offset+l2].substep_base+2*(temp1-elem_vals[offset+l2].value);
+        if(temp1!=(solve_real)elem_vals[offset+l2].value)elem_vals[offset+l2].value=elem_vals[offset+l2].substep_base+2*(temp1-elem_vals[offset+l2].value);
         elem_vals[offset+l2].substep_base=temp2;
       }else{
         elem_vals[offset+l2].substep_base=elem_vals[offset+l2].value;
         temp1=formula_eval(elem_vals,sets,set_elems,sum_vals,ops1,nops,arSet1,fdim-1,zerodivide);
+        if(IsChange)temp1+=(double)elem_vals[offset+l2].value;
         if(teems_nonfinite(temp1))upd_nf_hit(offset+l2);
-        if(temp1-elem_vals[offset+l2].value>0.000000001||temp1-elem_vals[offset+l2].value<-0.000000001)elem_vals[offset+l2].value=temp1;
+        elem_vals[offset+l2].value=temp1;
       }
     }
         upd_cond_thread_free(&uc,ucops,omp_get_thread_num()==0);
@@ -4603,12 +4606,11 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
       strcat(line1,"/100)");
       readitem=line1;
     }
-    if(IsChange==true) {
-      strcpy(line1,vname);
-      if(readitem[0]!='+'&&readitem[0]!='-') strcat(line1,"+");
-      strcat(line1,readitem);
-      readitem=line1;
-    }
+    /* a (change) Update's RHS is compiled alone: compiling V + (RHS)
+       formed the new value in the evaluator's float, which quantised the
+       increment to ulp(V) before the double shadow saw it, so the
+       extrapolated updated data degraded with the step count. The
+       increment is added to the stored value in double below */
     npow=str_count_char(readitem, '^');
     nmul=str_count_char(readitem, '*');
     ndiv=str_count_char(readitem, '/');
@@ -4758,6 +4760,7 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
               }
             }
       temp1=formula_eval(elem_vals,sets,set_elems,sum_vals,ops1,nops,arSet1,fdim-1,zerodivide);
+        if(IsChange)temp1+=(double)elem_vals[offset+l2].value;
       if(pathv!=NULL)temp1=pathv[l2];
       if(uc.n>0&&!upd_cond_hold(&uc,ucops,elem_vals,sets,set_elems,sum_vals,arSet1,fdim-1,zerodivide)) {
         if(dfr){ upd_pend_off[pb+l]=-1; upd_pend_sidx[pb+l]=-1; }
@@ -4766,13 +4769,13 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
       if(teems_nonfinite(temp1))upd_nf_hit(offset+l2);
       if(dfr){
         store_real v0=elem_vals[offset+l2].value,nv=v0;
-        if(temp1-v0>0.000000001||temp1-v0<-0.000000001)nv=temp1;
+        nv=temp1;
         upd_pend_off[pb+l]=offset+l2;
         upd_pend_val[pb+l]=nv;
         upd_pend_base[pb+l]=elem_vals[offset+l2].substep_base;
         upd_pend_sidx[pb+l]=-1;
       }else
-      if(temp1-elem_vals[offset+l2].value>0.000000001||temp1-elem_vals[offset+l2].value<-0.000000001)elem_vals[offset+l2].value=temp1;
+      elem_vals[offset+l2].value=temp1;
     }
         upd_cond_thread_free(&uc,ucops,omp_get_thread_num()==0);
         if(omp_get_thread_num()!=0){
