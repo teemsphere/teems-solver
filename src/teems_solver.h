@@ -462,6 +462,16 @@ typedef struct {
   int chart;
 } teems_rk_stats_t;
 extern teems_rk_stats_t teems_rk_stats;
+/* extrapolation accuracy summary (GEMPACK manual 26.2.1, 26.3.1):
+   solve_drivers.c fills it at the end of a three-solution run, main
+   patches it into stats.json. Counts cover the endogenous and
+   backsolved elements; lin[k] / lev[k] = results at k figures (0..6);
+   zero = results judged zero (not in lin, at 6 in lev) */
+typedef struct {
+  int valid, subints;
+  long nsum, zero, lin[7], lev[7];
+} teems_acc_stats_t;
+extern teems_acc_stats_t teems_acc_stats;
 /* set while a Runge-Kutta stage state is being realized under -adaptive
    yes: formula.c counts range-test and assertion violations into the
    two counters (and prints them as warnings) instead of aborting, so

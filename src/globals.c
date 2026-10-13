@@ -138,6 +138,7 @@ int teems_newton_mixed = 0;
 long teems_newton_nlevels = 0;
 long teems_newton_nlinear = 0;
 teems_rk_stats_t teems_rk_stats;
+teems_acc_stats_t teems_acc_stats;
 int teems_rk_stage_checks = 0;
 long teems_check_viol_range = 0;
 long teems_check_viol_assert = 0;

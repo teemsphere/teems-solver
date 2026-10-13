@@ -1630,16 +1630,20 @@ static void conv_apply(array_def *vars, offset_t nvar, dim_t subindx, const solv
 
 /* Extrapolation accuracy side-car (<stem>.xac, Tier B2; GEMPACK's XAC
    file, manual 26.2.3): per variable element the three pass solutions
-   the Richardson extrapolation combines and the figures-of-accuracy
-   code that the log only summarises. int64 header {version 1, nrow =
-   nvarele, npass 3, nsubints}, then npass x nrow doubles (pass by pass,
-   rows in .bin order), then nrow int32 codes: 6 = the passes agree to
-   6 or more figures, 5..2 = that many, 1 = one figure or none (the
-   minimum over subintervals). With subintervals a pass value is that
+   the Richardson extrapolation combines and what the log only
+   summarises. Version 2, columns in .bin row order: int64 header
+   {version 2, nrow = nvarele, npass 3, nsubints}; npass x nrow doubles
+   (pass by pass); nrow doubles error = |e12 - e24|, the disagreement of
+   the two two-pass extrapolations in the units of the reported result;
+   then four int8 columns: figures (0..6, 7 = judged zero), levels
+   figures (0..6), convergence code (0 = not classified) and flags (1
+   summarised, 2 exogenous, 4 judged zero, 8 backsolved). Figures are
+   the minimum over subintervals. With subintervals a pass value is that
    pass over the last subinterval, compounded onto the extrapolated
    result of the ones before (the path the last subinterval starts
-   from). Rank 0 only; a run that stops midway leaves a partial file
-   that <stem>.outputs.json does not list. */
+   from), and error is the last subinterval's. Rank 0 only; a run that
+   stops midway leaves a partial file that <stem>.outputs.json does not
+   list. */
 static FILE *xac_fp=NULL;
 static char xac_path[TABREADLINE+8];
 static solve_real *xac_base=NULL;
@@ -1649,7 +1653,7 @@ static void xac_pass(int sol,dim_t subindx,dim_t subints,array_def *vars,offset_
   solve_real buf[CHUNK];
   offset_t i,k,n,m;
   if(sol==0) {
-    offset_t hdr[4]={1,nvarele,3,(offset_t)(teems_comp_nsub>1?teems_comp_nsub:subints)};
+    offset_t hdr[4]={2,nvarele,3,(offset_t)(teems_comp_nsub>1?teems_comp_nsub:subints)};
     if(xac_fp!=NULL)fclose(xac_fp);
     snprintf(xac_path,sizeof(xac_path),"%s.xac",teems_sol_stem);
     xac_fp=fopen(xac_path,"wb");
@@ -1693,12 +1697,50 @@ static void xac_pass(int sol,dim_t subindx,dim_t subints,array_def *vars,offset_
   }
 }
 
-static void xac_codes(offset_t nvarele,const int *codes) {
+static int acc_figures(double rel) {
+  int fig;
+  if(rel<1e-6)fig=6; else if(rel<1e-5)fig=5; else if(rel<1e-4)fig=4; else if(rel<1e-3)fig=3; else if(rel<1e-2)fig=2; else if(rel<1e-1)fig=1; else fig=0;
+  return fig;
+}
+
+static void xac_codes(offset_t nvarele,array_def *vars,offset_t nvar,const int *figs,const signed char *levfigs,const solve_real *xc12,const solve_real *xc24) {
+  enum { CHUNK=1<<14 };
+  double dbuf[CHUNK];
+  signed char cbuf[CHUNK];
+  offset_t i,k,n,m;
+  int col;
   if(xac_fp==NULL)return;
-  fseeko(xac_fp,(off_t)(4*sizeof(offset_t))+(off_t)sizeof(solve_real)*3*nvarele,SEEK_SET);
-  fwrite(codes,sizeof(int),nvarele,xac_fp);
+  for(i=0; i<nvar; i++) {
+    if(vars[i].nelem<=0)continue;
+    fseeko(xac_fp,(off_t)(4*sizeof(offset_t))+(off_t)sizeof(double)*(3*nvarele+vars[i].offset),SEEK_SET);
+    for(k=0; k<vars[i].nelem; k+=n) {
+      n=vars[i].nelem-k; if(n>CHUNK)n=CHUNK;
+      for(m=0; m<n; m++) {
+        offset_t e=vars[i].offset+k+m;
+        double d=fabs((double)xc12[e]-(double)xc24[e]);
+        if(xac_base!=NULL&&!vars[i].change_real)d*=1+(double)xac_base[e]/100;
+        dbuf[m]=fabs(d);
+      }
+      fwrite(dbuf,sizeof(double),n,xac_fp);
+    }
+  }
+  for(col=0; col<4; col++) {
+    fseeko(xac_fp,(off_t)(4*sizeof(offset_t))+(off_t)sizeof(double)*4*nvarele+(off_t)col*nvarele,SEEK_SET);
+    for(k=0; k<nvarele; k+=n) {
+      n=nvarele-k; if(n>CHUNK)n=CHUNK;
+      for(m=0; m<n; m++) {
+        offset_t e=k+m;
+        signed char v=0;
+        if(col==0)v=(signed char)figs[e];
+        else if(col==1)v=levfigs[e];
+        else if(col==3)v=(signed char)((CL_EXO(e)?2:1)|(figs[e]==7?4:0)|(CL_BS(e)?8:0));
+        cbuf[m]=v;
+      }
+      fwrite(cbuf,1,n,xac_fp);
+    }
+  }
   if(fclose(xac_fp)!=0)errmsg("Error: cannot write %s: %s\n",xac_path,strerror(errno));
-  else outputs_note(xac_path,"extrapolation_accuracy",1);
+  else outputs_note(xac_path,"extrapolation_accuracy",2);
   xac_fp=NULL;
   free(xac_base);
   xac_base=NULL;
@@ -1949,6 +1991,8 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
     solve_real *xc12= (solve_real *) calloc (1,sizeof(solve_real));
     solve_real *xc24= (solve_real *) calloc (1,sizeof(solve_real));
     int *xc124= (int *) calloc (1,sizeof(int));
+    signed char *xclev= (signed char *) calloc (1,sizeof(signed char));
+    teems_acc_stats.valid=0;
     solve_real *clag1= (solve_real *) calloc (nvarele,sizeof(solve_real));
     solve_real *varchange= (solve_real *) calloc (nvarele,sizeof(solve_real));
     /* backsolve recovery workspace: exogenous per-step changes as placed
@@ -3338,15 +3382,11 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
               for(i=0; i<nvar; i++) {
                 if(vars[i].change_real) {
                   for(k=vars[i].offset; k<vars[i].nelem+vars[i].offset; k++) {
-                    xc12[k]=xcf[k]-varchange[k]*extrap_w1;
-                    xc24[k]=xcf[k];
                     xcf[k]+=varchange[k]*extrap_w2;
                   }
                 }
                 else {
                   for(k=vars[i].offset; k<vars[i].nelem+vars[i].offset; k++) {
-                    xc24[k]=xcf[k];
-                    xc12[k]=xcf[k]-varchange[k]*xc0[k]*extrap_w1;
                     xcf[k]+=varchange[k]*xc0[k]*extrap_w2;//(100+xc0[k])*(100+varchange[k]/45)/100-100;//varchange[k]/45;
                   }
                 }
@@ -3356,15 +3396,11 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
               for(i=0; i<nvar; i++) {
                 if(vars[i].change_real) {
                   for(k=vars[i].offset; k<vars[i].nelem+vars[i].offset; k++) {
-                    xc24[k]-=varchange[k]*extrap_w2;
-                    xc12[k]+=varchange[k]*extrap_w1;
                     xcf[k]-=varchange[k]*extrap_w3;
                   }
                 }
                 else {
                   for(k=vars[i].offset; k<vars[i].nelem+vars[i].offset; k++) {
-                    xc24[k]-=varchange[k]*xc0[k]*extrap_w2;
-                    xc12[k]+=varchange[k]*xc0[k]*extrap_w1;
                     xcf[k]-=varchange[k]*xc0[k]*extrap_w3;//(100+xc0[k])*(100-20*varchange[k]/45)/100-100;
                   }
                 }
@@ -3374,13 +3410,11 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
               for(i=0; i<nvar; i++) {
                 if(vars[i].change_real) {
                   for(k=vars[i].offset; k<vars[i].nelem+vars[i].offset; k++) {
-                    xc24[k]+=varchange[k]*extrap_w2;
                     xcf[k]+=varchange[k]*extrap_w3;
                   }
                 }
                 else {
                   for(k=vars[i].offset; k<vars[i].nelem+vars[i].offset; k++) {
-                    xc24[k]+=varchange[k]*xc0[k]*extrap_w2;
                     xcf[k]+=varchange[k]*xc0[k]*extrap_w3;//(100+xc0[k])*(100+64*varchange[k]/45)/100-100;
                   }
                 }
@@ -3388,26 +3422,20 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
             }
           }
           else {
-            if(sol==0){
-              for(i=0; i<nvarele; i++) {
-                xc12[i]=-varchange[i]*extrap_w1;
-                xcf[i]+=varchange[i]*extrap_w2;
-              }
-            }
-            if(sol==1) {
-              for(i=0; i<nvarele; i++) {
-                xc24[i]=-varchange[i]*extrap_w2;
-                xc12[i]+=varchange[i]*extrap_w1;
-                xcf[i]-=varchange[i]*extrap_w3;
-              }
-            }
-            if(sol==2) {
-              for(i=0; i<nvarele; i++) {
-                xc24[i]+=varchange[i]*extrap_w2;
-                xcf[i]+=varchange[i]*extrap_w3;
-              }
-            }
+            if(sol==0)for(i=0; i<nvarele; i++) xcf[i]+=varchange[i]*extrap_w2;
+            if(sol==1)for(i=0; i<nvarele; i++) xcf[i]-=varchange[i]*extrap_w3;
+            if(sol==2)for(i=0; i<nvarele; i++) xcf[i]+=varchange[i]*extrap_w3;
           }
+          /* the two two-pass extrapolations of the movement across this
+             subinterval (GEMPACK manual 26.3: per-subinterval accuracy is
+             judged on "the endogenous movements just across the current
+             subinterval"), not of the result compounded onto the ones
+             before: e12 = (q2 c2 - c1)/(q2 - 1), e24 = (q3 c3 - q2 c2)/(q3 - q2).
+             A percent-change movement is relative to the subinterval's
+             start, so the compounding factor xc0 cancels in the figures */
+          if(sol==0)for(i=0; i<nvarele; i++) xc12[i]=-varchange[i]*extrap_w1;
+          if(sol==1)for(i=0; i<nvarele; i++) { xc24[i]=-varchange[i]*extrap_w2; xc12[i]+=varchange[i]*extrap_w1; }
+          if(sol==2)for(i=0; i<nvarele; i++) xc24[i]+=varchange[i]*extrap_w2;
           if(convrule&&rank==rank_hsl) {
             conv_store(sol,nvarele,varchange,sol==0?extrap_w2:(sol==1?-extrap_w3:extrap_w3));
             if(sol==2) conv_apply(vars,nvar,subindx,xc0,xcf,euler);
@@ -3495,9 +3523,25 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
     if(rank==rank_hsl&&sol==maxsol-1) {
             if(subindx==0){
               xc124=realloc (xc124,nvarele*sizeof(int));
+              xclev=realloc (xclev,nvarele*sizeof(signed char));
               /* 7 = judged zero until a comparison below lowers it */
               for(i=0; i<nvarele; i++)xc124[i]=7;
+              for(i=0; i<nvarele; i++)xclev[i]=6;
             }else{
+            if(!inmemory){
+            strcpy(tempfilenam,scratch_dir);
+            strcat(tempfilenam,"_tempxclev");
+            sprintf(tempchar, "%d",rank);
+            strcat(tempfilenam,tempchar);
+            strcat(tempfilenam,".bin");
+            if ((tempvar = teems_fopen(tempfilenam, "rb")) == NULL) {
+              errmsg("Error: cannot open %s for reading\n",tempfilenam);
+            }
+            xclev=realloc (xclev,nvarele*sizeof(signed char));
+            scratch_read(xclev, sizeof(signed char),nvarele,tempvar,tempfilenam);
+            fclose(tempvar);
+            remove(tempfilenam);
+            }
             if(!inmemory){
             strcpy(tempfilenam,scratch_dir);
             strcat(tempfilenam,"_tempxc124");
@@ -3515,24 +3559,36 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
             }
 
       /* figures of accuracy (GEMPACK manual 26.2.1): the significant
-         figures to which the two two-pass extrapolations agree (a single-
-         or two-solution run has no xc24). The previous test scaled the
-         first extrapolation down into [1,10) and bucketed the absolute
-         difference, so a result below 1 was never scaled up and the count
-         was decimal places, not figures: 0.00123456 against 0.00123999
-         read as "6 digits". A result whose extrapolations are both below
-         1e-6 in magnitude cannot be judged in figures and keeps its own
-         class (code 7, GEMPACK's "confidence that the result is zero") */
-      if(maxsol==3) for(i=0; i<nvarele; i++){
-        double a=fabs((double)xc12[i]),b=fabs((double)xc24[i]);
-        double sc=(a>b)?a:b,rel;
-        int fig;
-        if(sc<=1e-6) continue;
-        rel=fabs((double)xc12[i]-(double)xc24[i])/sc;
-        if(rel<1e-6)fig=6; else if(rel<1e-5)fig=5; else if(rel<1e-4)fig=4; else if(rel<1e-3)fig=3; else if(rel<1e-2)fig=2; else fig=1;
-        if(xc124[i]>fig)xc124[i]=fig;
+         figures to which the two two-pass extrapolations agree, bucketed
+         on their relative difference (6 below 1e-6 down to 0 at 1e-1 or
+         more). A result whose extrapolations are both below 1e-6 in
+         magnitude cannot be judged in figures and keeps its own class
+         (code 7, GEMPACK's "confidence that the result is zero").
+         Levels figures: a change result is already a levels result; a
+         percent-change result is judged on its levels value L = L0 (1 +
+         e/100) (GEMPACK assumes L0 = 50; under a relative difference L0
+         cancels), so the relative difference is |e12 - e24| / max(|100 +
+         e12|, |100 + e24|). A result judged zero is 6 levels figures.
+         Both are the minimum over subintervals (26.3.1) */
+      if(maxsol==3) for(i=0; i<nvar; i++) {
+        bool chg=vars[i].change_real;
+        for(k=vars[i].offset; k<vars[i].offset+vars[i].nelem; k++) {
+          double e1=(double)xc12[k],e2=(double)xc24[k];
+          double a=fabs(e1),b=fabs(e2);
+          double sc=(a>b)?a:b,d=fabs(e1-e2);
+          int fig,lev;
+          if(sc<=1e-6) continue;
+          fig=acc_figures(d/sc);
+          if(chg) lev=fig;
+          else {
+            double l1=fabs(100+e1),l2=fabs(100+e2),ls=(l1>l2)?l1:l2;
+            lev=(ls<=1e-6)?6:acc_figures(d/ls);
+          }
+          if(xc124[k]>fig)xc124[k]=fig;
+          if(xclev[k]>lev)xclev[k]=(signed char)lev;
+        }
       }
-      if(rank==0&&maxsol==3&&subindx==subints-1)xac_codes(nvarele,xc124);
+      if(rank==0&&maxsol==3&&subindx==subints-1)xac_codes(nvarele,vars,nvar,xc124,xclev,xc12,xc24);
       if(subindx!=subints-1){
             if(!inmemory){
             strcpy(tempfilenam,scratch_dir);
@@ -3547,6 +3603,18 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
             fclose(tempvar);
             free(xc124);
             xc124=NULL;
+            strcpy(tempfilenam,scratch_dir);
+            strcat(tempfilenam,"_tempxclev");
+            sprintf(tempchar, "%d",rank);
+            strcat(tempfilenam,tempchar);
+            strcat(tempfilenam,".bin");
+            if ( (tempvar = teems_fopen(tempfilenam, "wb")) == NULL ) {
+              errmsg("Error: cannot open %s for writing\n",tempfilenam);
+            }
+            fwrite(xclev, sizeof(signed char),nvarele, tempvar);
+            fclose(tempvar);
+            free(xclev);
+            xclev=NULL;
             }
       }
     }
@@ -3606,42 +3674,37 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
         x1=NULL;
       }
     }
-    long int *precis= (long int *) calloc (7,sizeof(long int));
-    
     if(rank==rank_hsl) {
-      for(i=0; i<nvarele; i++){
-   switch(xc124[i]) {
-      case 7:
-         precis[6]+=1;
-         break;
-      case 6:
-         precis[5]+=1;
-         break;
-      case 5:
-         precis[4]+=1;
-         break;
-      case 4:
-         precis[3]+=1;
-         break;
-      case 3:
-         precis[2]+=1;
-         break;
-      case 2:
-         precis[1]+=1;
-         break;
-      default :
-         precis[0]+=1;
-   }
-    }
     if(teems_single_run) {
       if(rank==0)printf("Accuracy estimates: not available for a single-pass run (%s; they need three multi-step solutions)\n",teems_newton?"-solmed Newton, whose extrapolation does not work (GEMPACK manual 26.6.3)":"-single_run 1");
     }
     else if(teems_two_run) {
       if(rank==0)printf("Accuracy estimates: not available from two solutions (-two_run 1; they need three multi-step solutions, GEMPACK manual 26.2.3)\n");
     }
-    else if(rank==0)printf("Figures of accuracy: significant figures agreed by the two two-pass extrapolations (GEMPACK manual 26.2.1)\nAccurate at 6 digits        %ld\nAccurate at 5 digits        %ld\nAccurate at 4 digits        %ld\nAccurate at 3 digits        %ld\nAccurate at 2 digits        %ld\nAccurate at 1 digit or none %ld\nJudged zero (both below 1e-6) %ld\n",precis[5],precis[4],precis[3],precis[2],precis[1],precis[0],precis[6]);
+    else if(maxsol==3) {
+      /* the summary covers the endogenous and backsolved elements
+         (GEMPACK manual 26.2.6); shocked exogenous components would
+         read as exact */
+      teems_acc_stats_t *st=&teems_acc_stats;
+      memset(st,0,sizeof(*st));
+      for(i=0; i<nvarele; i++) {
+        if(CL_EXO(i))continue;
+        st->nsum++;
+        if(xc124[i]==7)st->zero++;
+        else st->lin[xc124[i]]++;
+        st->lev[xclev[i]]++;
+      }
+      st->subints=(int)subints;
+      st->valid=1;
+      if(rank==0) {
+        if(subints>1)printf("Overall accuracy summary over %d subintervals (GEMPACK manual 26.3.1): %ld endogenous and backsolved results by the significant figures to which the two two-pass extrapolations agree, the lowest across the subintervals, each judged on the movement across its subinterval\n",(int)subints,st->nsum);
+        else printf("Accuracy summary (GEMPACK manual 26.2.1): %ld endogenous and backsolved results by the significant figures to which the two two-pass extrapolations agree\n",st->nsum);
+        printf("  figures  results  levels values\n");
+        for(k=6; k>=0; k--)printf("  %7ld  %7ld  %13ld\n",(long)k,st->lin[k],st->lev[k]);
+        printf("  judged zero %ld (both extrapolations below 1e-6; at 6 figures among the levels values)\n",st->zero);
+      }
     }
-    free(precis);
+    }
     xc0=realloc (xc0,sizeof(solve_real));
     free(xc0);
     xc0=NULL;
@@ -3651,6 +3714,8 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
     xc24=NULL;
     free(xc124);
     xc124=NULL;
+    free(xclev);
+    xclev=NULL;
     free(clag1);
     free(varchange);
     free(exo_z);

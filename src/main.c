@@ -652,6 +652,53 @@ static void stats_rk_patch(cmf_file_entry *iodata, int niodata, int noutdata, in
   free(buf);
 }
 
+/* extrapolation accuracy summary (GEMPACK manual 26.2.1, 26.2.4: the
+   summary belongs with the solution), patched into stats.json like
+   la_used; absent unless a three-solution extrapolation ran.
+   figures[k] = results at k figures */
+static void stats_accuracy_patch(cmf_file_entry *iodata, int niodata, int noutdata, int nsoldata) {
+  char statspath[TABREADLINE+16];
+  char lin[160],lev[160];
+  int i,k,o;
+  const teems_acc_stats_t *st=&teems_acc_stats;
+  for (i=niodata+noutdata; i<niodata+noutdata+nsoldata; i++) {
+    if (strcmp("solfiles",iodata[i].logname)==0)break;
+  }
+  if(i<niodata+noutdata+nsoldata)strcpy(statspath,iodata[i].filname);
+  else strcpy(statspath,"solution");
+  strcat(statspath,".stats.json");
+  FILE *fp=teems_fopen_opt(statspath,"r");
+  if (fp==NULL)return;
+  fseek(fp,0,SEEK_END);
+  long len=ftell(fp);
+  fseek(fp,0,SEEK_SET);
+  char *buf=(char *) malloc (len+1);
+  size_t rd=fread(buf,1,len,fp);
+  fclose(fp);
+  if((long)rd!=len) {
+    free(buf);
+    return;
+  }
+  buf[len]='\0';
+  char *end=strrchr(buf,'}');
+  if(end==NULL) {
+    free(buf);
+    return;
+  }
+  *end='\0';
+  fp=fopen(statspath,"w");
+  if (fp==NULL) {
+    free(buf);
+    return;
+  }
+  for(k=0,o=0; k<7; k++)o+=snprintf(lin+o,sizeof(lin)-o,"%s%ld",k?", ":"",st->lin[k]);
+  for(k=0,o=0; k<7; k++)o+=snprintf(lev+o,sizeof(lev)-o,"%s%ld",k?", ":"",st->lev[k]);
+  fprintf(fp,"%s,\n  \"accuracy\": {\"population\": \"endogenous+backsolved\", \"summarised\": %ld, \"subintervals\": %d, \"linear\": {\"figures\": [%s], \"judged_zero\": %ld}, \"levels\": {\"figures\": [%s]}}\n}\n",
+          buf,st->nsum,st->subints,lin,st->zero,lev);
+  fclose(fp);
+  free(buf);
+}
+
 /* NDBBD thread-budget record: the team size each capped region ran
    with on the last step (-maxthreads / -smllthreads asked, the budget
    chose), patched into stats.json like la_used; absent unless NDBBD ran */
@@ -4021,6 +4068,7 @@ comp_teardown:
   }
   fh_selftest_summary(rank);
   if(isrk&&!comp_dispatch&&rank==0)stats_rk_patch(iodata,niodata,noutdata,nsoldata);
+  if(teems_acc_stats.valid&&rank==0)stats_accuracy_patch(iodata,niodata,noutdata,nsoldata);
   /* phase resident-memory record: a last probe for the run's high-water
      mark (collective), then patch the per-phase table */
   teems_rss_probe(solmethod==SM_PROBE?"structural diagnosis":"solution write");
