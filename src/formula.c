@@ -1587,13 +1587,16 @@ solve_real formula_eval(elem_value *record,set_def *sets,set_element *set_elems,
       if(eval2==0) {
         if(zdiv_enabled) {
           if(eval1==0) {
-            if(zdiv_active.zbz_on)ops[i].TmpVarVal=zdiv_shifted(zdiv_active.zbz_val);
+            /* a substituted default is recorded so the statement's
+               occurrence count is reported (GEMPACK manual 10.11.1.1);
+               divisions were never counted, only 0^negative (audit S2-B1) */
+            if(zdiv_active.zbz_on) { ops[i].TmpVarVal=zdiv_shifted(zdiv_active.zbz_val); eval_pending_add(&zpend,i,EH_DEFAULT); }
             else {
               ops[i].TmpVarVal=0;
               eval_pending_add(&zpend,i,EH_ZBZ);
             }
           } else {
-            if(zdiv_active.nbz_on)ops[i].TmpVarVal=zdiv_shifted(zdiv_active.nbz_val);
+            if(zdiv_active.nbz_on) { ops[i].TmpVarVal=zdiv_shifted(zdiv_active.nbz_val); eval_pending_add(&zpend,i,EH_DEFAULT); }
             else {
               ops[i].TmpVarVal=0;
               eval_pending_add(&zpend,i,EH_NBZ);

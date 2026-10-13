@@ -1805,7 +1805,6 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
   PetscInt *ai,*aj,*aic,*ajc;
   solve_real cntl4in;
   offset_t lasize,ldsize;
-  size_t fwrt;
   PetscInt nrow,ncol,nz,nrowc,ncolc,nrowb,ncolb,nzc;
   int unequal=0;
   PetscScalar *vals,*valsc;
@@ -2120,7 +2119,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
     snprintf(detail,sizeof(detail),"dense interface product %.2f GB, Schur staging %.2f GB, MA48 workspace %.2f GB",dense_b/1073741824.0,stage_b/1073741824.0,ws_b/1073741824.0);
     ndthr=ndbbd_team_cap(0,"presolve",ndthr,dense_b+stage_b+ws_b+small_b,detail,rank);
   }
-  #pragma omp parallel num_threads(ndthr) private(jthrd,nthrd,j3,j4,bivirowsize,bivicolsize,bbrowij,ai,nz,nrow,i,j,j1,j2,li,lj,ddrowi,vecbivisize,aic,ajc,valsc,nzc,nrowc,ncolc,ncolb,nrowb,aj,vals,lj2,nz0,j1name,filename,presolfile,fwrt,nz1,cntl4in,ncol,lasize,ldsize) shared(insize,submatAij,submatBij,submatCij)
+  #pragma omp parallel num_threads(ndthr) private(jthrd,nthrd,j3,j4,bivirowsize,bivicolsize,bbrowij,ai,nz,nrow,i,j,j1,j2,li,lj,ddrowi,vecbivisize,aic,ajc,valsc,nzc,nrowc,ncolc,ncolb,nrowb,aj,vals,lj2,nz0,j1name,filename,presolfile,nz1,cntl4in,ncol,lasize,ldsize) shared(insize,submatAij,submatBij,submatCij)
   {
   long int *bivinzrow=NULL,irnmems=0;//(long int *) calloc (1,sizeof(long int));
   PetscInt *bivinzcol=NULL;//(PetscInt *) calloc (1,sizeof(PetscInt));
@@ -2503,8 +2502,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
     if((presolfile=scratch_open(filename, "wb"))==NULL) {
       errmsg("Error: cannot open scratch file %s\n",filename);
     }
-    fwrt=fwrite(vecbivi, sizeof(solve_real),nz1, presolfile);
-    if(fwrt== 0) {errmsg("Error: short write on scratch file %s (%s); the scratch filesystem is likely full - free space there or point -tempdir at a larger filesystem\n",filename,strerror(errno));fflush(stdout);MPI_Abort(PETSC_COMM_WORLD,1);}
+    scratch_write(vecbivi, sizeof(solve_real),nz1, presolfile,filename);
     fclose(presolfile);
     strcpy(filename,scratch_dir);strcat(filename,"_rbvi");
     strcat(filename,rankname);
@@ -2513,8 +2511,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
     if((presolfile=scratch_open(filename, "wb"))==NULL) {
       errmsg("Error: cannot open scratch file %s\n",filename);
     }
-    fwrt=fwrite(irn1, sizeof(int), nz1, presolfile);
-    if(fwrt== 0) {errmsg("Error: short write on scratch file %s (%s); the scratch filesystem is likely full - free space there or point -tempdir at a larger filesystem\n",filename,strerror(errno));fflush(stdout);MPI_Abort(PETSC_COMM_WORLD,1);}
+    scratch_write(irn1, sizeof(int), nz1, presolfile,filename);
     fclose(presolfile);
     strcpy(filename,scratch_dir);strcat(filename,"_cbvi");
     strcat(filename,rankname);
@@ -2523,8 +2520,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
     if((presolfile=scratch_open(filename, "wb"))==NULL) {
       errmsg("Error: cannot open scratch file %s\n",filename);
     }
-    fwrt=fwrite(jcn1, sizeof(int), nz1, presolfile);
-    if(fwrt== 0) {errmsg("Error: short write on scratch file %s (%s); the scratch filesystem is likely full - free space there or point -tempdir at a larger filesystem\n",filename,strerror(errno));fflush(stdout);MPI_Abort(PETSC_COMM_WORLD,1);}
+    scratch_write(jcn1, sizeof(int), nz1, presolfile,filename);
     fclose(presolfile);
     free(irn1);//1
     irn1=NULL;
@@ -2564,8 +2560,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
         errmsg("Error: cannot open scratch file %s\n",filename);
       }
       logmsg(2,"rank %d nrow %d ncol %d block rank %d nz %d ma48_cntl4 %g\n",rank,nrow,ncol,insized[3],nz,ma48_cntl4);
-      fwrt=fwrite(insized, sizeof(int), 5+nreg*insizes, presolfile);
-      if(fwrt== 0) {errmsg("Error: short write on scratch file %s (%s); the scratch filesystem is likely full - free space there or point -tempdir at a larger filesystem\n",filename,strerror(errno));fflush(stdout);MPI_Abort(PETSC_COMM_WORLD,1);}
+      scratch_write(insized, sizeof(int), 5+nreg*insizes, presolfile,filename);
       fclose(presolfile);
     insize[j4*insizes+15]=0;
   }
@@ -2627,7 +2622,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
     snprintf(detail,sizeof(detail),"interface staging %.2f GB (%ld entries at laDi %ld of %ld nz), MA51 workspace %.2f GB",stage_b/1073741824.0,(long)ld,(long)laDi,nz1max_all,ws_b/1073741824.0);
     ndthr2=ndbbd_team_cap(1,"interface-rank",ndthr2,stage_b+ws_b,detail,rank);
   }
-  #pragma omp parallel num_threads(ndthr2) private(jthrd,nthrd,j3,j4,ai,nz,nrow,i,j,j1,j2,li,lj,aj,vals,lj2,nz0,j1name,filename,presolfile,fwrt,nz1,cntl4in,ncol,lasize,ldsize) shared(insize,submatAij,submatBij,submatCij)
+  #pragma omp parallel num_threads(ndthr2) private(jthrd,nthrd,j3,j4,ai,nz,nrow,i,j,j1,j2,li,lj,aj,vals,lj2,nz0,j1name,filename,presolfile,nz1,cntl4in,ncol,lasize,ldsize) shared(insize,submatAij,submatBij,submatCij)
   {
   int *irn=NULL,*jcn=NULL,*irn1=NULL,*jcn1=NULL,*keep=NULL,*iw51=NULL;
   solve_real *vecbivi=NULL,*w51=NULL;
@@ -2824,8 +2819,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
         for(i=0; i<ncol; i++)ph=(ph^(unsigned long)jcn[i])*1099511628211UL;
         printf("ifcut rank %d j3 %d irank %d nrow %d ncol %d permsum %lx\n",rank,j3,insized[3],nrow,ncol,ph);
       }
-      fwrt=fwrite(insized, sizeof(int), 5+nreg*insizes, presolfile);
-      if(fwrt== 0) {errmsg("Error: short write on scratch file %s (%s); the scratch filesystem is likely full - free space there or point -tempdir at a larger filesystem\n",filename,strerror(errno));fflush(stdout);MPI_Abort(PETSC_COMM_WORLD,1);}
+      scratch_write(insized, sizeof(int), 5+nreg*insizes, presolfile,filename);
       fclose(presolfile);
       strcpy(filename,scratch_dir);strcat(filename,"_row");
       strcat(filename,rankname);
@@ -2834,8 +2828,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
       if((presolfile=scratch_open(filename, "wb"))==NULL) {
         errmsg("Error: cannot open scratch file %s\n",filename);
       }
-      fwrt=fwrite(irn, sizeof(int), nrow, presolfile);
-      if(fwrt== 0) {errmsg("Error: short write on scratch file %s (%s); the scratch filesystem is likely full - free space there or point -tempdir at a larger filesystem\n",filename,strerror(errno));fflush(stdout);MPI_Abort(PETSC_COMM_WORLD,1);}
+      scratch_write(irn, sizeof(int), nrow, presolfile,filename);
       fclose(presolfile);
       strcpy(filename,scratch_dir);strcat(filename,"_col");
       strcat(filename,rankname);
@@ -2844,8 +2837,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
       if((presolfile=scratch_open(filename, "wb"))==NULL) {
         errmsg("Error: cannot open scratch file %s\n",filename);
       }
-      fwrt=fwrite(jcn, sizeof(int), ncol, presolfile);
-      if(fwrt== 0) {errmsg("Error: short write on scratch file %s (%s); the scratch filesystem is likely full - free space there or point -tempdir at a larger filesystem\n",filename,strerror(errno));fflush(stdout);MPI_Abort(PETSC_COMM_WORLD,1);}
+      scratch_write(jcn, sizeof(int), ncol, presolfile,filename);
       fclose(presolfile);
       free(insized);//1
     insize[j4*insizes+15]=0;
