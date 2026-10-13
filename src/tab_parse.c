@@ -6274,11 +6274,19 @@ static void set_maxsize_excise(char *line) {
   memmove(p,q,strlen(q)+1);
 }
 
+/* the coefficient and header a time-range bound was read from, collected
+   for the inverted-range error */
+static void rng_note(char *buf,size_t cap,const char *coef,const char *hdr) {
+  size_t n=strlen(buf);
+  if (n<cap) snprintf(buf+n,cap-n,"%s%s (header \"%s\")",n?", ":"",coef,hdr);
+}
+
 int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, set_def *record,dim_t nset) {
   FILE * filehandle;//, *fileout;
   char line[TABREADLINE]="\0",linecopy[TABREADLINE];//,line1[TABREADLINE];longname[TABREADLINE],
   char header[HEADERSIZE]="",floginame[NAMESIZE]="";
   char commsyntax[TABREADLINE],varname[NAMESIZE];
+  char rngsrc[4*(NAMESIZE+HEADERSIZE+16)];
   dim_t j=0,i,intindx[4],sign[2],intvar[2];//,inttype[4]
   int k0,k1=0;
   char *readitem=NULL;//,*p;
@@ -6290,6 +6298,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
       intindx[3]=0;
       sign[0]=0;
       sign[1]=0;
+      rngsrc[0]='\0';
       strcpy(line,record[j].readele);
       str_delete_char(line,' ');
       strcpy(linecopy,line);
@@ -6375,6 +6384,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
                   while (fgets(line,TABREADLINE,filehandle)) {
                     readitem = strtok(line,"\n");
                     intindx[0]=atoi(readitem);
+                    rng_note(rngsrc,sizeof(rngsrc),varname,header);
                     break;
                   }
                   break;
@@ -6454,6 +6464,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
                   while (fgets(line,TABREADLINE,filehandle)) {
                     readitem = strtok(line,"\n");
                     intindx[1]=atoi(readitem);
+                    rng_note(rngsrc,sizeof(rngsrc),varname,header);
                     break;
                   }
                   break;
@@ -6530,6 +6541,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
                   while (fgets(line,TABREADLINE,filehandle)) {
                     readitem = strtok(line,"\n");
                     intindx[0]=atoi(readitem);
+                    rng_note(rngsrc,sizeof(rngsrc),varname,header);
                     break;
                   }
                   break;
@@ -6633,6 +6645,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
                   while (fgets(line,TABREADLINE,filehandle)) {
                     readitem = strtok(line,"\n");
                     intindx[0]=atoi(readitem);
+                    rng_note(rngsrc,sizeof(rngsrc),varname,header);
                     break;
                   }
                   break;
@@ -6712,6 +6725,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
                   while (fgets(line,TABREADLINE,filehandle)) {
                     readitem = strtok(line,"\n");
                     intindx[1]=atoi(readitem);
+                    rng_note(rngsrc,sizeof(rngsrc),varname,header);
                     break;
                   }
                   break;
@@ -6788,6 +6802,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
                   while (fgets(line,TABREADLINE,filehandle)) {
                     readitem = strtok(line,"\n");
                     intindx[0]=atoi(readitem);
+                    rng_note(rngsrc,sizeof(rngsrc),varname,header);
                     break;
                   }
                   break;
@@ -6888,6 +6903,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
                   while (fgets(line,TABREADLINE,filehandle)) {
                     readitem = strtok(line,"\n");
                     intindx[2]=atoi(readitem);
+                    rng_note(rngsrc,sizeof(rngsrc),varname,header);
                     break;
                   }
                   break;
@@ -6968,6 +6984,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
                   while (fgets(line,TABREADLINE,filehandle)) {
                     readitem = strtok(line,"\n");
                     intindx[3]=atoi(readitem);
+                    rng_note(rngsrc,sizeof(rngsrc),varname,header);
                     break;
                   }
                   break;
@@ -7044,6 +7061,7 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
                   while (fgets(line,TABREADLINE,filehandle)) {
                     readitem = strtok(line,"\n");
                     intindx[2]=atoi(readitem);
+                    rng_note(rngsrc,sizeof(rngsrc),varname,header);
                     break;
                   }
                   break;
@@ -7062,7 +7080,8 @@ int sets_read_intertemporal(char *fname, int niodata, cmf_file_entry *iodata, se
           intvar[1]=intindx[2];
         }
         if (intvar[1]+1-intvar[0]<0) {
-          errmsg("Error: intertemporal set %s has an inverted time range (%d - %d) in TAB file\n",record[j].setname,intvar[0],intvar[1]);
+          if (rngsrc[0]) errmsg("Error: intertemporal set %s has an inverted time range (%d - %d) in TAB file; its bounds are read from %s\n",record[j].setname,intvar[0],intvar[1],rngsrc);
+          else errmsg("Error: intertemporal set %s has an inverted time range (%d - %d) in TAB file\n",record[j].setname,intvar[0],intvar[1]);
           return -1;
         }
         record[j].readele[0]='\0';

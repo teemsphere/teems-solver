@@ -52,6 +52,26 @@ contains
     real (kind=DPC) :: u
     if (teems_ma48_cntl2(u)) cntl(2)=u
   end subroutine teems_apply_ma48_cntl2
+  ! A failed MA48 analyse (stage 'A') or factorize ('B') call, as a named
+  ! Error line (exit contract: rc 1 = an Error line was printed). MA48
+  ! doc 2.3.1/2.3.2: MA48A/AD INFO(1) = -4 is a structurally rank
+  ! deficient matrix (structural rank in INFO(10)); a positive MA48B/BD
+  ! INFO(1) with the +2 bit set is a numerically rank deficient one
+  ! (estimated rank in INFO(5)). rnk carries the matching INFO entry.
+  subroutine teems_ma48_fail(stage,info1,rnk,n)
+    character(len=1), intent(in) :: stage
+    integer, intent(in) :: info1, rnk, n
+    if (stage=='A' .and. info1==-4) then
+      print '(a,i0,a,i0,a)', 'Error: the system matrix is structurally singular: structural rank ', &
+        rnk, ' of ', n, ' (MA48A/AD INFO(1) = -4)'
+    else if (stage=='B' .and. info1>0 .and. mod(info1/2,2)==1) then
+      print '(a,i0,a,i0,a,i0,a)', 'Error: the system matrix is numerically singular: estimated rank ', &
+        rnk, ' of ', n, ' (MA48B/BD INFO(1) = ', info1, ')'
+    else
+      print '(a,a,a,a,a,i0,a)', 'Error: MA48', stage, '/', stage, 'D stopped with INFO(1) = ', info1, &
+        '; the system cannot be solved'
+    end if
+  end subroutine teems_ma48_fail
 end module constants
 
 SUBROUTINE SPEC48_SINGLE(indata,irn1,jcn1,b1,values1,x,neleperrow,ai1,fcomm)
@@ -1205,7 +1225,7 @@ call teems_apply_ma48_cntl2(CNTL)
     RETURN
   END IF
   IF (INFO(1).LT.0) THEN
-  WRITE (6,'(A,I3)') 'Error STOP from MA48A/AD with INFO(1) =',INFO(1)
+  CALL teems_ma48_fail('A',INFO(1),INFO(10),N)
   CALL TEEMS_ONFAIL_DIAG(INFO(1))
   CALL TEEMS_ONFAIL_ABORT()
   END IF
@@ -1224,9 +1244,7 @@ call teems_apply_ma48_cntl2(CNTL)
     RETURN
   END IF
   IF (INFO(1).NE.0) THEN
-    WRITE (6,FMT='(A,I3/A)') 'STOP from MA48B/BD with INFO(1) =',&
-    INFO(1),'Solution not possible'
-    write(*,"(A,i5)") 'RANK',INFO(5)
+    CALL teems_ma48_fail('B',INFO(1),INFO(5),N)
     CALL TEEMS_ONFAIL_DIAG(INFO(1))
     CALL TEEMS_ONFAIL_ABORT()
   END IF
@@ -1423,7 +1441,7 @@ call teems_apply_ma48_cntl2(CNTL)
       RETURN
     END IF
     IF (INFO(1).LT.0) THEN
-    WRITE (6,'(A,I3)') 'Error STOP from MA48A/AD with INFO(1) =',INFO(1)
+    CALL teems_ma48_fail('A',INFO(1),INFO(10),N)
     CALL TEEMS_ONFAIL_DIAG(INFO(1))
     CALL TEEMS_ONFAIL_ABORT()
     END IF
@@ -1443,9 +1461,7 @@ call teems_apply_ma48_cntl2(CNTL)
       RETURN
     END IF
     IF (INFO(1).NE.0) THEN
-      WRITE (6,FMT='(A,I3/A)') 'STOP from MA48B/BD with INFO(1) =',&
-      INFO(1),'Solution not possible'
-      write(*,"(A,i5)") 'RANK',INFO(5)
+      CALL teems_ma48_fail('B',INFO(1),INFO(5),N)
       CALL TEEMS_ONFAIL_DIAG(INFO(1))
       CALL TEEMS_ONFAIL_ABORT()
     END IF
@@ -1829,7 +1845,7 @@ call teems_apply_ma48_cntl2(CNTL)
       IF (CONDEST_ON) deallocate(CIRN,CJCN,CVA,CB)
       RETURN
     END IF
-    WRITE (6,'(A,I3)') 'Error STOP from MA48A/AD with INFO(1) =',INFO(1)
+    CALL teems_ma48_fail('A',INFO(1),INFO(10),N)
     CALL TEEMS_ONFAIL_DIAG(INFO(1))
     CALL TEEMS_ONFAIL_ABORT()
   END IF
@@ -1853,9 +1869,7 @@ call teems_apply_ma48_cntl2(CNTL)
     RETURN
   END IF
   IF (INFO(1).NE.0) THEN
-    WRITE (6,FMT='(A,I3/A)') 'STOP from MA48B/BD with INFO(1) =',&
-    INFO(1),'Solution not possible'
-    WRITE (6,FMT='(A,i10)') 'INFO(5) =',INFO(5)
+    CALL teems_ma48_fail('B',INFO(1),INFO(5),N)
     CALL TEEMS_ONFAIL_DIAG(INFO(1))
     CALL TEEMS_ONFAIL_ABORT()
   END IF
@@ -2064,7 +2078,7 @@ SUBROUTINE SPEC48_SSOL2LA_P(INSIZE,IRN,JCN,VA,B,X)
       RETURN
     END IF
     IF (pINFO(1).LT.0) THEN
-      WRITE (6,'(A,I3)') 'Fatal STOP from MA48A/AD with INFO(1) =',pINFO(1)
+      CALL teems_ma48_fail('A',pINFO(1),pINFO(10),N)
       CALL TEEMS_ONFAIL_DIAG(pINFO(1))
       CALL TEEMS_ONFAIL_ABORT()
     END IF
@@ -2083,9 +2097,7 @@ SUBROUTINE SPEC48_SSOL2LA_P(INSIZE,IRN,JCN,VA,B,X)
       RETURN
     END IF
     IF (pINFO(1).NE.0) THEN
-      WRITE (6,FMT='(A,I3/A)') 'STOP from MA48B/BD with INFO(1) =',&
-      pINFO(1),'Solution not possible'
-      WRITE (6,FMT='(A,i10)') 'INFO(5) =',pINFO(5)
+      CALL teems_ma48_fail('B',pINFO(1),pINFO(5),N)
       CALL TEEMS_ONFAIL_DIAG(pINFO(1))
       CALL TEEMS_ONFAIL_ABORT()
     END IF
@@ -2317,7 +2329,7 @@ call teems_apply_ma48_cntl2(CNTL)
   ! the analyse itself fails on structural singularity (INFO(1)=-5);
   ! previously unchecked, which corrupted the follow-on factorize
   IF (INFO(1).LT.0) THEN
-    WRITE (6,'(A,I3)') 'Error STOP from MA48A/AD with INFO(1) =',INFO(1)
+    CALL teems_ma48_fail('A',INFO(1),INFO(10),N)
     CALL TEEMS_ONFAIL_DIAG(INFO(1))
     CALL TEEMS_ONFAIL_ABORT()
   END IF
@@ -2340,9 +2352,7 @@ call teems_apply_ma48_cntl2(CNTL)
     RETURN
   END IF
   IF (INFO(1).NE.0) THEN
-    WRITE (6,FMT='(A,I3/A)') 'STOP from MA48B/BD with INFO(1) =',&
-    INFO(1),'Solution not possible'
-    WRITE (6,FMT='(A,i10)') 'INFO(5) =',INFO(5)
+    CALL teems_ma48_fail('B',INFO(1),INFO(5),N)
     CALL TEEMS_ONFAIL_DIAG(INFO(1))
     CALL TEEMS_ONFAIL_ABORT()
   END IF
@@ -2600,7 +2610,7 @@ call teems_apply_ma48_cntl2(CNTL)
     RETURN
   END IF
   IF (INFO(1).LT.0) THEN
-  WRITE (6,'(A,I3)') 'Error STOP from MA48A/AD with INFO(1) =',INFO(1)
+  CALL teems_ma48_fail('A',INFO(1),INFO(10),N)
   CALL TEEMS_ONFAIL_DIAG(INFO(1))
   CALL TEEMS_ONFAIL_ABORT()
   END IF
@@ -2619,9 +2629,7 @@ call teems_apply_ma48_cntl2(CNTL)
     RETURN
   END IF
   IF (INFO(1).NE.0) THEN
-    WRITE (6,FMT='(A,I3/A)') 'STOP from MA48B/BD with INFO(1) =',&
-    INFO(1),'Solution not possible'
-    write(*,"(A,i5)") 'RANK',INFO(5)
+    CALL teems_ma48_fail('B',INFO(1),INFO(5),N)
     WRITE (6,*) ' (NDBBD interface block: on a repeat step the cached row/column', &
       ' selection may have gone numerically singular -- rerun with -ndcutcache 0)'
     CALL TEEMS_ONFAIL_DIAG(INFO(1))
@@ -2719,7 +2727,7 @@ call teems_apply_ma48_cntl2(CNTL)
     RETURN
   END IF
   IF (INFO(1).LT.0) THEN
-  WRITE (6,'(A,I3)') 'Error STOP from MA48A/AD with INFO(1) =',INFO(1)
+  CALL teems_ma48_fail('A',INFO(1),INFO(10),N)
   CALL TEEMS_ONFAIL_DIAG(INFO(1))
   CALL TEEMS_ONFAIL_ABORT()
   END IF
@@ -2738,9 +2746,7 @@ call teems_apply_ma48_cntl2(CNTL)
     RETURN
   END IF
   IF (INFO(1).NE.0) THEN
-    WRITE (6,FMT='(A,I3/A)') 'STOP from MA48B/BD with INFO(1) =',&
-    INFO(1),'Solution not possible'
-    write(*,"(A,i5)") 'RANK',INFO(5)
+    CALL teems_ma48_fail('B',INFO(1),INFO(5),N)
     CALL TEEMS_ONFAIL_DIAG(INFO(1))
     CALL TEEMS_ONFAIL_ABORT()
   END IF
@@ -2913,7 +2919,7 @@ call teems_apply_ma48_cntl2(CNTL)
       RETURN
     END IF
     IF (INFO(1).LT.0) THEN
-    WRITE (6,'(A,I3)') 'Error STOP from MA48A/AD with INFO(1) =',INFO(1)
+    CALL teems_ma48_fail('A',INFO(1),INFO(10),N)
     CALL TEEMS_ONFAIL_DIAG(INFO(1))
     CALL TEEMS_ONFAIL_ABORT()
     END IF
@@ -2933,9 +2939,7 @@ call teems_apply_ma48_cntl2(CNTL)
       RETURN
     END IF
     IF (INFO(1).NE.0) THEN
-      WRITE (6,FMT='(A,I3/A)') 'STOP from MA48B/BD with INFO(1) =',&
-      INFO(1),'Solution not possible'
-      write(*,"(A,i5)") 'RANK',INFO(5)
+      CALL teems_ma48_fail('B',INFO(1),INFO(5),N)
       CALL TEEMS_ONFAIL_DIAG(INFO(1))
       CALL TEEMS_ONFAIL_ABORT()
     END IF
