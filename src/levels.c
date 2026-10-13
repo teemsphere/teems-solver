@@ -2335,9 +2335,27 @@ offset_t comp_verify_states(set_def *sets, dim_t nset, set_element *set_elems, a
 
 char (*teems_lv_alias)[2][NAMESIZE] = NULL;
 int teems_lv_nalias = 0;
+/* declared levels name -> pair-coefficient name, every levels variable
+   (stats.json "levels_pairs"): the front end composes a levels
+   variable's level from its pair coefficient, and a p_/c_-leading name
+   runs its pair as gen_lvN (C1a), which the own-name lookup missed
+   (audit R6-B6) */
+char (*teems_lv_pairs)[2][NAMESIZE] = NULL;
+int teems_lv_npairs = 0;
 
 static void lv_alias_store(lv_ctx *c) {
   int i, n = 0;
+  free(teems_lv_pairs);
+  teems_lv_pairs = NULL;
+  teems_lv_npairs = 0;
+  if (c->nlv > 0) {
+    teems_lv_pairs = calloc(c->nlv, sizeof(*teems_lv_pairs));
+    if (teems_lv_pairs != NULL) for (i = 0; i < c->nlv; i++) {
+        strcpy(teems_lv_pairs[teems_lv_npairs][0], c->lv[i].decl);
+        strcpy(teems_lv_pairs[teems_lv_npairs][1], c->lv[i].valname);
+        teems_lv_npairs++;
+      }
+  }
   free(teems_lv_alias);
   teems_lv_alias = NULL;
   teems_lv_nalias = 0;

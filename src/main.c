@@ -496,6 +496,11 @@ static void ordering_stats_write(cmf_file_entry *iodata, int niodata, int noutda
   fprintf(fp,"],\n  \"block_neq\": [");
   for (j=0; j<ndblock; j++)fprintf(fp,"%s%ld",j?",":"",counteqnoadd[j]);
   fprintf(fp,"],\n");
+  /* declared levels name -> pair coefficient (levels.c), empty when the
+     model has no levels variables */
+  fprintf(fp,"  \"levels_pairs\": {");
+  for (j=0; j<teems_lv_npairs; j++)fprintf(fp,"%s\"%s\": \"%s\"",j?", ":"",teems_lv_pairs[j][0],teems_lv_pairs[j][1]);
+  fprintf(fp,"},\n");
   /* effective run-configuration record (see the header comment) */
   {
     static const char *mode_names[] = {"off","warn","fatal"};

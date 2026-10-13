@@ -644,6 +644,8 @@ int elem_list_expand(const char *in, char *out, size_t cap, const char *setname)
 int sum_enclosing_setname(const char *formulain, const char *readitem, const char *idx, char *out, size_t cap);
 int shocks_check_floor(array_def *vars, offset_t nvar, dim_t subints, int solmethod);
 const char *levels_linear_of(const char *name);
+extern char (*teems_lv_pairs)[2][NAMESIZE];
+extern int teems_lv_npairs;
 /* C1: one Complementarity statement (manual 10.17/11.14; design doc
    section 7): parsed at transform time, set matching validated after
    set elements exist, closure integration after closure_read. Bound
