@@ -2429,6 +2429,14 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
     lj=0;
     for(li=vecbivisize-1; li!=-1; --li)if(vecbivi[li]!=0)lj++;
     irnmems=nz+lj;
+    if(irnmems==0) {
+      /* no entry of its own and no Schur fill: the chain block has no
+         border coupling, so there is nothing to factorize; MA48 rejected
+         NE = 0 as INFO(1) = -1 without naming the cause */
+      errmsg("Error: the interface block of chain block %d on rank %d has no entries (nothing couples that chain block to the border), so the chain partition is degenerate for NDBBD; use SBBD, DBBD or LU\n",(int)j3,(int)rank);
+      fflush(stdout);
+      MPI_Abort(PETSC_COMM_WORLD,1);
+    }
     #pragma omp critical
     {
     irn1=realloc(irn1,irnmems*sizeof(int));
@@ -2741,6 +2749,10 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
       for(tries=0; tries<6; tries++) {
         insized[6]=0;
         spec51m_rank_(insized,&cntl4in,irn1,jcn1,vecbivi,irn,jcn,keep,w51,iw51);
+        if(insized[6]<0&&insized[6]!=-3) {
+          errmsg("Error: MA48 could not factorize the interface block of rank %d (%d x %d, %d entries) in the rank probe (INFO(1) = %d); use fewer tasks or another matrix_method\n",(int)rank,insized[0],insized[1],insized[2],insized[6]);
+          MPI_Abort(PETSC_COMM_WORLD,1);
+        }
         if(insized[6]!=-3)break;
         {
           /* MA48 workspace too small for the rank probe: grow and

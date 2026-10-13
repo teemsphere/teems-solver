@@ -926,6 +926,22 @@ SUBROUTINE SPEC51M_RANK(INSIZE,CNTL4IN,IRN,JCN,VA,IRNA,JCNA,KEEP,W,IW)
   IF (N.LT.M) THEN
     MAXN=M
   END IF
+  INSIZE(7)=0
+  IF (M.LT.1 .OR. N.LT.1 .OR. NE.LT.1) THEN
+!   an empty diagonal block: no entry couples its equations to its
+!   variables (a partition spread over more tasks than coupled blocks).
+!   MA48 rejects NE = 0 and MA51AD then walked the unset factorization
+!   (SIGSEGV on four of six ranks, GTAPv7 DBBD -n 6). Rank 0, identity
+!   permutations: every row and column of the block joins the border.
+    INSIZE(4)=0
+    DO I2=1,M
+      IRNA(I2)=I2
+    END DO
+    DO I2=1,N
+      JCNA(I2)=I2
+    END DO
+    RETURN
+  END IF
   allocate(CNTL(10),RINFO(10))!A(LA),,W(5*MAXN)
 
 
@@ -959,10 +975,20 @@ SUBROUTINE SPEC51M_RANK(INSIZE,CNTL4IN,IRN,JCN,VA,IRNA,JCNA,KEEP,W,IW)
         deallocate(CNTL,RINFO,ICNTL,INFO)
         RETURN
       END IF
+      IF (INFO(1).LT.0) THEN
+        INSIZE(7)=INFO(1)
+        deallocate(CNTL,RINFO,ICNTL,INFO)
+        RETURN
+      END IF
       CALL MA48BD(M,N,NE,1,LA,VA,IRN,JCN,KEEP,CNTL,ICNTL,W,IW,INFO,RINFO)
       IF (INFO(1).EQ.-3) THEN
         INSIZE(7)=-3
         INSIZE(8)=INFO(4)
+        deallocate(CNTL,RINFO,ICNTL,INFO)
+        RETURN
+      END IF
+      IF (INFO(1).LT.0) THEN
+        INSIZE(7)=INFO(1)
         deallocate(CNTL,RINFO,ICNTL,INFO)
         RETURN
       END IF
@@ -977,10 +1003,20 @@ SUBROUTINE SPEC51M_RANK(INSIZE,CNTL4IN,IRN,JCN,VA,IRNA,JCNA,KEEP,W,IW)
         deallocate(CNTL,RINFO,ICNTL,INFO)
         RETURN
       END IF
+      IF (INFO(1).LT.0) THEN
+        INSIZE(7)=INFO(1)
+        deallocate(CNTL,RINFO,ICNTL,INFO)
+        RETURN
+      END IF
       CALL MA48B(M,N,NE,1,LA,VA,IRN,JCN,KEEP,CNTL,ICNTL,W,IW,INFO,RINFO)
       IF (INFO(1).EQ.-3) THEN
         INSIZE(7)=-3
         INSIZE(8)=INFO(4)
+        deallocate(CNTL,RINFO,ICNTL,INFO)
+        RETURN
+      END IF
+      IF (INFO(1).LT.0) THEN
+        INSIZE(7)=INFO(1)
         deallocate(CNTL,RINFO,ICNTL,INFO)
         RETURN
       END IF

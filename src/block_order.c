@@ -1,6 +1,20 @@
 #include <teems_solver.h>
 #include <hsl_kernels.h>
 
+
+/* a diagonal block with rows and columns but no entry: none of its
+   equations references one of its variables, so the partition has been
+   spread over more tasks than it has coupled blocks (GTAPv7 big3 DBBD
+   -n 6 selects a 9-block set whose blocks on ranks 2-5 are empty). MA48
+   rejects such a block and the probe used to walk an unset
+   factorization; stop by name instead. */
+static void block_empty_abort(const char *what,int blk,int rank,int nrow,int ncol,int nz) {
+  if(nz>0||(nrow==0&&ncol==0))return;
+  errmsg("Error: %s %d of rank %d (%d equations x %d variables) has no entries: none of its equations references one of its variables, so the partition cannot be spread over this many tasks; use fewer tasks (at most the number of coupled blocks) or another matrix_method\n",what,blk,rank,nrow,ncol);
+  fflush(stdout);
+  MPI_Abort(PETSC_COMM_WORLD,1);
+}
+
 /* Stage a block's CSR as 1-based COO for the rank probe, without the
    entries whose value is exactly zero. -fastrefac assembles with its
    zeros kept (a fixed pattern for the kept pivot sequences); staged,
@@ -88,6 +102,7 @@ int dbbd_order(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscIn
     nrow=submatA[j1]->rmap->n;
     ncol=submatA[j1]->cmap->n;
     logmsg(2,"rank %d nz %d\n",rank,nz);
+    block_empty_abort("diagonal block",(int)j1,(int)rank,(int)nrow,(int)ncol,(int)nz);
     nz1=nz;
     if(nz1<nrow)nz1=nrow;
     if(nz1<ncol)nz1=ncol;
@@ -129,6 +144,10 @@ int dbbd_order(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscIn
     }
     if(insize[6]==-3) {
       errmsg("Error: the MA48 workspace for %s did not converge after %d growth attempts; raise the initial workspace (laA/laD/laDi) or use a bordered matrix_method (\"SBBD\" or \"DBBD\")\n",probe_onfail_scope_label(),tries);
+      MPI_Abort(PETSC_COMM_WORLD,1);
+    }
+    if(insize[6]<0) {
+      errmsg("Error: MA48 could not factorize diagonal block %d of rank %d (%d x %d, %d entries) in the rank probe (INFO(1) = %d); use fewer tasks or another matrix_method\n",j1,(int)rank,nrow,ncol,nz,insize[6]);
       MPI_Abort(PETSC_COMM_WORLD,1);
     }
     for(i=0; i<nrow; i++) {
@@ -346,6 +365,7 @@ int ndbbd_order_presolve(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt ran
       if(nrowmax<nrow)nrowmax=nrow;
       ncol=submatA[j8]->cmap->n;
       if(ncolmax<ncol)ncolmax=ncol;
+      block_empty_abort("regional block",(int)j8,(int)rank,(int)nrow,(int)ncol,(int)nz);
       nz1=nz;
       if(nz1<nrow)nz1=nrow;
       if(nz1<ncol)nz1=ncol;
@@ -386,6 +406,7 @@ int ndbbd_order_presolve(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt ran
       nz=aa->nz;
       nrow=submatA[j8]->rmap->n;
       ncol=submatA[j8]->cmap->n;
+      block_empty_abort("regional block",(int)j8,(int)rank,(int)nrow,(int)ncol,(int)nz);
       nz1=nz;
       if(nz1<nrow)nz1=nrow;
       if(nz1<ncol)nz1=ncol;
@@ -416,6 +437,10 @@ int ndbbd_order_presolve(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt ran
       }
       if(insize[6]==-3) {
         errmsg("Error: the MA48 workspace for %s did not converge after %d growth attempts; raise the initial workspace (laA/laD/laDi) or use a bordered matrix_method (\"SBBD\" or \"DBBD\")\n",probe_onfail_scope_label(),tries);
+        MPI_Abort(PETSC_COMM_WORLD,1);
+      }
+      if(insize[6]<0) {
+        errmsg("Error: MA48 could not factorize a regional diagonal block of rank %d (%d x %d, %d entries) in the rank probe (INFO(1) = %d); use fewer tasks or another matrix_method\n",(int)rank,nrow,ncol,nz,insize[6]);
         MPI_Abort(PETSC_COMM_WORLD,1);
       }
       bfirst=counteq[j3+begblock[rank]];
