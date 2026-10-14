@@ -1775,6 +1775,60 @@ static void acc_block_add(teems_acc_block_t *b,int fig,int lev,int code) {
   if(fig!=7&&(b->code_min[code]<0||fig<b->code_min[code])) b->code_min[code]=fig;
 }
 
+/* observed order of convergence (beyond GEMPACK): with step sizes h_i =
+   1/n_i, a result converging at order p has pass differences in the
+   ratio |c2 - c1| / |c3 - c2| = (h1^p - h2^p) / (h2^p - h3^p), which
+   rises with p; the ratios at the method's order +-0.5 (Euler 1,
+   Gragg and midpoint 2) bound the results converging as Richardson
+   extrapolation assumes */
+static double acc_ord_lo=0,acc_ord_hi=0;
+static int acc_ord_expected=0;
+
+static double acc_order_ratio(double p,double n1,double n2,double n3) {
+  double r=(pow(1/n1,p)-pow(1/n2,p))/(pow(1/n2,p)-pow(1/n3,p));
+  return r;
+}
+
+static void acc_order_bounds(bool euler) {
+  double n1=steps1,n2=(double)llround(steps1*step_ratio2),n3=(double)llround(steps1*step_ratio3);
+  acc_ord_expected=euler?1:2;
+  acc_ord_lo=acc_order_ratio(acc_ord_expected-0.5,n1,n2,n3);
+  acc_ord_hi=acc_order_ratio(acc_ord_expected+0.5,n1,n2,n3);
+}
+
+static int acc_order_class(double c1,double c2,double c3,int code) {
+  double d1=fabs(c2-c1),d2=fabs(c3-c2),r;
+  int o;
+  if(code==ACC_XMA||code==ACC_C0||code==ACC_FC0||code==ACC_MN0||code==ACC_ON0||d1==0||d2==0) o=ACC_ORD_NONE;
+  else if((c2-c1)*(c3-c2)<0) o=ACC_ORD_OSC;
+  else {
+    r=d1/d2;
+    o=(r<acc_ord_lo)?ACC_ORD_LOWER:((r>acc_ord_hi)?ACC_ORD_HIGHER:ACC_ORD_WITHIN);
+  }
+  return o;
+}
+
+/* keep the ACC_NWORST least accurate: fewer levels figures, then fewer
+   figures, then the larger error. Printed at -verbosity 2 only: the
+   lines echo model names, and teems-R reads any log line containing
+   "error" or "singular" as a failure; stats.json always carries them */
+static void acc_worst_insert(teems_acc_worst_t *w,int *n,const teems_acc_worst_t *x) {
+  int i,j;
+  for(i=0; i<*n; i++) {
+    const teems_acc_worst_t *y=&w[i];
+    if(x->levfigs<y->levfigs||(x->levfigs==y->levfigs&&(x->figs<y->figs||(x->figs==y->figs&&x->error>y->error)))) break;
+  }
+  if(i>=ACC_NWORST) return;
+  if(*n<ACC_NWORST) (*n)++;
+  for(j=*n-1; j>i; j--) w[j]=w[j-1];
+  w[i]=*x;
+}
+
+static void acc_label(array_def *a,offset_t e,char *out,size_t cap) {
+  array_element_label(a,e,out,cap);
+  if(out[0]=='p'&&out[1]=='@') out[1]='_';
+}
+
 static void acc_block_print(const teems_acc_block_t *b) {
   int k;
   printf("  figures  results  levels values\n");
@@ -1786,6 +1840,15 @@ static void acc_block_print(const teems_acc_block_t *b) {
     if(b->code_min[k]>=0) printf("  %-4s  %-47s  %7ld  %14d\n",acc_code_name[k],acc_code_meaning[k],b->code_n[k],b->code_min[k]);
     else printf("  %-4s  %-47s  %7ld\n",acc_code_name[k],acc_code_meaning[k],b->code_n[k]);
   }
+  printf("  observed order of convergence (expected %d): %ld within 0.5 of it, %ld lower, %ld higher, %ld with oscillating passes, %ld not measured (agreeing to working precision, near zero or a zero pass difference)\n",
+         acc_ord_expected,b->ord[ACC_ORD_WITHIN],b->ord[ACC_ORD_LOWER],b->ord[ACC_ORD_HIGHER],b->ord[ACC_ORD_OSC],b->ord[ACC_ORD_NONE]);
+}
+
+static void acc_worst_print(const teems_acc_worst_t *w,int n) {
+  int i;
+  if(n==0) return;
+  printf("  least accurate results:\n  %-40s  figures  levels  code  %14s  %12s\n","result","value","|e12-e24|");
+  for(i=0; i<n; i++) printf("  %-40s  %7d  %6d  %-4s  %14.7g  %12.4g\n",w[i].label,w[i].figs,w[i].levfigs,acc_code_name[w[i].code],w[i].value,w[i].error);
 }
 
 /* one value array to scratch (write 1, then freed) or back (write 0) */
@@ -1926,6 +1989,7 @@ static void dacc_pass(int sol, dim_t subindx, dim_t subints, array_def *coefs, o
     dacc_b=(double *) malloc (dacc_n*sizeof(double));
   }
   conv_ratios(euler,&q2,&q3);
+  if(sol==2&&subindx==subints-1) teems_dacc_stats.nworst=0;
   for(k=0; k<ncof; k++) {
     if(!dacc_selected(k)) continue;
     for(e=0; e<coefs[k].nelem; e++,p++) {
@@ -1940,6 +2004,13 @@ static void dacc_pass(int sol, dim_t subindx, dim_t subints, array_def *coefs, o
         else if(sc<=1e-6) continue;
         else fig=acc_figures(d/sc);
         if(dacc_fig[p]>fig) dacc_fig[p]=(signed char)fig;
+        if(subindx==subints-1&&fig<6) {
+          teems_acc_worst_t w;
+          acc_label(&coefs[k],e,w.label,sizeof(w.label));
+          w.figs=dacc_fig[p]; w.levfigs=dacc_fig[p]; w.code=0;
+          w.value=e24; w.error=d/sc;
+          acc_worst_insert(teems_dacc_stats.worst,&teems_dacc_stats.nworst,&w);
+        }
       }
     }
   }
@@ -1950,8 +2021,13 @@ static void dacc_pass(int sol, dim_t subindx, dim_t subints, array_def *coefs, o
   }
   if(sol==2&&subindx==subints-1) {
     teems_dacc_stats_t *st=&teems_dacc_stats;
+    teems_acc_worst_t keep[ACC_NWORST];
+    int nkeep=st->nworst;
+    memcpy(keep,st->worst,sizeof(keep));
     free(st->file);
     memset(st,0,sizeof(*st));
+    memcpy(st->worst,keep,sizeof(keep));
+    st->nworst=nkeep;
     st->nfile=teems_ndatafile;
     st->file=(teems_acc_hist_t *) calloc (st->nfile>0?st->nfile:1,sizeof(teems_acc_hist_t));
     st->subints=(int)subints;
@@ -1993,6 +2069,10 @@ static void dacc_print(void) {
   for(f=0; f<st->nfile; f++) if(st->file[f].values>0) printf("  %8ld",st->file[f].zero);
   if(nf>1) printf("  %8ld",st->all.zero);
   printf(" (both extrapolations below 1e-6)\n");
+  if(verbosity>=2&&st->nworst>0) {
+    printf("  least accurate updated data values:\n  %-40s  figures  %14s  %12s\n","value","extrapolated","rel. diff.");
+    for(k=0; k<st->nworst; k++) printf("  %-40s  %7d  %14.7g  %12.4g\n",st->worst[k].label,st->worst[k].figs,st->worst[k].value,st->worst[k].error);
+  }
 }
 
 /* ---- -solmed Newton (GEMPACK manual 26.6) -------------------------
@@ -3805,6 +3885,8 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
       }
       acc_block_init(&blk);
       conv_ratios(euler,&q2,&q3);
+      acc_order_bounds(euler);
+      if(sub_eff==subs_eff-1&&subindx==subints-1) teems_acc_stats.nworst=0;
 
       /* per element (GEMPACK manual 26.2.1, 26.2.3): the convergence
          code from the three passes, and the significant figures to which
@@ -3834,10 +3916,25 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
             double ls=fmax(fabs(100+e1),fabs(100+e2));
             lev=(ls<=1e-6)?6:acc_figures(d/ls);
           }
-          if(ACC_SUMMARISED(k))acc_block_add(&blk,fig,lev,code);
+          if(ACC_SUMMARISED(k)) {
+            acc_block_add(&blk,fig,lev,code);
+            blk.ord[acc_order_class((double)xcp1[k],(double)xcp2[k],(double)varchange[k],code)]++;
+          }
           if(xc124[k]>fig)xc124[k]=fig;
           if(xclev[k]>lev)xclev[k]=(signed char)lev;
           if(xccode[k]<code)xccode[k]=(signed char)code;
+          if(rank==0&&sub_eff==subs_eff-1&&subindx==subints-1&&ACC_SUMMARISED(k)&&xc124[k]!=7&&xccode[k]!=ACC_XMA) {
+            teems_acc_worst_t w;
+            double scale=1;
+            if(!chg) {
+              if(subindx>0) scale=(double)xc0[k];
+              else if(teems_comp_xac_base!=NULL) scale=1+(double)teems_comp_xac_base[k]/100;
+            }
+            acc_label(&vars[i],k-vars[i].offset,w.label,sizeof(w.label));
+            w.figs=xc124[k]; w.levfigs=xclev[k]; w.code=xccode[k];
+            w.value=(double)xcf[k]; w.error=d*fabs(scale);
+            acc_worst_insert(teems_acc_stats.worst,&teems_acc_stats.nworst,&w);
+          }
         }
       }
       if(maxsol==3&&sub_eff<subs_eff) {
@@ -3934,6 +4031,8 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
       } else {
         acc_block_init(&st->all);
         for(i=0; i<nvarele; i++) if(ACC_SUMMARISED(i)) acc_block_add(&st->all,xc124[i],xclev[i],xccode[i]);
+        for(k=0; k<st->nsub; k++) { int o; for(o=0; o<ACC_NORD; o++) st->all.ord[o]+=st->sub[k].ord[o]; }
+        st->ord_expected=acc_ord_expected;
         st->subints=subs_eff;
         st->valid=1;
         free(acc_keep_fig); free(acc_keep_lev); free(acc_keep_code);
@@ -3942,6 +4041,7 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
           if(subs_eff>1)printf("Overall accuracy summary over %d subintervals (GEMPACK manual 26.3.1): %ld %s, each at its lowest figures and worst code across the subintervals\n",subs_eff,st->all.nsum,acc_covers_text());
           else printf("Accuracy summary (GEMPACK manual 26.2.1): %ld %s\n",st->all.nsum,acc_covers_text());
           acc_block_print(&st->all);
+          if(verbosity>=2) acc_worst_print(st->worst,st->nworst);
           dacc_print();
         }
       }

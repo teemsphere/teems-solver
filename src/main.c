@@ -666,17 +666,23 @@ static void stats_hist_write(FILE *fp, const char *prefix, const teems_acc_hist_
 
 /* the linear and levels figures, judged zero and convergence codes of
    one accuracy summary, as fields of the enclosing object */
-static void stats_acc_block_write(FILE *fp, const teems_acc_block_t *b) {
+static const char *stats_code_name(int code) {
   static const char *const names[ACC_NCODE]={"","XMA","XRA","C0","FC0","CX","FCX","MVC","MN0","OVC","ON0","MC?","OC?","MD?","OD?","MD!","OD!"};
+  const char *nm=(code>=0&&code<ACC_NCODE)?names[code]:"";
+  return nm;
+}
+
+static void stats_acc_block_write(FILE *fp, const teems_acc_block_t *b) {
   int k,first=1;
   fprintf(fp,", \"linear\": {\"figures\": [");
   for(k=0; k<7; k++)fprintf(fp,"%s%ld",k?", ":"",b->lin[k]);
   fprintf(fp,"], \"judged_zero\": %ld}, \"levels\": {\"figures\": [",b->zero);
   for(k=0; k<7; k++)fprintf(fp,"%s%ld",k?", ":"",b->lev[k]);
-  fprintf(fp,"]}, \"codes\": {");
+  fprintf(fp,"]}, \"order\": {\"within\": %ld, \"lower\": %ld, \"higher\": %ld, \"oscillating\": %ld, \"not_measured\": %ld}, \"codes\": {",
+          b->ord[ACC_ORD_WITHIN],b->ord[ACC_ORD_LOWER],b->ord[ACC_ORD_HIGHER],b->ord[ACC_ORD_OSC],b->ord[ACC_ORD_NONE]);
   for(k=1; k<ACC_NCODE; k++) {
     if(b->code_n[k]==0)continue;
-    fprintf(fp,"%s\"%s\": {\"results\": %ld, \"lowest_figures\": ",first?"":", ",names[k],b->code_n[k]);
+    fprintf(fp,"%s\"%s\": {\"results\": %ld, \"lowest_figures\": ",first?"":", ",stats_code_name(k),b->code_n[k]);
     if(b->code_min[k]>=0)fprintf(fp,"%d}",b->code_min[k]);
     else fprintf(fp,"null}");
     first=0;
@@ -734,6 +740,14 @@ static void stats_accuracy_patch(cmf_file_entry *iodata, int niodata, int noutda
   else fprintf(fp,"%s,\n  \"accuracy\": {\"covers\": \"endogenous+backsolved\", \"summarised\": %ld, \"subintervals\": %d",buf,st->all.nsum,st->subints);
   if(teems_rqf>0)fprintf(fp,", \"required_figures\": %d",teems_rqf);
   stats_acc_block_write(fp,&st->all);
+  fprintf(fp,", \"expected_order\": %d, \"least_accurate\": [",st->ord_expected);
+  for(k=0; k<st->nworst; k++) {
+    fprintf(fp,"%s{\"result\": ",k?", ":"");
+    json_string(fp,st->worst[k].label);
+    fprintf(fp,", \"figures\": %d, \"levels_figures\": %d, \"code\": \"%s\", \"value\": %.9g, \"error\": %.6g}",
+            st->worst[k].figs,st->worst[k].levfigs,stats_code_name(st->worst[k].code),st->worst[k].value,st->worst[k].error);
+  }
+  fprintf(fp,"]");
   if(st->subints>1&&st->sub!=NULL&&st->nsub==st->subints) {
     fprintf(fp,", \"per_subinterval\": [");
     for(k=0; k<st->nsub; k++) {
@@ -757,7 +771,13 @@ static void stats_accuracy_patch(cmf_file_entry *iodata, int niodata, int noutda
     }
     fprintf(fp,"], \"all\": {");
     stats_hist_write(fp,"",&ds->all);
-    fprintf(fp,"}}");
+    fprintf(fp,"}, \"least_accurate\": [");
+    for(f=0; f<ds->nworst; f++) {
+      fprintf(fp,"%s{\"value\": ",f?", ":"");
+      json_string(fp,ds->worst[f].label);
+      fprintf(fp,", \"figures\": %d, \"extrapolated\": %.9g, \"relative_difference\": %.6g}",ds->worst[f].figs,ds->worst[f].value,ds->worst[f].error);
+    }
+    fprintf(fp,"]}");
   }
   fprintf(fp,"}\n}\n");
   fclose(fp);

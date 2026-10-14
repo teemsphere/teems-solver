@@ -472,13 +472,27 @@ enum { ACC_NONE, ACC_XMA, ACC_XRA, ACC_C0, ACC_FC0, ACC_CX, ACC_FCX, ACC_MVC, AC
        ACC_MCQ, ACC_OCQ, ACC_MDQ, ACC_ODQ, ACC_MDX, ACC_ODX, ACC_NCODE };
 /* one summary: counts by figures (lin, lev), judged zero, and per
    convergence code the count and the lowest figures (-1 = none) */
+/* observed order of convergence per result (beyond GEMPACK): the
+   ratio of the pass differences against the method's order, within
+   +-0.5 of it, lower, higher, oscillating passes, or not measured
+   (XMA/C0/FC0/MN0/ON0 or a zero pass difference) */
+enum { ACC_ORD_WITHIN, ACC_ORD_LOWER, ACC_ORD_HIGHER, ACC_ORD_OSC, ACC_ORD_NONE, ACC_NORD };
 typedef struct {
-  long nsum, zero, lin[7], lev[7], code_n[ACC_NCODE];
+  long nsum, zero, lin[7], lev[7], code_n[ACC_NCODE], ord[ACC_NORD];
   int code_min[ACC_NCODE];
 } teems_acc_block_t;
+/* least accurate results: lowest levels figures, then lowest figures,
+   then largest error (in result units) */
+#define ACC_NWORST 10
 typedef struct {
-  int valid, subints, nsub;
+  char label[2*NAMESIZE];
+  int figs, levfigs, code;
+  double value, error;
+} teems_acc_worst_t;
+typedef struct {
+  int valid, subints, nsub, ord_expected, nworst;
   teems_acc_block_t all, *sub; /* sub[k]: subinterval k (when subints > 1) */
+  teems_acc_worst_t worst[ACC_NWORST];
 } teems_acc_stats_t;
 extern teems_acc_stats_t teems_acc_stats;
 /* updated-data accuracy summary (GEMPACK manual 26.2.2): the values
@@ -495,8 +509,9 @@ typedef struct {
   long values, zero, figs[7];
 } teems_acc_hist_t;
 typedef struct {
-  int valid, subints, nfile;
+  int valid, subints, nfile, nworst;
   teems_acc_hist_t *file, all;
+  teems_acc_worst_t worst[ACC_NWORST]; /* figs, label and error (the relative difference) used */
 } teems_dacc_stats_t;
 extern teems_dacc_stats_t teems_dacc_stats;
 /* set while a Runge-Kutta stage state is being realized under -adaptive
