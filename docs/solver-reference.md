@@ -1595,8 +1595,8 @@ without the feature. Names are case-insensitive, as in PETSc.
   constant (`src/version.h`) surfaced by `-version`, the ungated log
   banner, the `solver_version` field of `stats.json`/`probe.json`
   and the image label; teems-R's solve pre-flight checks it (same major
-  version, at least 1.1.0, no answer = a pre-1.1 image; option
-  `version_check`). The symlink and aliases are removed only at a real
+  version, at least 1.1.0, no answer = a pre-1.1 image; no
+  override). The symlink and aliases are removed only at a real
   2.0.0.
 - **Newton's method** (2026-10-09): one MPI rank only (LU or SBBD); no
   subtotals, complementarities or extrapolation; damping halves a
