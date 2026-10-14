@@ -2991,12 +2991,12 @@ int tab_postsim_split(char *newtabfile, char *psfile) {
     else if(strncmp(line,"coefficient ",12)==0) {
       ps_decl_name(line,12,nm);
       if(nm[0]!='\0') {
-        teems_ps_coefnames=realloc(teems_ps_coefnames,(teems_ps_ncoefs+1)*sizeof(*teems_ps_coefnames));
+        teems_ps_coefnames=teems_realloc(teems_ps_coefnames,(teems_ps_ncoefs+1)*sizeof(*teems_ps_coefnames),"the PostSim coefficient names");
         strcpy(teems_ps_coefnames[teems_ps_ncoefs++],nm);
       }
     }
     if(nm[0]!='\0') {
-      psnames=realloc(psnames,(npsn+1)*sizeof(*psnames));
+      psnames=teems_realloc(psnames,(npsn+1)*sizeof(*psnames),"the PostSim names");
       strcpy(psnames[npsn++],nm);
     }
   }
@@ -3066,7 +3066,7 @@ int tab_postsim_split(char *newtabfile, char *psfile) {
       if(strncmp(line,"read ",5)==0&&strncmp(line,"read elements",13)!=0) {
         ps_read_logname(line,nm);
         if(nm[0]!='\0') {
-          ordlogs=realloc(ordlogs,(nordlog+1)*sizeof(*ordlogs));
+          ordlogs=teems_realloc(ordlogs,(nordlog+1)*sizeof(*ordlogs),"the PostSim file names");
           strcpy(ordlogs[nordlog++],nm);
         }
       }
@@ -3091,7 +3091,7 @@ int tab_postsim_split(char *newtabfile, char *psfile) {
     if(strncmp(line,"read ",5)==0) {
       ps_read_logname(line,nm);
       if(nm[0]!='\0') {
-        pslogs=realloc(pslogs,(npslog+1)*sizeof(*pslogs));
+        pslogs=teems_realloc(pslogs,(npslog+1)*sizeof(*pslogs),"the PostSim file names");
         strcpy(pslogs[npslog++],nm);
       }
       fputs(line,fps);

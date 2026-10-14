@@ -855,6 +855,7 @@ char *tab_next_statement_resolved(char *commsyntax, FILE *filehandle, char *read
 int str_find_ci(char *line, char *finditem);
 int str_cmp_ci(const char *a, const char *b);
 FILE *teems_fopen(const char *path, const char *mode);
+void *teems_realloc(void *p, size_t n, const char *what);
 FILE *teems_fopen_opt(const char *path, const char *mode);
 int str_ncmp_ci(const char *a, const char *b, size_t n);
 int str_find_token_ci(const char *base, const char *s, const char *pat);

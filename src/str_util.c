@@ -177,6 +177,19 @@ static void fopen_fatal(const char *path, const char *mode, int err) {
   MPI_Abort(PETSC_COMM_WORLD,1);
 }
 
+/* Checked allocation for the TAB transforms (loop and PostSim name
+   tables): a failed realloc/calloc used to be written through as NULL
+   (audit S4-F12). n == 0 is treated as one byte. */
+void *teems_realloc(void *p, size_t n, const char *what) {
+  void *q=realloc(p,n>0?n:1);
+  if (q==NULL) {
+    errmsg("Error: memory allocation failed for %s (%zu bytes); the run does not fit in memory on this host\n",what,n);
+    fflush(stdout);
+    MPI_Abort(PETSC_COMM_WORLD,1);
+  }
+  return q;
+}
+
 FILE *teems_fopen(const char *path, const char *mode) {
   FILE *f=fopen(path,mode);
   if (f==NULL) fopen_fatal(path,mode,errno);

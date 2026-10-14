@@ -658,8 +658,10 @@ bool solve_rk(PetscBool nohsl,PetscInt VecSize,PetscInt dnz,PetscInt* dnnz,Petsc
       ierr = VecAssemblyBegin(vece);CHKERRQ(ierr);
       ierr = VecAssemblyEnd(vece);CHKERRQ(ierr);
       /* a singular stage state may fail softly on the sequential LU
-         path (the kernel returns instead of aborting); the bordered
-         methods' kernels still abort */
+         path without -fastrefac (SPEC48_SSOL2LA returns instead of
+         aborting, and the step shrinks); the -fastrefac LU kernel
+         (SPEC48_SSOL2LA_P) and the bordered methods' kernels still
+         abort, naming the singularity */
       teems_stage_solve_failed=0;
       teems_rk_softfail=(adaptive==1&&matsol==MM_LU)?1:0;
       rk_stage_solve(nohsl,VecSize,BSize,dnz,dnnz,onz,onnz,dnzB,dnnzB,onzB,onnzB,rank,rank_hsl,mpisize,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele,nvarele,closure_vals,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,eq_addr,ndblock,countvarintra1,counteq,counteqnoadd,countvarintra1s,counteqs,counteqnoadds,laA,laDi,laD,ma48_cntl4,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,fcomm,&vece,x1);

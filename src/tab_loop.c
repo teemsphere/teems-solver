@@ -154,7 +154,7 @@ int tab_loop_transform(char *fname) {
     while (fgets(buf, sizeof(buf), f)) {
       if (nl == cap) {
         cap = cap ? 2 * cap : 256;
-        ln = realloc(ln, (size_t)cap * TABREADLINE);
+        ln = teems_realloc(ln, (size_t)cap * TABREADLINE, "the loop transform's statement table");
       }
       strcpy(ln[nl], buf);
       lt_kw(buf, kw, sizeof(kw));
@@ -167,8 +167,10 @@ int tab_loop_transform(char *fname) {
       return 0;
     }
   }
-  lp = calloc(nl + 1, sizeof(lt_loop));
-  stack = calloc(nl + 1, sizeof(int));
+  lp = teems_realloc(NULL, (size_t)(nl + 1) * sizeof(lt_loop), "the loop table");
+  memset(lp, 0, (size_t)(nl + 1) * sizeof(lt_loop));
+  stack = teems_realloc(NULL, (size_t)(nl + 1) * sizeof(int), "the loop stack");
+  memset(stack, 0, (size_t)(nl + 1) * sizeof(int));
   /* structure: begin/end pairs, the loop quantifier, names */
   for (i = 0; i < nl; i++) {
     char *s = ln[i], *p;
@@ -295,7 +297,7 @@ int tab_loop_transform(char *fname) {
         snprintf(s, TABREADLINE, "loop (begin) %d %s %s %s %d;\n", lp[j].id, lp[j].idx, lp[j].set, lp[j].name, lp[j].fused);
         stack[++top] = j;
         if (!lp[j].fused) {
-          teems_loop_syns = realloc(teems_loop_syns, (size_t)(teems_loop_nsyn + 1) * sizeof(teems_loop_syn));
+          teems_loop_syns = teems_realloc(teems_loop_syns, (size_t)(teems_loop_nsyn + 1) * sizeof(teems_loop_syn), "the loop set table");
           teems_loop_syns[teems_loop_nsyn].id = lp[j].id;
           strcpy(teems_loop_syns[teems_loop_nsyn].parent, lp[j].set);
           teems_loop_nsyn++;
