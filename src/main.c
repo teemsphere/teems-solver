@@ -656,6 +656,13 @@ static void stats_rk_patch(cmf_file_entry *iodata, int niodata, int noutdata, in
    summary belongs with the solution), patched into stats.json like
    la_used; absent unless a three-solution extrapolation ran.
    figures[k] = results at k figures */
+static void stats_hist_write(FILE *fp, const char *prefix, const teems_acc_hist_t *h) {
+  int k;
+  fprintf(fp,"%s\"values\": %ld, \"figures\": [",prefix,h->values);
+  for(k=0; k<7; k++)fprintf(fp,"%s%ld",k?", ":"",h->figs[k]);
+  fprintf(fp,"], \"judged_zero\": %ld",h->zero);
+}
+
 static void stats_accuracy_patch(cmf_file_entry *iodata, int niodata, int noutdata, int nsoldata) {
   char statspath[TABREADLINE+16];
   char lin[160],lev[160];
@@ -693,8 +700,25 @@ static void stats_accuracy_patch(cmf_file_entry *iodata, int niodata, int noutda
   }
   for(k=0,o=0; k<7; k++)o+=snprintf(lin+o,sizeof(lin)-o,"%s%ld",k?", ":"",st->lin[k]);
   for(k=0,o=0; k<7; k++)o+=snprintf(lev+o,sizeof(lev)-o,"%s%ld",k?", ":"",st->lev[k]);
-  fprintf(fp,"%s,\n  \"accuracy\": {\"population\": \"endogenous+backsolved\", \"summarised\": %ld, \"subintervals\": %d, \"linear\": {\"figures\": [%s], \"judged_zero\": %ld}, \"levels\": {\"figures\": [%s]}}\n}\n",
+  fprintf(fp,"%s,\n  \"accuracy\": {\"covers\": \"endogenous+backsolved\", \"summarised\": %ld, \"subintervals\": %d, \"linear\": {\"figures\": [%s], \"judged_zero\": %ld}, \"levels\": {\"figures\": [%s]}",
           buf,st->nsum,st->subints,lin,st->zero,lev);
+  if(teems_dacc_stats.valid&&teems_dacc_stats.all.values>0) {
+    const teems_dacc_stats_t *ds=&teems_dacc_stats;
+    int f,first=1;
+    fprintf(fp,", \"data\": {\"subintervals\": %d, \"files\": [",ds->subints);
+    for(f=0; f<ds->nfile; f++) {
+      if(ds->file[f].values==0)continue;
+      fprintf(fp,"%s{\"name\": ",first?"":", ");
+      json_string(fp,teems_datafile_name[f]);
+      stats_hist_write(fp,", ",&ds->file[f]);
+      fprintf(fp,"}");
+      first=0;
+    }
+    fprintf(fp,"], \"all\": {");
+    stats_hist_write(fp,"",&ds->all);
+    fprintf(fp,"}}");
+  }
+  fprintf(fp,"}\n}\n");
   fclose(fp);
   free(buf);
 }

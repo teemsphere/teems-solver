@@ -1746,6 +1746,139 @@ static void xac_codes(offset_t nvarele,array_def *vars,offset_t nvar,const int *
   xac_base=NULL;
 }
 
+/* Updated-data accuracy (GEMPACK manual 26.2.2): the values Read from a
+   data file and updated, judged like the variables on the two two-pass
+   extrapolations of their three pass-end values. Every pass restarts
+   from the subinterval's starting data, so the stored values at a
+   pass's end are that pass's updated data. Kept as running quantities,
+   two doubles per value: after pass 1 a = v1, after pass 2 a = e12 and
+   b = v2, after pass 3 e24 is formed and the figures (minimum over
+   subintervals) recorded. Data values are levels, so no movement basis
+   applies. Under -inmemory 0 a and b go to scratch between passes */
+static offset_t dacc_n=0;
+static double *dacc_a=NULL,*dacc_b=NULL;
+static signed char *dacc_fig=NULL;
+
+static int dacc_selected(offset_t k) {
+  int sel=teems_cof_readfile!=NULL&&teems_cof_updtgt!=NULL&&teems_cof_readfile[k]>=0&&teems_cof_updtgt[k];
+  return sel;
+}
+
+static void dacc_spill(int write, PetscInt rank) {
+  char path[TABREADLINE];
+  FILE *fp;
+  snprintf(path,sizeof(path),"%s_tempdacc%d.bin",scratch_dir,(int)rank);
+  if(write) {
+    if((fp=teems_fopen(path,"wb"))==NULL) {
+      errmsg("Error: cannot open %s for writing\n",path);
+      return;
+    }
+    fwrite(dacc_a,sizeof(double),dacc_n,fp);
+    fwrite(dacc_b,sizeof(double),dacc_n,fp);
+    fclose(fp);
+    free(dacc_a); free(dacc_b);
+    dacc_a=dacc_b=NULL;
+  } else {
+    dacc_a=(double *) malloc ((dacc_n>0?dacc_n:1)*sizeof(double));
+    dacc_b=(double *) malloc ((dacc_n>0?dacc_n:1)*sizeof(double));
+    if((fp=teems_fopen(path,"rb"))==NULL) {
+      errmsg("Error: cannot open %s for reading\n",path);
+      return;
+    }
+    scratch_read(dacc_a,sizeof(double),dacc_n,fp,path);
+    scratch_read(dacc_b,sizeof(double),dacc_n,fp,path);
+    fclose(fp);
+    remove(path);
+  }
+}
+
+static void dacc_pass(int sol, dim_t subindx, dim_t subints, array_def *coefs, offset_t ncof, elem_value *elem_vals, bool euler, int inmemory, PetscInt rank) {
+  offset_t k,e,p=0;
+  double q2,q3;
+  if(sol==0&&subindx==0) {
+    dacc_n=0;
+    for(k=0; k<ncof; k++) if(dacc_selected(k)) dacc_n+=coefs[k].nelem;
+    free(dacc_fig);
+    dacc_fig=(signed char *) malloc (dacc_n>0?dacc_n:1);
+    for(p=0; p<dacc_n; p++) dacc_fig[p]=7;
+    p=0;
+  }
+  if(dacc_n==0) return;
+  if(sol>0&&!inmemory) dacc_spill(0,rank);
+  if(sol==0) {
+    free(dacc_a); free(dacc_b);
+    dacc_a=(double *) malloc (dacc_n*sizeof(double));
+    dacc_b=(double *) malloc (dacc_n*sizeof(double));
+  }
+  conv_ratios(euler,&q2,&q3);
+  for(k=0; k<ncof; k++) {
+    if(!dacc_selected(k)) continue;
+    for(e=0; e<coefs[k].nelem; e++,p++) {
+      double v=updates_value_now(coefs,k,e,elem_vals);
+      if(sol==0) dacc_a[p]=v;
+      else if(sol==1) { dacc_a[p]=(q2*v-dacc_a[p])/(q2-1.0); dacc_b[p]=v; }
+      else {
+        double e12=dacc_a[p],e24=(q3*v-q2*dacc_b[p])/(q3-q2);
+        double a=fabs(e12),b=fabs(e24),sc=(a>b)?a:b;
+        int fig;
+        if(sc<=1e-6) continue;
+        fig=acc_figures(fabs(e12-e24)/sc);
+        if(dacc_fig[p]>fig) dacc_fig[p]=(signed char)fig;
+      }
+    }
+  }
+  if(sol<2&&!inmemory) dacc_spill(1,rank);
+  if(sol==2) {
+    free(dacc_a); free(dacc_b);
+    dacc_a=dacc_b=NULL;
+  }
+  if(sol==2&&subindx==subints-1) {
+    teems_dacc_stats_t *st=&teems_dacc_stats;
+    free(st->file);
+    memset(st,0,sizeof(*st));
+    st->nfile=teems_ndatafile;
+    st->file=(teems_acc_hist_t *) calloc (st->nfile>0?st->nfile:1,sizeof(teems_acc_hist_t));
+    st->subints=(int)subints;
+    p=0;
+    for(k=0; k<ncof; k++) {
+      teems_acc_hist_t *h;
+      if(!dacc_selected(k)) continue;
+      h=&st->file[teems_cof_readfile[k]];
+      for(e=0; e<coefs[k].nelem; e++,p++) {
+        h->values++; st->all.values++;
+        if(dacc_fig[p]==7) { h->zero++; st->all.zero++; }
+        else { h->figs[dacc_fig[p]]++; st->all.figs[dacc_fig[p]]++; }
+      }
+    }
+    st->valid=1;
+    free(dacc_fig);
+    dacc_fig=NULL;
+  }
+}
+
+static void dacc_print(void) {
+  const teems_dacc_stats_t *st=&teems_dacc_stats;
+  int f,k,nf=0;
+  if(!st->valid||st->all.values==0) return;
+  for(f=0; f<st->nfile; f++) if(st->file[f].values>0) nf++;
+  if(st->subints>1)printf("Updated data accuracy summary over %d subintervals (GEMPACK manual 26.2.2): %ld values Read from data files and updated, by the significant figures to which the two two-pass extrapolations agree, the lowest across the subintervals\n",st->subints,st->all.values);
+  else printf("Updated data accuracy summary (GEMPACK manual 26.2.2): %ld values Read from data files and updated, by the significant figures to which the two two-pass extrapolations agree\n",st->all.values);
+  printf("  figures");
+  for(f=0; f<st->nfile; f++) if(st->file[f].values>0) printf("  %12.12s",teems_datafile_name[f]);
+  if(nf>1) printf("  %12s","all files");
+  printf("\n");
+  for(k=6; k>=0; k--) {
+    printf("  %7d",k);
+    for(f=0; f<st->nfile; f++) if(st->file[f].values>0) printf("  %12ld",st->file[f].figs[k]);
+    if(nf>1) printf("  %12ld",st->all.figs[k]);
+    printf("\n");
+  }
+  printf("  judged zero");
+  for(f=0; f<st->nfile; f++) if(st->file[f].values>0) printf("  %8ld",st->file[f].zero);
+  if(nf>1) printf("  %8ld",st->all.zero);
+  printf(" (both extrapolations below 1e-6)\n");
+}
+
 /* ---- -solmed Newton (GEMPACK manual 26.6) -------------------------
    The schedule is a forward-Euler pass of -step1 steps in which some
    steps are Newton corrections: every exogenous change is zero and
@@ -1993,6 +2126,7 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
     int *xc124= (int *) calloc (1,sizeof(int));
     signed char *xclev= (signed char *) calloc (1,sizeof(signed char));
     teems_acc_stats.valid=0;
+    teems_dacc_stats.valid=0;
     solve_real *clag1= (solve_real *) calloc (nvarele,sizeof(solve_real));
     solve_real *varchange= (solve_real *) calloc (nvarele,sizeof(solve_real));
     /* backsolve recovery workspace: exogenous per-step changes as placed
@@ -3363,6 +3497,7 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
              extrapolation with the weight the variables' final result
              gives this pass (sol 0: w2, sol 1: -w3, sol 2: w3) */
           if(rank==0&&maxsol==3&&subindx==subints-1)xac_pass(sol,subindx,subints,vars,nvar,nvarele,varchange,xcf);
+          if(rank==0&&maxsol==3)dacc_pass(sol,subindx,subints,coefs,ncof,elem_vals,euler,inmemory,rank);
           if(teems_sup&&rank==0&&subints==1&&(teems_sup==2||sol==maxsol-1)) {
             static const char *const udext[3]={".ud5",".ud6",".ud7"};
             coefficients_dump_phase(teems_sol_stem,udext[sol],5+sol,ncof,ncofele,elem_vals);
@@ -3702,6 +3837,7 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
         printf("  figures  results  levels values\n");
         for(k=6; k>=0; k--)printf("  %7ld  %7ld  %13ld\n",(long)k,st->lin[k],st->lev[k]);
         printf("  judged zero %ld (both extrapolations below 1e-6; at 6 figures among the levels values)\n",st->zero);
+        dacc_print();
       }
     }
     }

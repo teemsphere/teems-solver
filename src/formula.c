@@ -3749,6 +3749,8 @@ static void upd_analyse(char *fname, elem_value *elem_vals, array_def *coefs, of
     while ((isalnum((unsigned char)*p)||*p=='_'||*p=='@')&&j<NAMESIZE-1) name[j++]=*p++;
     name[j]='\0';
     tgt[n]=upd_coef_lookup(name,coefs,ncof);
+    if (teems_cof_updtgt==NULL) teems_cof_updtgt=calloc(ncof+1,1);
+    if (tgt[n]>=0&&teems_cof_updtgt!=NULL) teems_cof_updtgt[tgt[n]]=1;
     ce[n]=(unsigned char)isce;
     if (tgt[n]>=0&&cnt[tgt[n]]<2) cnt[tgt[n]]++;
     if (isce&&tgt[n]>=0&&upd_pathbase[tgt[n]]<0) { upd_pathbase[tgt[n]]=upd_pathn; upd_pathn+=coefs[tgt[n]].nelem; }
@@ -3856,6 +3858,16 @@ int updates_path_active(void) {
 
 /* a multi-step pass restarts from the initial data: the shadow re-syncs
    from the stored values at the next Update pass */
+/* a coefficient element's value at the end of the current pass: the
+   double shadow for a (change)/(explicit) path target, the stored value
+   otherwise (the updated-data accuracy summary, manual 26.2.2) */
+double updates_value_now(array_def *coefs, offset_t k, offset_t e, elem_value *elem_vals) {
+  double v;
+  if (upd_pathbase!=NULL&&upd_pathbase[k]>=0&&upd_shvalid) v=upd_shv[upd_pathbase[k]+e];
+  else v=(double)elem_vals[coefs[k].offset+e].value;
+  return v;
+}
+
 void updates_path_restart(void) {
   upd_shvalid=0;
 }

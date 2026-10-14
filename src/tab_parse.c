@@ -903,6 +903,34 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
         return -1;
       }
     }
+    /* the logical file each coefficient is first Read from, for the
+       updated-data accuracy summary (manual 26.2.2) */
+    {
+      const char *t=line;
+      char nm[NAMESIZE];
+      int n=0,d;
+      offset_t c;
+      if (teems_cof_readfile==NULL) {
+        teems_cof_readfile=malloc((ncof+1)*sizeof(int));
+        for (c=0; c<=ncof; c++) teems_cof_readfile[c]=-1;
+        teems_datafile_name=calloc(niodata>0?niodata:1,NAMESIZE);
+        teems_ndatafile=niodata;
+        for (d=0; d<niodata; d++) strncpy(teems_datafile_name[d],iodata[d].logname,NAMESIZE-1);
+      }
+      while (*t==' ') t++;
+      if (strncasecmp(t,"read",4)==0) t+=4;
+      for (;;) {
+        while (*t==' ') t++;
+        if (*t!='(') break;
+        for (d=0; *t!='\0'; t++) { if (*t=='(') d++; else if (*t==')') { d--; if (d==0) { t++; break; } } }
+      }
+      while ((isalnum((unsigned char)*t)||*t=='_'||*t=='@')&&n<NAMESIZE-1) nm[n++]=*t++;
+      nm[n]='\0';
+      for (c=0; c<ncof; c++) if (strcmp(nm,coefs[c].cofname)==0) {
+          if (teems_cof_readfile[c]<0) teems_cof_readfile[c]=(int)k0;
+          break;
+        }
+    }
     if (strchr(line,'(')==NULL) {
       readitem = strtok(line," ");
       readitem = strtok(NULL," ");

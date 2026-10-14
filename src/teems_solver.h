@@ -472,6 +472,24 @@ typedef struct {
   long nsum, zero, lin[7], lev[7];
 } teems_acc_stats_t;
 extern teems_acc_stats_t teems_acc_stats;
+/* updated-data accuracy summary (GEMPACK manual 26.2.2): the values
+   Read from a data file whose coefficient an Update statement targets,
+   grouped by the logical file of the (first) Read. data_read_files
+   records cof_readfile (iodata index, -1 = not Read) and the logical
+   names; upd_analyse records cof_updtgt. solve_drivers.c fills
+   teems_dacc_stats (file[i] per iodata index, all = every file) */
+extern int *teems_cof_readfile;
+extern unsigned char *teems_cof_updtgt;
+extern char (*teems_datafile_name)[NAMESIZE];
+extern int teems_ndatafile;
+typedef struct {
+  long values, zero, figs[7];
+} teems_acc_hist_t;
+typedef struct {
+  int valid, subints, nfile;
+  teems_acc_hist_t *file, all;
+} teems_dacc_stats_t;
+extern teems_dacc_stats_t teems_dacc_stats;
 /* set while a Runge-Kutta stage state is being realized under -adaptive
    yes: formula.c counts range-test and assertion violations into the
    two counters (and prints them as warnings) instead of aborting, so
@@ -1045,6 +1063,7 @@ void updates_path_conv_apply(double q2, double q3);
 int conv_pick(double c1,double c2,double c3,double q2,double q3,double E,double *R);
 void conv_ratios(bool euler,double *q2,double *q3);
 void updates_path_restart(void);
+double updates_value_now(array_def *coefs, offset_t k, offset_t e, elem_value *elem_vals);
 extern int teems_upd_pathuse;
 
 /* ============ jacobian.c — first-order derivative matrix assembly ======
