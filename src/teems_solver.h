@@ -466,10 +466,19 @@ extern teems_rk_stats_t teems_rk_stats;
    solve_drivers.c fills it at the end of a three-solution run, main
    patches it into stats.json. Counts cover the endogenous and
    backsolved elements; lin[k] / lev[k] = results at k figures (0..6);
-   zero = results judged zero (not in lin, at 6 in lev) */
+   zero = results judged zero (C0/FC0: not in lin, at 6 in lev) */
+/* convergence codes (manual 26.2.3), best to worst; solve_drivers.c */
+enum { ACC_NONE, ACC_XMA, ACC_XRA, ACC_C0, ACC_FC0, ACC_CX, ACC_FCX, ACC_MVC, ACC_MN0, ACC_OVC, ACC_ON0,
+       ACC_MCQ, ACC_OCQ, ACC_MDQ, ACC_ODQ, ACC_MDX, ACC_ODX, ACC_NCODE };
+/* one summary: counts by figures (lin, lev), judged zero, and per
+   convergence code the count and the lowest figures (-1 = none) */
 typedef struct {
-  int valid, subints;
-  long nsum, zero, lin[7], lev[7];
+  long nsum, zero, lin[7], lev[7], code_n[ACC_NCODE];
+  int code_min[ACC_NCODE];
+} teems_acc_block_t;
+typedef struct {
+  int valid, subints, nsub;
+  teems_acc_block_t all, *sub; /* sub[k]: subinterval k (when subints > 1) */
 } teems_acc_stats_t;
 extern teems_acc_stats_t teems_acc_stats;
 /* updated-data accuracy summary (GEMPACK manual 26.2.2): the values
@@ -1061,6 +1070,9 @@ int updates_path_active(void);
 void updates_path_conv_store(int sol, array_def *coefs, offset_t ncof, elem_value *elem_vals);
 void updates_path_conv_apply(double q2, double q3);
 int conv_pick(double c1,double c2,double c3,double q2,double q3,double E,double *R);
+int acc_classify(double c1,double c2,double c3,double q2,double q3,int rqf,double *e12p,double *e24p);
+extern int teems_rqf;     /* -rqf n: required figures for XRA (26.2.6), 0 = none */
+extern int teems_comp_sub; /* complementarity: index of the subinterval the accurate run solves */
 void conv_ratios(bool euler,double *q2,double *q3);
 void updates_path_restart(void);
 double updates_value_now(array_def *coefs, offset_t k, offset_t e, elem_value *elem_vals);

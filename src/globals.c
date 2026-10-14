@@ -144,6 +144,8 @@ unsigned char *teems_cof_updtgt = NULL;
 char (*teems_datafile_name)[NAMESIZE] = NULL;
 int teems_ndatafile = 0;
 teems_dacc_stats_t teems_dacc_stats;
+int teems_rqf = 0;
+int teems_comp_sub = 0;
 int teems_rk_stage_checks = 0;
 long teems_check_viol_range = 0;
 long teems_check_viol_assert = 0;

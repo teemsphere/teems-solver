@@ -1574,33 +1574,82 @@ bool solve_johansen(PetscBool nohsl,PetscInt VecSize,Mat A,PetscInt dnz,PetscInt
     return 1;
   }
 
+/* Convergence codes (GEMPACK manual 26.2.3), one per element and
+   subinterval from its three pass results c1 c2 c3 (step counts
+   n1<n2<n3) and the two two-pass extrapolations e12 (passes 1,2) and
+   e24 (passes 2,3). GEMPACK does not publish its thresholds; TEEMS's,
+   tested in this order:
+     XMA  |e12 - e24| <= 1e-7 max(|e12|,|e24|): the extrapolations agree
+          to working precision (an all-zero result included)
+     C0   both extrapolations and all three passes at most 1e-6 in
+          magnitude; FC0 the extrapolations only (the judged-zero class)
+     MN0/ON0  the passes at most 1e-6 in magnitude
+     MVC/OVC  the passes within 1e-6 of each other (|c3 - c1| relative
+          to the largest)
+     XRA  (-rqf n only) the extrapolations agree to n or more figures
+     CX   they agree to 2 or more figures; FCX to 1
+     MC?/OC?  0 figures, the pass differences shrinking (|c3 - c2| <
+          |c2 - c1|); MD?/OD? growing by at most a factor 2; MD!/OD!
+          growing more
+   M = monotone passes ((c2 - c1)(c3 - c2) >= 0), O = oscillating.
+   Codes are numbered from best to worst, so the worst over
+   subintervals (26.3.1) is the largest. */
+static const char *const acc_code_name[ACC_NCODE]={"","XMA","XRA","C0","FC0","CX","FCX","MVC","MN0","OVC","ON0","MC?","OC?","MD?","OD?","MD!","OD!"};
+static const char *const acc_code_meaning[ACC_NCODE]={"",
+  "three extrapolations equal to machine accuracy","three extrapolations equal to required accuracy",
+  "confidence that the result is zero","fair confidence that the result is zero",
+  "confidence in the extrapolated result","fair confidence in the extrapolated result",
+  "monotonic, results very close together","monotonic, results near zero",
+  "oscillating, but results very close together","oscillating, but results near zero",
+  "monotonic, appears to be converging","oscillating, but appears to be converging",
+  "monotonic, but may be diverging","oscillating and may be diverging",
+  "monotonic, but appears to be diverging","oscillating and appears to be diverging"};
+
+static int acc_figures(double rel) {
+  int fig;
+  if(rel<1e-6)fig=6; else if(rel<1e-5)fig=5; else if(rel<1e-4)fig=4; else if(rel<1e-3)fig=3; else if(rel<1e-2)fig=2; else if(rel<1e-1)fig=1; else fig=0;
+  return fig;
+}
+
+int acc_classify(double c1,double c2,double c3,double q2,double q3,int rqf,double *e12p,double *e24p) {
+  double e12=(q2*c2-c1)/(q2-1.0),e24=(q3*c3-q2*c2)/(q3-q2);
+  double se=fmax(fabs(e12),fabs(e24)),sc=fmax(fabs(c1),fmax(fabs(c2),fabs(c3)));
+  double d=fabs(e12-e24),d1=fabs(c2-c1),d2=fabs(c3-c2);
+  int mono=(c2-c1)*(c3-c2)>=0,code;
+  if(e12p!=NULL)*e12p=e12;
+  if(e24p!=NULL)*e24p=e24;
+  if(d<=1e-7*se) code=ACC_XMA;
+  else if(se<=1e-6) code=(sc<=1e-6)?ACC_C0:ACC_FC0;
+  else if(sc<=1e-6) code=mono?ACC_MN0:ACC_ON0;
+  else if(fabs(c3-c1)<=1e-6*sc) code=mono?ACC_MVC:ACC_OVC;
+  else if(rqf>0&&acc_figures(d/se)>=rqf) code=ACC_XRA;
+  else if(acc_figures(d/se)>=2) code=ACC_CX;
+  else if(acc_figures(d/se)==1) code=ACC_FCX;
+  else if(d2<d1) code=mono?ACC_MCQ:ACC_OCQ;
+  else if(d2<=2*d1) code=mono?ACC_MDQ:ACC_ODQ;
+  else code=mono?ACC_MDX:ACC_ODX;
+  return code;
+}
+
 /* -convrule 1: GEMPACK's treatment of poorly converging components
    (manual 26.2.5, 26.2.5.1; default off, as it changes reported
-   results). Per element and subinterval the three pass results c1 c2
-   c3 (step counts n1<n2<n3) are classified and the reported increment
-   is
-     - their average when they lie very close together or near zero
-       (GEMPACK's MVC/OVC/MN0/ON0);
-     - the extrapolation when the two two-pass extrapolations, from
-       passes 1,2 and from passes 2,3, agree to at least one figure
-       (manual 26.2.1's figures column; the confident codes CX/FCX);
-     - the third result otherwise (MC?/MD?/MD!/OC?/OD?/OD!; the
-       manual's GC10E1 example, figures 0, reports the 8-step result).
-   The manual does not publish the code thresholds; "very close" is
-   agreement to about six figures. The same rule applies to the
-   (change)/(explicit) Update targets' extrapolated path values.
-   conv_c holds the three passes, conv_w their extrapolation weights. */
+   results), a lookup on the element's convergence code for the
+   subinterval: the average of the three passes for MVC/OVC/MN0/ON0,
+   the third pass for MC?/OC?/MD?/OD?/MD!/OD! (the manual's GC10E1
+   example, figures 0, reports the 8-step result), the extrapolation
+   otherwise. The same rule applies to the (change)/(explicit) Update
+   targets' extrapolated path values. conv_c holds the three passes,
+   conv_w their extrapolation weights. */
 static solve_real *conv_c[3]={NULL,NULL,NULL};
 static double conv_w[3];
 static offset_t conv_n[3];
 
 int conv_pick(double c1,double c2,double c3,double q2,double q3,double E,double *R) {
-  double sc=fmax(fabs(c1),fmax(fabs(c2),fabs(c3)));
-  double e12=(q2*c2-c1)/(q2-1.0),e23=(q3*c3-q2*c2)/(q3-q2);
-  if(sc<=1e-6||fabs(c3-c1)<=1e-6*sc) { *R=(c1+c2+c3)/3; return 1; }
-  if(fabs(e12-e23)<0.1*fmax(fabs(e12),fabs(e23))) { *R=E; return 0; }
-  *R=c3;
-  return 2;
+  int code=acc_classify(c1,c2,c3,q2,q3,0,NULL,NULL),o;
+  if(code==ACC_MVC||code==ACC_OVC||code==ACC_MN0||code==ACC_ON0) { *R=(c1+c2+c3)/3; o=1; }
+  else if(code>=ACC_MCQ) { *R=c3; o=2; }
+  else { *R=E; o=0; }
+  return o;
 }
 
 void conv_ratios(bool euler,double *q2,double *q3) {
@@ -1697,13 +1746,67 @@ static void xac_pass(int sol,dim_t subindx,dim_t subints,array_def *vars,offset_
   }
 }
 
-static int acc_figures(double rel) {
-  int fig;
-  if(rel<1e-6)fig=6; else if(rel<1e-5)fig=5; else if(rel<1e-4)fig=4; else if(rel<1e-3)fig=3; else if(rel<1e-2)fig=2; else if(rel<1e-1)fig=1; else fig=0;
-  return fig;
+/* accuracy summary tallies (teems_acc_block_t): counts by figures and
+   levels figures over the summarised elements, judged zero (figures 7)
+   apart, and per convergence code the count and the lowest figures */
+static int *acc_keep_fig=NULL;
+static signed char *acc_keep_lev=NULL,*acc_keep_code=NULL;
+
+static void acc_block_init(teems_acc_block_t *b) {
+  int c;
+  memset(b,0,sizeof(*b));
+  for(c=0; c<ACC_NCODE; c++) b->code_min[c]=-1;
 }
 
-static void xac_codes(offset_t nvarele,array_def *vars,offset_t nvar,const int *figs,const signed char *levfigs,const solve_real *xc12,const solve_real *xc24) {
+static void acc_block_add(teems_acc_block_t *b,int fig,int lev,int code) {
+  b->nsum++;
+  if(fig==7) b->zero++;
+  else b->lin[fig]++;
+  b->lev[lev]++;
+  b->code_n[code]++;
+  if(fig!=7&&(b->code_min[code]<0||fig<b->code_min[code])) b->code_min[code]=fig;
+}
+
+static void acc_block_print(const teems_acc_block_t *b) {
+  int k;
+  printf("  figures  results  levels values\n");
+  for(k=6; k>=0; k--)printf("  %7d  %7ld  %13ld\n",k,b->lin[k],b->lev[k]);
+  printf("  judged zero %ld (codes C0 and FC0: both extrapolations below 1e-6; at 6 figures among the levels values)\n",b->zero);
+  printf("  code  meaning                                          results  lowest figures\n");
+  for(k=1; k<ACC_NCODE; k++) {
+    if(b->code_n[k]==0) continue;
+    if(b->code_min[k]>=0) printf("  %-4s  %-47s  %7ld  %14d\n",acc_code_name[k],acc_code_meaning[k],b->code_n[k],b->code_min[k]);
+    else printf("  %-4s  %-47s  %7ld\n",acc_code_name[k],acc_code_meaning[k],b->code_n[k]);
+  }
+}
+
+/* one value array to scratch (write 1, then freed) or back (write 0) */
+static void acc_spill_bytes(const char *name,void **p,size_t nbytes,PetscInt rank,int write) {
+  char path[TABREADLINE];
+  FILE *fp;
+  snprintf(path,sizeof(path),"%s%s%d.bin",scratch_dir,name,(int)rank);
+  if(write) {
+    if((fp=teems_fopen(path,"wb"))==NULL) {
+      errmsg("Error: cannot open %s for writing\n",path);
+      return;
+    }
+    fwrite(*p,1,nbytes,fp);
+    fclose(fp);
+    free(*p);
+    *p=NULL;
+  } else {
+    *p=realloc(*p,nbytes>0?nbytes:1);
+    if((fp=teems_fopen(path,"rb"))==NULL) {
+      errmsg("Error: cannot open %s for reading\n",path);
+      return;
+    }
+    scratch_read(*p,1,nbytes,fp,path);
+    fclose(fp);
+    remove(path);
+  }
+}
+
+static void xac_codes(offset_t nvarele,array_def *vars,offset_t nvar,const int *figs,const signed char *levfigs,const signed char *codes,const solve_real *c1,const solve_real *c2,const solve_real *c3,double q2,double q3) {
   enum { CHUNK=1<<14 };
   double dbuf[CHUNK];
   signed char cbuf[CHUNK];
@@ -1717,7 +1820,8 @@ static void xac_codes(offset_t nvarele,array_def *vars,offset_t nvar,const int *
       n=vars[i].nelem-k; if(n>CHUNK)n=CHUNK;
       for(m=0; m<n; m++) {
         offset_t e=vars[i].offset+k+m;
-        double d=fabs((double)xc12[e]-(double)xc24[e]);
+        double e12=((double)q2*c2[e]-c1[e])/(q2-1.0),e24=(q3*(double)c3[e]-q2*(double)c2[e])/(q3-q2);
+        double d=fabs(e12-e24);
         if(xac_base!=NULL&&!vars[i].change_real)d*=1+(double)xac_base[e]/100;
         dbuf[m]=fabs(d);
       }
@@ -1733,6 +1837,7 @@ static void xac_codes(offset_t nvarele,array_def *vars,offset_t nvar,const int *
         signed char v=0;
         if(col==0)v=(signed char)figs[e];
         else if(col==1)v=levfigs[e];
+        else if(col==2)v=codes[e];
         else if(col==3)v=(signed char)((CL_EXO(e)?2:1)|(figs[e]==7?4:0)|(CL_BS(e)?8:0));
         cbuf[m]=v;
       }
@@ -1753,7 +1858,9 @@ static void xac_codes(offset_t nvarele,array_def *vars,offset_t nvar,const int *
    pass's end are that pass's updated data. Kept as running quantities,
    two doubles per value: after pass 1 a = v1, after pass 2 a = e12 and
    b = v2, after pass 3 e24 is formed and the figures (minimum over
-   subintervals) recorded. Data values are levels, so no movement basis
+   subintervals) recorded: 6 when the two agree to working precision
+   (XMA, an unchanged zero included), the judged-zero class when both
+   are at most 1e-6, the variables' buckets otherwise. Data values are levels, so no movement basis
    applies. Under -inmemory 0 a and b go to scratch between passes */
 static offset_t dacc_n=0;
 static double *dacc_a=NULL,*dacc_b=NULL;
@@ -1819,10 +1926,11 @@ static void dacc_pass(int sol, dim_t subindx, dim_t subints, array_def *coefs, o
       else if(sol==1) { dacc_a[p]=(q2*v-dacc_a[p])/(q2-1.0); dacc_b[p]=v; }
       else {
         double e12=dacc_a[p],e24=(q3*v-q2*dacc_b[p])/(q3-q2);
-        double a=fabs(e12),b=fabs(e24),sc=(a>b)?a:b;
+        double a=fabs(e12),b=fabs(e24),sc=(a>b)?a:b,d=fabs(e12-e24);
         int fig;
-        if(sc<=1e-6) continue;
-        fig=acc_figures(fabs(e12-e24)/sc);
+        if(d<=1e-7*sc) fig=6;
+        else if(sc<=1e-6) continue;
+        else fig=acc_figures(d/sc);
         if(dacc_fig[p]>fig) dacc_fig[p]=(signed char)fig;
       }
     }
@@ -2121,10 +2229,11 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
               memcpy(countvarintra1s,countvarintra1,(ndblock+1)*sizeof(offset_t));
     gettimeofday(&begintime, NULL);
     solve_real *xc0= (solve_real *) calloc (1,sizeof(solve_real));
-    solve_real *xc12= (solve_real *) calloc (1,sizeof(solve_real));
-    solve_real *xc24= (solve_real *) calloc (1,sizeof(solve_real));
+    solve_real *xcp1= (solve_real *) calloc (1,sizeof(solve_real));
+    solve_real *xcp2= (solve_real *) calloc (1,sizeof(solve_real));
     int *xc124= (int *) calloc (1,sizeof(int));
     signed char *xclev= (signed char *) calloc (1,sizeof(signed char));
+    signed char *xccode= (signed char *) calloc (1,sizeof(signed char));
     teems_acc_stats.valid=0;
     teems_dacc_stats.valid=0;
     solve_real *clag1= (solve_real *) calloc (nvarele,sizeof(solve_real));
@@ -3420,8 +3529,8 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
             if ((tempvar = teems_fopen(tempfilenam, "rb")) == NULL) {
               errmsg("Error: cannot open %s for reading\n",tempfilenam);
             }
-            xc12=realloc (xc12,(nvarele)*sizeof(solve_real));
-            scratch_read(xc12, sizeof(solve_real),nvarele,tempvar,tempfilenam);
+            xcp1=realloc (xcp1,(nvarele)*sizeof(solve_real));
+            scratch_read(xcp1, sizeof(solve_real),nvarele,tempvar,tempfilenam);
             fclose(tempvar);
             remove(tempfilenam);
             }
@@ -3434,8 +3543,8 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
             if ((tempvar = teems_fopen(tempfilenam, "rb")) == NULL) {
               errmsg("Error: cannot open %s for reading\n",tempfilenam);
             }
-            xc24=realloc (xc24,(nvarele)*sizeof(solve_real));
-            scratch_read(xc24, sizeof(solve_real),nvarele,tempvar,tempfilenam);
+            xcp2=realloc (xcp2,(nvarele)*sizeof(solve_real));
+            scratch_read(xcp2, sizeof(solve_real),nvarele,tempvar,tempfilenam);
             fclose(tempvar);
             remove(tempfilenam);
             }
@@ -3464,8 +3573,8 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
             xcf=*xcf2;
             for(i=0; i<nvarele; i++)xcf[i]=0;
           }
-          if(sol==0)xc12=realloc (xc12,nvarele*sizeof(solve_real));
-          if(sol==0)xc24=realloc (xc24,nvarele*sizeof(solve_real));
+          if(sol==0)xcp1=realloc (xcp1,nvarele*sizeof(solve_real));
+          if(sol==0)xcp2=realloc (xcp2,nvarele*sizeof(solve_real));
           {
             /* Richardson weights for the current solution pass. q is the
                step-ratio power matching the method's truncation error
@@ -3497,7 +3606,7 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
              extrapolation with the weight the variables' final result
              gives this pass (sol 0: w2, sol 1: -w3, sol 2: w3) */
           if(rank==0&&maxsol==3&&subindx==subints-1)xac_pass(sol,subindx,subints,vars,nvar,nvarele,varchange,xcf);
-          if(rank==0&&maxsol==3)dacc_pass(sol,subindx,subints,coefs,ncof,elem_vals,euler,inmemory,rank);
+          if(rank==0&&maxsol==3)dacc_pass(sol,(teems_comp_nsub>1)?teems_comp_sub:(dim_t)subindx,(teems_comp_nsub>1)?teems_comp_nsub:subints,coefs,ncof,elem_vals,euler,inmemory,rank);
           if(teems_sup&&rank==0&&subints==1&&(teems_sup==2||sol==maxsol-1)) {
             static const char *const udext[3]={".ud5",".ud6",".ud7"};
             coefficients_dump_phase(teems_sol_stem,udext[sol],5+sol,ncof,ncofele,elem_vals);
@@ -3561,16 +3670,15 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
             if(sol==1)for(i=0; i<nvarele; i++) xcf[i]-=varchange[i]*extrap_w3;
             if(sol==2)for(i=0; i<nvarele; i++) xcf[i]+=varchange[i]*extrap_w3;
           }
-          /* the two two-pass extrapolations of the movement across this
-             subinterval (GEMPACK manual 26.3: per-subinterval accuracy is
-             judged on "the endogenous movements just across the current
-             subinterval"), not of the result compounded onto the ones
-             before: e12 = (q2 c2 - c1)/(q2 - 1), e24 = (q3 c3 - q2 c2)/(q3 - q2).
-             A percent-change movement is relative to the subinterval's
-             start, so the compounding factor xc0 cancels in the figures */
-          if(sol==0)for(i=0; i<nvarele; i++) xc12[i]=-varchange[i]*extrap_w1;
-          if(sol==1)for(i=0; i<nvarele; i++) { xc24[i]=-varchange[i]*extrap_w2; xc12[i]+=varchange[i]*extrap_w1; }
-          if(sol==2)for(i=0; i<nvarele; i++) xc24[i]+=varchange[i]*extrap_w2;
+          /* the first two passes' movement across this subinterval (the
+             third is varchange when the figures are taken): GEMPACK
+             manual 26.3 judges a subinterval on "the endogenous movements
+             just across the current subinterval", not on the result
+             compounded onto the ones before. A percent-change movement is
+             relative to the subinterval's start, so the compounding factor
+             xc0 cancels in the figures */
+          if(sol==0)memcpy(xcp1,varchange,nvarele*sizeof(solve_real));
+          if(sol==1)memcpy(xcp2,varchange,nvarele*sizeof(solve_real));
           if(convrule&&rank==rank_hsl) {
             conv_store(sol,nvarele,varchange,sol==0?extrap_w2:(sol==1?-extrap_w3:extrap_w3));
             if(sol==2) conv_apply(vars,nvar,subindx,xc0,xcf,euler);
@@ -3656,101 +3764,86 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
           }
 
     if(rank==rank_hsl&&sol==maxsol-1) {
-            if(subindx==0){
-              xc124=realloc (xc124,nvarele*sizeof(int));
-              xclev=realloc (xclev,nvarele*sizeof(signed char));
-              /* 7 = judged zero until a comparison below lowers it */
-              for(i=0; i<nvarele; i++)xc124[i]=7;
-              for(i=0; i<nvarele; i++)xclev[i]=6;
-            }else{
-            if(!inmemory){
-            strcpy(tempfilenam,scratch_dir);
-            strcat(tempfilenam,"_tempxclev");
-            sprintf(tempchar, "%d",rank);
-            strcat(tempfilenam,tempchar);
-            strcat(tempfilenam,".bin");
-            if ((tempvar = teems_fopen(tempfilenam, "rb")) == NULL) {
-              errmsg("Error: cannot open %s for reading\n",tempfilenam);
-            }
-            xclev=realloc (xclev,nvarele*sizeof(signed char));
-            scratch_read(xclev, sizeof(signed char),nvarele,tempvar,tempfilenam);
-            fclose(tempvar);
-            remove(tempfilenam);
-            }
-            if(!inmemory){
-            strcpy(tempfilenam,scratch_dir);
-            strcat(tempfilenam,"_tempxc124");
-            sprintf(tempchar, "%d",rank);
-            strcat(tempfilenam,tempchar);
-            strcat(tempfilenam,".bin");
-            if ((tempvar = teems_fopen(tempfilenam, "rb")) == NULL) {
-              errmsg("Error: cannot open %s for reading\n",tempfilenam);
-            }
-            xc124=realloc (xc124,nvarele*sizeof(int));
-            scratch_read(xc124, sizeof(int),nvarele,tempvar,tempfilenam);
-            fclose(tempvar);
-            remove(tempfilenam);
-            }
-            }
+      /* under complementarity with subintervals each accurate run is one
+         entry here (subints 1): the subinterval index and the minimum
+         figures / worst codes carry across entries */
+      int sub_eff=(teems_comp_nsub>1)?teems_comp_sub:(int)subindx;
+      int subs_eff=(teems_comp_nsub>1)?teems_comp_nsub:(int)subints;
+      teems_acc_block_t blk;
+      double q2,q3;
+      if(subindx==0){
+        xc124=realloc (xc124,nvarele*sizeof(int));
+        xclev=realloc (xclev,nvarele*sizeof(signed char));
+        xccode=realloc (xccode,nvarele*sizeof(signed char));
+        if(sub_eff>0&&acc_keep_fig!=NULL) {
+          memcpy(xc124,acc_keep_fig,nvarele*sizeof(int));
+          memcpy(xclev,acc_keep_lev,nvarele);
+          memcpy(xccode,acc_keep_code,nvarele);
+        } else {
+          /* 7 = judged zero until a comparison below lowers it */
+          for(i=0; i<nvarele; i++)xc124[i]=7;
+          for(i=0; i<nvarele; i++)xclev[i]=6;
+          memset(xccode,0,nvarele);
+        }
+      }else if(!inmemory){
+        acc_spill_bytes("_tempxc124",(void **)&xc124,nvarele*sizeof(int),rank,0);
+        acc_spill_bytes("_tempxclev",(void **)&xclev,nvarele,rank,0);
+        acc_spill_bytes("_tempxccode",(void **)&xccode,nvarele,rank,0);
+      }
+      if(sub_eff==0) {
+        free(teems_acc_stats.sub);
+        teems_acc_stats.sub=(teems_acc_block_t *) calloc (subs_eff,sizeof(teems_acc_block_t));
+        teems_acc_stats.nsub=subs_eff;
+      }
+      acc_block_init(&blk);
+      conv_ratios(euler,&q2,&q3);
 
-      /* figures of accuracy (GEMPACK manual 26.2.1): the significant
-         figures to which the two two-pass extrapolations agree, bucketed
-         on their relative difference (6 below 1e-6 down to 0 at 1e-1 or
-         more). A result whose extrapolations are both below 1e-6 in
-         magnitude cannot be judged in figures and keeps its own class
-         (code 7, GEMPACK's "confidence that the result is zero").
-         Levels figures: a change result is already a levels result; a
+      /* per element (GEMPACK manual 26.2.1, 26.2.3): the convergence
+         code from the three passes, and the significant figures to which
+         the two two-pass extrapolations agree, bucketed on their relative
+         difference (6 below 1e-6 down to 0 at 1e-1 or more). XMA counts
+         at 6 figures (an all-zero result included); C0/FC0 cannot be
+         judged in figures and keep their own class (figures 7). Levels
+         figures: a change result is already a levels result; a
          percent-change result is judged on its levels value L = L0 (1 +
          e/100) (GEMPACK assumes L0 = 50; under a relative difference L0
          cancels), so the relative difference is |e12 - e24| / max(|100 +
-         e12|, |100 + e24|). A result judged zero is 6 levels figures.
-         Both are the minimum over subintervals (26.3.1) */
+         e12|, |100 + e24|); XMA, C0 and FC0 are 6 levels figures.
+         Over subintervals the figures are the minimum and the code the
+         worst (26.3.1) */
       if(maxsol==3) for(i=0; i<nvar; i++) {
         bool chg=vars[i].change_real;
         for(k=vars[i].offset; k<vars[i].offset+vars[i].nelem; k++) {
-          double e1=(double)xc12[k],e2=(double)xc24[k];
-          double a=fabs(e1),b=fabs(e2);
-          double sc=(a>b)?a:b,d=fabs(e1-e2);
-          int fig,lev;
-          if(sc<=1e-6) continue;
-          fig=acc_figures(d/sc);
-          if(chg) lev=fig;
+          double e1,e2,d;
+          int fig,lev,code;
+          code=acc_classify((double)xcp1[k],(double)xcp2[k],(double)varchange[k],q2,q3,teems_rqf,&e1,&e2);
+          d=fabs(e1-e2);
+          if(code==ACC_XMA) fig=6;
+          else if(code==ACC_C0||code==ACC_FC0) fig=7;
+          else fig=acc_figures(d/fmax(fabs(e1),fabs(e2)));
+          if(fig>=6||chg) lev=(fig==7)?6:fig;
           else {
-            double l1=fabs(100+e1),l2=fabs(100+e2),ls=(l1>l2)?l1:l2;
+            double ls=fmax(fabs(100+e1),fabs(100+e2));
             lev=(ls<=1e-6)?6:acc_figures(d/ls);
           }
+          if(!CL_EXO(k))acc_block_add(&blk,fig,lev,code);
           if(xc124[k]>fig)xc124[k]=fig;
           if(xclev[k]>lev)xclev[k]=(signed char)lev;
+          if(xccode[k]<code)xccode[k]=(signed char)code;
         }
       }
-      if(rank==0&&maxsol==3&&subindx==subints-1)xac_codes(nvarele,vars,nvar,xc124,xclev,xc12,xc24);
-      if(subindx!=subints-1){
-            if(!inmemory){
-            strcpy(tempfilenam,scratch_dir);
-            strcat(tempfilenam,"_tempxc124");
-            sprintf(tempchar, "%d",rank);
-            strcat(tempfilenam,tempchar);
-            strcat(tempfilenam,".bin");
-            if ( (tempvar = teems_fopen(tempfilenam, "wb")) == NULL ) {
-              errmsg("Error: cannot open %s for writing\n",tempfilenam);
-            }
-            fwrite(xc124, sizeof(int),nvarele, tempvar);
-            fclose(tempvar);
-            free(xc124);
-            xc124=NULL;
-            strcpy(tempfilenam,scratch_dir);
-            strcat(tempfilenam,"_tempxclev");
-            sprintf(tempchar, "%d",rank);
-            strcat(tempfilenam,tempchar);
-            strcat(tempfilenam,".bin");
-            if ( (tempvar = teems_fopen(tempfilenam, "wb")) == NULL ) {
-              errmsg("Error: cannot open %s for writing\n",tempfilenam);
-            }
-            fwrite(xclev, sizeof(signed char),nvarele, tempvar);
-            fclose(tempvar);
-            free(xclev);
-            xclev=NULL;
-            }
+      if(maxsol==3&&sub_eff<subs_eff) {
+        teems_acc_stats.sub[sub_eff]=blk;
+        if(rank==0&&subs_eff>1&&verbosity>=1) {
+          printf("Accuracy summary for subinterval %d of %d (GEMPACK manual 26.3): %ld endogenous and backsolved results, each judged on its movement across the subinterval\n",sub_eff+1,subs_eff,blk.nsum);
+          acc_block_print(&blk);
+        }
+      }
+      if(rank==0&&maxsol==3&&subindx==subints-1)xac_codes(nvarele,vars,nvar,xc124,xclev,xccode,xcp1,xcp2,varchange,q2,q3);
+      if(subindx!=subints-1&&!inmemory){
+        acc_spill_bytes("_tempxc124",(void **)&xc124,nvarele*sizeof(int),rank,1);
+        acc_spill_bytes("_tempxclev",(void **)&xclev,nvarele,rank,1);
+        acc_spill_bytes("_tempxccode",(void **)&xccode,nvarele,rank,1);
       }
     }
             
@@ -3764,10 +3857,10 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
             if ( (tempvar = teems_fopen(tempfilenam, "wb")) == NULL ) {
               errmsg("Error: cannot open %s for writing\n",tempfilenam);
             }
-            fwrite(xc12, sizeof(solve_real),nvarele, tempvar);
+            fwrite(xcp1, sizeof(solve_real),nvarele, tempvar);
             fclose(tempvar);
-            free(xc12);
-            xc12=NULL;
+            free(xcp1);
+            xcp1=NULL;
             }
             if(!inmemory){
             strcpy(tempfilenam,scratch_dir);
@@ -3778,10 +3871,10 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
             if ( (tempvar = teems_fopen(tempfilenam, "wb")) == NULL ) {
               errmsg("Error: cannot open %s for writing\n",tempfilenam);
             }
-            fwrite(xc24, sizeof(solve_real),nvarele, tempvar);
+            fwrite(xcp2, sizeof(solve_real),nvarele, tempvar);
             fclose(tempvar);
-            free(xc24);
-            xc24=NULL;
+            free(xcp2);
+            xcp2=NULL;
             }
           }
           
@@ -3820,38 +3913,45 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
       /* the summary covers the endogenous and backsolved elements
          (GEMPACK manual 26.2.6); shocked exogenous components would
          read as exact */
+      int sub_eff=(teems_comp_nsub>1)?teems_comp_sub:(int)subints-1;
+      int subs_eff=(teems_comp_nsub>1)?teems_comp_nsub:(int)subints;
       teems_acc_stats_t *st=&teems_acc_stats;
-      memset(st,0,sizeof(*st));
-      for(i=0; i<nvarele; i++) {
-        if(CL_EXO(i))continue;
-        st->nsum++;
-        if(xc124[i]==7)st->zero++;
-        else st->lin[xc124[i]]++;
-        st->lev[xclev[i]]++;
-      }
-      st->subints=(int)subints;
-      st->valid=1;
-      if(rank==0) {
-        if(subints>1)printf("Overall accuracy summary over %d subintervals (GEMPACK manual 26.3.1): %ld endogenous and backsolved results by the significant figures to which the two two-pass extrapolations agree, the lowest across the subintervals, each judged on the movement across its subinterval\n",(int)subints,st->nsum);
-        else printf("Accuracy summary (GEMPACK manual 26.2.1): %ld endogenous and backsolved results by the significant figures to which the two two-pass extrapolations agree\n",st->nsum);
-        printf("  figures  results  levels values\n");
-        for(k=6; k>=0; k--)printf("  %7ld  %7ld  %13ld\n",(long)k,st->lin[k],st->lev[k]);
-        printf("  judged zero %ld (both extrapolations below 1e-6; at 6 figures among the levels values)\n",st->zero);
-        dacc_print();
+      if(sub_eff<subs_eff-1) {
+        acc_keep_fig=(int *) realloc (acc_keep_fig,nvarele*sizeof(int));
+        acc_keep_lev=(signed char *) realloc (acc_keep_lev,nvarele);
+        acc_keep_code=(signed char *) realloc (acc_keep_code,nvarele);
+        memcpy(acc_keep_fig,xc124,nvarele*sizeof(int));
+        memcpy(acc_keep_lev,xclev,nvarele);
+        memcpy(acc_keep_code,xccode,nvarele);
+      } else {
+        acc_block_init(&st->all);
+        for(i=0; i<nvarele; i++) if(!CL_EXO(i)) acc_block_add(&st->all,xc124[i],xclev[i],xccode[i]);
+        st->subints=subs_eff;
+        st->valid=1;
+        free(acc_keep_fig); free(acc_keep_lev); free(acc_keep_code);
+        acc_keep_fig=NULL; acc_keep_lev=acc_keep_code=NULL;
+        if(rank==0) {
+          if(subs_eff>1)printf("Overall accuracy summary over %d subintervals (GEMPACK manual 26.3.1): %ld endogenous and backsolved results, each at its lowest figures and worst code across the subintervals\n",subs_eff,st->all.nsum);
+          else printf("Accuracy summary (GEMPACK manual 26.2.1): %ld endogenous and backsolved results\n",st->all.nsum);
+          acc_block_print(&st->all);
+          dacc_print();
+        }
       }
     }
     }
     xc0=realloc (xc0,sizeof(solve_real));
     free(xc0);
     xc0=NULL;
-    free(xc12);
-    xc12=NULL;
-    free(xc24);
-    xc24=NULL;
+    free(xcp1);
+    xcp1=NULL;
+    free(xcp2);
+    xcp2=NULL;
     free(xc124);
     xc124=NULL;
     free(xclev);
     xclev=NULL;
+    free(xccode);
+    xccode=NULL;
     free(clag1);
     free(varchange);
     free(exo_z);

@@ -171,7 +171,7 @@ static const char *const cli_teems_flags[]={
   "newton_per_euler","newton_shock","newton_tol",
   "nsubints","postsim","probefine","probepattern","random_seed",
   "range_test_initial","range_test_updated","refine","residcheck","retryadj","rkchart",
-  "rkctrl","rkguard","rk_h0","rknorm","rkscope","single_run","sui","sup","two_run",
+  "rkctrl","rkguard","rk_h0","rknorm","rkscope","rqf","single_run","sui","sup","two_run",
   "smllthreads","solmed","step1","step2","step3","tempdir","verbosity","zdivshift",
   "withmc66","version",NULL
 };
@@ -663,10 +663,29 @@ static void stats_hist_write(FILE *fp, const char *prefix, const teems_acc_hist_
   fprintf(fp,"], \"judged_zero\": %ld",h->zero);
 }
 
+/* the linear and levels figures, judged zero and convergence codes of
+   one accuracy summary, as fields of the enclosing object */
+static void stats_acc_block_write(FILE *fp, const teems_acc_block_t *b) {
+  static const char *const names[ACC_NCODE]={"","XMA","XRA","C0","FC0","CX","FCX","MVC","MN0","OVC","ON0","MC?","OC?","MD?","OD?","MD!","OD!"};
+  int k,first=1;
+  fprintf(fp,", \"linear\": {\"figures\": [");
+  for(k=0; k<7; k++)fprintf(fp,"%s%ld",k?", ":"",b->lin[k]);
+  fprintf(fp,"], \"judged_zero\": %ld}, \"levels\": {\"figures\": [",b->zero);
+  for(k=0; k<7; k++)fprintf(fp,"%s%ld",k?", ":"",b->lev[k]);
+  fprintf(fp,"]}, \"codes\": {");
+  for(k=1; k<ACC_NCODE; k++) {
+    if(b->code_n[k]==0)continue;
+    fprintf(fp,"%s\"%s\": {\"results\": %ld, \"lowest_figures\": ",first?"":", ",names[k],b->code_n[k]);
+    if(b->code_min[k]>=0)fprintf(fp,"%d}",b->code_min[k]);
+    else fprintf(fp,"null}");
+    first=0;
+  }
+  fprintf(fp,"}");
+}
+
 static void stats_accuracy_patch(cmf_file_entry *iodata, int niodata, int noutdata, int nsoldata) {
   char statspath[TABREADLINE+16];
-  char lin[160],lev[160];
-  int i,k,o;
+  int i,k;
   const teems_acc_stats_t *st=&teems_acc_stats;
   for (i=niodata+noutdata; i<niodata+noutdata+nsoldata; i++) {
     if (strcmp("solfiles",iodata[i].logname)==0)break;
@@ -698,10 +717,18 @@ static void stats_accuracy_patch(cmf_file_entry *iodata, int niodata, int noutda
     free(buf);
     return;
   }
-  for(k=0,o=0; k<7; k++)o+=snprintf(lin+o,sizeof(lin)-o,"%s%ld",k?", ":"",st->lin[k]);
-  for(k=0,o=0; k<7; k++)o+=snprintf(lev+o,sizeof(lev)-o,"%s%ld",k?", ":"",st->lev[k]);
-  fprintf(fp,"%s,\n  \"accuracy\": {\"covers\": \"endogenous+backsolved\", \"summarised\": %ld, \"subintervals\": %d, \"linear\": {\"figures\": [%s], \"judged_zero\": %ld}, \"levels\": {\"figures\": [%s]}",
-          buf,st->nsum,st->subints,lin,st->zero,lev);
+  fprintf(fp,"%s,\n  \"accuracy\": {\"covers\": \"endogenous+backsolved\", \"summarised\": %ld, \"subintervals\": %d",buf,st->all.nsum,st->subints);
+  if(teems_rqf>0)fprintf(fp,", \"required_figures\": %d",teems_rqf);
+  stats_acc_block_write(fp,&st->all);
+  if(st->subints>1&&st->sub!=NULL&&st->nsub==st->subints) {
+    fprintf(fp,", \"per_subinterval\": [");
+    for(k=0; k<st->nsub; k++) {
+      fprintf(fp,"%s{\"summarised\": %ld",k?", ":"",st->sub[k].nsum);
+      stats_acc_block_write(fp,&st->sub[k]);
+      fprintf(fp,"}");
+    }
+    fprintf(fp,"]");
+  }
   if(teems_dacc_stats.valid&&teems_dacc_stats.all.values>0) {
     const teems_dacc_stats_t *ds=&teems_dacc_stats;
     int f,first=1;
@@ -1915,6 +1942,14 @@ int main(int argc,char **args) {
       steps3=steps2;
       if(rank==0) printf("Two-solution %s run: %d and %d steps extrapolated, no accuracy estimate (-two_run 1)\n",solmed,(int)steps1,(int)steps2);
     }
+  }
+  /* -rqf n (manual 26.2.6 RQF): results whose two extrapolations agree
+     to n or more figures get the code XRA in the accuracy summary */
+  PetscOptionsGetInt(NULL,NULL,"-rqf",&teems_rqf,NULL);
+  if(teems_rqf<0||teems_rqf>6) {
+    if(rank==0)errmsg("Error: -rqf takes the required figures of accuracy, 1 to 6 (0 = none; GEMPACK manual 26.2.6)\n");
+    PetscFinalize();
+    return 1;
   }
   /* -sup 1|2 (manual 26.8.1 SUP = last|all): the updated data after
      the last or every separate multi-step solution, <stem>.ud5..ud7 in
@@ -3862,6 +3897,7 @@ comp_teardown:
 
   FILE* solution;
 
+  teems_comp_sub=comp_sub;
   if(!comp_dispatch&&(solmethod==SM_GRAGG||solmethod==SM_MIDPOINT||solmethod==SM_EULER||solmethod==SM_NEWTON))solve_gragg(nohsl,VecSize,&A,dnz,dnnz,onz,onnz,&B,dnzB,dnnzB,onzB,onnzB,&vecb,&vece,rank,rank_hsl,mpisize,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,&elem_vals,ncofele+nvarele,ncofele,nvarele,&closure_vals,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,eq_addr,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,teems_ma48_cntl4,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,(teems_comp_nsub>1)?1:subints,fcomm,solmethod,&xcf);
 
   if(!comp_dispatch&&isrk)solve_rk(nohsl,VecSize,dnz,dnnz,onz,onnz,dnzB,dnnzB,onzB,onnzB,&vece,rank,rank_hsl,mpisize,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,&elem_vals,ncofele,nvarele,&closure_vals,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,eq_addr,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,teems_ma48_cntl4,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,fcomm,solmethod,adaptive,(double)epstol,(double)retryadj,maxretries,&rko,&xcf,&accmetric);
