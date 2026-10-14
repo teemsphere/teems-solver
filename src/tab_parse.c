@@ -5512,6 +5512,17 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
               }
             }
           }
+          /* the loop above takes one argument per dimension, so a
+             surplus one was never looked at: Shock phi(NA) on a scalar
+             (as teems-R wrote one before 453dcd5) went on to map an
+             element through set_elems[-1] */
+          if ((vars[j].size==0&&argu[0]!='\0')||(vars[j].size>0&&strtok(NULL,",")!=NULL)) {
+            if (vars[j].size==0) errmsg("Error: %s is a scalar variable, so its shock takes no arguments; write Shock %s = <value>; (shock file)\n",vars[j].cofname,vars[j].cofname);
+            else errmsg("Error: shock statement for variable %s gives more arguments than its %d dimension%s (shock file)\n",vars[j].cofname,(int)vars[j].size,vars[j].size==1?"":"s");
+            fclose(filehandle);
+            MPI_Abort(PETSC_COMM_WORLD,1);
+            return -1;
+          }
           /* GEMPACK-standard value ordering: first subscript varies
              fastest (column-major), fixed dims collapsed to size 1 */
           if (vars[j].size>0)antidim[0]=1;
@@ -5534,7 +5545,7 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
                     l2=l2-l1*antidim[dcount];
                   }
                 }
-              } else {
+              } else if(vars[j].size==1) {
                 /* one index: the element position must go through the same
                    fixed-element / superset mapping as the multi-index path;
                    `arSet[0]=l2` shocked position 0.. of the full set
@@ -5579,7 +5590,7 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
                     l2=l2-l1*antidim[dcount];
                   }
                 }
-              } else {
+              } else if(vars[j].size==1) {
                 if(supsetid[0]>-2)arSet[0]=set_elems[dimbegadd[0]+l2].superset_pos[supsetid[0]];
                 else arSet[0]=dimindx[0];
               }
