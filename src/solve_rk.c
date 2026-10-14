@@ -794,7 +794,7 @@ bool solve_rk(PetscBool nohsl,PetscInt VecSize,PetscInt dnz,PetscInt* dnnz,Petsc
         h*=q;
         if(h<1e-8) {
           if(rank==0)errmsg("Error: adaptive step size collapsed below 1e-8 without meeting epsTolerance %.3g (worst error metric %.3g); the problem may be too stiff for %s\n",epstol,metric,scheme.name);
-          MPI_Abort(PETSC_COMM_WORLD,1);
+          teems_abort();
         }
         if(rank==0)logmsg(1,"Step %d rejected (accuracy metric %.3g > %.3g, worst element %s[%ld]), retrying with step size %.4g\n",stepno+1,metric,epstol,rk_elem_var(vars,nvar,worst_t),(long)worst_t,h);
         fflush(stdout);
@@ -853,7 +853,7 @@ bool solve_rk(PetscBool nohsl,PetscInt VecSize,PetscInt dnz,PetscInt* dnnz,Petsc
                     (failcode==RK_FAIL_ASSERT&&teems_assertions_mode==2));
         if(fatal) {
           if(rank==0)errmsg("Error: %s and %d retries at reduced step size did not clear it; the simulation cannot continue (try more steps or a smaller shock)\n",rk_fail_name(failcode),maxretries);
-          MPI_Abort(PETSC_COMM_WORLD,1);
+          teems_abort();
         }
         /* warn-level range/assertion violations: the retries are
            exhausted, so take the step with the warnings, as a
@@ -1072,7 +1072,7 @@ bool solve_comp_approx(PetscBool nohsl,PetscInt VecSize,PetscInt dnz,PetscInt* d
     }
   if(deloff<0&&rank==rank_hsl) {
     errmsg("Error: complementarity approximate run without a del_comp@ variable (internal)\n");
-    MPI_Abort(PETSC_COMM_WORLD,1);
+    teems_abort();
   }
 
   elem_vals1=elem_vals+ncofele;
@@ -1099,7 +1099,7 @@ bool solve_comp_approx(PetscBool nohsl,PetscInt VecSize,PetscInt dnz,PetscInt* d
     /* per-step states + E_$comp weights from the step-base values
        (a redo re-evaluates the same base: same states, shorter h) */
     if(rank==rank_hsl) {
-      if(comp_states_set(sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals)<0)MPI_Abort(PETSC_COMM_WORLD,1);
+      if(comp_states_set(sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals)<0)teems_abort();
     }
     /* a state change moves E_$comp entries between columns: the NDBBD
        cut probed on the old pattern no longer partitions the matrix */

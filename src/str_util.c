@@ -174,7 +174,7 @@ static void fopen_fatal(const char *path, const char *mode, int err) {
   const char *what=(mode[0]=='r'&&strchr(mode,'+')==NULL)?"reading":"writing";
   errmsg("Error: cannot open %s for %s: %s (the solver runs as uid %d; remove or re-own files another user left in the run directory, or make it writable)\n",path,what,strerror(err),(int)getuid());
   fflush(stdout);
-  MPI_Abort(PETSC_COMM_WORLD,1);
+  teems_abort();
 }
 
 /* Checked allocation for the TAB transforms (loop and PostSim name
@@ -185,7 +185,7 @@ void *teems_realloc(void *p, size_t n, const char *what) {
   if (q==NULL) {
     errmsg("Error: memory allocation failed for %s (%zu bytes); the run does not fit in memory on this host\n",what,n);
     fflush(stdout);
-    MPI_Abort(PETSC_COMM_WORLD,1);
+    teems_abort();
   }
   return q;
 }

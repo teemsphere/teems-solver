@@ -12,7 +12,7 @@ static void block_empty_abort(const char *what,int blk,int rank,int nrow,int nco
   if(nz>0||(nrow==0&&ncol==0))return;
   errmsg("Error: %s %d of rank %d (%d equations x %d variables) has no entries: none of its equations references one of its variables, so the partition cannot be spread over this many tasks; use fewer tasks (at most the number of coupled blocks) or another matrix_method\n",what,blk,rank,nrow,ncol);
   fflush(stdout);
-  MPI_Abort(PETSC_COMM_WORLD,1);
+  teems_abort();
 }
 
 /* Stage a block's CSR as 1-based COO for the rank probe, without the
@@ -144,11 +144,11 @@ int dbbd_order(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscIn
     }
     if(insize[6]==-3) {
       errmsg("Error: the MA48 workspace for %s did not converge after %d growth attempts; raise the initial workspace (laA/laD/laDi) or use a bordered matrix_method (\"SBBD\" or \"DBBD\")\n",probe_onfail_scope_label(),tries);
-      MPI_Abort(PETSC_COMM_WORLD,1);
+      teems_abort();
     }
     if(insize[6]<0) {
       errmsg("Error: MA48 could not factorize diagonal block %d of rank %d (%d x %d, %d entries) in the rank probe (INFO(1) = %d); use fewer tasks or another matrix_method\n",j1,(int)rank,nrow,ncol,nz,insize[6]);
-      MPI_Abort(PETSC_COMM_WORLD,1);
+      teems_abort();
     }
     for(i=0; i<nrow; i++) {
       row_order1[i+counteq[j1+begblock[rank]]]=irn1[i]-1;
@@ -437,11 +437,11 @@ int ndbbd_order_presolve(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt ran
       }
       if(insize[6]==-3) {
         errmsg("Error: the MA48 workspace for %s did not converge after %d growth attempts; raise the initial workspace (laA/laD/laDi) or use a bordered matrix_method (\"SBBD\" or \"DBBD\")\n",probe_onfail_scope_label(),tries);
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
       }
       if(insize[6]<0) {
         errmsg("Error: MA48 could not factorize a regional diagonal block of rank %d (%d x %d, %d entries) in the rank probe (INFO(1) = %d); use fewer tasks or another matrix_method\n",(int)rank,nrow,ncol,nz,insize[6]);
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
       }
       bfirst=counteq[j3+begblock[rank]];
       for(i=0; i<nrow; i++) {
@@ -654,7 +654,7 @@ int ndbbd_order(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscI
       if((presolfile=teems_fopen(filename, "r"))==NULL) {
         errmsg("Error: cannot open interface file %s; the presolve pass did not produce it (check scratch space)\n",filename);
         fflush(stdout);
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
       }
       scratch_read_n(insized, sizeof(int), 5, presolfile,filename);
       fclose(presolfile);
@@ -668,7 +668,7 @@ int ndbbd_order(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscI
         if((presolfile=teems_fopen(filename, "r"))==NULL) {
           errmsg("Error: cannot open interface file %s\n",filename);
           fflush(stdout);
-          MPI_Abort(PETSC_COMM_WORLD,1);
+          teems_abort();
         }
         scratch_read_n(irn1, sizeof(int), insized[0], presolfile,filename);
         fclose(presolfile);
@@ -679,7 +679,7 @@ int ndbbd_order(Mat A, offset_t VecSize, PetscInt mpisize, PetscInt rank, PetscI
         if((presolfile=teems_fopen(filename, "r"))==NULL) {
           errmsg("Error: cannot open interface file %s\n",filename);
           fflush(stdout);
-          MPI_Abort(PETSC_COMM_WORLD,1);
+          teems_abort();
         }
         /* the column permutation has ncol (insized[1]) entries, as the
            presolve wrote it; it was read and applied with the row count

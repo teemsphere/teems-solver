@@ -1199,7 +1199,7 @@ static int chain_refs_scan(char *fname, set_def *sets, dim_t nset, array_def *co
          before the rewrite overruns the statement buffer (audit S3-C1) */
       if (readitem==NULL||(readitem-line)+strlen(readitem)+strlen(vname)+4>=sizeof(line)) {
         errmsg("Error: equation statement too long for the partition probe: the left-hand side is rewritten onto the right, which exceeds the %d-character statement buffer; shorten the left-hand side: %.80s...\n",TABREADLINE,linecopy);
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
       }
       strcat(readitem,"-");
       strcat(readitem,"(");
@@ -1221,7 +1221,7 @@ static int chain_refs_scan(char *fname, set_def *sets, dim_t nset, array_def *co
          before the rewrite overruns the statement buffer (audit S3-C1) */
       if (readitem==NULL||(readitem-line)+strlen(readitem)+strlen(vname)+4>=sizeof(line)) {
         errmsg("Error: equation statement too long for the partition probe: the left-hand side is rewritten onto the right, which exceeds the %d-character statement buffer; shorten the left-hand side: %.80s...\n",TABREADLINE,linecopy);
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
       }
       strcat(readitem,"-");
       strcat(readitem,"(");
@@ -1421,9 +1421,9 @@ static int partition_probe(char *tabfile, set_def *sets, dim_t nset, set_element
   offset_t emin=-1;
   partition_flags_apply(sets,nset,cand);
   if(nesteddbbd==1) {
-    if(!equation_order_read_nested(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,closure_vals,var_inter,ele_inter,eq_defs,eq_intertemp,eq_time,eq_reg,cand,alltimeset,orderintra,orderreg))MPI_Abort(PETSC_COMM_WORLD,1);
+    if(!equation_order_read_nested(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,closure_vals,var_inter,ele_inter,eq_defs,eq_intertemp,eq_time,eq_reg,cand,alltimeset,orderintra,orderreg))teems_abort();
   }
-  else if(!equation_order_read(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,closure_vals,var_inter,ele_inter,eq_defs,eq_intertemp,eq_time,eq_reg,cand,alltimeset,orderintra,orderreg))MPI_Abort(PETSC_COMM_WORLD,1);
+  else if(!equation_order_read(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,closure_vals,var_inter,ele_inter,eq_defs,eq_intertemp,eq_time,eq_reg,cand,alltimeset,orderintra,orderreg))teems_abort();
   block_var_count(vars,nvar,sets,set_elems,closure_vals,var_inter,ele_inter,orderintra,orderreg,alltimeset,cand,nreg,nesteddbbd,countvar);
   block_eq_count(eq_defs,neq,eq_intertemp,eq_time,eq_reg,sets,set_elems,alltimeset,nreg,nesteddbbd,ndblock,counteq);
   partition_flags_clear(sets,nset);
@@ -1776,7 +1776,7 @@ int main(int argc,char **args) {
     PetscOptionsGetInt(NULL,NULL,"-random_seed",&rs,&rset);
     if(rset&&rs<0) {
       errmsg("Error: -random_seed must be a non-negative integer, got %ld\n",(long)rs);
-      MPI_Abort(PETSC_COMM_WORLD,1);
+      teems_abort();
     }
     teems_random_seed=(long)rs;
   }
@@ -2322,10 +2322,10 @@ int main(int argc,char **args) {
   char subfile[TABREADLINE]="";
   int has_sub=0;
   if(rank==0) {
-    if(manifest_check(filename)<0)MPI_Abort(PETSC_COMM_WORLD,1);
+    if(manifest_check(filename)<0)teems_abort();
     has_sub=cmf_subtotals_file(filename,subfile);
     niodata=cmf_count_files(filename,"iodata");
-    if(niodata==-1)MPI_Abort(PETSC_COMM_WORLD,1);/* rank 0 only: the other ranks wait in the Bcast below */
+    if(niodata==-1)teems_abort();/* rank 0 only: the other ranks wait in the Bcast below */
     noutdata=cmf_count_files(filename,"outdata");
     nsoldata=cmf_count_files(filename,"soldata");
   }
@@ -2342,7 +2342,7 @@ int main(int argc,char **args) {
     if(why!=NULL) {
       if(rank==0)errmsg("Error: subtotals (GEMPACK manual 29) are not available with %s; use matrix_method LU, SBBD or DBBD with the Johansen, Euler, midpoint or Gragg method\n",why);
       MPI_Barrier(PETSC_COMM_WORLD);
-      MPI_Abort(PETSC_COMM_WORLD,1);
+      teems_abort();
     }
   }
   if(nohsl) {
@@ -2362,21 +2362,21 @@ int main(int argc,char **args) {
     PetscOptionsGetInt(NULL,NULL,"-assertions",&mopt,NULL);
     if(mopt<0||mopt>2) {
       if(rank==0)errmsg("Error: -assertions must be 0 (off), 1 (warn) or 2 (fatal)\n");
-      MPI_Abort(PETSC_COMM_WORLD,1);
+      teems_abort();
     }
     teems_assertions_mode=(int)mopt;
     mopt=teems_range_test_initial;
     PetscOptionsGetInt(NULL,NULL,"-range_test_initial",&mopt,NULL);
     if(mopt<0||mopt>2) {
       if(rank==0)errmsg("Error: -range_test_initial must be 0 (off), 1 (warn) or 2 (fatal)\n");
-      MPI_Abort(PETSC_COMM_WORLD,1);
+      teems_abort();
     }
     teems_range_test_initial=(int)mopt;
     mopt=teems_range_test_updated;
     PetscOptionsGetInt(NULL,NULL,"-range_test_updated",&mopt,NULL);
     if(mopt<0||mopt>2) {
       if(rank==0)errmsg("Error: -range_test_updated must be 0 (off), 1 (warn) or 2 (fatal)\n");
-      MPI_Abort(PETSC_COMM_WORLD,1);
+      teems_abort();
     }
     teems_range_test_updated=(int)mopt;
     mopt=postsim_on;
@@ -2386,36 +2386,36 @@ int main(int argc,char **args) {
   if(rank==rank_hsl) {
     cmf_read(filename,niodata,iodata,tabfile,closure,shock);
     for (nj=0; nj<niodata+noutdata+nsoldata; nj++) logmsg(2,"rank %d logname %s fname %s\n",rank,iodata[nj].logname,iodata[nj].filname);
-    if(tab_preprocess(tabfile,newtabfile)==-1)MPI_Abort(PETSC_COMM_WORLD,1);
+    if(tab_preprocess(tabfile,newtabfile)==-1)teems_abort();
     /* audit A6: fail fast on unsupported/unknown Default statements
        before any reader applies them positionally */
-    if(tab_defaults_validate(newtabfile)==-1)MPI_Abort(PETSC_COMM_WORLD,1);
+    if(tab_defaults_validate(newtabfile)==-1)teems_abort();
     /* Tier 0: route POSTSIM sections to the _ps companion, consumed
        once after the solve */
     strcpy(psfile,newtabfile);
     strcat(psfile,"_ps");
     npostsim=tab_postsim_split(newtabfile,psfile);
     /* fail-fast: exit 0 here used to mask section errors */
-    if(npostsim<0)MPI_Abort(PETSC_COMM_WORLD,1);
+    if(npostsim<0)teems_abort();
     /* conditional set builders (manual 10.1.3): data-dependent
        conditions evaluated from the input files, statements rewritten
        into explicit lists + subset relations BEFORE set resolution */
-    if(tab_setbuilder_transform(newtabfile,iodata,niodata)<0)MPI_Abort(PETSC_COMM_WORLD,1);
+    if(tab_setbuilder_transform(newtabfile,iodata,niodata)<0)teems_abort();
     /* C1: parse Complementarity statements, validate (10.17/11.14)
        and replace them with their derived levels statements (51.7.2)
        BEFORE the levels transform expands those; untouched when the
        TAB has none (design doc section 7) */
-    if(tab_complementarity_transform(newtabfile)<0)MPI_Abort(PETSC_COMM_WORLD,1);
+    if(tab_complementarity_transform(newtabfile)<0)teems_abort();
     /* C0: expand Formula&Equation, pair levels variables with value
        coefficients + updates, linearize Equation (levels) by change
        differentiation; untouched when the TAB has no levels
        statements (design doc section 5) */
-    if(tab_levels_transform(newtabfile)<0)MPI_Abort(PETSC_COMM_WORLD,1);
+    if(tab_levels_transform(newtabfile)<0)teems_abort();
     /* loops (manual 11.18): marker statements, body statements over
        the loop, BREAK/CYCLE as probe assertions; a PostSim section's
        loops are in the companion file */
-    if(tab_loop_transform(newtabfile)<0)MPI_Abort(PETSC_COMM_WORLD,1);
-    if(npostsim>0&&tab_loop_transform(psfile)<0)MPI_Abort(PETSC_COMM_WORLD,1);
+    if(tab_loop_transform(newtabfile)<0)teems_abort();
+    if(npostsim>0&&tab_loop_transform(psfile)<0)teems_abort();
   }
 
   strcpy(tabfile,newtabfile);
@@ -2441,7 +2441,7 @@ int main(int argc,char **args) {
       if(why!=NULL) {
         if(rank==0)errmsg("Error: %s needs a simulation, and this run has none (%s); drop %s or give the TAB its equations and a closure\n",why,neqstmt==0?"the TAB has no equations":"-solmed nosim",why);
         MPI_Barrier(PETSC_COMM_WORLD);
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
       }
       if(rank==0&&neqstmt>0)logmsg(1,"No-simulation run (-solmed nosim): %ld equation statement(s) are not solved; reads, formulas, assertions and writes only (GEMPACK manual 25.1.8)\n",neqstmt);
     }
@@ -2463,8 +2463,8 @@ int main(int argc,char **args) {
     for(j=0; j<MAXSUPSET; j++)sets[i].subsetid[j]=-1;
   }
   if(rank==0) {
-    if(sets_read(tabfile,niodata,iodata, sets,nset)==-1)MPI_Abort(PETSC_COMM_WORLD,1);
-    if(sets_read_intertemporal(tabfile,niodata,iodata, sets,nset)==-1)MPI_Abort(PETSC_COMM_WORLD,1);
+    if(sets_read(tabfile,niodata,iodata, sets,nset)==-1)teems_abort();
+    if(sets_read_intertemporal(tabfile,niodata,iodata, sets,nset)==-1)teems_abort();
     for (i=0; i<teems_loop_nsyn; i++) {
       set_def *ls=&sets[nset-teems_loop_nsyn+i];
       dim_t par;
@@ -2473,18 +2473,18 @@ int main(int argc,char **args) {
       for (par=0; par<nset-teems_loop_nsyn; par++) if (strcmp(sets[par].setname,teems_loop_syns[i].parent)==0) break;
       if (par==nset-teems_loop_nsyn) {
         errmsg("Error: Loop over %s, which is not a declared set (GEMPACK manual 11.18)\n",teems_loop_syns[i].parent);
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
       }
       ls->size=(sets[par].size>0)?1:0;
     }
     for (i=0; i<nset; i++) {
       if(sets[i].size<0){
         errmsg("Error: set %s has a negative size in TAB file\n",sets[i].setname);
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
       }
       if(sets[i].size>MAXSETSIZE){
         errmsg("Error: set %s declares %ld elements, above the %d limit; check the element count in its data-file header\n",sets[i].setname,(long)sets[i].size,MAXSETSIZE);
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
       }
       sets[i].offset=nsetspace;
       nsetspace=nsetspace+sets[i].size;
@@ -2504,7 +2504,7 @@ int main(int argc,char **args) {
      checked above. */
   if (nsetspace>0&&set_elems==NULL) {
     errmsg("Error: cannot allocate %ld set elements; check the element counts the data-file headers declare\n",(long)nsetspace);
-    MPI_Abort(PETSC_COMM_WORLD,1);
+    teems_abort();
   }
   teems_sets=sets;
   teems_nset=nset;
@@ -2537,12 +2537,12 @@ int main(int argc,char **args) {
         if (dim1<0||dim1>sets[i].size) {
           errmsg("Error: header \"%s\" in %s supplies %ld elements but set %s is declared with %ld in the TAB file\n",
                  vname,iodata[sets[i].fileid].filname,(long)dim1,sets[i].setname,(long)sets[i].size);
-          MPI_Abort(PETSC_COMM_WORLD,1);
+          teems_abort();
         }
         datafile_labels *matvar1= (datafile_labels *) calloc (dim1,sizeof(datafile_labels));
         if (dim1>0&&matvar1==NULL) {
           errmsg("Error: out of memory reading the elements of set %s\n",sets[i].setname);
-          MPI_Abort(PETSC_COMM_WORLD,1);
+          teems_abort();
         }
         datafile_read_labels(vname,iodata[sets[i].fileid].filname,dim1,matvar1);
         for (j=0; j<dim1; j++) {
@@ -2584,7 +2584,7 @@ int main(int argc,char **args) {
                 readitem = strtok(copyline,",");
                 if (readitem==NULL||strlen(readitem)>=NAMESIZE) {
                   errmsg("Error: malformed element list for set %s\n",sets[i].setname);
-                  MPI_Abort(PETSC_COMM_WORLD,1);
+                  teems_abort();
                 }
                 strcpy(set_elems[sets[i].offset].setele,readitem);
                 set_elems[sets[i].offset].superset_pos[0]=0;
@@ -2592,7 +2592,7 @@ int main(int argc,char **args) {
                   readitem = strtok(NULL,",");
                   if (readitem==NULL||strlen(readitem)>=NAMESIZE) {
                     errmsg("Error: malformed element list for set %s\n",sets[i].setname);
-                    MPI_Abort(PETSC_COMM_WORLD,1);
+                    teems_abort();
                   }
                   strcpy(set_elems[j+sets[i].offset].setele,readitem);
                   set_elems[j+sets[i].offset].superset_pos[0]=j;
@@ -2607,7 +2607,7 @@ int main(int argc,char **args) {
     subsets_read(tabfile, set_elems, sets,nset);
     j2=1;
     while(j2==1)for(i=1; i<MAXSUPSET; i++)subset_map_build(set_elems,sets,nset,&j2); //printf("check %d\n",i);}
-    if(tab_loop_sets_link(set_elems,sets,nset)<0)MPI_Abort(PETSC_COMM_WORLD,1);
+    if(tab_loop_sets_link(set_elems,sets,nset)<0)teems_abort();
     ndblock1=ndblock;
     /* MAPPING statements (manual 11.9): declarations + by_elements
        values, resolved against the set elements built above so they
@@ -2627,7 +2627,7 @@ int main(int argc,char **args) {
     /* C1: complementarity quantifier sets vs the variable's and
        bounds' argument sets (11.14 points 2-3) -- needs the set
        elements built above for the ordered-subset walk */
-    if(complementarities_validate(sets,nset,set_elems)==-1)MPI_Abort(PETSC_COMM_WORLD,1);
+    if(complementarities_validate(sets,nset,set_elems)==-1)teems_abort();
   }
   MPI_Barrier(PETSC_COMM_WORLD);
   if(nohsl) {
@@ -2700,7 +2700,7 @@ int main(int argc,char **args) {
   if(rank==0) {
     ncofele=coefficients_read(tabfile,commsyntax,coefs,ncof,sets,nset);
     /* fail-fast: exit 0 here used to mask declaration errors */
-    if(ncofele==-1)MPI_Abort(PETSC_COMM_WORLD,1);
+    if(ncofele==-1)teems_abort();
     /* PostSim residuals: mark split-recorded PostSim coefficients for
        the 12.2.2 LHS and 12.2.3 Read-target rules */
     postsim_mark_coefs(coefs,ncof);
@@ -2740,11 +2740,11 @@ int main(int argc,char **args) {
   logmsg(2,"nvarele %ld\n",nvarele);
   if(rank==0) {
     nvarele=variables_read(tabfile,commsyntax,vars,nvar,sets,nset);
-    if(nvarele==-1)MPI_Abort(PETSC_COMM_WORLD,1);
+    if(nvarele==-1)teems_abort();
     /* 11.2.1 name uniqueness (the 12.2.2 name-resolution spec pass):
        a coefficient/variable/set name collision would silently bind
        whichever list is searched first */
-    if(names_validate(sets,nset,coefs,ncof,vars,nvar,maps,nmap)==-1)MPI_Abort(PETSC_COMM_WORLD,1);
+    if(names_validate(sets,nset,coefs,ncof,vars,nvar,maps,nmap)==-1)teems_abort();
     if(nmap>0)mapping_use_guards(tabfile,maps,nmap);
     nvarele1=nvarele;
   }
@@ -2772,11 +2772,11 @@ int main(int argc,char **args) {
      segfaulted in data_read_files). */
   if ((ncofele+nvarele)>0&&elem_vals==NULL) {
     errmsg("Error: cannot allocate %ld coefficient and variable elements; check the element counts the data-file headers declare\n",(long)(ncofele+nvarele));
-    MPI_Abort(PETSC_COMM_WORLD,1);
+    teems_abort();
   }
   if ((ncofele>0&&coef_store==NULL)||(nvarele>0&&var_store==NULL)) {
     errmsg("Error: cannot allocate the coefficient (%ld) and variable (%ld) value stores; check the element counts the data-file headers declare\n",(long)ncofele,(long)nvarele);
-    MPI_Abort(PETSC_COMM_WORLD,1);
+    teems_abort();
   }
   logmsg(2,"rankasd %d nvar %ld\n",rank,nvar);
   if(rank==0) {
@@ -2819,7 +2819,7 @@ int main(int argc,char **args) {
   if(rank==0) {
     strcpy(commsyntax,"read");
     /* fail-fast: exit 0 here used to mask read errors */
-    if(data_read_files(tabfile,niodata,iodata,commsyntax,sets,nset,set_elems,coefs,ncof,coef_store,ncofele,vars,nvar,var_store,nvarele)==-1)MPI_Abort(PETSC_COMM_WORLD,1);
+    if(data_read_files(tabfile,niodata,iodata,commsyntax,sets,nset,set_elems,coefs,ncof,coef_store,ncofele,vars,nvar,var_store,nvarele)==-1)teems_abort();
   }
   //**************************************************************************************
   //********************* END READ VARIABLE, COEFFICIENT VALUE FROM FILE******************
@@ -2851,26 +2851,26 @@ int main(int argc,char **args) {
     teems_xac_sel=(unsigned char *) malloc (nvarele>0?nvarele:1);
     if(xacvars_resolve(teems_xacvars,vars,nvar,nvarele,teems_xac_sel,rank)<0) {
       MPI_Barrier(PETSC_COMM_WORLD);
-      MPI_Abort(PETSC_COMM_WORLD,1);
+      teems_abort();
     }
   }
   if(rank==0&&solmethod!=SM_NOSIM) {
     strcpy(commsyntax,"exogenous");
     nexo=closure_read(closure,commsyntax,closure_vals,vars,nvar,sets,nset,set_elems);
-    if(nexo==-1)MPI_Abort(PETSC_COMM_WORLD,1);
+    if(nexo==-1)teems_abort();
     nexo1=nexo;
     strcpy(commsyntax,"shock");
-    if(shocks_read(shock,commsyntax,closure_vals,nvarele,vars,nvar,sets,nset,set_elems,subints)==-1)MPI_Abort(PETSC_COMM_WORLD,1);
-    if(shocks_check_floor(vars,nvar,subints,solmethod)<0)MPI_Abort(PETSC_COMM_WORLD,1);
+    if(shocks_read(shock,commsyntax,closure_vals,nvarele,vars,nvar,sets,nset,set_elems,subints)==-1)teems_abort();
+    if(shocks_check_floor(vars,nvar,subints,solmethod)<0)teems_abort();
     if(has_sub) {
-      if(subtotals_read(subfile,vars,nvar,sets,nset,set_elems,nvarele)<0)MPI_Abort(PETSC_COMM_WORLD,1);
+      if(subtotals_read(subfile,vars,nvar,sets,nset,set_elems,nvarele)<0)teems_abort();
       logmsg(1,"Subtotals: %d shock group(s) from %s (GEMPACK manual 29)\n",teems_nsub,subfile);
     }
     /* backsolve statements: mark the eliminated elements (the flags ride
        the closure broadcast) and check the condensed system's references
        before any equation scan runs with the filter active */
-    if(backsolve_read(tabfile,vars,nvar,closure_vals)==-1)MPI_Abort(PETSC_COMM_WORLD,1);
-    if(backsolve_validate_refs(tabfile,vars)==-1)MPI_Abort(PETSC_COMM_WORLD,1);
+    if(backsolve_read(tabfile,vars,nvar,closure_vals)==-1)teems_abort();
+    if(backsolve_validate_refs(tabfile,vars)==-1)teems_abort();
     if(nbacksolve>0)logmsg(1,"Backsolving %d variables (%ld elements) from retained defining equations\n",nbacksolve,nbselems);
     /* C1/C2: auto-exogenize del_comp@ and the dummies of ACTIVE
        (X-endogenous) complementarity components; inert components
@@ -2878,8 +2878,8 @@ int main(int argc,char **args) {
        (51.7.2 (c)/(d); design doc sections 7-8). The marks and the
        nexo adjustment ride the closure broadcast below; the 11.14.1
        backsolve guards stay fatal. */
-    if(comp_closure_check(closure_vals,vars,nvar,&nexo,sets,nset,set_elems)==-1)MPI_Abort(PETSC_COMM_WORLD,1);
-    if(teems_newton&&newton_closure_check(closure_vals,vars,nvar,&nexo)==-1)MPI_Abort(PETSC_COMM_WORLD,1);
+    if(comp_closure_check(closure_vals,vars,nvar,&nexo,sets,nset,set_elems)==-1)teems_abort();
+    if(teems_newton&&newton_closure_check(closure_vals,vars,nvar,&nexo)==-1)teems_abort();
     nexo1=nexo;
   }
   /* every rank dispatches on active-mode complementarities (C2) */
@@ -2890,7 +2890,7 @@ int main(int argc,char **args) {
     if(hc) {
       if(rank==0)errmsg("Error: subtotals (GEMPACK manual 29) are not available in a model with complementarities yet: the approximate and accurate runs change the closure and the states between steps, so the step right-hand sides are not the shocks alone (GEMPACK manual 52)\n");
       MPI_Barrier(PETSC_COMM_WORLD);
-      MPI_Abort(PETSC_COMM_WORLD,1);
+      teems_abort();
     }
   }
   /* approximate/accurate-run controls (manual 51.6 semantics, TEEMS
@@ -2925,7 +2925,7 @@ int main(int argc,char **args) {
     PetscOptionsGetInt(NULL,NULL,"-comp_steps",&iopt,NULL);
     if(iopt<1) {
       if(rank==0)errmsg("Error: -comp_steps must be a positive Euler step count (GEMPACK manual 51.6)\n");
-      MPI_Abort(PETSC_COMM_WORLD,1);
+      teems_abort();
     }
     comp_steps=(int)iopt;
     iopt=comp_redo;
@@ -2934,7 +2934,7 @@ int main(int argc,char **args) {
     PetscOptionsGetReal(NULL,NULL,"-comp_redo_min_frac",&minfrac_opt,NULL);
     if(minfrac_opt<=0||minfrac_opt>1) {
       if(rank==0)errmsg("Error: -comp_redo_min_frac must lie in (0,1] (GEMPACK manual 51.6)\n");
-      MPI_Abort(PETSC_COMM_WORLD,1);
+      teems_abort();
     }
     comp_minfrac=(double)minfrac_opt;
     iopt=comp_do_approx;
@@ -2949,7 +2949,7 @@ int main(int argc,char **args) {
     comp_sberr_warn=iopt?1:0;
     if(!comp_do_approx&&!comp_do_acc) {
       if(rank==0)errmsg("Error: -comp_do_approx and -comp_do_acc cannot both be 0\n");
-      MPI_Abort(PETSC_COMM_WORLD,1);
+      teems_abort();
     }
     /* state flips change the filtered nonzero pattern between steps,
        which breaks the persistent-pivot refactorization */
@@ -3219,9 +3219,9 @@ comp_accurate_reentry:
   offset_t nintraendovar;
   if(rank==rank_hsl) {
     if(nesteddbbd==1) {
-      if(!equation_order_read_nested(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,closure_vals,var_inter,ele_inter,eq_defs,eq_intertemp,eq_time,eq_reg,allregset,alltimeset,orderintra,orderreg))MPI_Abort(PETSC_COMM_WORLD,1);
+      if(!equation_order_read_nested(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,closure_vals,var_inter,ele_inter,eq_defs,eq_intertemp,eq_time,eq_reg,allregset,alltimeset,orderintra,orderreg))teems_abort();
     }
-    else if(!equation_order_read(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,closure_vals,var_inter,ele_inter,eq_defs,eq_intertemp,eq_time,eq_reg,allregset,alltimeset,orderintra,orderreg))MPI_Abort(PETSC_COMM_WORLD,1);
+    else if(!equation_order_read(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,closure_vals,var_inter,ele_inter,eq_defs,eq_intertemp,eq_time,eq_reg,allregset,alltimeset,orderintra,orderreg))teems_abort();
     if(alltimeset>=0||allregset>=0)for(i=0; i<neq; i++)eq_intertemp[i]=!eq_intertemp[i];
     /* initial closure check (manual 23.2.7): the number of endogenous
        components must equal the number of equation rows, checked
@@ -3232,7 +3232,7 @@ comp_accurate_reentry:
       for(i=0; i<neq; i++)neqrows+=eq_defs[i].nelem;
       if(neqrows!=(offset_t)VecSize) {
         errmsg("Error: initial closure check: %ld endogenous components is not equal to the number of equation rows (%ld); %ld variable components, %ld exogenous, %ld backsolved -- make %ld more component(s) %s (GEMPACK manual 23.2.7)\n",(long)VecSize,(long)neqrows,(long)nvarele,(long)nexo,(long)nbselems,(long)(neqrows>(offset_t)VecSize?neqrows-(offset_t)VecSize:(offset_t)VecSize-neqrows),neqrows>(offset_t)VecSize?"endogenous":"exogenous");
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
       }
     }
     j0=0;
@@ -3924,7 +3924,7 @@ comp_accurate_reentry:
       /* capture the target states from the current values (post-
          approximate, or pre-sim when the approximate run was skipped) */
       if(rank==rank_hsl) {
-        if(comp_accurate_prepare(sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals)<0)MPI_Abort(PETSC_COMM_WORLD,1);
+        if(comp_accurate_prepare(sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals)<0)teems_abort();
       }
       /* restore the pre-simulation values: the accurate run solves the
          original data with the modified closure (drivers re-snapshot
@@ -3942,7 +3942,7 @@ comp_accurate_reentry:
          under nohsl -- so the numbering below reads the same closure
          it read on pass 1 */
       if(rank==rank_hsl) {
-        if(comp_accurate_closure(closure_vals,vars,nvar,coefs,ncof,sets,nset,set_elems,elem_vals)<0)MPI_Abort(PETSC_COMM_WORLD,1);
+        if(comp_accurate_closure(closure_vals,vars,nvar,coefs,ncof,sets,nset,set_elems,elem_vals)<0)teems_abort();
         /* a percentage-change complementarity variable whose bound is 0
            gets a -100 percent shock in the accurate run (51.7.1); under
            Gragg its update left the reals with no named cause, and the
@@ -3955,7 +3955,7 @@ comp_accurate_reentry:
             char lab[4*NAMESIZE];
             array_element_label(&vars[i],e,lab,sizeof(lab));
             errmsg("Error: the complementarity accurate run (GEMPACK manual 51.7.1) shocks %s by -100 percent to reach its bound of zero, which the %s method cannot take (GEMPACK manual 30.2); declare %s (change,levels), or use the midpoint or Euler method\n",lab,solmed,vars[i].cofname);
-            MPI_Abort(PETSC_COMM_WORLD,1);
+            teems_abort();
           }
         }
       }
@@ -4019,7 +4019,7 @@ comp_teardown:
       if(comp_sberr_warn)printf("Warning: %ld complementarity state/bound error(s) after the accurate run (treated as warnings per -comp_sberr_warn; check the log carefully, GEMPACK manual 51.6)\n",(long)comp_nbad);
       else {
         errmsg("Error: %ld complementarity state/bound error(s) after the accurate run; rerun with more Euler steps (-comp_steps) or smaller shocks, or downgrade with -comp_sberr_warn 1 (GEMPACK manual 51.5.4/51.6)\n",(long)comp_nbad);
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
       }
     }
     comp_states_free();
@@ -4251,7 +4251,7 @@ comp_teardown:
       teems_ps_pass=1;
       /* Reads, Formulas and Assertions in file order (manual 12.2.1);
          the Read targets are checked first (12.2.3) */
-      if(postsim_reads_execute(psfile,niodata,iodata,sets,nset,set_elems,coefs,ncof,ncofele,vars,nvar,nvarele,elem_vals)==-1)MPI_Abort(PETSC_COMM_WORLD,1);
+      if(postsim_reads_execute(psfile,niodata,iodata,sets,nset,set_elems,coefs,ncof,ncofele,vars,nvar,nvarele,elem_vals)==-1)teems_abort();
       ord_plan_build(psfile,1,coefs,ncof,vars,nvar);
       strcpy(commsyntax,"formula");
       statements_execute(psfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,true,0);
@@ -4266,7 +4266,7 @@ comp_teardown:
     if(cofdump&&rank==0&&elem_vals!=NULL) {
       for (i=niodata+noutdata; i<niodata+noutdata+nsoldata; i++)
         if (strcmp("solfiles",iodata[i].logname)==0)break;
-      if(coefficients_dump(i<niodata+noutdata+nsoldata?iodata[i].filname:"solution",coefs,ncof,ncofele,elem_vals))MPI_Abort(PETSC_COMM_WORLD,1);
+      if(coefficients_dump(i<niodata+noutdata+nsoldata?iodata[i].filname:"solution",coefs,ncof,ncofele,elem_vals))teems_abort();
       cofdumped=1;
     }
     if(nowrites==0&&rank==0)for(i=0; i<noutdata; i++){

@@ -129,7 +129,7 @@ static int ndbbd_team_cap(int region,const char *name,int want,double per_thread
 static void alloc_fatal(const char *what) {
   errmsg("Error: memory allocation failed for %s; the run does not fit in memory on this rank (use fewer threads or tasks, or a bigger host)\n",what);
   fflush(stdout);
-  MPI_Abort(PETSC_COMM_WORLD,1);
+  teems_abort();
 }
 /* a scratch read that must deliver every record: a short read (a
    truncated handoff file) used to be noticed only at zero records and
@@ -139,7 +139,7 @@ size_t scratch_read_n(void *p,size_t esz,size_t n,FILE *fp,const char *fn) {
   if(got!=n) {
     errmsg("Error: short read on scratch file %s (%ld of %ld records); the file is truncated (a scratch write likely failed earlier, or the scratch filesystem was cleared)\n",fn,(long)got,(long)n);
     fflush(stdout);
-    MPI_Abort(PETSC_COMM_WORLD,1);
+    teems_abort();
   }
   return got;
 }
@@ -148,7 +148,7 @@ static FILE *scratch_open(const char *fn,const char *mode) {
   if(fp==NULL) {
     errmsg("Error: cannot open scratch file %s (%s); the scratch filesystem may be full or unwritable - free space there or point -tempdir at a larger filesystem\n",fn,strerror(errno));
     fflush(stdout);
-    MPI_Abort(PETSC_COMM_WORLD,1);
+    teems_abort();
   }
   return fp;
 }
@@ -156,7 +156,7 @@ static void scratch_write(const void *p,size_t esz,size_t n,FILE *fp,const char 
   if(fwrite(p,esz,n,fp)!=n) {
     errmsg("Error: short write on scratch file %s (%s); the scratch filesystem is likely full - free space there or point -tempdir at a larger filesystem\n",fn,strerror(errno));
     fflush(stdout);
-    MPI_Abort(PETSC_COMM_WORLD,1);
+    teems_abort();
   }
 }
 
@@ -317,7 +317,7 @@ static void dbbd_fh_factors(int j1,int **irn,int **keep,solve_real **va) {
     FILE *fp1=scratch_open(dfh.fn01[j1],"rb"),*fp2=scratch_open(dfh.fn02[j1],"rb"),*fp3=scratch_open(dfh.fn03[j1],"rb");
     if(fp1==NULL||fp2==NULL||fp3==NULL) {
       errmsg("Error: cannot open the kept DBBD factor files for block %d (%s)\n",j1,dfh.fn01[j1]);
-      MPI_Abort(PETSC_COMM_WORLD,1);
+      teems_abort();
     }
     *irn=(int*)calloc(la1,sizeof(int));
     *keep=(int*)calloc(nk,sizeof(int));
@@ -1065,7 +1065,7 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
   vecbivisize=((long int)bivirowsize)*((long int)bivicolsize);
   if(vecbivisize<0) {
     errmsg("Error: interface problem size overflow (negative vecbivisize); the border is too large\n");
-    MPI_Abort(PETSC_COMM_WORLD,1);
+    teems_abort();
   }
   solve_real *vecbivi= (solve_real *) ma48_alloc(vecbivisize,sizeof(solve_real));
   logmsg(2,"vecbivisize %ld rank %d\n",vecbivisize,rank);
@@ -1222,7 +1222,7 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
             errmsg("Error: the MA48 workspace for %s did not converge after %d growth attempts; raise the initial workspace (laA/laD/laDi) or re-run with fastrefac = FALSE\n",probe_onfail_scope_label(),tries);
           else
             errmsg("Error: MA48 could not factorize %s after repeated retries (the fast refactorization was declined each time); re-run with fastrefac = FALSE, or use a different matrix_method\n",probe_onfail_scope_label());
-          MPI_Abort(PETSC_COMM_WORLD,1);
+          teems_abort();
         }
       }
       else {
@@ -1250,7 +1250,7 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
       }
       if(insize[j1*insizes+17]==-3) {
         errmsg("Error: the MA48 workspace for %s did not converge after %d growth attempts; raise the initial workspace (laA/laD/laDi) or use a bordered matrix_method (\"SBBD\" or \"DBBD\")\n",probe_onfail_scope_label(),tries);
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
       }
       MatDestroy(&submatA[j1]);
       }
@@ -1587,7 +1587,7 @@ int dbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize,
       }
       if(insizeD[4]==-3) {
         errmsg("Error: the MA48 workspace for %s did not converge after %d growth attempts; raise the initial workspace (laA/laD/laDi) or use a bordered matrix_method (\"SBBD\" or \"DBBD\")\n",probe_onfail_scope_label(),tries);
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
       }
     }
     probe_onfail_scope_clear();
@@ -1835,7 +1835,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
        deadlock; without it another rank's abort kills rank 0 before
        its message is written */
     MPI_Barrier(PETSC_COMM_WORLD);
-    MPI_Abort(PETSC_COMM_WORLD,1);
+    teems_abort();
   }
   nmatin=(nreg+1)*nmatint;
   nmatinplus=(nreg+1)*nmatinplust;
@@ -2274,7 +2274,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
     logmsg(2,"rank %d vecbivisize %ld bivirowsize %d bivicolsize %d\n",rank,vecbivisize,bivirowsize,bivicolsize);
     if(vecbivisize<0) {
       errmsg("Error: interface problem size overflow (negative vecbivisize); the border is too large\n");
-      MPI_Abort(PETSC_COMM_WORLD,1);
+      teems_abort();
     }
     memset(vecbivi,0,vecbivisize*sizeof(solve_real));
     for(j1=0; j1<nreg; j1++) {
@@ -2378,7 +2378,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
         }
         if(redo_io<0) {
           errmsg("Error: MA48 could not factorize %s after repeated retries (the fast refactorization was declined each time); re-run with fastrefac = FALSE, or use a different matrix_method\n",probe_onfail_scope_label());
-          MPI_Abort(PETSC_COMM_WORLD,1);
+          teems_abort();
         }
       }
       else {
@@ -2408,7 +2408,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
       }
       if(insize[j4*insizes+17]==-3) {
         errmsg("Error: the MA48 workspace for %s did not converge after %d growth attempts; raise the initial workspace (laA/laD/laDi) or use a bordered matrix_method (\"SBBD\" or \"DBBD\")\n",probe_onfail_scope_label(),tries);
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
       }
       ndbbd_fac_emit(rank,j4,irn,keep,values,insize[j4*insizes+16],insize[j4*insizes+12]);
       }
@@ -2435,7 +2435,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
          NE = 0 as INFO(1) = -1 without naming the cause */
       errmsg("Error: the interface block of chain block %d on rank %d has no entries (nothing couples that chain block to the border), so the chain partition is degenerate for NDBBD; use SBBD, DBBD or LU\n",(int)j3,(int)rank);
       fflush(stdout);
-      MPI_Abort(PETSC_COMM_WORLD,1);
+      teems_abort();
     }
     #pragma omp critical
     {
@@ -2471,7 +2471,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
       vecbivi=realloc(vecbivi,vecbivi_cap*sizeof(solve_real));
       if(vecbivi==NULL) {
         errmsg("Error: memory allocation failed growing the interface buffer for the border append (rank %d)\n",(int)rank);
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
       }
     }
     nrow=submatAij[j4]->rmap->n;
@@ -2682,7 +2682,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
     if((presolfile=scratch_open(filename, "r"))==NULL) {
       errmsg("Error: cannot open interface file %s; the presolve pass did not produce it (check scratch space)\n",filename);
       fflush(stdout);
-      MPI_Abort(PETSC_COMM_WORLD,1);
+      teems_abort();
     }
     scratch_read_n(insizeda, sizeof(int), 5+nreg*insizes, presolfile,filename);
     fclose(presolfile);
@@ -2751,7 +2751,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
         spec51m_rank_(insized,&cntl4in,irn1,jcn1,vecbivi,irn,jcn,keep,w51,iw51);
         if(insized[6]<0&&insized[6]!=-3) {
           errmsg("Error: MA48 could not factorize the interface block of rank %d (%d x %d, %d entries) in the rank probe (INFO(1) = %d); use fewer tasks or another matrix_method\n",(int)rank,insized[0],insized[1],insized[2],insized[6]);
-          MPI_Abort(PETSC_COMM_WORLD,1);
+          teems_abort();
         }
         if(insized[6]!=-3)break;
         {
@@ -2801,7 +2801,7 @@ int ndbbd_presolve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpis
       }
       if(insized[6]==-3) {
         errmsg("Error: the MA48 workspace for %s did not converge after %d growth attempts; raise the initial workspace (laA/laD/laDi) or use a bordered matrix_method (\"SBBD\" or \"DBBD\")\n",probe_onfail_scope_label(),tries);
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
       }
       ndbbd_cut_iface_put(j3,insized[3],irn,jcn,nrow,ncol);
       }
@@ -2926,7 +2926,7 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
        deadlock; without it another rank's abort kills rank 0 before
        its message is written */
     MPI_Barrier(PETSC_COMM_WORLD);
-    MPI_Abort(PETSC_COMM_WORLD,1);
+    teems_abort();
   }
   nmatin=(nreg+1)*nmatint;
   nmatinplus=(nreg+1)*nmatinplust;
@@ -3387,7 +3387,7 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
     if((presolfile=scratch_open(filename, "r"))==NULL) {
       errmsg("Error: cannot open interface file %s; the presolve pass did not produce it (check scratch space)\n",filename);
       fflush(stdout);
-      MPI_Abort(PETSC_COMM_WORLD,1);
+      teems_abort();
     }
     scratch_read_n(insizeda, sizeof(int), 5+nreg*insizes, presolfile,filename);
     fclose(presolfile);
@@ -3436,7 +3436,7 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
     if((presolfile=scratch_open(filename, "r"))==NULL) {
       errmsg("Error: cannot open interface file %s; the presolve pass did not produce it (check scratch space)\n",filename);
       fflush(stdout);
-      MPI_Abort(PETSC_COMM_WORLD,1);
+      teems_abort();
     }
     scratch_read_n(insizeda, sizeof(int), 5+nreg*insizes, presolfile,filename);
     fclose(presolfile);
@@ -3556,7 +3556,7 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
       }
       if(insize[j4*insizes+17]==-3) {
         errmsg("Error: the MA48 workspace for %s did not converge after %d growth attempts; raise the initial workspace (laA/laD/laDi) or use a bordered matrix_method (\"SBBD\" or \"DBBD\")\n",probe_onfail_scope_label(),tries);
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
       }
       free(sirn);
       free(sjcn);
@@ -3639,7 +3639,7 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
   vecbivisize=((long int)bivirowsize)*((long int)bivicolsize);
   if(vecbivisize<0) {
     errmsg("Error: interface problem size overflow (negative vecbivisize); the border is too large\n");
-    MPI_Abort(PETSC_COMM_WORLD,1);
+    teems_abort();
   }
   solve_real *vecbivi= (solve_real *) ma48_alloc(vecbivisize,sizeof(solve_real));
   logmsg(2,"vecbivisize %ld rank %d\n",vecbivisize,rank);
@@ -4113,7 +4113,7 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
       }
       if(insizeD[4]==-3) {
         errmsg("Error: the MA48 workspace for %s did not converge after %d growth attempts; raise the initial workspace (laA/laD/laDi) or use a bordered matrix_method (\"SBBD\" or \"DBBD\")\n",probe_onfail_scope_label(),tries);
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
       }
     }
     probe_onfail_scope_clear();

@@ -92,7 +92,7 @@ static char *strict_fail(FILE *f,long pos,const strict_spec *strict,const char *
   }
   shown[k]='\0';
   errmsg("Error: %s at line %ld of the %s file (expected %s): %s\n",what,lineno,strict->file,strict->expect,shown);
-  MPI_Abort(PETSC_COMM_WORLD,1);
+  teems_abort();
   return NULL;
 }
 
@@ -538,7 +538,7 @@ int sum_extract(char *formula) {
        statement and the cut below wrote one past it (fuzz batch 13 overflow
        when the statement fills the buffer) */
     errmsg("Error: unbalanced parentheses in sum: %s\n",formula);
-    MPI_Abort(PETSC_COMM_WORLD,1);
+    teems_abort();
   }
   formula[i+1]='\0';
   return 1;
@@ -716,13 +716,13 @@ double teems_value_checked(const char *tok, const char *what, const char *name) 
   int erange,nonfinite=0;
   if (tok==NULL) {
     errmsg("Error: %s for %s is missing\n",what,name);
-    MPI_Abort(PETSC_COMM_WORLD,1);
+    teems_abort();
     return 0.0;
   }
   while (*q==' '||*q=='\t') q++;
   if (*q=='\0') {
     errmsg("Error: %s for %s is empty\n",what,name);
-    MPI_Abort(PETSC_COMM_WORLD,1);
+    teems_abort();
     return 0.0;
   }
   errno=0;
@@ -730,7 +730,7 @@ double teems_value_checked(const char *tok, const char *what, const char *name) 
   erange=(errno==ERANGE);
   if (end==q) {
     errmsg("Error: %s for %s is not a number: %s\n",what,name,tok);
-    MPI_Abort(PETSC_COMM_WORLD,1);
+    teems_abort();
     return 0.0;
   }
   /* the shock reader hands this the tail of its statement, so the value
@@ -740,12 +740,12 @@ double teems_value_checked(const char *tok, const char *what, const char *name) 
   while (*end==' '||*end=='\t'||*end=='\n'||*end=='\r') end++;
   if (*end!='\0') {
     errmsg("Error: %s for %s is not a number: %s\n",what,name,tok);
-    MPI_Abort(PETSC_COMM_WORLD,1);
+    teems_abort();
     return 0.0;
   }
   if (erange) {
     errmsg("Error: %s for %s is out of range: %s\n",what,name,tok);
-    MPI_Abort(PETSC_COMM_WORLD,1);
+    teems_abort();
     return 0.0;
   }
   /* The build is -Ofast, which implies -ffast-math, so isfinite() and
@@ -761,7 +761,7 @@ double teems_value_checked(const char *tok, const char *what, const char *name) 
   }
   if (nonfinite) {
     errmsg("Error: %s for %s is not a finite number: %s\n",what,name,tok);
-    MPI_Abort(PETSC_COMM_WORLD,1);
+    teems_abort();
     return 0.0;
   }
   return v;
@@ -787,7 +787,7 @@ static void rd_put(elem_store *store, offset_t at, solve_real val, int kind) {
   }
   if (kind!=rd_win.kind||at<rd_win.lo||at>=rd_win.lo+rd_win.n) {
     errmsg("Error: internal: a deferred Read wrote outside its target (statement order, GEMPACK manual 11.11.8)\n");
-    MPI_Abort(PETSC_COMM_WORLD,1);
+    teems_abort();
     return;
   }
   store[at-rd_win.lo].value=val;
@@ -940,7 +940,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
       }
       if (str_copy_bounded(vname,readitem,NAMESIZE)) {
         errmsg("Error: variable name in Read statement exceeds %d characters: %.60s...\n",NAMESIZE-1,readitem);
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
         return -1;
       }
       readitem = strtok(NULL,"\"");
@@ -951,7 +951,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
       }
       if (str_copy_bounded(header,readitem,NAMESIZE)) {
         errmsg("Error: header name in Read statement exceeds %d characters: %.60s...\n",NAMESIZE-1,readitem);
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
         return -1;
       }
       n1=0;
@@ -989,12 +989,12 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
              built, rather than at each division. */
           if (vars[i].size>1) for (n1=0; n1<vars[i].size; n1++) if (antidim[n1]<=0) {
             errmsg("Error: %s is declared over a set with no elements; its values cannot be read from %s\n",vars[i].cofname,fname);
-            MPI_Abort(PETSC_COMM_WORLD,1);
+            teems_abort();
             return -1;
           }
           if (str_copy_bounded(vname,readitem,NAMESIZE)) {
             errmsg("Error: header name in data file exceeds %d characters: %.60s...\n",NAMESIZE-1,readitem);
-            MPI_Abort(PETSC_COMM_WORLD,1);
+            teems_abort();
             return -1;
           }
           n1=0;
@@ -1166,7 +1166,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
              built, rather than at each division. */
           if (coefs[i].size>1) for (n1=0; n1<coefs[i].size; n1++) if (antidim[n1]<=0) {
             errmsg("Error: %s is declared over a set with no elements; its values cannot be read from %s\n",coefs[i].cofname,fname);
-            MPI_Abort(PETSC_COMM_WORLD,1);
+            teems_abort();
             return -1;
           }
           filehandle1 = teems_fopen(iodata[k0].filname,"r");
@@ -1180,7 +1180,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
             if (readitem != NULL) {
               if (str_copy_bounded(vname,readitem,NAMESIZE)) {
                 errmsg("Error: header name in data file exceeds %d characters: %.60s...\n",NAMESIZE-1,readitem);
-                MPI_Abort(PETSC_COMM_WORLD,1);
+                teems_abort();
                 return -1;
               }
               n1=0;
@@ -1332,7 +1332,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
       readitem = strtok(NULL,"(");
       if (str_copy_bounded(vname,readitem,NAMESIZE)) {
         errmsg("Error: variable name in Read statement exceeds %d characters: %.60s...\n",NAMESIZE-1,readitem);
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
         return -1;
       }
       str_replace_all(vname," ","");
@@ -1343,7 +1343,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
       }
       if (str_copy_bounded(argu,readitem,TABREADLINE)) {
         errmsg("Error: argument list in Read statement exceeds %d characters: %.60s...\n",TABREADLINE-1,readitem);
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
         return -1;
       }
       strcat(argu,",");
@@ -1355,7 +1355,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
       }
       if (str_copy_bounded(header,readitem,NAMESIZE)) {
         errmsg("Error: header name in Read statement exceeds %d characters: %.60s...\n",NAMESIZE-1,readitem);
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
         return -1;
       }
       n1=0;
@@ -1422,7 +1422,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
              built, rather than at each division. */
           if (coefs[i].size>1) for (n1=0; n1<coefs[i].size; n1++) if (antidim[n1]<=0) {
             errmsg("Error: %s is declared over a set with no elements; its values cannot be read from %s\n",coefs[i].cofname,fname);
-            MPI_Abort(PETSC_COMM_WORLD,1);
+            teems_abort();
             return -1;
           }
           filehandle1 = teems_fopen(iodata[k0].filname,"r");
@@ -1616,7 +1616,7 @@ offset_t data_read_files(char *fname, int niodata, cmf_file_entry *iodata, char 
              built, rather than at each division. */
           if (vars[i].size>1) for (n1=0; n1<vars[i].size; n1++) if (antidim[n1]<=0) {
             errmsg("Error: %s is declared over a set with no elements; its values cannot be read from %s\n",vars[i].cofname,fname);
-            MPI_Abort(PETSC_COMM_WORLD,1);
+            teems_abort();
             return -1;
           }
           filehandle1 = teems_fopen(iodata[k0].filname,"r");
@@ -1819,7 +1819,7 @@ offset_t sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
         }
         if (j>=10000) {
           errmsg("Error: too many sum() terms in one statement (limit 10000)\n");
-          MPI_Abort(PETSC_COMM_WORLD,1);
+          teems_abort();
         }
         strcat(interchar,interchar1);
         strcpy(sum_cof[j].sumname,interchar);
@@ -1970,7 +1970,7 @@ offset_t sum_parse(char *formulain, char *commsyntax, sum_def *sum_cof,quantifie
         }
         if (j>=10000) {
           errmsg("Error: too many sum() terms in one statement (limit 10000)\n");
-          MPI_Abort(PETSC_COMM_WORLD,1);
+          teems_abort();
         }
         strcat(interchar,interchar1);
         strcpy(sum_cof[j].sumname,interchar);
@@ -2793,7 +2793,7 @@ static int lp_range(lp_plan *P, lp_ctx *X, long lo, long hi, int inloop, int *tg
       lp_rt *L=&P->l[which];
       if (L->epos<0||L->epos>=hi) {
         errmsg("Error: a loop runs across a statement-order split (GEMPACK manual 10.1, 11.18); internal\n");
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
       }
       if (L->fused) lp_plain(X,L->bpos+1,L->epos);
       else {
@@ -2830,7 +2830,7 @@ static int lp_run(lp_plan *P, lp_ctx *X, int L, int *tgt) {
   dim_t e,n;
   if (R->syn<0) {
     errmsg("Error: loop %d has no loop set (internal)\n",R->id);
-    MPI_Abort(PETSC_COMM_WORLD,1);
+    teems_abort();
   }
   n=X->sets[teems_loop_syns[R->syn].parentid].size;
   for (e=0; e<n; e++) {
@@ -2876,7 +2876,7 @@ offset_t statements_execute(char *fname, char *commsyntax, set_def *sets, dim_t 
     ord_event *ev=&pl->ev[e];
     if (ev->isread) {
       if (fromfile) {
-        if (ord_replay(pl,&pl->rd[ev->r],!pl->postsim,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele)==-1) MPI_Abort(PETSC_COMM_WORLD,1);
+        if (ord_replay(pl,&pl->rd[ev->r],!pl->postsim,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele)==-1) teems_abort();
       } else ord_snap(&pl->rd[ev->r],elem_vals,1);
       continue;
     }
@@ -2932,7 +2932,7 @@ int mappings_read(char *fname, map_def *maps, dim_t nmap, set_def *sets, dim_t n
     if (readitem==NULL||strlen(readitem)>=NAMESIZE) {
       errmsg("Error: malformed Mapping statement in TAB file: %s\n",linecopy);
       fclose(filehandle);
-      MPI_Abort(PETSC_COMM_WORLD,1);
+      teems_abort();
       return -1;
     }
     strcpy(maps[j].mapname,readitem);
@@ -2940,7 +2940,7 @@ int mappings_read(char *fname, map_def *maps, dim_t nmap, set_def *sets, dim_t n
     if (readitem==NULL||strcmp(readitem,"from")!=0) {
       errmsg("Error: malformed Mapping statement in TAB file: %s\n",linecopy);
       fclose(filehandle);
-      MPI_Abort(PETSC_COMM_WORLD,1);
+      teems_abort();
       return -1;
     }
     readitem = strtok(NULL," ");
@@ -2948,7 +2948,7 @@ int mappings_read(char *fname, map_def *maps, dim_t nmap, set_def *sets, dim_t n
     if (readitem==NULL||i==nset) {
       errmsg("Error: set %s in Mapping %s is not declared\n",readitem==NULL?"":readitem,maps[j].mapname);
       fclose(filehandle);
-      MPI_Abort(PETSC_COMM_WORLD,1);
+      teems_abort();
       return -1;
     }
     maps[j].fromset=i;
@@ -2956,7 +2956,7 @@ int mappings_read(char *fname, map_def *maps, dim_t nmap, set_def *sets, dim_t n
     if (readitem==NULL||strcmp(readitem,"to")!=0) {
       errmsg("Error: malformed Mapping statement in TAB file: %s\n",linecopy);
       fclose(filehandle);
-      MPI_Abort(PETSC_COMM_WORLD,1);
+      teems_abort();
       return -1;
     }
     readitem = strtok(NULL," ;");
@@ -2964,7 +2964,7 @@ int mappings_read(char *fname, map_def *maps, dim_t nmap, set_def *sets, dim_t n
     if (readitem==NULL||i==nset) {
       errmsg("Error: set %s in Mapping %s is not declared\n",readitem==NULL?"":readitem,maps[j].mapname);
       fclose(filehandle);
-      MPI_Abort(PETSC_COMM_WORLD,1);
+      teems_abort();
       return -1;
     }
     maps[j].toset=i;
@@ -2978,13 +2978,13 @@ int mappings_read(char *fname, map_def *maps, dim_t nmap, set_def *sets, dim_t n
       if (!teems_set_isprod[maps[j].fromset]) {
         errmsg("Error: Mapping (project) %s: set %s is not defined as a set product A x B (GEMPACK manual 10.13.2)\n",maps[j].mapname,fs->setname);
         fclose(filehandle);
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
         return -1;
       }
       if ((dim_t)maps[j].toset!=p1&&(dim_t)maps[j].toset!=p2) {
         errmsg("Error: Mapping (project) %s: set %s is not a factor of the product %s (GEMPACK manual 10.13.2)\n",maps[j].mapname,sets[maps[j].toset].setname,fs->setname);
         fclose(filehandle);
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
         return -1;
       }
       n1=sets[p1].size;
@@ -3054,7 +3054,7 @@ int mapping_values_read(char *fname, int niodata, cmf_file_entry *iodata, map_de
       if (byele) {
         errmsg("Error: Read (by_elements) target %s is not a declared mapping (GEMPACK manual 11.9.1)\n",target);
         fclose(filehandle);
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
         return -1;
       }
       continue;
@@ -3067,7 +3067,7 @@ int mapping_values_read(char *fname, int niodata, cmf_file_entry *iodata, map_de
       if (sub==nset) {
         errmsg("Error: %s for mapping %s: %s is not a declared set\n",kind,maps[j].mapname,qset);
         fclose(filehandle);
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
         return -1;
       }
       if (sub!=maps[j].fromset) {
@@ -3076,7 +3076,7 @@ int mapping_values_read(char *fname, int niodata, cmf_file_entry *iodata, map_de
         if (sup==MAXSUPSET) {
           errmsg("Error: %s for mapping %s: set %s is not the domain %s or a declared subset of it (GEMPACK manual 11.9.11)\n",kind,maps[j].mapname,qset,sets[maps[j].fromset].setname);
           fclose(filehandle);
-          MPI_Abort(PETSC_COMM_WORLD,1);
+          teems_abort();
           return -1;
         }
       }
@@ -3084,7 +3084,7 @@ int mapping_values_read(char *fname, int niodata, cmf_file_entry *iodata, map_de
       if (strstr(q,want)==NULL) {
         errmsg("Error: %s for mapping %s: its argument must be the quantifier index %s (GEMPACK manual 11.9.11)\n",kind,maps[j].mapname,qidx);
         fclose(filehandle);
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
         return -1;
       }
     }
@@ -3092,14 +3092,14 @@ int mapping_values_read(char *fname, int niodata, cmf_file_entry *iodata, map_de
     if (k0<0) {
       errmsg("Error: %s for mapping %s has no file clause\n",kind,maps[j].mapname);
       fclose(filehandle);
-      MPI_Abort(PETSC_COMM_WORLD,1);
+      teems_abort();
       return -1;
     }
     k1=str_find_ci(linecopy+k0+10," ");
     if (k1<0||k1>=(int)sizeof(line1)) {
       errmsg("Error: malformed %s statement for mapping %s\n",kind,maps[j].mapname);
       fclose(filehandle);
-      MPI_Abort(PETSC_COMM_WORLD,1);
+      teems_abort();
       return -1;
     }
     strncpy(line1,linecopy+k0+10,k1);
@@ -3108,7 +3108,7 @@ int mapping_values_read(char *fname, int niodata, cmf_file_entry *iodata, map_de
     if (k0==niodata) {
       errmsg("Error: cannot open file %s named in the CMF file\n",line1);
       fclose(filehandle);
-      MPI_Abort(PETSC_COMM_WORLD,1);
+      teems_abort();
       return -1;
     }
     {
@@ -3116,7 +3116,7 @@ int mapping_values_read(char *fname, int niodata, cmf_file_entry *iodata, map_de
       if (h1==NULL||h2==NULL||h2-h1-1>=HEADERSIZE||h2==h1+1) {
         errmsg("Error: %s for mapping %s needs a header (GEMPACK manual 11.9.1)\n",kind,maps[j].mapname);
         fclose(filehandle);
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
         return -1;
       }
       snprintf(line1,sizeof(line1),"%.*s",(int)(h2-h1-1),h1+1);
@@ -3126,7 +3126,7 @@ int mapping_values_read(char *fname, int niodata, cmf_file_entry *iodata, map_de
     if (dim1!=sets[sub].size) {
       errmsg("Error: %s for mapping %s supplies %ld values for the %ld elements of set %s\n",kind,maps[j].mapname,(long)dim1,(long)sets[sub].size,sets[sub].setname);
       fclose(filehandle);
-      MPI_Abort(PETSC_COMM_WORLD,1);
+      teems_abort();
       return -1;
     }
     datafile_labels *matvar1= (datafile_labels *) calloc (dim1>0?dim1:1,sizeof(datafile_labels));
@@ -3145,7 +3145,7 @@ int mapping_values_read(char *fname, int niodata, cmf_file_entry *iodata, map_de
           errmsg("Error: %s in the data for mapping %s is not an element of set %s (GEMPACK manual 11.9.2)\n",matvar1[i].ch,maps[j].mapname,sets[maps[j].toset].setname);
           free(matvar1);
           fclose(filehandle);
-          MPI_Abort(PETSC_COMM_WORLD,1);
+          teems_abort();
           return -1;
         }
       } else {
@@ -3158,7 +3158,7 @@ int mapping_values_read(char *fname, int niodata, cmf_file_entry *iodata, map_de
           errmsg("Error: value %s in the data for mapping %s is not an element number of set %s (1 to %ld; GEMPACK manual 11.9.1c, 11.9.2)\n",matvar1[i].ch,maps[j].mapname,sets[maps[j].toset].setname,(long)sets[maps[j].toset].size);
           free(matvar1);
           fclose(filehandle);
-          MPI_Abort(PETSC_COMM_WORLD,1);
+          teems_abort();
           return -1;
         }
         k=(dim_t)v-1;
@@ -3167,7 +3167,7 @@ int mapping_values_read(char *fname, int niodata, cmf_file_entry *iodata, map_de
       if (dp<0) {
         free(matvar1);
         fclose(filehandle);
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
         return -1;
       }
       maps[j].values[dp]=k;
@@ -3223,7 +3223,7 @@ int mapping_use_guards(char *fname, map_def *maps, dim_t nmap) {
       if (gpos==0||(gpos>0&&!isalnum((int)line[gpos-1])&&line[gpos-1]!='_')) {
         errmsg("Error: a set mapping on the left-hand side of an Update statement is not supported (mapping %s; GEMPACK manual 11.9.9)\n",maps[gm].mapname);
         fclose(filehandle);
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
         return -1;
       }
     }
@@ -3260,7 +3260,7 @@ static dim_t mapping_synth_register(int kind, dim_t a, dim_t b, int k) {
   }
   if (teems_nmap-teems_nmap_user>=MAP_SYNTH_MAX) {
     errmsg("Error: more than %d distinct mapping compositions and offsets on mapped indices (GEMPACK manual 11.9.6); simplify the index expressions\n",MAP_SYNTH_MAX);
-    MPI_Abort(PETSC_COMM_WORLD,1);
+    teems_abort();
   }
   m=teems_nmap;
   md=&teems_maps[m];
@@ -3270,14 +3270,14 @@ static dim_t mapping_synth_register(int kind, dim_t a, dim_t b, int k) {
     ss=teems_maps[b].toset==teems_maps[a].fromset?0:set_supset_slot(teems_sets,teems_maps[b].toset,teems_maps[a].fromset);
     if (ss<0) {
       errmsg("Error: %s(%s(...)): mapping %s maps into %s, which is neither the domain %s of %s nor a declared subset of it (GEMPACK manual 11.9.6)\n",teems_maps[a].mapname,teems_maps[b].mapname,teems_maps[b].mapname,teems_sets[teems_maps[b].toset].setname,teems_sets[teems_maps[a].fromset].setname,teems_maps[a].mapname);
-      MPI_Abort(PETSC_COMM_WORLD,1);
+      teems_abort();
     }
     md->fromset=teems_maps[b].fromset;
     md->toset=teems_maps[a].toset;
   } else {
     if (!teems_sets[teems_maps[a].toset].intertemp) {
       errmsg("Error: an offset %+d on the mapped index %s(...) needs an intertemporal codomain; %s maps into %s (GEMPACK manual 11.9.6, 16.2)\n",k,teems_maps[a].mapname,teems_maps[a].mapname,teems_sets[teems_maps[a].toset].setname);
-      MPI_Abort(PETSC_COMM_WORLD,1);
+      teems_abort();
     }
     md->fromset=teems_maps[a].fromset;
     md->toset=teems_maps[a].toset;
@@ -3335,7 +3335,7 @@ void mapping_frame_check(dim_t m, dim_t frame_setid, dim_t dss, int leadlag, con
     if (di<0||di>=teems_sets[md->fromset].size) continue;
     if (md->values[di]<0) {
       errmsg("Error: an index expression through a mapping in %s runs outside set %s at element %s of %s (an offset on a mapped index must stay in the codomain; GEMPACK manual 11.9.6, 16.4)\n",symname,teems_sets[md->toset].setname,teems_set_elems[teems_sets[frame_setid].offset+e].setele,teems_sets[frame_setid].setname);
-      MPI_Abort(PETSC_COMM_WORLD,1);
+      teems_abort();
     }
   }
 }
@@ -3385,7 +3385,7 @@ void mapping_lower_calls(char *line) {
           for (i2=0; i2<teems_nmap; i2++) if (str_cmp_ci(arg,teems_maps[i2].mapname)==0) break;
           if (i2==teems_nmap) {
             errmsg("Error: unknown mapping %s in an index expression\n",arg);
-            MPI_Abort(PETSC_COMM_WORLD,1);
+            teems_abort();
           }
           inner=(int)i2;
           memmove(arg,at+1,strlen(at+1)+1);
@@ -3405,7 +3405,7 @@ void mapping_lower_calls(char *line) {
       if (shift!=0) id=mapping_synth_register(MAP_SYNTH_SHIFT,id,0,shift);
       if (snprintf(repl,sizeof(repl),"%s%c%s%s",teems_maps[id].mapname,MAPMARK,arg,line+end)>=(int)sizeof(repl)) {
         errmsg("Error: statement too long after lowering mapping calls: %.120s\n",line);
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
       }
       strcpy(line+k,repl);
       changed=1;
@@ -3428,7 +3428,7 @@ void mapping_lower_calls(char *line) {
    SEGV, potential-models vetting SW1): named fatal instead */
 void sum_carried_fatal(const char *idx, const char *stmt) {
   errmsg("Error: index %s in a sum is neither a quantifier index nor the index of an enclosing sum (an unlowered element literal or an undeclared name?): %s\n",idx,stmt);
-  MPI_Abort(PETSC_COMM_WORLD,1);
+  teems_abort();
 }
 
 char *sum_dim_identity(char *p) {
@@ -3542,7 +3542,7 @@ void sum_cond_parse(char *settok, const char *sumindx, int *cond_mapid, char *co
     if (sc==NULL) {
       if (strlen(lhs)>=NAMESIZE) {
         errmsg("Error: sum condition '%s' on a sum containing variables is too long (at most %d characters)\n",lhs,NAMESIZE-1);
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
         return;
       }
       *cond_mapid=-1;
@@ -3551,7 +3551,7 @@ void sum_cond_parse(char *settok, const char *sumindx, int *cond_mapid, char *co
     }
     if (strlen(lhs)>=sizeof(sc->cond_gen[0])) {
       errmsg("Error: sum condition '%s' is too long\n",lhs);
-      MPI_Abort(PETSC_COMM_WORLD,1);
+      teems_abort();
       return;
     }
     strcpy(sc->cond_gen[0],lhs);
@@ -3571,12 +3571,12 @@ void sum_cond_parse(char *settok, const char *sumindx, int *cond_mapid, char *co
       if (mp>0) {
         if (strcmp(lhs,sumindx)!=0) {
           errmsg("Error: the sum condition on mapping %s must test the summed index %s, not %s\n",teems_maps[mp-1].mapname,sumindx,lhs);
-          MPI_Abort(PETSC_COMM_WORLD,1);
+          teems_abort();
           return;
         }
         if (eq[1]=='\0'||strlen(eq+1)>=NAMESIZE) {
           errmsg("Error: malformed sum condition RHS for mapping %s\n",teems_maps[mp-1].mapname);
-          MPI_Abort(PETSC_COMM_WORLD,1);
+          teems_abort();
           return;
         }
         *cond_mapid=mp;
@@ -3603,7 +3603,7 @@ void sum_cond_parse(char *settok, const char *sumindx, int *cond_mapid, char *co
     double cval;
     if (sc==NULL) {
       errmsg("Error: unsupported sum condition '%s' on a sum containing variables; only a mapping equality MAPPING(index) = value is supported there (GEMPACK manual 11.4.11)\n",lhs);
-      MPI_Abort(PETSC_COMM_WORLD,1);
+      teems_abort();
       return;
     }
     /* a scalar coefficient has no argument list: "SC > 1" */
@@ -3677,7 +3677,7 @@ badcond:
       }
     }
     errmsg("Error: unsupported sum condition '%s'; supported forms are MAPPING(index) = value and COEF[(args)] <op> <numeric const> (GEMPACK manual 11.4.11)\n",lhs);
-    MPI_Abort(PETSC_COMM_WORLD,1);
+    teems_abort();
     return;
   }
 }
@@ -3697,12 +3697,12 @@ void sum_cond_coef_resolve(sum_def *sc, quantifier *frame, dim_t nframe, set_def
   for (ci=0; ci<ncof; ci++) if (strcmp(coefs[ci].cofname,sc->cond_coef)==0) break;
   if (ci==ncof) {
     errmsg("Error: sum condition coefficient %s is not declared (GEMPACK manual 11.4.11)\n",sc->cond_coef);
-    MPI_Abort(PETSC_COMM_WORLD,1);
+    teems_abort();
     return;
   }
   if ((dim_t)coefs[ci].size!=sc->cond_cofnargs) {
     errmsg("Error: sum condition %s has %d argument(s) but the coefficient has %d dimension(s)\n",sc->cond_coef,(int)sc->cond_cofnargs,(int)coefs[ci].size);
-    MPI_Abort(PETSC_COMM_WORLD,1);
+    teems_abort();
     return;
   }
   out->cofid=ci;
@@ -3723,7 +3723,7 @@ void sum_cond_coef_resolve(sum_def *sc, quantifier *frame, dim_t nframe, set_def
       dim_t ss=set_supset_slot(sets,(dim_t)sc->sumsetid,coefs[ci].setid[d]);
       if (ss<0) {
         errmsg("Error: sum condition %s: the summed index %s must range over the coefficient's dimension set %s or a declared subset of it (GEMPACK manual 11.4.11)\n",sc->cond_coef,sc->sumindx,sets[coefs[ci].setid[d]].setname);
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
         return;
       }
       out->ss[d]=(int)ss;
@@ -3736,7 +3736,7 @@ void sum_cond_coef_resolve(sum_def *sc, quantifier *frame, dim_t nframe, set_def
       dim_t ss=set_supset_slot(sets,(dim_t)frame[l].setid,coefs[ci].setid[d]);
       if (ss<0) {
         errmsg("Error: sum condition %s: index %s must range over the coefficient's dimension set %s or a declared subset of it (GEMPACK manual 11.4.11)\n",sc->cond_coef,sc->cond_cofargs[d],sets[coefs[ci].setid[d]].setname);
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
         return;
       }
       out->ss[d]=(int)ss;
@@ -3749,7 +3749,7 @@ void sum_cond_coef_resolve(sum_def *sc, quantifier *frame, dim_t nframe, set_def
       if (strcmp(set_elems[sets[coefs[ci].setid[d]].offset+l].setele,sc->cond_cofargs[d])==0) break;
     if (l==(dim_t)sets[coefs[ci].setid[d]].size) {
       errmsg("Error: sum condition %s: argument %s is neither the summed index, a quantifier index nor an element of %s (GEMPACK manual 11.4.11)\n",sc->cond_coef,sc->cond_cofargs[d],sets[coefs[ci].setid[d]].setname);
-      MPI_Abort(PETSC_COMM_WORLD,1);
+      teems_abort();
       return;
     }
     out->bind[d]=-1;
@@ -3797,7 +3797,7 @@ void sum_cond_rhs_resolve(int cond_mapid, const char *cond_rhs, quantifier *fram
       ss=set_supset_slot(sets,frame[l].setid,(dim_t)teems_maps[cond_mapid-1].toset);
       if (ss<0) {
         errmsg("Error: the RHS index %s of the condition on mapping %s ranges over set %s, which is not the mapping's codomain set %s or a declared subset of it\n",cond_rhs,teems_maps[cond_mapid-1].mapname,sets[frame[l].setid].setname,sets[teems_maps[cond_mapid-1].toset].setname);
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
         return;
       }
       *condpos=(int)l;
@@ -3810,7 +3810,7 @@ void sum_cond_rhs_resolve(int cond_mapid, const char *cond_rhs, quantifier *fram
       return;
     }
   errmsg("Error: the sum condition RHS %s for mapping %s is neither a quantifier index nor an element of the codomain set %s\n",cond_rhs,teems_maps[cond_mapid-1].mapname,sets[cs].setname);
-  MPI_Abort(PETSC_COMM_WORLD,1);
+  teems_abort();
 }
 
 /* MAP(i) = r with r the index of an enclosing sum (not a quantifier):
@@ -3836,7 +3836,7 @@ void sum_cond_domain_check(sum_def *sc, set_def *sets) {
   if (sc->cond_mapid<=0) return;
   if ((offset_t)teems_maps[sc->cond_mapid-1].fromset!=sc->sumsetid) {
     errmsg("Error: the condition on mapping %s sums over set %s, not the mapping's domain set %s\n",teems_maps[sc->cond_mapid-1].mapname,sets[sc->sumsetid].setname,sets[teems_maps[sc->cond_mapid-1].fromset].setname);
-    MPI_Abort(PETSC_COMM_WORLD,1);
+    teems_abort();
   }
 }
 
@@ -3854,7 +3854,7 @@ dim_t sum_cond_carry_rhs(sum_def *sc, quantifier *arSet, dim_t fdim, dim_t l3, c
   if (l5>=fdim-1) return l3; /* not a quantifier (scalar statements have fdim 0): codomain element, resolved at eval */
   if (set_supset_slot(sets,arSet[l5].setid,(dim_t)teems_maps[sc->cond_mapid-1].toset)<0) {
     errmsg("Error: the RHS quantifier %s of the condition on mapping %s ranges over set %s, which is not the mapping's codomain set %s or a declared subset of it\n",sc->cond_rhs,teems_maps[sc->cond_mapid-1].mapname,sets[arSet[l5].setid].setname,sets[teems_maps[sc->cond_mapid-1].toset].setname);
-    MPI_Abort(PETSC_COMM_WORLD,1);
+    teems_abort();
     return l3;
   }
   for (l4=0; l4<l3; l4++) if (strcmp(sc->cond_rhs,sc->dimnames[l4])==0) return l3;
@@ -4010,7 +4010,7 @@ static int ct_parse(const char *s, cond_tree *t, const char *ctx) {
   ct_or(t);
   if (t->err||s[t->pos]!='\0') {
     errmsg("Error: malformed condition '%s' (AND, OR and NOT join comparisons; at most %d comparisons; GEMPACK manual 11.4.5) in %s\n",s,ICOND_MAXLEAF,ctx);
-    MPI_Abort(PETSC_COMM_WORLD,1);
+    teems_abort();
     return -1;
   }
   return 0;
@@ -4136,7 +4136,7 @@ static dim_t cond_common_set(dim_t a, dim_t b, set_def *sets, const char *cond, 
   if (a==b||set_supset_slot(sets,a,b)>=0) return b;
   if (set_supset_slot(sets,b,a)>=0) return a;
   errmsg("Error: the condition %s compares an index over set %s with one over set %s; one set must equal or be a declared subset of the other (GEMPACK manual 11.4.11) in %s\n",cond,sets[a].setname,sets[b].setname,ctx);
-  MPI_Abort(PETSC_COMM_WORLD,1);
+  teems_abort();
   return a;
 }
 
@@ -4160,7 +4160,7 @@ int icond_compile(const char *cond, quantifier *frame, dim_t nframe, set_def *se
     int op,kind[2],slot[2],mp[2];
     if (ct_leaf_split(cond,t.lb[k],t.le[k],side[0],side[1],sizeof(side[0]),&op)<0) {
       errmsg("Error: the condition %.*s has no comparison (=, <>, <, >, <=, >=; GEMPACK manual 11.4.5) in %s\n",t.le[k]-t.lb[k],cond+t.lb[k],ctx);
-      MPI_Abort(PETSC_COMM_WORLD,1);
+      teems_abort();
       return 0;
     }
     cond_leaf_kinds(side[0],side[1],sizeof(side[0]),frame,nframe,&kind[0],&kind[1],&slot[0],&slot[1],&mp[0],&mp[1]);
@@ -4174,7 +4174,7 @@ int icond_compile(const char *cond, quantifier *frame, dim_t nframe, set_def *se
     cond_leaf_kinds(side[0],side[1],sizeof(side[0]),frame,nframe,&kind[0],&kind[1],&slot[0],&slot[1],&mp[0],&mp[1]);
     if (kind[0]==CS_QUOTE&&kind[1]==CS_QUOTE) {
       errmsg("Error: the condition %s=%s compares two elements (GEMPACK manual 11.4.11) in %s\n",side[0],side[1],ctx);
-      MPI_Abort(PETSC_COMM_WORLD,1);
+      teems_abort();
       return 0;
     }
     lf->op=op;
@@ -4192,12 +4192,12 @@ int icond_compile(const char *cond, quantifier *frame, dim_t nframe, set_def *se
         dim_t ds=set_supset_slot(sets,lf->st0[sd],(dim_t)md->fromset);
         if (ds<0) {
           errmsg("Error: the index of mapping %s in the condition %s ranges over set %s, which is not the mapping's domain set %s or a declared subset of it, in %s\n",md->mapname,cond,sets[lf->st0[sd]].setname,sets[md->fromset].setname,ctx);
-          MPI_Abort(PETSC_COMM_WORLD,1);
+          teems_abort();
           return 0;
         }
         if (!mapping_ready((dim_t)(mp[sd]-1))) {
           errmsg("Error: mapping %s is used (in a condition) before a Formula has assigned all of its values (GEMPACK manual 10.13.1/11.9.1) in %s\n",md->mapname,ctx);
-          MPI_Abort(PETSC_COMM_WORLD,1);
+          teems_abort();
           return 0;
         }
         mapping_frame_check((dim_t)(mp[sd]-1),lf->st0[sd],ds,0,ctx);
@@ -4212,7 +4212,7 @@ int icond_compile(const char *cond, quantifier *frame, dim_t nframe, set_def *se
     else S=(kind[0]==CS_QUOTE)?base[1]:base[0];
     if (op>2&&!sets[S].intertemp) {
       errmsg("Error: the condition %s orders positions in set %s, which is not intertemporal; indices compare by <, >, <= and >= only over intertemporal sets (GEMPACK manual 11.4.11) in %s\n",cond,sets[S].setname,ctx);
-      MPI_Abort(PETSC_COMM_WORLD,1);
+      teems_abort();
       return 0;
     }
     for (sd=0; sd<2; sd++) {
@@ -4223,7 +4223,7 @@ int icond_compile(const char *cond, quantifier *frame, dim_t nframe, set_def *se
         for (e=0; e<sets[S].size; e++) if (strcmp(el,set_elems[sets[S].offset+e].setele)==0) break;
         if (e==sets[S].size) {
           errmsg("Error: %s in the condition %s is not an element of set %s (GEMPACK manual 11.4.11) in %s\n",el,cond,sets[S].setname,ctx);
-          MPI_Abort(PETSC_COMM_WORLD,1);
+          teems_abort();
           return 0;
         }
         lf->fix[sd]=(offset_t)e;
@@ -4311,7 +4311,7 @@ int cond_lower_numeric(const char *cond, char *out, size_t cap, quantifier *fram
       int op,ka,kc,sa,sc2,ma,mc,w;
       if (ct_leaf_split(cond,t.lb[v],t.le[v],a,c,sizeof(a),&op)<0) {
         errmsg("Error: the condition %.*s has no comparison (=, <>, <, >, <=, >=; GEMPACK manual 11.4.5) in %s\n",t.le[v]-t.lb[v],cond+t.lb[v],ctx);
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
       }
       cond_leaf_kinds(a,c,sizeof(a),frame,nframe,&ka,&kc,&sa,&sc2,&ma,&mc);
       if (ka!=CS_NUM&&kc!=CS_NUM) {
@@ -4339,7 +4339,7 @@ int cond_lower_numeric(const char *cond, char *out, size_t cap, quantifier *fram
   for (k=0; k<n; k++) free(stk[k]);
   if (!ok) {
     errmsg("Error: the condition %s is too long to evaluate in %s\n",cond,ctx);
-    MPI_Abort(PETSC_COMM_WORLD,1);
+    teems_abort();
   }
   return ok;
 }
@@ -4597,7 +4597,7 @@ void mapping_reject_in(char *line, const char *what) {
     k=str_find_ci(line,find);
     if (k==0||(k>0&&!isalnum((int)line[k-1])&&line[k-1]!='_')) {
       errmsg("Error: mapping-valued indices in %s statements are not supported yet (mapping %s)\n",what,teems_maps[m].mapname);
-      MPI_Abort(PETSC_COMM_WORLD,1);
+      teems_abort();
     }
   }
 }
@@ -4618,7 +4618,7 @@ void mapping_reject_lhs(char *line, const char *what) {
     k=str_find_ci(line,find);
     if (k==0||(k>0&&!isalnum((int)line[k-1])&&line[k-1]!='_')) {
       errmsg("Error: a set mapping on the left-hand side of an %s statement is not supported (mapping %s; GEMPACK manual 11.9.9)\n",what,teems_maps[m].mapname);
-      MPI_Abort(PETSC_COMM_WORLD,1);
+      teems_abort();
     }
   }
   *eq='=';
@@ -4678,11 +4678,11 @@ int mappings_validate(map_def *maps, dim_t nmap, set_def *sets, set_element *set
       if (maps[j].nassigned>0) {
         for (i=0; i<sets[maps[j].fromset].size&&maps[j].assigned[i]; i++) {}
         errmsg("Error: mapping %s has values for %ld of the %ld elements of set %s; element %s gets none (GEMPACK manual 11.9.1, 11.9.11)\n",maps[j].mapname,(long)maps[j].nassigned,(long)sets[maps[j].fromset].size,sets[maps[j].fromset].setname,set_elems[sets[maps[j].fromset].offset+i].setele);
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
         return -1;
       }
       errmsg("Error: mapping %s is never given values (GEMPACK manual 11.9.1)\n",maps[j].mapname);
-      MPI_Abort(PETSC_COMM_WORLD,1);
+      teems_abort();
       return -1;
     }
     if (maps[j].onto) {
@@ -4692,7 +4692,7 @@ int mappings_validate(map_def *maps, dim_t nmap, set_def *sets, set_element *set
       for (i=0; i<tosize; i++) if (!hit[i]) {
           errmsg("Error: mapping %s is not onto: element %s of set %s is not mapped to (GEMPACK manual 11.9.3)\n",maps[j].mapname,set_elems[sets[maps[j].toset].offset+i].setele,sets[maps[j].toset].setname);
           free(hit);
-          MPI_Abort(PETSC_COMM_WORLD,1);
+          teems_abort();
           return -1;
         }
       free(hit);
@@ -4716,7 +4716,7 @@ static offset_t closure_var_find(char *vname, array_def *vars, offset_t nvar) {
      names (11.2.1), so only the exact derived forms are rejected */
   if (name_is_comp_derived(vname)) {
     errmsg("Error: %s is a solver-managed derived complementarity variable and cannot appear in closure or shock files (GEMPACK manual 51.7.2)\n",vname);
-    MPI_Abort(PETSC_COMM_WORLD,1);
+    teems_abort();
   }
   for (j=0; j<nvar; j++) if (strcmp(vname,vars[j].cofname)==0) return j;
   /* a p_NAME linear variable runs as p@NAME (pcoef_rename) */
@@ -4734,14 +4734,14 @@ static offset_t closure_var_find(char *vname, array_def *vars, offset_t nvar) {
     const char *lin=levels_linear_of(vname+2);
     if (lin!=NULL) {
       errmsg("Error: %s names no variable: the linear variable of levels variable %s is %s (LINEAR_NAME/LINEAR_VAR, GEMPACK manual 9.2.2)\n",vname,vname+2,lin);
-      MPI_Abort(PETSC_COMM_WORLD,1);
+      teems_abort();
     }
     for (j=0; j<nvar; j++) if (strcmp(vname+2,vars[j].cofname)==0) {
         if (vars[j].level_par&&(vars[j].change_real?'c':'p')==vname[0]) return j;
         errmsg("Error: %s names no variable: %s is %s, named %s%s (GEMPACK manual 9.2.2)\n",vname,vars[j].cofname,
                !vars[j].level_par?"a linear variable":vars[j].change_real?"a change levels variable":"a percentage-change levels variable",
                !vars[j].level_par?"":vars[j].change_real?"c_":"p_",vars[j].cofname);
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
       }
   }
   return -1;
@@ -4798,7 +4798,7 @@ offset_t closure_read(char *fname, char *commsyntax,closure_entry *closure_vals,
   filehandle = fopen(fname,"r");
   if (filehandle==NULL) {
     errmsg("Error: cannot open closure file %s: %s\n",fname,strerror(errno));
-    MPI_Abort(PETSC_COMM_WORLD,1);
+    teems_abort();
     return -1;
   }
   while (closure_next_statement(commsyntax,filehandle,line)) {
@@ -4853,7 +4853,7 @@ offset_t closure_read(char *fname, char *commsyntax,closure_entry *closure_vals,
           if(j==nvar&&vname[0]!=';') {
             errmsg("Error: variable %s is not declared (closure file)\n",vname);
             fclose(filehandle);
-            MPI_Abort(PETSC_COMM_WORLD,1);
+            teems_abort();
             return -1;
           }
       } else {
@@ -4872,7 +4872,7 @@ offset_t closure_read(char *fname, char *commsyntax,closure_entry *closure_vals,
                 free(arSet);
                 free(exoantidim);
                 fclose(filehandle);
-                MPI_Abort(PETSC_COMM_WORLD,1);
+                teems_abort();
                 return -1;
               }
               if (strchr(p,'"')!=NULL) {
@@ -4892,7 +4892,7 @@ offset_t closure_read(char *fname, char *commsyntax,closure_entry *closure_vals,
                     free(arSet);
                     free(exoantidim);
                     fclose(filehandle);
-                    MPI_Abort(PETSC_COMM_WORLD,1);
+                    teems_abort();
                     return -1;
                   }
               } else {
@@ -4914,7 +4914,7 @@ offset_t closure_read(char *fname, char *commsyntax,closure_entry *closure_vals,
                       free(arSet);
                       free(exoantidim);
                       fclose(filehandle);
-                      MPI_Abort(PETSC_COMM_WORLD,1);
+                      teems_abort();
                       return -1;
                     }
                 }
@@ -4927,7 +4927,7 @@ offset_t closure_read(char *fname, char *commsyntax,closure_entry *closure_vals,
                 free(arSet);
                 free(exoantidim);
                 fclose(filehandle);
-                MPI_Abort(PETSC_COMM_WORLD,1);
+                teems_abort();
                 return -1;
               }
               strcat(p,",");
@@ -4942,7 +4942,7 @@ offset_t closure_read(char *fname, char *commsyntax,closure_entry *closure_vals,
                   free(arSet);
                   free(exoantidim);
                   fclose(filehandle);
-                  MPI_Abort(PETSC_COMM_WORLD,1);
+                  teems_abort();
                   return -1;
                 }
                 if (*p=='"') {
@@ -4958,7 +4958,7 @@ offset_t closure_read(char *fname, char *commsyntax,closure_entry *closure_vals,
                       free(arSet);
                       free(exoantidim);
                       fclose(filehandle);
-                      MPI_Abort(PETSC_COMM_WORLD,1);
+                      teems_abort();
                       return -1;
                     }
                 } else {
@@ -4977,7 +4977,7 @@ offset_t closure_read(char *fname, char *commsyntax,closure_entry *closure_vals,
                         free(arSet);
                         free(exoantidim);
                         fclose(filehandle);
-                        MPI_Abort(PETSC_COMM_WORLD,1);
+                        teems_abort();
                         return -1;
                       }
                   }
@@ -5012,7 +5012,7 @@ offset_t closure_read(char *fname, char *commsyntax,closure_entry *closure_vals,
           if(j==nvar) {
             errmsg("Error: variable %s is not declared (closure file)\n",p);
             fclose(filehandle);
-            MPI_Abort(PETSC_COMM_WORLD,1);
+            teems_abort();
             return -1;
           }
       }
@@ -5032,12 +5032,12 @@ static void shock_component_set(array_def *vars, offset_t j, offset_t e, solve_r
   if (!CL_EXO(x)) {
     array_element_label(&vars[j],e,lab,sizeof(lab));
     errmsg("Error: the shock statement for %s names component %s, which is endogenous; only exogenous components can be shocked (GEMPACK manual 24, 24.14.1; shock file)\n",vars[j].cofname,lab);
-    MPI_Abort(PETSC_COMM_WORLD,1);
+    teems_abort();
   }
   if (seen[x]) {
     array_element_label(&vars[j],e,lab,sizeof(lab));
     errmsg("Error: some components of %s have been specified more than once (%s is shocked by two statements; shock file)\n",vars[j].cofname,lab);
-    MPI_Abort(PETSC_COMM_WORLD,1);
+    teems_abort();
   }
   seen[x]=1;
   CL_SHOCK(x)=v;
@@ -5100,7 +5100,7 @@ static const strict_spec subtotal_strict={"subtotals","a \"subtotal\" statement"
 static void sub_fatal(FILE *f,const char *fmt,const char *a,const char *b,const char *c) {
   errmsg(fmt,a,b,c);
   if (f!=NULL) fclose(f);
-  MPI_Abort(PETSC_COMM_WORLD,1);
+  teems_abort();
 }
 
 /* the components one item names: marks mark[] and returns the count of
@@ -5163,7 +5163,7 @@ static offset_t sub_item(FILE *f,const char *label,char *item,array_def *vars,of
       if (l1==sets[vs].size) {
         errmsg("Error: element %s is not in set %s (in %s; subtotal \"%s\"; subtotals file)\n",p,sets[vs].setname,vars[j].cofname,label);
         if (f!=NULL) fclose(f);
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
         return 0;
       }
       pos[d]=(offset_t *) malloc (sizeof(offset_t));
@@ -5207,7 +5207,7 @@ static offset_t sub_item(FILE *f,const char *label,char *item,array_def *vars,of
       for (d=0; d<nd; d++) free(pos[d]);
       errmsg("Error: subtotal \"%s\" names %s, which is %s; a subtotal is made of shocked exogenous components (GEMPACK manual 29.1; subtotals file)\n",label,lab,CL_EXO(x)?"exogenous but not shocked":"not exogenous");
       if (f!=NULL) fclose(f);
-      MPI_Abort(PETSC_COMM_WORLD,1);
+      teems_abort();
       return 0;
     }
     for (d=0; d<nd; d++) {
@@ -5229,7 +5229,7 @@ int subtotals_read(char *fname, array_def *vars, offset_t nvar, set_def *sets, d
   size_t L;
   if ((f=fopen(fname,"r"))==NULL) {
     errmsg("Error: cannot open subtotals file %s: %s\n",fname,strerror(errno));
-    MPI_Abort(PETSC_COMM_WORLD,1);
+    teems_abort();
     return -1;
   }
   mark=(unsigned char *) calloc (nvarele>0?nvarele:1,sizeof(unsigned char));
@@ -5300,7 +5300,7 @@ int subtotals_read(char *fname, array_def *vars, offset_t nvar, set_def *sets, d
   free(mark);
   if (teems_nsub==0) {
     errmsg("Error: the subtotals file %s holds no subtotal statement\n",fname);
-    MPI_Abort(PETSC_COMM_WORLD,1);
+    teems_abort();
     return -1;
   }
   return teems_nsub;
@@ -5319,7 +5319,7 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
   solve_real val;
       if ( (filehandle = fopen(fname,"r")) == NULL ) {
         errmsg("Error: cannot open shock file %s: %s\n",fname,strerror(errno));
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
         return -1;
       }
   unsigned char *seen= (unsigned char *) calloc (nvarele>0?nvarele:1,sizeof(unsigned char));
@@ -5335,7 +5335,7 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
     if(k1>=DATREADLINE){
       errmsg("Error: shock statement exceeds the line buffer; increase DATREADLINE\n");
       fclose(filehandle);
-      MPI_Abort(PETSC_COMM_WORLD,1);
+      teems_abort();
       return -1;
     }
     str_replace_all_bounded(line,";", " ;",DATREADLINE);
@@ -5362,7 +5362,7 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
       if (readitem==NULL) {
         errmsg("Error: malformed shock statement (shock file)\n");
         fclose(filehandle);
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
         return -1;
       }
       { offset_t jf=closure_var_find(readitem,vars,nvar); if(jf>=0) readitem=vars[jf].cofname; }
@@ -5371,7 +5371,7 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
           if (readitem==NULL) {
             errmsg("Error: shock statement for variable %s has no value (shock file)\n",vars[j].cofname);
             fclose(filehandle);
-            MPI_Abort(PETSC_COMM_WORLD,1);
+            teems_abort();
             return -1;
           }
           /* no argument list = the whole variable (GEMPACK 24.1, 24.6.2):
@@ -5390,7 +5390,7 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
             if (nexov==0) {
               errmsg("Error: %s has no exogenous components, so it cannot be shocked (GEMPACK manual 24, 24.6.3; shock file)\n",vars[j].cofname);
               fclose(filehandle);
-              MPI_Abort(PETSC_COMM_WORLD,1);
+              teems_abort();
               return -1;
             }
             k1=str_rfind_ci(readitem,"uniform");
@@ -5424,7 +5424,7 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
                   errmsg("Error: shock statement for variable %s supplies %ld value(s); it has %ld exogenous of %ld components: give one value per exogenous component or one per component, or use \"uniform\" (GEMPACK manual 24.14.1; shock file)\n",vars[j].cofname,(long)nval,(long)nexov,(long)nel);
                 }
                 fclose(filehandle);
-                MPI_Abort(PETSC_COMM_WORLD,1);
+                teems_abort();
                 return -1;
               }
               tok=strtok(readitem," ");
@@ -5453,7 +5453,7 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
       if (j==nvar&&readitem[0]!=';') {
         errmsg("Error: %s in the shock file is not a declared variable\n",readitem);
         fclose(filehandle);
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
         return -1;
       }
     } else {
@@ -5464,7 +5464,7 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
       if (readitem==NULL) {
         errmsg("Error: malformed shock statement (shock file)\n");
         fclose(filehandle);
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
         return -1;
       }
       { offset_t jf=closure_var_find(readitem,vars,nvar); if(jf>=0) readitem=vars[jf].cofname; }
@@ -5475,7 +5475,7 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
           if (readitem==NULL) {
             errmsg("Error: malformed shock statement for variable %s (shock file)\n",vars[j].cofname);
             fclose(filehandle);
-            MPI_Abort(PETSC_COMM_WORLD,1);
+            teems_abort();
             return -1;
           }
           /* readitem is cut from line[DATREADLINE]; argu is TABREADLINE,
@@ -5486,7 +5486,7 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
           if (strlen(readitem)+2>sizeof(argu)) {
             errmsg("Error: shock statement for variable %s is too long (exceeds %d chars)\n",vars[j].cofname,TABREADLINE);
             fclose(filehandle);
-            MPI_Abort(PETSC_COMM_WORLD,1);
+            teems_abort();
             return -1;
           }
           strcpy(argu,readitem);
@@ -5495,14 +5495,14 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
           if (readitem==NULL) {
             errmsg("Error: shock statement for variable %s has no value (shock file)\n",vars[j].cofname);
             fclose(filehandle);
-            MPI_Abort(PETSC_COMM_WORLD,1);
+            teems_abort();
             return -1;
           }
           /* same shape as argu above: a " " follows the copy */
           if (strlen(readitem)+2>sizeof(linecopy)) {
             errmsg("Error: shock statement for variable %s is too long (exceeds %d chars)\n",vars[j].cofname,DATREADLINE);
             fclose(filehandle);
-            MPI_Abort(PETSC_COMM_WORLD,1);
+            teems_abort();
             return -1;
           }
           strcpy(linecopy,readitem);
@@ -5525,7 +5525,7 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
             if (p==NULL) {
               errmsg("Error: wrong number of arguments for variable %s (shock file)\n",vars[j].cofname);
               fclose(filehandle);
-              MPI_Abort(PETSC_COMM_WORLD,1);
+              teems_abort();
               return -1;
             }
             if(strchr(p,'\"')==NULL) {
@@ -5545,14 +5545,14 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
                       }
                     if(sup==MAXSUPSET){
                       errmsg("Error: %s is not a valid set at that position of variable %s (shock file)\n",p,vars[j].cofname);
-                      MPI_Abort(PETSC_COMM_WORLD,1);
+                      teems_abort();
                       return -1;
                     }
                     break;
                   }
                   if(k1==nset){
                     errmsg("Error: %s in variable %s (shock file) is not a set\n",p,vars[j].cofname);
-                    MPI_Abort(PETSC_COMM_WORLD,1);
+                    teems_abort();
                     return -1;
                   }
               }
@@ -5567,7 +5567,7 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
               if (k2<2) {
                 errmsg("Error: %s in variable %s (shock file) is not a quoted set element\n",p,vars[j].cofname);
                 fclose(filehandle);
-                MPI_Abort(PETSC_COMM_WORLD,1);
+                teems_abort();
                 return -1;
               }
               for (k1=0; k1<sets[vars[j].setid[n1]].size; k1++)if (strncmp(set_elems[sets[vars[j].setid[n1]].offset+k1].setele,p+1,k2-2)==0&&set_elems[sets[vars[j].setid[n1]].offset+k1].setele[k2-2]=='\0') {
@@ -5578,7 +5578,7 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
                 }
               if(k1==sets[vars[j].setid[n1]].size){
                 errmsg("Error: %s in variable %s (shock file) is not a set element\n",p,vars[j].cofname);
-                MPI_Abort(PETSC_COMM_WORLD,1);
+                teems_abort();
                 return -1;
               }
             }
@@ -5591,7 +5591,7 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
             if (vars[j].size==0) errmsg("Error: %s is a scalar variable, so its shock takes no arguments; write Shock %s = <value>; (shock file)\n",vars[j].cofname,vars[j].cofname);
             else errmsg("Error: shock statement for variable %s gives more arguments than its %d dimension%s (shock file)\n",vars[j].cofname,(int)vars[j].size,vars[j].size==1?"":"s");
             fclose(filehandle);
-            MPI_Abort(PETSC_COMM_WORLD,1);
+            teems_abort();
             return -1;
           }
           /* GEMPACK-standard value ordering: first subscript varies
@@ -5645,7 +5645,7 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
               if (readitem==NULL) {
                 errmsg("Error: shock statement for variable %s supplies fewer values than elements (%ld expected) (shock file)\n",vars[j].cofname,(long)dims);
                 fclose(filehandle);
-                MPI_Abort(PETSC_COMM_WORLD,1);
+                teems_abort();
                 return -1;
               }
               val=teems_value_checked(readitem,"shock value",vars[j].cofname);
@@ -5678,7 +5678,7 @@ offset_t shocks_read(char *fname, char *commsyntax,closure_entry *closure_vals,o
       }
       if(j==nvar){
         errmsg("Error: %s in the shock file is not a declared variable\n",readitem);
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
         return -1;
       }
     }
@@ -7706,7 +7706,7 @@ dim_t set_union_named(set_element *set_elems, set_def *sets,dim_t nset,dim_t i) 
   strcpy(line,sets[i].readele);
   readitem = strtok(line,",");
   readitem = strtok(NULL,",");
-  if (readitem==NULL) {errmsg("Error: set %s is defined over a set that is not declared\n",sets[i].setname);MPI_Abort(PETSC_COMM_WORLD,1);return 0;}
+  if (readitem==NULL) {errmsg("Error: set %s is defined over a set that is not declared\n",sets[i].setname);teems_abort();return 0;}
   for (l=0; l<nset; l++) {
     if (strcmp(readitem,sets[l].setname)==0) {
       dim1=sets[l].size;
@@ -7717,18 +7717,18 @@ dim_t set_union_named(set_element *set_elems, set_def *sets,dim_t nset,dim_t i) 
       break;
     }
   }
-  if(sup1>=MAXSUPSET){errmsg("Error: superset size exceeded; increase MAXSUPSET in teems_solver.h\n");MPI_Abort(PETSC_COMM_WORLD,1);return 0;}
-  if (dim1>0&&l==i) {errmsg("Error: set %s references itself in a set expression\n",sets[i].setname);MPI_Abort(PETSC_COMM_WORLD,1);return 0;}
+  if(sup1>=MAXSUPSET){errmsg("Error: superset size exceeded; increase MAXSUPSET in teems_solver.h\n");teems_abort();return 0;}
+  if (dim1>0&&l==i) {errmsg("Error: set %s references itself in a set expression\n",sets[i].setname);teems_abort();return 0;}
   m=0;
   for (n=0; n<dim1; n++) {
-    if (m>=bound) {errmsg("Error: set expression produces more elements than declared for set %s\n",sets[i].setname);MPI_Abort(PETSC_COMM_WORLD,1);return 0;}
+    if (m>=bound) {errmsg("Error: set expression produces more elements than declared for set %s\n",sets[i].setname);teems_abort();return 0;}
     if(sets[i].offset+m!=sets[l].offset+n)strcpy(set_elems[sets[i].offset+m].setele,set_elems[sets[l].offset+n].setele);
     set_elems[sets[i].offset+m].superset_pos[0]=n;
     set_elems[sets[l].offset+m].superset_pos[sup1]=n;
     m++;
   }
   readitem = strtok(NULL,",");
-  if (readitem==NULL) {errmsg("Error: set %s is defined over a set that is not declared\n",sets[i].setname);MPI_Abort(PETSC_COMM_WORLD,1);return 0;}
+  if (readitem==NULL) {errmsg("Error: set %s is defined over a set that is not declared\n",sets[i].setname);teems_abort();return 0;}
   for (j=0; j<nset; j++) {
     if (strcmp(readitem,sets[j].setname)==0) {
       dim2=sets[j].size;
@@ -7739,12 +7739,12 @@ dim_t set_union_named(set_element *set_elems, set_def *sets,dim_t nset,dim_t i) 
       break;
     }
   }
-  if(sup2>=MAXSUPSET){errmsg("Error: superset size exceeded; increase MAXSUPSET in teems_solver.h\n");MPI_Abort(PETSC_COMM_WORLD,1);return 0;}
-  if (dim2>0&&j==i) {errmsg("Error: set %s references itself in a set expression\n",sets[i].setname);MPI_Abort(PETSC_COMM_WORLD,1);return 0;}
+  if(sup2>=MAXSUPSET){errmsg("Error: superset size exceeded; increase MAXSUPSET in teems_solver.h\n");teems_abort();return 0;}
+  if (dim2>0&&j==i) {errmsg("Error: set %s references itself in a set expression\n",sets[i].setname);teems_abort();return 0;}
   for (n=0; n<dim2; n++) {
     for (j1=0; j1<dim1; j1++) if(strcmp(set_elems[sets[l].offset+j1].setele,set_elems[sets[j].offset+n].setele)==0) break;
     if(j1==dim1) {
-      if (m>=bound) {errmsg("Error: set expression produces more elements than declared for set %s\n",sets[i].setname);MPI_Abort(PETSC_COMM_WORLD,1);return 0;}
+      if (m>=bound) {errmsg("Error: set expression produces more elements than declared for set %s\n",sets[i].setname);teems_abort();return 0;}
       if(sets[i].offset+m!=sets[j].offset+n)strcpy(set_elems[sets[i].offset+m].setele,set_elems[sets[j].offset+n].setele);
       set_elems[sets[i].offset+m].superset_pos[0]=m;
       set_elems[sets[j].offset+n].superset_pos[sup2]=m;
@@ -7763,7 +7763,7 @@ dim_t set_union_op(set_element *set_elems, set_def *sets,dim_t nset,dim_t i) {
   strcpy(line,sets[i].readele);
   readitem = strtok(line,",");
   readitem = strtok(NULL,",");
-  if (readitem==NULL) {errmsg("Error: set %s is defined over a set that is not declared\n",sets[i].setname);MPI_Abort(PETSC_COMM_WORLD,1);return 0;}
+  if (readitem==NULL) {errmsg("Error: set %s is defined over a set that is not declared\n",sets[i].setname);teems_abort();return 0;}
   for (l=0; l<nset; l++) {
     if (strcmp(readitem,sets[l].setname)==0) {
       dim1=sets[l].size;
@@ -7774,18 +7774,18 @@ dim_t set_union_op(set_element *set_elems, set_def *sets,dim_t nset,dim_t i) {
       break;
     }
   }
-  if(sup1>=MAXSUPSET){errmsg("Error: superset size exceeded; increase MAXSUPSET in teems_solver.h\n");MPI_Abort(PETSC_COMM_WORLD,1);return 0;}
-  if (dim1>0&&l==i) {errmsg("Error: set %s references itself in a set expression\n",sets[i].setname);MPI_Abort(PETSC_COMM_WORLD,1);return 0;}
+  if(sup1>=MAXSUPSET){errmsg("Error: superset size exceeded; increase MAXSUPSET in teems_solver.h\n");teems_abort();return 0;}
+  if (dim1>0&&l==i) {errmsg("Error: set %s references itself in a set expression\n",sets[i].setname);teems_abort();return 0;}
   m=0;
   for (n=0; n<dim1; n++) {
-    if (m>=bound) {errmsg("Error: set expression produces more elements than declared for set %s\n",sets[i].setname);MPI_Abort(PETSC_COMM_WORLD,1);return 0;}
+    if (m>=bound) {errmsg("Error: set expression produces more elements than declared for set %s\n",sets[i].setname);teems_abort();return 0;}
     if(sets[i].offset+m!=sets[l].offset+n)strcpy(set_elems[sets[i].offset+m].setele,set_elems[sets[l].offset+n].setele);
     set_elems[sets[i].offset+m].superset_pos[0]=n;
     set_elems[sets[l].offset+m].superset_pos[sup1]=n;
     m++;
   }
   readitem = strtok(NULL,",");
-  if (readitem==NULL) {errmsg("Error: set %s is defined over a set that is not declared\n",sets[i].setname);MPI_Abort(PETSC_COMM_WORLD,1);return 0;}
+  if (readitem==NULL) {errmsg("Error: set %s is defined over a set that is not declared\n",sets[i].setname);teems_abort();return 0;}
   for (j=0; j<nset; j++) {
     if (strcmp(readitem,sets[j].setname)==0) {
       dim2=sets[j].size;
@@ -7796,18 +7796,18 @@ dim_t set_union_op(set_element *set_elems, set_def *sets,dim_t nset,dim_t i) {
       break;
     }
   }
-  if(sup2>=MAXSUPSET){errmsg("Error: superset size exceeded; increase MAXSUPSET in teems_solver.h\n");MPI_Abort(PETSC_COMM_WORLD,1);return 0;}
-  if (dim2>0&&j==i) {errmsg("Error: set %s references itself in a set expression\n",sets[i].setname);MPI_Abort(PETSC_COMM_WORLD,1);return 0;}
+  if(sup2>=MAXSUPSET){errmsg("Error: superset size exceeded; increase MAXSUPSET in teems_solver.h\n");teems_abort();return 0;}
+  if (dim2>0&&j==i) {errmsg("Error: set %s references itself in a set expression\n",sets[i].setname);teems_abort();return 0;}
   for (n=0; n<dim2; n++) {
     /* '+' is the disjoint union (manual 10.1.1.1): an element in both
        operands is an error, as it is on the expression route; UNION
        (set_union_named) is the form for overlapping sets */
     for (j1=0; j1<dim1; j1++) if (strcmp(set_elems[sets[l].offset+j1].setele,set_elems[sets[j].offset+n].setele)==0) {
         errmsg("Error: '+' operands in the definition of %s are not disjoint (element %s); use UNION for overlapping sets\n",sets[i].setname,set_elems[sets[j].offset+n].setele);
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
         return 0;
       }
-    if (m>=bound) {errmsg("Error: set expression produces more elements than declared for set %s\n",sets[i].setname);MPI_Abort(PETSC_COMM_WORLD,1);return 0;}
+    if (m>=bound) {errmsg("Error: set expression produces more elements than declared for set %s\n",sets[i].setname);teems_abort();return 0;}
     if(sets[i].offset+m!=sets[j].offset+n)strcpy(set_elems[sets[i].offset+m].setele,set_elems[sets[j].offset+n].setele);
     set_elems[sets[i].offset+m].superset_pos[0]=m;
     set_elems[sets[j].offset+n].superset_pos[sup2]=m;
@@ -7823,7 +7823,7 @@ dim_t set_difference(set_element *set_elems, set_def *sets,dim_t nset,dim_t i) {
   strcpy(line,sets[i].readele);
   readitem = strtok(line,",");
   readitem = strtok(NULL,",");
-  if (readitem==NULL) {errmsg("Error: set %s is defined over a set that is not declared\n",sets[i].setname);MPI_Abort(PETSC_COMM_WORLD,1);return 0;}
+  if (readitem==NULL) {errmsg("Error: set %s is defined over a set that is not declared\n",sets[i].setname);teems_abort();return 0;}
   for (l=0; l<nset; l++) {
     if (strcmp(readitem,sets[l].setname)==0) {
       dim1=sets[l].size;
@@ -7834,17 +7834,17 @@ dim_t set_difference(set_element *set_elems, set_def *sets,dim_t nset,dim_t i) {
       break;
     }
   }
-  if(dim1>0&&sup1>=MAXSUPSET){errmsg("Error: superset size exceeded; increase MAXSUPSET in teems_solver.h\n");MPI_Abort(PETSC_COMM_WORLD,1);return 0;}
-  if (dim1>0&&l==i) {errmsg("Error: set %s references itself in a set expression\n",sets[i].setname);MPI_Abort(PETSC_COMM_WORLD,1);return 0;}
+  if(dim1>0&&sup1>=MAXSUPSET){errmsg("Error: superset size exceeded; increase MAXSUPSET in teems_solver.h\n");teems_abort();return 0;}
+  if (dim1>0&&l==i) {errmsg("Error: set %s references itself in a set expression\n",sets[i].setname);teems_abort();return 0;}
   readitem = strtok(NULL,",");
-  if (readitem==NULL) {errmsg("Error: set %s is defined over a set that is not declared\n",sets[i].setname);MPI_Abort(PETSC_COMM_WORLD,1);return 0;}
+  if (readitem==NULL) {errmsg("Error: set %s is defined over a set that is not declared\n",sets[i].setname);teems_abort();return 0;}
   for (j=0; j<nset; j++) {
     if (strcmp(readitem,sets[j].setname)==0) {
       dim2=sets[j].size;
       break;
     }
   }
-  if (dim2>0&&j==i) {errmsg("Error: set %s references itself in a set expression\n",sets[i].setname);MPI_Abort(PETSC_COMM_WORLD,1);return 0;}
+  if (dim2>0&&j==i) {errmsg("Error: set %s references itself in a set expression\n",sets[i].setname);teems_abort();return 0;}
   /* '-' removes elements that are present (manual 10.1.1.1), as on the
      expression route: the parse-time size is size(A)-size(B), so an
      element of B outside A would otherwise surface as an overflow */
@@ -7852,7 +7852,7 @@ dim_t set_difference(set_element *set_elems, set_def *sets,dim_t nset,dim_t i) {
     for (n=0; n<dim1; n++) if (strcmp(set_elems[sets[l].offset+n].setele,set_elems[sets[j].offset+v].setele)==0) break;
     if (n==dim1) {
       errmsg("Error: '-' in the definition of %s removes element %s, which is not present\n",sets[i].setname,set_elems[sets[j].offset+v].setele);
-      MPI_Abort(PETSC_COMM_WORLD,1);
+      teems_abort();
       return 0;
     }
   }
@@ -7866,7 +7866,7 @@ dim_t set_difference(set_element *set_elems, set_def *sets,dim_t nset,dim_t i) {
       }
     }
     if(indi==0) {
-      if (m>=bound) {errmsg("Error: set expression produces more elements than declared for set %s\n",sets[i].setname);MPI_Abort(PETSC_COMM_WORLD,1);return 0;}
+      if (m>=bound) {errmsg("Error: set expression produces more elements than declared for set %s\n",sets[i].setname);teems_abort();return 0;}
       if(sets[i].offset+m!=sets[l].offset+n)strcpy(set_elems[sets[i].offset+m].setele,set_elems[sets[l].offset+n].setele);
       set_elems[sets[i].offset+m].superset_pos[sup1]=n;
       set_elems[sets[i].offset+m].superset_pos[0]=m;
@@ -7940,7 +7940,7 @@ void set_supset_fatal(const char *idx, const char *symname, const char *where, s
   const char *wo=(where!=NULL)?" (":"",*ww=(where!=NULL)?where:"",*wc=(where!=NULL)?")":"";
   if (idx!=NULL) errmsg("Error: index %s of %s ranges over set %s, which is not %s (the declared set at that argument position) or a declared subset of it; add 'Subset %s is subset of %s;' (GEMPACK manual 10.2)%s%s%s\n",idx,symname,sets[sub].setname,sets[sup].setname,sets[sub].setname,sets[sup].setname,wo,ww,wc);
   else errmsg("Error: %s is qualified by set %s at an argument position declared over %s, and %s is not a declared subset of %s; add 'Subset %s is subset of %s;' (GEMPACK manual 10.2)%s%s%s\n",symname,sets[sub].setname,sets[sup].setname,sets[sub].setname,sets[sup].setname,sets[sub].setname,sets[sup].setname,wo,ww,wc);
-  MPI_Abort(PETSC_COMM_WORLD,1);
+  teems_abort();
 }
 
 /* record sup as a superset of sub and fill element positions */
@@ -8172,7 +8172,7 @@ static dim_t set_expr_eval(char **pp, set_element *se, set_def *sets, dim_t nset
       if (!set_product_names(out,n,accname,tmp,m,rhsname,prod,cap,owner)) {
         free(prod);
         free(tmp);
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
         return 0;
       } else {
         n=n*m;
@@ -8256,7 +8256,7 @@ dim_t set_expr_build(set_element *se, set_def *sets, dim_t nset, dim_t i) {
        returns what it has; a set built from that is not the set the TAB
        defines, so the run stops here rather than at the exit-status backstop */
     free(out);
-    MPI_Abort(PETSC_COMM_WORLD,1);
+    teems_abort();
     return 0;
   }
   if (m>bound) { /* the cap bump above sizes the scratch buffer so a 0-size set
@@ -8264,7 +8264,7 @@ dim_t set_expr_build(set_element *se, set_def *sets, dim_t nset, dim_t i) {
        writing past them ran off the end of it (fuzz batch 13 overflow) */
     errmsg("Error: set expression produces more elements than declared for set %s\n",sets[i].setname);
     free(out);
-    MPI_Abort(PETSC_COMM_WORLD,1);
+    teems_abort();
     return 0;
   }
   for (n=0; n<m; n++) {
@@ -8355,7 +8355,7 @@ void set_equality_build(set_element *se, set_def *sets, dim_t i) {
   for (j=0; j<sets[i].size; j++) {
     if (j>=bound) {
       errmsg("Error: set equality produces more elements than declared for set %s\n",sets[i].setname);
-      MPI_Abort(PETSC_COMM_WORLD,1);
+      teems_abort();
       return;
     }
     strcpy(se[sets[i].offset+j].setele,se[sets[j1].offset+j].setele);
@@ -8435,7 +8435,7 @@ offset_t subsets_read(char *fname, set_element *set_elems, set_def *sets,dim_t n
          to continue into a SEGV; potential-models segfaults.md #4) */
       errmsg("Error: some elements of set %s are not in set %s\n",subset,set);
       fclose(filehandle);
-      MPI_Abort(PETSC_COMM_WORLD,1);
+      teems_abort();
       return -1;
     }
   }
@@ -8569,7 +8569,7 @@ char *closure_next_statement(char *commsyntax, FILE *filehandle, char *readline)
        statement filling one whole line left closure_read no room */
     if (strlen(line)+1>=(size_t)TABREADLINE) {
       errmsg("Error: %s statement too long (exceeds %ld chars): %.120s ...\n",commsyntax,(long)TABREADLINE,line);
-      MPI_Abort(PETSC_COMM_WORLD,1);
+      teems_abort();
       return NULL;
     }
     strcpy(readline,line);
@@ -8582,7 +8582,7 @@ char *closure_next_statement(char *commsyntax, FILE *filehandle, char *readline)
          terminator (";" -> " ;") in the same buffer */
       if (strlen(readline)+strlen(line)+1>=(size_t)TABREADLINE) {
         errmsg("Error: %s statement too long (exceeds %ld chars): %.120s ...\n",commsyntax,(long)TABREADLINE,readline);
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
         return NULL;
       }
       strcat(readline, line);
@@ -8692,7 +8692,7 @@ static char *tab_next_statement_raw(char *commsyntax, FILE *filehandle, char *re
         /* the continuation join had no bound on readline (fuzz batch 13) */
         if (strlen(readline)+strlen(line)>=(size_t)rlinesize) {
           errmsg("Error: %s statement too long (exceeds %ld chars; a Backsolve/Substitute expansion in teems-R can grow a statement past this): %.120s ...\n",commsyntax,(long)rlinesize,readline);
-          MPI_Abort(PETSC_COMM_WORLD,1);
+          teems_abort();
           return NULL;
         }
         if (n==NULL) {
@@ -8749,7 +8749,7 @@ static char *tab_next_statement_resolved_raw(char *commsyntax, FILE *filehandle,
         /* the continuation join had no bound on readline (fuzz batch 13) */
         if (strlen(readline)+strlen(line)>=(size_t)rlinesize) {
           errmsg("Error: %s statement too long (exceeds %ld chars; a Backsolve/Substitute expansion in teems-R can grow a statement past this): %.120s ...\n",commsyntax,(long)rlinesize,readline);
-          MPI_Abort(PETSC_COMM_WORLD,1);
+          teems_abort();
           return NULL;
         }
         if (n==NULL) {
@@ -8976,7 +8976,7 @@ int backsolve_validate_refs(char *fname, array_def *vars) {
           errmsg("Error: backsolved variable %s is referenced through a set mapping in its defining equation %s; the row-to-element recovery would not be one-to-one\n",vars[backsolves[hit].varindx].cofname,eqname);
           fclose(filehandle);
           free(eqfound);
-          MPI_Abort(PETSC_COMM_WORLD,1);
+          teems_abort();
           return -1;
         }
       }

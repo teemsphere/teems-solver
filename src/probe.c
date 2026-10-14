@@ -494,7 +494,7 @@ void probe_onfail_scope_clear(void) {
 /* Fortran entry: collective abort after a diagnosed failure — a plain
    STOP on one rank leaves the others waiting in the next collective */
 void teems_onfail_abort_(void) {
-  MPI_Abort(PETSC_COMM_WORLD,1);
+  teems_abort();
 }
 
 /* Fortran entry: nonzero while a Runge-Kutta stage solve under adaptive

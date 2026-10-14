@@ -6,6 +6,12 @@
 
 int verbosity = 1;
 int teems_error_count = 0;
+void teems_abort(void) {
+  fflush(stdout);
+  fflush(stderr);
+  MPI_Abort(PETSC_COMM_WORLD,1);
+  _exit(1);
+}
 int errmsg(const char *fmt, ...) {
   va_list ap;
   int n;

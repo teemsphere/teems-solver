@@ -297,7 +297,7 @@ int datafile_read_labels(char *varname, char *filename,dim_t d1, datafile_labels
               if (cmf_strcpy_bounded(record[reccount].ch,readitem,sizeof(record[reccount].ch))) {
                 errmsg("Error: element label for header %s exceeds %d characters in %s\n",varname,NAMESIZE-1,filename);
                 fclose(dfile);
-                MPI_Abort(PETSC_COMM_WORLD,1);
+                teems_abort();
                 return -1;
               }
               reccount++;
@@ -330,12 +330,12 @@ int cmf_subtotals_file(char *filename, char *out) {
     if(readitem==NULL) {
       errmsg("Error: the subtotals statement of the manifest (.cmf) file names no quoted file\n");
       fclose(filehandle);
-      MPI_Abort(PETSC_COMM_WORLD,1);
+      teems_abort();
     }
     if(++n>1) {
       errmsg("Error: the manifest (.cmf) file has more than one subtotals statement; put every subtotal in one file\n");
       fclose(filehandle);
-      MPI_Abort(PETSC_COMM_WORLD,1);
+      teems_abort();
     }
     snprintf(out,TABREADLINE,"%s",readitem);
   }
@@ -463,11 +463,11 @@ int cmf_read(char *filename, int niodata, cmf_file_entry *iodata, char *tabfile,
 static void dedup_subst(char *line1, const char *a, const char *b, size_t cap) {
   if (a[0]=='\0') {
     errmsg("Error: cannot rename a sum index: malformed sum(<index>,<set>,...) in a formula or equation\n");
-    MPI_Abort(PETSC_COMM_WORLD,1);
+    teems_abort();
   }
   if (str_subst_all_bounded(line1,a,b,cap)!=0) {
     errmsg("Error: renaming sum index %s does not fit the statement buffer (%d characters)\n",a,(int)TABREADLINE);
-    MPI_Abort(PETSC_COMM_WORLD,1);
+    teems_abort();
   }
 }
 
@@ -484,7 +484,7 @@ static void dedup_subst_back(char *line, const char *a, const char *b, size_t ca
   if (p==NULL || alen==0) return;
   if (len-alen+blen>=cap) {
     errmsg("Error: renaming a repeated sum index does not fit the statement buffer (%d characters): %s\n",(int)TABREADLINE,a);
-    MPI_Abort(PETSC_COMM_WORLD,1);
+    teems_abort();
   }
   memmove(p+blen,p+alen,len-(size_t)(p-line)-alen+1);
   memcpy(p,b,blen);
@@ -528,7 +528,7 @@ static void dedup_ident_rename(char *span, const char *a, const char *b, size_t 
       size_t len=strlen(span);
       if (len-alen+blen>=cap) {
         errmsg("Error: renaming sum index %s does not fit the statement buffer (%d characters)\n",a,(int)TABREADLINE);
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
       }
       memmove(p+blen,p+alen,strlen(p+alen)+1);
       memcpy(p,b,blen);
@@ -831,7 +831,7 @@ int sum_dedup_indices(char *formulain) {
 
       if (strcmp(temp,line1)==0) {
         errmsg("Error: cannot rename the repeated sum index %s in: %s\n",replitem,temp);
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
       }
       dedup_subst_back(formulain,temp,line1,(size_t)TABREADLINE);
       strcpy(line,formulain);
@@ -1523,7 +1523,7 @@ static int if_in_lower(char *s, size_t cap, char *pre, size_t precap, int *seq) 
 static void wr_tok(char *dst,size_t cap,const char *src,int len,const char *what,const char *line) {
   if(len<0||(size_t)len>=cap) {
     errmsg("Error: cannot read the %s of a Write statement (missing delimiter or over %d characters): %s\n",what,(int)cap-1,line);
-    MPI_Abort(PETSC_COMM_WORLD,1);
+    teems_abort();
   }
   memcpy(dst,src,(size_t)len);
   dst[len]='\0';
@@ -2638,7 +2638,7 @@ int tab_write_variables(char *filename, char *newtabfile,array_def *vars,offset_
                   errmsg("Error: equation too long after prefixing its variables (exceeds %d chars)\n",TABREADLINE);
                   fclose(filehandle);
                   fclose(fout);
-                  MPI_Abort(PETSC_COMM_WORLD,1);
+                  teems_abort();
                   return -1;
                 }
                 memmove(&line[l+2],&line[l],linelght-l+1);
@@ -2670,7 +2670,7 @@ int tab_write_variables(char *filename, char *newtabfile,array_def *vars,offset_
               errmsg("Error: conditions on Equation quantifiers are not supported (row pruning); put the condition on a sum inside the equation (GEMPACK manual 11.4.11)\n");
               fclose(filehandle);
               fclose(fout);
-              MPI_Abort(PETSC_COMM_WORLD,1);
+              teems_abort();
               return -1;
             }
           }
@@ -2686,7 +2686,7 @@ int tab_write_variables(char *filename, char *newtabfile,array_def *vars,offset_
         errmsg("Error: an IF condition reads variable %s; conditions take coefficients and levels variables, not linear variables (GEMPACK manual 11.4.5): %.200s\n",badv,line);
         fclose(filehandle);
         fclose(fout);
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
         return -1;
       }
     }
@@ -2694,7 +2694,7 @@ int tab_write_variables(char *filename, char *newtabfile,array_def *vars,offset_
       if (!cond_text_lower(line,TABREADLINE,NULL,0,"an IF condition")) {
         fclose(filehandle);
         fclose(fout);
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
         return -1;
       }
     }
@@ -3214,7 +3214,7 @@ static char *sb_iodata_path(cmf_file_entry *iodata, int nio, const char *logname
    from a truncated set (audit 1011 S4-F5) */
 static void sb_cap_abort(const char *setname) {
   errmsg("Error: set %s has more than %d elements, the most a set-builder source can hold; a builder over it would select from a truncated set\n",setname,SB_MAXELE);
-  MPI_Abort(PETSC_COMM_WORLD,1);
+  teems_abort();
 }
 
 static int sb_elements_d(char *tabfile, cmf_file_entry *iodata, int nio, const char *setname, char (*ele)[NAMESIZE], int depth);

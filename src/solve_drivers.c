@@ -18,7 +18,7 @@ offset_t ma48_grow_la(offset_t cur,offset_t suggested,offset_t nnz,const char *k
            probe_onfail_scope_label(),(long)MA48_LA_MAX,knob,
            (long)((100.0*MA48_LA_MAX)/nnz));
     fflush(stdout);
-    MPI_Abort(PETSC_COMM_WORLD,1);
+    teems_abort();
   }
   logmsg(1,"Note: MA48 workspace grown from %ld to %ld reals (equivalent -%s %ld)\n",
          (long)cur,(long)newla,knob,(long)ceil((100.0*newla)/nnz));
@@ -47,7 +47,7 @@ static void ma48_alloc_fail(offset_t n,size_t sz) {
   errmsg("Error: cannot allocate the %.1f GB MA48 workspace this factorization needs (%ld elements); free memory on this machine, use a bordered matrix_method (\"SBBD\" or \"DBBD\") to split the factorization, or condense the model\n",
          (n*(double)sz)/1073741824.0,(long)n);
   fflush(stdout);
-  MPI_Abort(PETSC_COMM_WORLD,1);
+  teems_abort();
 }
 
 void *ma48_alloc(offset_t n,size_t sz) {
@@ -88,7 +88,7 @@ void jac_mat_prealloc(Mat M,const char *what,PetscBool mpi,int count,PetscInt nr
         errmsg("Error: assembling the %s for %s needs %ld nonzeros, above the %ld-nonzero ceiling of the %d-bit PetscInt build; every HSL matrix_method (\"LU\", \"SBBD\") keeps the whole system on one rank, so more ranks do not help -- condense the model, reduce its dimensions, or use the distributed matrix_method \"DBBD\"\n",
                what,probe_onfail_scope_label(),(long)nnz,(long)PETSC_INT_MAX,(int)(8*sizeof(PetscInt)));
       fflush(stdout);
-      MPI_Abort(PETSC_COMM_WORLD,1);
+      teems_abort();
     }
   }
   if(mpi)ierr=MatMPIAIJSetPreallocation(M,dnz,dnnz,onz,onnz);
@@ -96,7 +96,7 @@ void jac_mat_prealloc(Mat M,const char *what,PetscBool mpi,int count,PetscInt nr
   if(ierr) {
     errmsg("Error: PETSc could not preallocate the %s for %s (PETSc error %d)\n",what,probe_onfail_scope_label(),(int)ierr);
     fflush(stdout);
-    MPI_Abort(PETSC_COMM_WORLD,1);
+    teems_abort();
   }
 }
 
@@ -156,7 +156,7 @@ void solve_x_check(const solve_real *x, PetscInt n, int doit) {
       char lab[(MAXVARDIM+2)*NAMESIZE];
       probe_col_label(i,lab,sizeof(lab));
       errmsg("Error: the linear solve gave a value that is not finite (%s) for %s: the LHS matrix is singular or badly scaled at this step, or a coefficient overflowed (GEMPACK manual 34.1, 34.3)\n",teems_isnan_bits((double)x[i])?"NaN":"infinite",lab);
-      MPI_Abort(PETSC_COMM_WORLD,1);
+      teems_abort();
     }
 }
 
@@ -238,7 +238,7 @@ void fh_request_check(dim_t matsol,dim_t mc66,PetscInt rank) {
   if(who==NULL)return;
   if(rank==0)errmsg("Error: this run solves extra right-hand sides with each step's factorization (-fhtest), which %s cannot keep yet; use matrix_method LU, SBBD or DBBD\n",who);
   MPI_Barrier(PETSC_COMM_WORLD);
-  MPI_Abort(PETSC_COMM_WORLD,1);
+  teems_abort();
 }
 
 /* Residual check (manual 30.1.5, 30.6.1) of a distributed solve: each
@@ -435,7 +435,7 @@ static void sub_step_solve(PetscInt rank,PetscInt n) {
     xs=(solve_real *) malloc ((size_t)n*nc*sizeof(solve_real));
     if(teems_fh_solve(rank==0?sub_rhs+(size_t)c0*n:NULL,xs,nc)!=0) {
       if(rank==0)errmsg("Error: the subtotal solves found no kept factorization for this step\n");
-      MPI_Abort(PETSC_COMM_WORLD,1);
+      teems_abort();
     }
     if(fh_refine_now) {
       solve_real *bl=fh_rows_scatter(rank==0?sub_rhs+(size_t)c0*n:NULL,nc,rank,mpisize);
@@ -763,7 +763,7 @@ static void fh_refine_cols(const solve_real *bloc,solve_real *x,int nc,PetscInt 
   d=(solve_real *) malloc ((size_t)n*nc*sizeof(solve_real));
   if(teems_fh_solve(rfull,d,nc)!=0) {
     if(rank==0)errmsg("Error: the refinement step found no kept DBBD factorization for this solve\n");
-    MPI_Abort(PETSC_COMM_WORLD,1);
+    teems_abort();
   }
   for(i=0; i<(PetscInt)((size_t)n*nc); i++)x[i]+=d[i];
   free(d);
@@ -918,7 +918,7 @@ void lu_fastrefac_solve(Mat A,PetscInt VecSize,dim_t laA,solve_real *rhs,solve_r
     lu_fastrefac_extract(A,VecSize,laA);
   }
   errmsg("Error: the MA48 workspace for %s did not converge after %d growth attempts; raise the initial workspace (laA/laD/laDi) or use a bordered matrix_method (\"SBBD\" or \"DBBD\")\n",probe_onfail_scope_label(),tries);
-  MPI_Abort(PETSC_COMM_WORLD,1);
+  teems_abort();
 }
 
 void lu_fastrefac_free(void) {
@@ -1015,7 +1015,7 @@ void lu_grow_solve(Mat A,PetscInt VecSize,dim_t laA,solve_real *rhs,solve_real *
     lasize=ma48_grow_la(lasize,insize[5],count,"laA",&teems_laA_used);
   }
   errmsg("Error: the MA48 workspace for %s did not converge after %d growth attempts; raise the initial workspace (laA/laD/laDi) or use a bordered matrix_method (\"SBBD\" or \"DBBD\")\n",probe_onfail_scope_label(),tries);
-  MPI_Abort(PETSC_COMM_WORLD,1);
+  teems_abort();
 }
 
 /* SBBD persistent MP48 instance (-fastrefac): border lists, per-block
@@ -1103,7 +1103,7 @@ void sbbd_fastrefac_solve(Mat *A,Vec *vecb,PetscInt VecSize,PetscInt rank,PetscI
          the diagnosing rank has printed, or its output is truncated
          by their abort */
       MPI_Barrier(PETSC_COMM_WORLD);
-      MPI_Abort(PETSC_COMM_WORLD,1);
+      teems_abort();
     }
   }
   probe_onfail_scope_clear();
@@ -2306,7 +2306,7 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
   PetscOptionsGetInt(NULL,NULL,"-convrule",&convrule,NULL);
   if(convrule&&(teems_single_run||teems_two_run||teems_sub_active)) {
     if(rank==0)errmsg("Error: -convrule 1 applies to a run extrapolating from three solutions without subtotals (GEMPACK manual 26.2.5)\n");
-    MPI_Abort(PETSC_COMM_WORLD,1);
+    teems_abort();
   }
   conv_n[0]=conv_n[1]=conv_n[2]=0;
               offset_t *counteqs= (offset_t *) calloc (ndblock+1,sizeof(offset_t));
@@ -3085,7 +3085,7 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
           if(ns.rlast>teems_newton_tol) {
             if(teems_newton_mode==1) {
               errmsg("Error: Newton's method did not converge: after %ld correction(s) the del_newton terms sum to %.6e, %.3e relative to the equations' sides (-newton_tol %g, -newton_maxit %d); try more Euler steps (-step1) or -newton_damp 1 (GEMPACK manual 26.6.2)\n",ns.it,ns.rabs,ns.rlast,teems_newton_tol,teems_newton_maxit);
-              MPI_Abort(PETSC_COMM_WORLD,1);
+              teems_abort();
             }
             printf("Warning: after the last Newton correction the del_newton terms sum to %.6e, %.3e relative to the equations' sides, above -newton_tol %g: the levels equations are not yet satisfied (GEMPACK manual 26.6.2)\n",ns.rabs,ns.rlast,teems_newton_tol);
           }

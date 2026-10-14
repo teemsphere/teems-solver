@@ -43,7 +43,7 @@ solve_real formula_subst_scalar(char *var2, elem_value *record, array_def *coefs
     } while (index--);
   }
   errmsg("Error: Zerodivide default %s is neither a real constant nor a declared scalar coefficient (GEMPACK manual 10.11)\n",var2);
-  MPI_Abort(PETSC_COMM_WORLD,1);
+  teems_abort();
   return eval;
 }
 
@@ -61,7 +61,7 @@ char *mapping_token_split(char *p, int *mp) {
   if (at==NULL) return p;
   if (strchr(at+1,MAPMARK)!=NULL) {
     errmsg("Error: composition of set mappings is not supported (GEMPACK manual 11.9.6)\n");
-    MPI_Abort(PETSC_COMM_WORLD,1);
+    teems_abort();
   }
   *at='\0';
   for (m=0; m<teems_nmap; m++) if (strcmp(p,teems_maps[m].mapname)==0) {
@@ -71,12 +71,12 @@ char *mapping_token_split(char *p, int *mp) {
            quantifier to bind, and used to read the codomain's first
            element */
         errmsg("Error: a set mapping applied to the element %s (mapping %s) is not supported in an expression yet; write the codomain element it maps to (GEMPACK manual 11.9.6)\n",at+1,m<teems_nmap_user?teems_maps[m].mapname:"in a composition");
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
       }
       return at+1;
     }
   errmsg("Error: unknown mapping %s in an index expression\n",p);
-  MPI_Abort(PETSC_COMM_WORLD,1);
+  teems_abort();
   return at+1;
 }
 
@@ -96,19 +96,19 @@ static void map_dim_bind(dim_addr *Dm, int mp, dim_t frame_setid, offset_t arg_s
     dss=set_supset_slot(sets,frame_setid,(dim_t)md->fromset);
     if (dss<0) {
       errmsg("Error: the index of mapping %s does not range over its domain set %s or a declared subset of it (it ranges over %s, in %s)\n",md->mapname,sets[md->fromset].setname,sets[frame_setid].setname,symname);
-      MPI_Abort(PETSC_COMM_WORLD,1);
+      teems_abort();
     }
   }
   if ((offset_t)md->toset!=arg_setid) {
     css=set_supset_slot(sets,(dim_t)md->toset,(dim_t)arg_setid);
     if (css<0) {
       errmsg("Error: mapping %s does not map into the argument set at that position of %s (its codomain %s is neither %s nor a declared subset of it; GEMPACK manual 11.9.7)\n",md->mapname,symname,sets[md->toset].setname,sets[arg_setid].setname);
-      MPI_Abort(PETSC_COMM_WORLD,1);
+      teems_abort();
     }
   }
   if (!mapping_ready((dim_t)(mp-1))) {
     errmsg("Error: mapping %s is used (in %s) before a Formula has assigned all of its values (GEMPACK manual 10.13.1/11.9.1)\n",md->mapname,symname);
-    MPI_Abort(PETSC_COMM_WORLD,1);
+    teems_abort();
   }
   offset_range_check(frame_setid,dss>0?dss:0,(dim_t)md->fromset,leadlag,md->mapname,symname);
   mapping_frame_check((dim_t)(mp-1),frame_setid,dss,leadlag,symname);
@@ -164,7 +164,7 @@ static void dim_bind_pos(dim_addr *D, bool *seen, char *p, int mp, int leadlag, 
     return;
   }
   errmsg("Error: index %s is repeated in %s at argument positions needing three different set routings; this is not supported\n",p,symname);
-  MPI_Abort(PETSC_COMM_WORLD,1);
+  teems_abort();
 }
 
 /* $POS(...) (manual 11.5.6) inside a formula text (spaces stripped,
@@ -324,7 +324,7 @@ static char *bind_next_index(const char *delim, const char *tokcopy) {
   if (p==NULL) {
     errmsg("Error: %s has an empty index in its argument list; a reference must carry exactly the declared indices (GEMPACK manual 10.3, 11.4.10)\n",tokcopy);
     fflush(stdout);
-    MPI_Abort(PETSC_COMM_WORLD,1);
+    teems_abort();
   }
   return p;
 }
@@ -393,7 +393,7 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
     if (strcmp(coefs[index].cofname,p)==0) {
       if((int)coefs[index].size!=nargs_tok) {
         errmsg("Error: coefficient %s is declared with %d %s but is referenced with %d in %s; a reference must carry exactly the declared indices (GEMPACK manual 10.3, 11.4.10)\n",coefs[index].cofname,(int)coefs[index].size,coefs[index].size==1?"index":"indices",nargs_tok,tokcopy);
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
       }
       if(!coefs[index].suplval)warn_no_values(coefs[index].cofname,index,0);
       if(varindex==2) {
@@ -493,7 +493,7 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
     if (strcmp(vars[index].cofname,p)==0) {
       if((int)vars[index].size!=nargs_tok) {
         errmsg("Error: variable %s is declared with %d %s but is referenced with %d in %s; a reference must carry exactly the declared indices (GEMPACK manual 10.3, 11.4.10)\n",vars[index].cofname,(int)vars[index].size,vars[index].size==1?"index":"indices",nargs_tok,tokcopy);
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
       }
       if(varindex==2) {
         ops[nops].Var2BegAdd=vars[index].offset+ncofele;
@@ -724,7 +724,7 @@ int formula_bind_operand(char *var2, set_def *sets,array_def *coefs,offset_t nco
      Callers do not test the return value, so abort here by name. */
   errmsg("Error: %s is not a coefficient, variable or number and cannot be an arithmetic operand (an index or quoted element compares through $POS, GEMPACK manual 11.5.6/11.4.11)\n",tokcopy);
   fflush(stdout);
-  MPI_Abort(PETSC_COMM_WORLD,1);
+  teems_abort();
   return 0;
 }
 
@@ -765,7 +765,7 @@ static void leadlag_digits_check(const char *p, const char *sign, char ch) {
   return;
 bad:
   errmsg("Error: index offset %.*s%c%s is not an integer constant (GEMPACK manual 11.2.4: an offset is index + <integer> or index - <integer>)\n",(int)(sign-p),p,ch,sign+1);
-  MPI_Abort(PETSC_COMM_WORLD,1);
+  teems_abort();
 }
 
 int parse_index_leadlag(char *p,int *leadlag) {
@@ -799,7 +799,7 @@ dim_t set_bind_slot(set_def *sets, dim_t sub, dim_t sup, int *leadlag, const cha
   if (*leadlag!=0&&(!sets[sub].intertemp||!sets[sup].intertemp)) {
     dim_t bad=sets[sup].intertemp?sub:sup;
     errmsg("Error: index offset %s%+d in %s applies to set %s, which is not intertemporal; offsets t+n and t-n are allowed only over sets declared (intertemporal) (GEMPACK manual 16.2)\n",idx,*leadlag,symname,sets[bad].setname);
-    MPI_Abort(PETSC_COMM_WORLD,1);
+    teems_abort();
   }
   ss=set_supset_slot(sets,sub,sup);
   if (ss>=0) return ss;
@@ -813,7 +813,7 @@ dim_t set_bind_slot(set_def *sets, dim_t sub, dim_t sup, int *leadlag, const cha
         if (*leadlag!=0) snprintf(ix,sizeof(ix),"%s%+d",idx,*leadlag);
         else snprintf(ix,sizeof(ix),"%s",idx);
         errmsg("Error: index %s of %s ranges over set %s, and its element %s[%ld] lands on %s[%ld], outside set %s (%s[%ld] - %s[%ld]); intertemporal elements line up by number (GEMPACK manual 16.4)\n",ix,symname,sets[sub].setname,teems_set_itstem[sub],(long)(teems_set_itfirst[sub]+e),teems_set_itstem[sup],k,sets[sup].setname,teems_set_itstem[sup],lo,teems_set_itstem[sup],hi);
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
       }
     }
     *leadlag+=teems_set_itfirst[sub]-teems_set_itfirst[sup];
@@ -837,7 +837,7 @@ void offset_range_check(dim_t frame_setid, dim_t ss, dim_t arg_setid, int leadla
     pos+=leadlag;
     if (pos<0||pos>=teems_sets[arg_setid].size) {
       errmsg("Error: index offset %s%+d in %s runs outside set %s (at element %s of %s; GEMPACK manual 16.4)\n",idx,leadlag,symname,teems_sets[arg_setid].setname,teems_set_elems[teems_sets[frame_setid].offset+e].setele,teems_sets[frame_setid].setname);
-      MPI_Abort(PETSC_COMM_WORLD,1);
+      teems_abort();
     }
   }
 }
@@ -1166,7 +1166,7 @@ int coefs_range_test_initial(array_def *coefs, offset_t ncof, elem_value *elem_v
   }
   if(nviol>0&&mode==2) {
     errmsg("Error: %d coefficient(s) have initial values outside their declared range (GEMPACK manual 25.4.2: tested once the initial Reads and Formulas are done); -range_test_initial 1 reports them as warnings instead\n",nviol);
-    MPI_Abort(PETSC_COMM_WORLD,1);
+    teems_abort();
   }
   return nviol;
 }
@@ -1377,13 +1377,13 @@ void eval_ctx_stmt(const char *kind, const char *stmt) {
    error that produced it (manual 34.3) */
 void eval_nonfinite_fatal(const char *what, double v) {
   errmsg("Error: %s %s%s is not finite (%s): a division, LOGE, SQRT or power left its domain or the value overflowed (arithmetic error, GEMPACK manual 34.3)\n",what,eval_ctx[0]?"in ":"",eval_ctx,teems_isnan_bits(v)?"NaN":"infinite");
-  MPI_Abort(PETSC_COMM_WORLD,1);
+  teems_abort();
 }
 /* a Jacobian row PETSc would not take (an entry outside the row's
    preallocation): continuing would solve without it */
 void eval_insert_fatal(const char *block, long row) {
   errmsg("Error: the %s-column entries of Jacobian row %ld%s%s could not be stored (PETSc rejected the insertion; internal preallocation error) -- the run stops rather than solve without them\n",block,row,eval_ctx[0]?" from ":"",eval_ctx);
-  MPI_Abort(PETSC_COMM_WORLD,1);
+  teems_abort();
 }
 #define EVAL_PENDING_MAX 64
 typedef struct { int n; int op[EVAL_PENDING_MAX]; char kind[EVAL_PENDING_MAX]; } eval_pending;
@@ -1417,23 +1417,23 @@ static void eval_pending_flush_one(int kind) {
   switch(kind) {
   case EH_ZBZ:
     errmsg("Error: zero divided by zero in %s while Zerodivide (zero_by_zero) is off (GEMPACK manual 34.3)\n",eval_ctx[0]?eval_ctx:"a formula");
-    MPI_Abort(PETSC_COMM_WORLD,1);
+    teems_abort();
     break;
   case EH_NBZ:
     errmsg("Error: division by zero in %s; Zerodivide (nonzero_by_zero) is off -- set a default with Zerodivide (nonzero_by_zero) default <value> or guard with ID01 (GEMPACK manual 34.3)\n",eval_ctx[0]?eval_ctx:"a formula");
-    MPI_Abort(PETSC_COMM_WORLD,1);
+    teems_abort();
     break;
   case EH_FRACPOW:
     errmsg("Error: fractional power of a negative number in %s (arithmetic error, GEMPACK manual 34.3)\n",eval_ctx[0]?eval_ctx:"a formula");
-    MPI_Abort(PETSC_COMM_WORLD,1);
+    teems_abort();
     break;
   case EH_SIMDIV:
     errmsg("Error: division by zero in %s, where it is never allowed (GEMPACK manual 10.11.1; Zerodivide statements apply to Formulas only) -- guard the denominator with ID01 or ID0V\n",eval_ctx[0]?eval_ctx:"an Equation, Backsolve or Update");
-    MPI_Abort(PETSC_COMM_WORLD,1);
+    teems_abort();
     break;
   case EH_NONFINITE:
     errmsg("Error: an IF condition operand %s%s is not finite: a division, LOGE, SQRT or power left its domain or the value overflowed (arithmetic error, GEMPACK manual 34.3)\n",eval_ctx[0]?"in ":"",eval_ctx);
-    MPI_Abort(PETSC_COMM_WORLD,1);
+    teems_abort();
     break;
   default:
     #pragma omp atomic
@@ -2206,17 +2206,17 @@ static void mapping_store_value(dim_t mm, dim_t dom, dim_t cod, set_def *sets, s
   dim_t n=sets[md->fromset].size;
   if (cod<0||cod>=sets[md->toset].size) {
     errmsg("Error: Formula assigns mapping %s a position outside its codomain set %s (%d elements): %d (GEMPACK manual 11.9.2)\n",md->mapname,sets[md->toset].setname,(int)sets[md->toset].size,(int)cod+1);
-    MPI_Abort(PETSC_COMM_WORLD,1);
+    teems_abort();
   }
   if (md->assigned[dom]&&md->values[dom]!=cod&&md->used) {
     errmsg("Error: Formula changes the value of mapping %s for element %s after the mapping has been used (GEMPACK manual 11.9.9)\n",md->mapname,set_elems[sets[md->fromset].offset+dom].setele);
-    MPI_Abort(PETSC_COMM_WORLD,1);
+    teems_abort();
   }
   md->values[dom]=cod;
   if (!md->assigned[dom]) { md->assigned[dom]=1; md->nassigned++; }
   if (md->nassigned==n&&!md->has_values) {
     md->has_values=true;
-    if (mapping_check_onto(teems_maps,mm,sets,set_elems)==-1) MPI_Abort(PETSC_COMM_WORLD,1);
+    if (mapping_check_onto(teems_maps,mm,sets,set_elems)==-1) teems_abort();
   }
 }
 
@@ -2239,14 +2239,14 @@ static void mapping_assign_literal(dim_t mm, char *lhs, char *rhs, set_def *sets
   if (p==NULL) p=strchr(lhs,MAPMARK);
   if (p==NULL||p[1]!='"') {
     errmsg("Error: unquantified Formula for mapping %s must name a domain element in quotes, e.g. %s(\"food\") (GEMPACK manual 10.13.1)\n",md->mapname,md->mapname);
-    MPI_Abort(PETSC_COMM_WORLD,1);
+    teems_abort();
   }
   for (p+=2; *p!='"'&&*p!='\0'&&k<NAMESIZE-1; p++) el[k++]=tolower((int)*p);
   el[k]='\0';
   dom=set_element_pos(el,md->fromset,sets,set_elems);
   if (dom<0) {
     errmsg("Error: %s is not an element of set %s, the domain of mapping %s (GEMPACK manual 11.9.2)\n",el,sets[md->fromset].setname,md->mapname);
-    MPI_Abort(PETSC_COMM_WORLD,1);
+    teems_abort();
   }
   while (*rhs==' ') rhs++;
   if ((q=strchr(rhs,';'))!=NULL) *q='\0';
@@ -2257,12 +2257,12 @@ static void mapping_assign_literal(dim_t mm, char *lhs, char *rhs, set_def *sets
     cod=set_element_pos(el,md->toset,sets,set_elems);
     if (cod<0) {
       errmsg("Error: %s is not an element of set %s, the codomain of mapping %s (GEMPACK manual 11.9.2)\n",el,sets[md->toset].setname,md->mapname);
-      MPI_Abort(PETSC_COMM_WORLD,1);
+      teems_abort();
     }
   } else {
     if (byele) {
       errmsg("Error: Formula (by_elements) for mapping %s needs a quoted codomain element on the right-hand side (GEMPACK manual 10.13.1)\n",md->mapname);
-      MPI_Abort(PETSC_COMM_WORLD,1);
+      teems_abort();
     }
     cod=(dim_t)atoi(rhs)-1;
   }
@@ -2285,13 +2285,13 @@ static void mapping_assign_formula(dim_t mm, char *vname, char *rhs, int byele, 
   if (p==NULL) p=strchr(vname,MAPMARK);
   if (p==NULL) {
     errmsg("Error: Formula for mapping %s has no argument (GEMPACK manual 10.13.1)\n",md->mapname);
-    MPI_Abort(PETSC_COMM_WORLD,1);
+    teems_abort();
   }
   for (p++; *p!=')'&&*p!='}'&&*p!='\0'&&k<NAMESIZE-1; p++) arg[k++]=*p;
   arg[k]='\0';
   if (strchr(arg,',')!=NULL) {
     errmsg("Error: mapping %s takes one argument in a Formula (GEMPACK manual 10.13.1): %s\n",md->mapname,vname);
-    MPI_Abort(PETSC_COMM_WORLD,1);
+    teems_abort();
   }
   if (arg[0]=='"') {
     k=0;
@@ -2300,20 +2300,20 @@ static void mapping_assign_formula(dim_t mm, char *vname, char *rhs, int byele, 
     dom=set_element_pos(el,md->fromset,sets,set_elems);
     if (dom<0) {
       errmsg("Error: %s is not an element of set %s, the domain of mapping %s (GEMPACK manual 11.9.2)\n",el,sets[md->fromset].setname,md->mapname);
-      MPI_Abort(PETSC_COMM_WORLD,1);
+      teems_abort();
     }
     litdom=1;
   } else {
     for (l=0; l<fdim-1; l++) if (strcmp(arg,arSet[l].index_name)==0) break;
     if (l==fdim-1) {
       errmsg("Error: the argument %s of mapping %s is not one of the Formula's quantifier indices\n",arg,md->mapname);
-      MPI_Abort(PETSC_COMM_WORLD,1);
+      teems_abort();
     }
     if ((dim_t)arSet[l].setid!=md->fromset) {
       for (sup=1; sup<MAXSUPSET; sup++) if (sets[arSet[l].setid].subsetid[sup]==md->fromset) break;
       if (sup==MAXSUPSET) {
         errmsg("Error: index %s of the Formula for mapping %s does not range over its domain set %s or a subset of it (GEMPACK manual 11.9.2)\n",arg,md->mapname,sets[md->fromset].setname);
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
       }
     }
   }
@@ -2325,7 +2325,7 @@ static void mapping_assign_formula(dim_t mm, char *vname, char *rhs, int byele, 
     codlit=set_element_pos(el,md->toset,sets,set_elems);
     if (codlit<0) {
       errmsg("Error: %s is not an element of set %s, the codomain of mapping %s (GEMPACK manual 11.9.2)\n",el,sets[md->toset].setname,md->mapname);
-      MPI_Abort(PETSC_COMM_WORLD,1);
+      teems_abort();
     }
   } else {
     /* identity and copy forms (manual 10.13.1; potential-models vetting
@@ -2352,17 +2352,17 @@ static void mapping_assign_formula(dim_t mm, char *vname, char *rhs, int byele, 
       for (idxl=0; idxl<fdim-1; idxl++) if (strcmp(p+1,arSet[idxl].index_name)==0) break;
       if (mb==teems_nmap||idxl==fdim-1) {
         errmsg("Error: Formula for mapping %s: %s is not a mapping of one of the Formula's quantifier indices (GEMPACK manual 10.13.1)\n",md->mapname,rr);
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
       }
       if (!mapping_ready(mb)) {
         errmsg("Error: mapping %s is used (in the Formula for mapping %s) before all of its values are assigned (GEMPACK manual 10.13.1/11.9.1)\n",teems_maps[mb].mapname,md->mapname);
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
       }
       cpdss=set_supset_slot(sets,(dim_t)arSet[idxl].setid,teems_maps[mb].fromset);
       idxss=set_supset_slot(sets,teems_maps[mb].toset,md->toset);
       if (cpdss<0) {
         errmsg("Error: Formula for mapping %s: %s needs its index over the domain of %s or a subset of it (GEMPACK manual 10.13.1)\n",md->mapname,rr,teems_maps[mb].mapname);
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
       }
       teems_maps[mb].used=true;
       cpmap=mb;
@@ -2370,9 +2370,9 @@ static void mapping_assign_formula(dim_t mm, char *vname, char *rhs, int byele, 
     } else {
       if (byele) {
         errmsg("Error: Formula (by_elements) for mapping %s needs a quoted codomain element, an index of the codomain or another mapping on the right-hand side (GEMPACK manual 10.13.1)\n",md->mapname);
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
       }
-      if(!formula_compile(rhs,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,&nops,arSet,fdim-1))MPI_Abort(PETSC_COMM_WORLD,1);
+      if(!formula_compile(rhs,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,&nops,arSet,fdim-1))teems_abort();
     }
   }
   for (t=0; t<nloops; t++) {
@@ -2405,7 +2405,7 @@ static void mapping_assign_formula(dim_t mm, char *vname, char *rhs, int byele, 
         cod=set_element_pos(set_elems[sets[vs].offset+vp].setele,md->toset,sets,set_elems);
         if (cod<0) {
           errmsg("Error: Formula for mapping %s gives element %s, which is not an element of its codomain %s (GEMPACK manual 11.9.12)\n",md->mapname,set_elems[sets[vs].offset+vp].setele,sets[md->toset].setname);
-          MPI_Abort(PETSC_COMM_WORLD,1);
+          teems_abort();
         }
       }
     } else {
@@ -2430,7 +2430,7 @@ static char *formula_toplevel_eq(char *line, const char *commsyntax) {
   char *p=str_rfind_toplevel(line,'=');
   if (p==NULL) {
     errmsg("Error: %s statement has no top-level '=' (a missing '=' or unbalanced parentheses): %s\n",commsyntax,line);
-    MPI_Abort(PETSC_COMM_WORLD,1);
+    teems_abort();
   }
   return p;
 }
@@ -2524,7 +2524,7 @@ static void lhs_args_bind(const char *kind, const char *stmt, array_def *a, char
   if (argu!=NULL) for (; *p!='\0'; p++) if (*p==',') nargs++;
   if (argu==NULL||nargs!=(int)a->size) {
     errmsg("Error: the left-hand side of %s %s carries %d argument(s); %s is declared with %d (GEMPACK manual 10.8, 11.4.10): %s\n",kind,a->cofname,nargs,a->cofname,(int)a->size,stmt);
-    MPI_Abort(PETSC_COMM_WORLD,1);
+    teems_abort();
   }
   p=argu;
   for (d=0; d<a->size; d++) {
@@ -2533,7 +2533,7 @@ static void lhs_args_bind(const char *kind, const char *stmt, array_def *a, char
     dim_t l,ss;
     if (c==NULL||c-p<=0||c-p>=NAMESIZE) {
       errmsg("Error: the left-hand side of %s %s has an empty or malformed argument (GEMPACK manual 10.8, 11.4.10): %s\n",kind,a->cofname,stmt);
-      MPI_Abort(PETSC_COMM_WORLD,1);
+      teems_abort();
     }
     memcpy(tok,p,c-p);
     tok[c-p]='\0';
@@ -2548,40 +2548,40 @@ static void lhs_args_bind(const char *kind, const char *stmt, array_def *a, char
       map_def *md;
       if (varmap==NULL) {
         errmsg("Error: a set mapping on the left-hand side of an %s statement is not supported (GEMPACK manual 11.9.9): %s\n",kind,stmt);
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
       }
       ix=mapping_token_split(tok,&mp);
       md=&teems_maps[mp-1];
       if (strpbrk(ix,"+-#!")!=NULL) {
         errmsg("Error: an index offset on a mapped argument of the left-hand side of %s %s is not supported (GEMPACK manual 11.9.8): %s\n",kind,a->cofname,stmt);
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
       }
       if (sets[a->setid[d]].intertemp) {
         errmsg("Error: %s %s has a set mapping on its left-hand side but argument %d ranges over the intertemporal set %s; LHS mappings need non-intertemporal argument sets (GEMPACK manual 11.9.8.2): %s\n",kind,a->cofname,(int)d+1,sets[a->setid[d]].setname,stmt);
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
       }
       for (l=0; l<nq; l++) if (strcmp(arSet[l].index_name,ix)==0) break;
       if (l==nq) {
         errmsg("Error: %s, the index of mapping %s on the left-hand side of %s %s, is not an index of the statement's quantifiers (GEMPACK manual 11.9.8): %s\n",ix,md->mapname,kind,a->cofname,stmt);
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
       }
       if ((dim_t)md->fromset!=(dim_t)arSet[l].setid) {
         dss=set_supset_slot(sets,(dim_t)arSet[l].setid,(dim_t)md->fromset);
         if (dss<0) {
           errmsg("Error: the index of mapping %s does not range over its domain set %s or a declared subset of it (it ranges over %s, in %s)\n",md->mapname,sets[md->fromset].setname,sets[arSet[l].setid].setname,a->cofname);
-          MPI_Abort(PETSC_COMM_WORLD,1);
+          teems_abort();
         }
       }
       if ((dim_t)md->toset!=(dim_t)a->setid[d]) {
         css=set_supset_slot(sets,(dim_t)md->toset,(dim_t)a->setid[d]);
         if (css<0) {
           errmsg("Error: mapping %s does not map into the argument set at that position of %s (its codomain %s is neither %s nor a declared subset of it; GEMPACK manual 11.9.7)\n",md->mapname,a->cofname,sets[md->toset].setname,sets[a->setid[d]].setname);
-          MPI_Abort(PETSC_COMM_WORLD,1);
+          teems_abort();
         }
       }
       if (!mapping_ready((dim_t)(mp-1))) {
         errmsg("Error: mapping %s is used (in %s) before a Formula has assigned all of its values (GEMPACK manual 10.13.1/11.9.1)\n",md->mapname,a->cofname);
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
       }
       mapping_frame_check((dim_t)(mp-1),(dim_t)arSet[l].setid,dss,0,a->cofname);
       md->used=true;
@@ -2600,7 +2600,7 @@ static void lhs_args_bind(const char *kind, const char *stmt, array_def *a, char
       else for (; *q!='\0'; q++) if (!isdigit((unsigned char)*q)) { q=NULL; break; }
       if (q==NULL) {
         errmsg("Error: index offset %s on the left-hand side of %s %s is not an integer constant (GEMPACK manual 11.2.4: an offset is index + <integer> or index - <integer>): %s\n",tok,kind,a->cofname,stmt);
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
       }
       ll=atoi(sg+1);
       if (*sg=='-'||*sg=='!') ll=-ll;
@@ -2609,7 +2609,7 @@ static void lhs_args_bind(const char *kind, const char *stmt, array_def *a, char
     for (l=0; l<nq; l++) if (strcmp(arSet[l].index_name,tok)==0) break;
     if (l==nq) {
       errmsg("Error: %s on the left-hand side of %s %s is not an index of the statement's quantifiers (each LHS argument is an ALL index, GEMPACK manual 10.8, 11.4.10): %s\n",tok,kind,a->cofname,stmt);
-      MPI_Abort(PETSC_COMM_WORLD,1);
+      teems_abort();
     }
     varantidim[d]=a->strides[d];
     vararset[d]=l+1;
@@ -2650,7 +2650,7 @@ static void lhs_mapped_unique(array_def *a, const char *stmt, quantifier *arSet,
       array_element_label(a,off,lab,sizeof(lab));
       errmsg("Error: the Formula assigns %s more than once through the set mapping on its left-hand side; a Formula with LHS mappings may assign each element at most once, whatever its conditions (GEMPACK manual 11.9.8): %s\n",lab,stmt);
       free(seen);
-      MPI_Abort(PETSC_COMM_WORLD,1);
+      teems_abort();
     }
     seen[off]=1;
   }
@@ -2795,7 +2795,7 @@ static int sr_classify_text(const char *t, const char *lhsname, array_def *a, qu
         if (back) {
           free(wm); free(rm);
           errmsg("Error: Formula for %s reads a later element of %s along the loop (backward recursion; formulas run forwards through their loops and use the most recent values, GEMPACK manual 16.5(b)/(c) -- copy the coefficient first): %s\n",a->cofname,a->cofname,stmt);
-          MPI_Abort(PETSC_COMM_WORLD,1);
+          teems_abort();
         }
         if (nstk>0&&!incond) mode=SR_SERIAL_SUMS;
         else if (mode<SR_SERIAL) mode=SR_SERIAL;
@@ -2823,7 +2823,7 @@ static void formula_sums_redo(const char *fsrc, const char *fmain, const char *s
   while (sum_eval(t,syn,sets,nset,set_elems,elem_vals,ncofvar,ncofele,coefs,ncof,vars,nvar,sum_cof,totalsum,sum_vals,nsumele,ops,arSet,fdim,&sumindx,sumcount,zerodivide)==1) sumcount++;
   strcpy(m,fmain);
   *nops=0;
-  if(!formula_compile(m,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,nops,arSet,fdim-1))MPI_Abort(PETSC_COMM_WORLD,1);
+  if(!formula_compile(m,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,nops,arSet,fdim-1))teems_abort();
 }
 
 offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset, set_element *set_elems, array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar, elem_value *elem_vals,offset_t ncofvar,offset_t ncofele,bool IsIni) {
@@ -2873,7 +2873,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
        running the formula half while the equation silently vanishes */
     if (strstr(line,"& equation")!=NULL||strstr(line,"&equation")!=NULL) {
       errmsg("Error: 'Formula & Equation' is not supported: its expansion needs a levels equation (GEMPACK manual 10.9.1); linearize the equation and set the base value with Formula (initial)\n");
-      MPI_Abort(PETSC_COMM_WORLD,1);
+      teems_abort();
     }
     /* positional INITIAL/ALWAYS default (manual 10.19; audit A6):
        both directions and spaced forms; values validated up front by
@@ -2994,7 +2994,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
             condgen[i]=0;
             if (str_find_ci(qp,"(all,")!=0) {
               errmsg("Error: malformed quantifier list in Formula: %s\n",linecopy);
-              MPI_Abort(PETSC_COMM_WORLD,1);
+              teems_abort();
             }
             for (qe=qp; *qe!='\0'; qe++) {
               if (*qe=='(') qd++;
@@ -3002,7 +3002,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
             }
             if (*qe!=')'||qe-qp-1>=(long)sizeof(grp)) {
               errmsg("Error: unbalanced quantifier in Formula: %s\n",linecopy);
-              MPI_Abort(PETSC_COMM_WORLD,1);
+              teems_abort();
             }
             memcpy(grp,qp+1,qe-qp-1);
             grp[qe-qp-1]='\0';
@@ -3010,18 +3010,18 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
             c2=(c1!=NULL)?strchr(c1+1,','):NULL;
             if (c1==NULL||c2==NULL||c2-c1-1<=0||c2-c1-1>=NAMESIZE) {
               errmsg("Error: malformed quantifier (%s) in Formula: %s\n",grp,linecopy);
-              MPI_Abort(PETSC_COMM_WORLD,1);
+              teems_abort();
             }
             memcpy(arSet[i].index_name,c1+1,c2-c1-1);
             arSet[i].index_name[c2-c1-1]='\0';
             cc=strchr(c2+1,':');
             if (cc==NULL) {
-              if (strlen(c2+1)>=NAMESIZE) { errmsg("Error: malformed quantifier (%s) in Formula: %s\n",grp,linecopy); MPI_Abort(PETSC_COMM_WORLD,1); }
+              if (strlen(c2+1)>=NAMESIZE) { errmsg("Error: malformed quantifier (%s) in Formula: %s\n",grp,linecopy); teems_abort(); }
               strcpy(tempset,c2+1);
             } else {
               char *cond_s=cc+1,*op=NULL;
               int oplen=0,od=0;
-              if (cc-c2-1>=NAMESIZE) { errmsg("Error: malformed quantifier (%s) in Formula: %s\n",grp,linecopy); MPI_Abort(PETSC_COMM_WORLD,1); }
+              if (cc-c2-1>=NAMESIZE) { errmsg("Error: malformed quantifier (%s) in Formula: %s\n",grp,linecopy); teems_abort(); }
               memcpy(tempset,c2+1,cc-c2-1);
               tempset[cc-c2-1]='\0';
               /* AND/OR/NOT and index comparisons (manual 11.4.5, 11.4.11):
@@ -3032,7 +3032,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
                 char ctx[TABREADLINE];
                 snprintf(ctx,sizeof(ctx),"Formula %.200s",linecopy);
                 qlow[0]='(';
-                if (!cond_lower_numeric(cond_s,qlow+1,sizeof(qlow)-8,arSet,(dim_t)(i+1),ctx)) MPI_Abort(PETSC_COMM_WORLD,1);
+                if (!cond_lower_numeric(cond_s,qlow+1,sizeof(qlow)-8,arSet,(dim_t)(i+1),ctx)) teems_abort();
                 strcat(qlow,")<>0");
                 cond_s=qlow;
               }
@@ -3048,7 +3048,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
               }
               if (op==NULL) {
                 errmsg("Error: Formula quantifier condition %s has no comparison (=, <>, <, >, <=, >=; GEMPACK manual 11.4.11): %s\n",cond_s,linecopy);
-                MPI_Abort(PETSC_COMM_WORLD,1);
+                teems_abort();
               }
               if (op[0]=='=') logioper[i]=1;
               else if (op[0]=='<'&&op[1]=='=') logioper[i]=5;
@@ -3079,16 +3079,16 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
                     dim_t mm2,cset,q2;
                     if (logioper[i]!=1&&logioper[i]!=4) {
                       errmsg("Error: a mapping in a Formula quantifier condition compares by = or <> only (GEMPACK manual 11.4.11): %s\n",linecopy);
-                      MPI_Abort(PETSC_COMM_WORLD,1);
+                      teems_abort();
                     }
                     memcpy(mname,ms,mk-ms); mname[mk-ms]='\0';
                     for (mm2=0; mm2<teems_nmap; mm2++) if (strcmp(mname,teems_maps[mm2].mapname)==0) break;
-                    if (mm2==teems_nmap) { errmsg("Error: unknown mapping %s in a Formula quantifier condition: %s\n",mname,linecopy); MPI_Abort(PETSC_COMM_WORLD,1); }
+                    if (mm2==teems_nmap) { errmsg("Error: unknown mapping %s in a Formula quantifier condition: %s\n",mname,linecopy); teems_abort(); }
                     cset=teems_maps[mm2].toset;
-                    if (strchr(os,MAPMARK)!=NULL&&strpbrk(os,"(){}+-*/^$")==NULL) { if (snprintf(other,sizeof(other),"$pos(%s)",os)>=(int)sizeof(other)) { errmsg("Error: Formula quantifier condition too long: %s\n",linecopy); MPI_Abort(PETSC_COMM_WORLD,1); } }
+                    if (strchr(os,MAPMARK)!=NULL&&strpbrk(os,"(){}+-*/^$")==NULL) { if (snprintf(other,sizeof(other),"$pos(%s)",os)>=(int)sizeof(other)) { errmsg("Error: Formula quantifier condition too long: %s\n",linecopy); teems_abort(); } }
                     else {
                       for (q2=0; q2<=i; q2++) if (strcmp(os,arSet[q2].index_name)==0) break;
-                      if (q2<=i) { if (snprintf(other,sizeof(other),"$pos(%s,%s)",os,sets[cset].setname)>=(int)sizeof(other)) { errmsg("Error: Formula quantifier condition too long: %s\n",linecopy); MPI_Abort(PETSC_COMM_WORLD,1); } }
+                      if (q2<=i) { if (snprintf(other,sizeof(other),"$pos(%s,%s)",os,sets[cset].setname)>=(int)sizeof(other)) { errmsg("Error: Formula quantifier condition too long: %s\n",linecopy); teems_abort(); } }
                       else {
                         char el[NAMESIZE];
                         int ek=0;
@@ -3099,12 +3099,12 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
                         for (e=0; e<sets[cset].size; e++) if (strcmp(el,set_elems[sets[cset].offset+e].setele)==0) break;
                         if (e==sets[cset].size) {
                           errmsg("Error: %s in a Formula quantifier condition is neither a quantifier index nor an element of %s, the codomain of mapping %s: %s\n",os,sets[cset].setname,mname,linecopy);
-                          MPI_Abort(PETSC_COMM_WORLD,1);
+                          teems_abort();
                         }
                         snprintf(other,sizeof(other),"%d",(int)e+1);
                       }
                     }
-                    if (snprintf(rhs_buf,sizeof(rhs_buf),"$pos(%s)",ms)>=(int)sizeof(rhs_buf)) { errmsg("Error: Formula quantifier condition too long: %s\n",linecopy); MPI_Abort(PETSC_COMM_WORLD,1); }
+                    if (snprintf(rhs_buf,sizeof(rhs_buf),"$pos(%s)",ms)>=(int)sizeof(rhs_buf)) { errmsg("Error: Formula quantifier condition too long: %s\n",linecopy); teems_abort(); }
                     strcpy(lhs_s,rhs_buf);
                     strcpy(rhs_buf,other);
                     rhs_s=rhs_buf;
@@ -3154,7 +3154,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
                      expressions over the frame */
                   if (str_count_ci(cond_s,"sum(")>0) {
                     errmsg("Error: sums in Formula quantifier conditions are not supported; compute the sum in a coefficient first: %s\n",linecopy);
-                    MPI_Abort(PETSC_COMM_WORLD,1);
+                    teems_abort();
                   }
                   condgen[i]=1;
                   condL[i]=strdup(lhs_s);
@@ -3176,7 +3176,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
           readitem = qp;
           if (*readitem=='\0') {
             errmsg("Error: Formula has no left-hand side after its quantifiers: %s\n",linecopy);
-            MPI_Abort(PETSC_COMM_WORLD,1);
+            teems_abort();
           }
           dcountdim1[fdim-2]=1;
           for (i=fdim-3; i>-1; i--) {
@@ -3288,7 +3288,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
              on element 0 of the first coefficient with no message */
           if (index<0) {
             errmsg("Error: Formula assigns %s, which is not a declared coefficient (GEMPACK manual 10.8)\n",p);
-            MPI_Abort(PETSC_COMM_WORLD,1);
+            teems_abort();
           }
         }
         /* the fast-form condition binder below reuses index; the range
@@ -3305,11 +3305,11 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
         if (teems_ps_pass) {
           if (check10) {
             errmsg("Error: PostSim Formula assigns variable %s; simulation results cannot be changed (GEMPACK manual 12.2.2)\n",vars[index].cofname);
-            MPI_Abort(PETSC_COMM_WORLD,1);
+            teems_abort();
           }
           if (teems_coef_is_ps==NULL||!teems_coef_is_ps[index]) {
             errmsg("Error: PostSim Formula assigns ordinary coefficient %s; the LHS must be a PostSim Coefficient (GEMPACK manual 12.2.2)\n",coefs[index].cofname);
-            MPI_Abort(PETSC_COMM_WORLD,1);
+            teems_abort();
           }
         }
         for (l=0; l<MAXVARDIM; l++){varantidim[l]=0;varsubset[l]=0;varsupsetid[l]=0;varll[l]=0;varmap[l]=0;varmapdss[l]=0;}
@@ -3320,7 +3320,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
         if (lhsmapped&&!loopser) lhs_mapped_unique(lhsdef,linecopy,arSet,fdim-1,dcountdim1,nloops,varsize,varantidim,vararset,varsubset,varsupsetid,varmap,varmapdss,sets,set_elems);
         if (IsFomIni) for (l=0; l<varsize; l++) if (varll[l]!=0) {
           errmsg("Error: index offsets are not allowed on the left-hand side of a Formula(Initial) (a Read in later steps; GEMPACK manual 10.8, 11.11.4): %s\n",linecopy);
-          MPI_Abort(PETSC_COMM_WORLD,1);
+          teems_abort();
         }
         /* recursive formulas (manual 16.5): classify references to the
            LHS array in the right-hand side and the quantifier conditions */
@@ -3347,7 +3347,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
         }
         if (fsr==SR_SERIAL_SUMS) strcpy(fmain,line1);
         nf_l=-1;
-        if(!formula_compile(line1,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,&nops,arSet,fdim-1))MPI_Abort(PETSC_COMM_WORLD,1);
+        if(!formula_compile(line1,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,&nops,arSet,fdim-1))teems_abort();
         if(ncond>0) {
           for(i=0; i<MAXVARDIM; i++)for(j=0; j<MAXVARDIM; j++){
             logiantidim[i][j]=0;
@@ -3368,7 +3368,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
               condnops[i1][sd]=0;
               if(!formula_compile(ctext,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,condops[i1][sd],&condnops[i1][sd],arSet,fdim-1)) {
                 errmsg("Error: cannot evaluate the Formula quantifier condition %s: %s\n",sd==0?condL[i1]:condR[i1],linecopy);
-                MPI_Abort(PETSC_COMM_WORLD,1);
+                teems_abort();
               }
             }
           }
@@ -3390,7 +3390,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
                 strcat(argu,",");
                 if(cond_arg_count(argu)!=(int)coefs[index].size) {
                   errmsg("Error: quantifier condition %s carries %d argument(s); %s is declared with %d (GEMPACK manual 11.4.11)\n",coefs[index].cofname,cond_arg_count(argu),coefs[index].cofname,(int)coefs[index].size);
-                  MPI_Abort(PETSC_COMM_WORLD,1);
+                  teems_abort();
                 }
                 for(i=0; i<coefs[index].size; i++) {
                   if(i==0)p=strtok(argu,",");
@@ -3421,7 +3421,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
                   strcat(argu,",");
                   if(cond_arg_count(argu)!=(int)vars[index].size) {
                     errmsg("Error: quantifier condition %s carries %d argument(s); %s is declared with %d (GEMPACK manual 11.4.11)\n",vars[index].cofname,cond_arg_count(argu),vars[index].cofname,(int)vars[index].size);
-                    MPI_Abort(PETSC_COMM_WORLD,1);
+                    teems_abort();
                   }
                   for(i=0; i<vars[index].size; i++) {
                     if(i==0)p=strtok(argu,",");
@@ -3440,7 +3440,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
             }
             if(b==0) {
               errmsg("Error: quantifier condition refers to %s, which is not a declared coefficient or variable (GEMPACK manual 11.4.11)\n",condvar[i1]);
-              MPI_Abort(PETSC_COMM_WORLD,1);
+              teems_abort();
             }
           }
         index=lhs_index;
@@ -3631,7 +3631,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
           store_real bad=elem_vals[offset+nf_off].value;
           array_element_label(check10?&vars[index]:&coefs[index],nf_off,lab,sizeof(lab));
           errmsg("Error: Formula for %s gives a value that is not finite (%s) at %s: a division, LOGE, SQRT or power left its domain or the value overflowed (arithmetic error, GEMPACK manual 34.3): %s\n",check10?vars[index].cofname:coefs[index].cofname,teems_isnan_bits((double)bad)?"NaN":"infinite",lab,linecopy);
-          MPI_Abort(PETSC_COMM_WORLD,1);
+          teems_abort();
         }
         zdiv_default_report("Formula",check10?vars[index].cofname:coefs[index].cofname,linecopy,zerodivide);
         int glmode=IsIni?teems_range_test_initial:teems_range_test_updated;
@@ -3647,7 +3647,7 @@ offset_t formulas_execute(char *fname, char *commsyntax,set_def *sets,dim_t nset
              25.4.4); the GEMPACK default is warn */
           if(glviol) {
             if(teems_rk_stage_checks)teems_check_viol_range++;
-            else if(glmode==2)MPI_Abort(PETSC_COMM_WORLD,1);
+            else if(glmode==2)teems_abort();
           }
         }
         
@@ -3795,7 +3795,7 @@ static offset_t upd_pend_reserve(offset_t n) {
     upd_pend_sb=realloc(upd_pend_sb,c*sizeof(double));
     if (upd_pend_off==NULL||upd_pend_sidx==NULL||upd_pend_val==NULL||upd_pend_base==NULL||upd_pend_sv==NULL||upd_pend_sb==NULL) {
       errmsg("Error: out of memory holding Update results\n");
-      MPI_Abort(PETSC_COMM_WORLD,1);
+      teems_abort();
     }
     upd_pend_cap=c;
   }
@@ -3825,7 +3825,7 @@ static void upd_range_check(array_def *coefs, offset_t index, offset_t offset, o
        GEMPACK default is warn */
     if(glviol) {
       if(teems_rk_stage_checks)teems_check_viol_range++;
-      else if(glmode==2)MPI_Abort(PETSC_COMM_WORLD,1);
+      else if(glmode==2)teems_abort();
     }
   }
 }
@@ -3880,7 +3880,7 @@ static void upd_shadow_sync(array_def *coefs, offset_t ncof, elem_value *elem_va
     upd_shb=malloc(upd_pathn*sizeof(double));
     if (upd_shv==NULL||upd_shb==NULL) {
       errmsg("Error: out of memory for the updated-data extrapolation\n");
-      MPI_Abort(PETSC_COMM_WORLD,1);
+      teems_abort();
     }
   }
   for (k=0; k<ncof; k++) {
@@ -3968,7 +3968,7 @@ static void upd_cond_extract(char *line, upd_conds *uc) {
       for (c=colon+1; c<close&&k<TABREADLINE-1; c++) if (*c!=' ') cond[k++]=*c;
       cond[k]='\0';
       cond_unwrap(cond);
-      if (!cond_lower_stmt(cond,sizeof(cond),line,"an Update quantifier condition")) MPI_Abort(PETSC_COMM_WORLD,1);
+      if (!cond_lower_stmt(cond,sizeof(cond),line,"an Update quantifier condition")) teems_abort();
       for (c=cond; *c!='\0'; c++) {
         if (*c=='('||*c=='['||*c=='{') od++;
         else if (*c==')'||*c==']'||*c=='}') od--;
@@ -3976,7 +3976,7 @@ static void upd_cond_extract(char *line, upd_conds *uc) {
       }
       if (o==NULL||str_count_ci(cond,"sum(")>0||str_count_ci(cond,"sum{")>0) {
         errmsg("Error: Update quantifier condition %s must be one comparison of two sum-free expressions (GEMPACK manual 11.4.11): %s\n",cond,line);
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
       }
       ol=((o[0]=='<'&&(o[1]=='='||o[1]=='>'))||(o[0]=='>'&&o[1]=='='))?2:1;
       uc->op[uc->n]=(o[0]=='=')?1:(o[0]=='<'&&o[1]=='=')?5:(o[0]=='>'&&o[1]=='=')?6:(o[0]=='<'&&o[1]=='>')?4:(o[0]=='>')?2:3;
@@ -4010,7 +4010,7 @@ static void upd_cond_compile(upd_conds *uc, set_def *sets, array_def *coefs, off
     uc->nops[i][sd]=0;
     if (!formula_compile(ctext,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,uc->ops[i][sd],&uc->nops[i][sd],arSet,nframe)) {
       errmsg("Error: cannot evaluate the Update quantifier condition %s\n",uc->txt[i][sd]);
-      MPI_Abort(PETSC_COMM_WORLD,1);
+      teems_abort();
     }
   }
 }
@@ -4147,7 +4147,7 @@ static void product_update_check(const char *rhs, const char *lhs, array_def *co
     ok=product_factor_ok(f,coefs,ncof,vars,nvar);
     if (!ok) {
       errmsg("Error: product Update of %s: the right-hand side must be a product of percentage-change variables v1*v2*...*vn (GEMPACK manual 11.12.4), and %s is not one; write a (change) Update for any other form: %s\n",lname,f[0]!='\0'?f:"an empty factor",stmt);
-      MPI_Abort(PETSC_COMM_WORLD,1);
+      teems_abort();
     }
     if (*q=='\0') break;
     p=q+1;
@@ -4182,7 +4182,7 @@ static void upd_nonfinite_scan(array_def *coefs, elem_value *elem_vals) {
       char lab[4*NAMESIZE];
       array_element_label(a,e,lab,sizeof(lab));
       errmsg("Error: Update of %s gives a value that is not finite (%s) at %s (arithmetic error, GEMPACK manual 34.3)\n",a->cofname,teems_isnan_bits((double)elem_vals[a->offset+e].value)?"NaN":"infinite",lab);
-      MPI_Abort(PETSC_COMM_WORLD,1);
+      teems_abort();
     }
   }
   upd_nf_n=0;
@@ -4283,7 +4283,7 @@ offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_el
     if(IsChange==false&&IsExplicit==false) {
       if (!product_star_rewrite(readitem,"+",TABREADLINE-(size_t)(readitem-line))) {
         errmsg("Error: Update statement too long: %s\n",linecopy);
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
       }
       strcpy(line1,vname);
       strcat(line1,"*(1+(");
@@ -4376,10 +4376,10 @@ offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_el
              slots between steps (manual 11.12.4: the LHS is a coefficient) */
           if (index<0) {
             errmsg("Error: Update assigns %s, which is not a declared coefficient (GEMPACK manual 11.12.4)\n",p);
-            MPI_Abort(PETSC_COMM_WORLD,1);
+            teems_abort();
           }
           errmsg("Error: Update assigns variable %s; the left-hand side of an Update must be a coefficient (GEMPACK manual 11.12.4)\n",p);
-          MPI_Abort(PETSC_COMM_WORLD,1);
+          teems_abort();
         }
         char *lhsargs=NULL;
         if (varsize>0) {
@@ -4389,7 +4389,7 @@ offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_el
         for (l=0; l<MAXVARDIM; l++){varantidim[l]=0;varsubset[l]=0;varsupsetid[l]=0;varll[l]=0;}
         lhs_args_bind("Update",linecopy,check10?&vars[index]:&coefs[index],lhsargs,arSet,fdim-1,sets,varantidim,vararset,varsubset,varsupsetid,varll,NULL,NULL);
         upd_nonfinite_note(check10?-1:index);
-    if(!formula_compile(line1,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,&nops,arSet,fdim-1))MPI_Abort(PETSC_COMM_WORLD,1);
+    if(!formula_compile(line1,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,&nops,arSet,fdim-1))teems_abort();
     upd_cond_compile(&uc,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,arSet,fdim-1);
     int dfr=upd_stmt_defer(stmt);
     offset_t pb=dfr?upd_pend_reserve(nloops):0;
@@ -4511,7 +4511,7 @@ offset_t updates_apply(char *fname,set_def *sets,dim_t nset, set_element *set_el
           char lab[4*NAMESIZE];
           array_element_label(check10?&vars[index]:&coefs[index],upd_nf_off-offset,lab,sizeof(lab));
           errmsg("Error: Update of %s gives a value that is not finite at %s: a division, LOGE, SQRT or power left its domain (arithmetic error, GEMPACK manual 34.3): %s\n",check10?vars[index].cofname:coefs[index].cofname,lab,linecopy);
-          MPI_Abort(PETSC_COMM_WORLD,1);
+          teems_abort();
         }
         zdiv_default_report("Update",check10?vars[index].cofname:coefs[index].cofname,linecopy,zerodivide);
         stmt++;
@@ -4620,7 +4620,7 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
     if(IsChange==false&&IsExplicit==false) {
       if (!product_star_rewrite(readitem,"/100)*(1+",TABREADLINE-(size_t)(readitem-line))) {
         errmsg("Error: Update statement too long: %s\n",linecopy);
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
       }
       strcpy(line1,vname);
       strcat(line1,"*(1+");
@@ -4713,10 +4713,10 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
              slots between steps (manual 11.12.4: the LHS is a coefficient) */
           if (index<0) {
             errmsg("Error: Update assigns %s, which is not a declared coefficient (GEMPACK manual 11.12.4)\n",p);
-            MPI_Abort(PETSC_COMM_WORLD,1);
+            teems_abort();
           }
           errmsg("Error: Update assigns variable %s; the left-hand side of an Update must be a coefficient (GEMPACK manual 11.12.4)\n",p);
-          MPI_Abort(PETSC_COMM_WORLD,1);
+          teems_abort();
         }
         char *lhsargs=NULL;
         if (varsize>0) {
@@ -4726,7 +4726,7 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
         for (l=0; l<MAXVARDIM; l++){varantidim[l]=0;varsubset[l]=0;varsupsetid[l]=0;varll[l]=0;}
         lhs_args_bind("Update",linecopy,check10?&vars[index]:&coefs[index],lhsargs,arSet,fdim-1,sets,varantidim,vararset,varsubset,varsupsetid,varll,NULL,NULL);
         upd_nonfinite_note(check10?-1:index);
-    if(!formula_compile(line1,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,&nops,arSet,fdim-1))MPI_Abort(PETSC_COMM_WORLD,1);
+    if(!formula_compile(line1,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,&nops,arSet,fdim-1))teems_abort();
     upd_cond_compile(&uc,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,arSet,fdim-1);
     int dfr=upd_stmt_defer(stmt);
     offset_t pb=dfr?upd_pend_reserve(nloops):0;
@@ -4826,7 +4826,7 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
           char lab[4*NAMESIZE];
           array_element_label(check10?&vars[index]:&coefs[index],upd_nf_off-offset,lab,sizeof(lab));
           errmsg("Error: Update of %s gives a value that is not finite at %s: a division, LOGE, SQRT or power left its domain (arithmetic error, GEMPACK manual 34.3): %s\n",check10?vars[index].cofname:coefs[index].cofname,lab,linecopy);
-          MPI_Abort(PETSC_COMM_WORLD,1);
+          teems_abort();
         }
         zdiv_default_report("Update",check10?vars[index].cofname:coefs[index].cofname,linecopy,zerodivide);
         stmt++;
@@ -4860,7 +4860,7 @@ void sum_cond_general_compile(sum_def *sc, sum_cofcond *out, quantifier *frame, 
       memcpy(out->ic,&ic,sizeof(icond));
       return;
     }
-    if (!cond_lower_numeric(sc->cond_gen[0],sidetext[0]+1,sizeof(sidetext[0])-2,frame,nframe,ctx)) MPI_Abort(PETSC_COMM_WORLD,1);
+    if (!cond_lower_numeric(sc->cond_gen[0],sidetext[0]+1,sizeof(sidetext[0])-2,frame,nframe,ctx)) teems_abort();
     sidetext[0][0]='(';
     strcat(sidetext[0],")");
     strcpy(sidetext[1],"0");
@@ -4883,7 +4883,7 @@ void sum_cond_general_compile(sum_def *sc, sum_cofcond *out, quantifier *frame, 
     out->gcap[sd]=cn;
     if (!formula_compile(ctext,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,(formula_op *)out->gops[sd],&nops,frame,nframe)) {
       errmsg("Error: cannot evaluate the sum condition side %s\n",sidetext[sd]);
-      MPI_Abort(PETSC_COMM_WORLD,1);
+      teems_abort();
     }
     out->gnops[sd]=nops;
   }
@@ -4974,7 +4974,7 @@ int sum_eval(char *formulain, char *commsyntax,set_def *sets,dim_t nset, set_ele
         p=sum_body_extract(line1);
         if (p==NULL) {
           errmsg("Error: malformed sum statement '%s'\n",line1);
-          MPI_Abort(PETSC_COMM_WORLD,1);
+          teems_abort();
         }
         strcpy(line2,p);
         arsetsize=sum_cof[j].size+1;
@@ -5000,7 +5000,7 @@ int sum_eval(char *formulain, char *commsyntax,set_def *sets,dim_t nset, set_ele
         sum_cond_coef_resolve(&sum_cof[j],arSet,fdimsumcof,sets,set_elems,coefs,ncof,&cofcond);
         sum_cond_general_compile(&sum_cof[j],&cofcond,arSet,fdimsumcof,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum);
         nops=0;
-        if(!formula_compile(p,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,&nops,arSet,fdimsumcof))MPI_Abort(PETSC_COMM_WORLD,1);
+        if(!formula_compile(p,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,&nops,arSet,fdimsumcof))teems_abort();
         #pragma omp parallel private(l,l1,l2,dcount,superset_pos,vval,arSet2,ops1) shared(elem_vals,arSet,sum_vals)
         {
         void *gown[2];
@@ -5086,7 +5086,7 @@ int sum_eval(char *formulain, char *commsyntax,set_def *sets,dim_t nset, set_ele
         p=sum_body_extract(line1);
         if (p==NULL) {
           errmsg("Error: malformed sum statement '%s'\n",line1);
-          MPI_Abort(PETSC_COMM_WORLD,1);
+          teems_abort();
         }
         arsetsize=sum_cof[j].size+1;
         quantifier *arSet= (quantifier *) calloc (arsetsize,sizeof(quantifier));
@@ -5111,7 +5111,7 @@ int sum_eval(char *formulain, char *commsyntax,set_def *sets,dim_t nset, set_ele
         sum_cond_coef_resolve(&sum_cof[j],arSet,fdimsumcof,sets,set_elems,coefs,ncof,&cofcond);
         sum_cond_general_compile(&sum_cof[j],&cofcond,arSet,fdimsumcof,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum);
         nops=0;
-        if(!formula_compile(p,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,&nops,arSet,fdimsumcof))MPI_Abort(PETSC_COMM_WORLD,1);
+        if(!formula_compile(p,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,&nops,arSet,fdimsumcof))teems_abort();
         #pragma omp parallel private(l,l1,l2,dcount,superset_pos,vval,arSet2,ops1) shared(elem_vals,arSet,sum_vals)
         {
         void *gown[2];
@@ -5345,7 +5345,7 @@ offset_t assertions_execute(char *fname,set_def *sets,dim_t nset,set_element *se
         }
         strcpy(condtxt,c);
         cond_unwrap(condtxt);
-        if(!cond_lower_stmt(condtxt,sizeof(condtxt),linecopy,"an Assertion quantifier condition"))MPI_Abort(PETSC_COMM_WORLD,1);
+        if(!cond_lower_stmt(condtxt,sizeof(condtxt),linecopy,"an Assertion quantifier condition"))teems_abort();
         /* top-level comparison operator of the condition */
         {
           char *cq,*cright;
@@ -5573,7 +5573,7 @@ offset_t assertions_execute(char *fname,set_def *sets,dim_t nset,set_element *se
       }
       else if(mode==2) {
         errmsg("Error: assertion failed (-assertions 1 downgrades this abort to a warning, -assertions 0 skips the checks)\n");
-        MPI_Abort(PETSC_COMM_WORLD,1);
+        teems_abort();
       }
     }
     if(zdiv_default_hits>0)zdiv_default_report("Assertion",(msg[0]!='\0')?msg:"",linecopy,zerodivide);

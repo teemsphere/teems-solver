@@ -59,9 +59,16 @@ extern int verbosity; /* -verbosity: 0 = errors/warnings + results only,
    returns nonzero when any error was printed, so a site that reports
    and continues can never end in exit 0 (finding 3 of the 2026-09
    platform gate). Fatal sites still terminate on the spot
-   (MPI_Abort / PetscFinalize + return 1). */
+   (teems_abort() / PetscFinalize + return 1). */
 extern int teems_error_count;
 int errmsg(const char *fmt, ...) __attribute__((format(printf,1,2)));
+/* teems_abort(): the one fatal exit. MPI_Abort() is not guaranteed to
+   stop the calling process: under MPICH 5.0.1 (hydra) it returns to
+   the caller on a multi-rank run and the process keeps executing until
+   the proxy's kill lands (tierB3 2026-10-15: a parser fatal ran on into
+   a second fatal and closed the subtotals file twice). Every fatal
+   site calls this instead, so no path depends on that behaviour. */
+void teems_abort(void) __attribute__((noreturn));
 extern int inmemory; /* -inmemory: keep value arrays resident instead of spilling to scratch */
 extern int section_threads;
 extern int ndbbd_threads_used[4]; /* NDBBD team sizes chosen by the thread budget: presolve, interface-rank, interface-factor, schur; 0 = region not run */
@@ -943,7 +950,7 @@ static inline void scratch_read(void *buf,size_t size,size_t n,FILE *fp,const ch
   if(fp==NULL||fread(buf,size,n,fp)!=n) {
     printf("Error: short read on scratch file %s; the pass that writes it did not complete (check free space under -tempdir)\n",fname);
     fflush(stdout);
-    MPI_Abort(PETSC_COMM_WORLD,1);
+    teems_abort();
   }
 }
 /* rewrite the word comparison operators (ge le gt lt ne eq, space-
