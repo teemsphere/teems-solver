@@ -2145,7 +2145,7 @@ int sum_count(char *formulain, char *commsyntax) {
 int names_validate(set_def *sets, dim_t nset, array_def *coefs, offset_t ncof, array_def *vars, offset_t nvar, map_def *maps, dim_t nmap) {
   static const char *reserved[]={"sum","if","abs","max","min","sqrt","exp","loge","log10","id01","id0v","round","trunc0","truncb","prod","maxs","mins","random","normal","cumnormal","lognormal","cumlognormal","gperf","gperfc","ras_matrix","all",NULL};
   offset_t i,j;
-  dim_t k;
+  dim_t k,k2;
   int r;
   for(i=0; i<ncof; i++) {
     for(j=0; j<nvar; j++)if(strcmp(coefs[i].cofname,vars[j].cofname)==0) {
@@ -2206,10 +2206,16 @@ int names_validate(set_def *sets, dim_t nset, array_def *coefs, offset_t ncof, a
         return -1;
       }
   }
-  for(k=0; k<nset; k++)for(r=0; reserved[r]!=NULL; r++)if(strcmp(sets[k].setname,reserved[r])==0) {
-      errmsg("Error: set name %s is a reserved word (GEMPACK manual 11.2.1)\n",sets[k].setname);
-      return -1;
-    }
+  for(k=0; k<nset; k++) {
+    for(k2=k+1; k2<nset; k2++)if(strcmp(sets[k].setname,sets[k2].setname)==0) {
+        errmsg("Error: set %s is declared more than once (GEMPACK manual 11.2.1)\n",sets[k].setname);
+        return -1;
+      }
+    for(r=0; reserved[r]!=NULL; r++)if(strcmp(sets[k].setname,reserved[r])==0) {
+        errmsg("Error: set name %s is a reserved word (GEMPACK manual 11.2.1)\n",sets[k].setname);
+        return -1;
+      }
+  }
   for(k=0; k<nmap; k++) {
     for(i=0; i<ncof; i++)if(strcmp(maps[k].mapname,coefs[i].cofname)==0) {
         errmsg("Error: name %s is declared as both a mapping and a coefficient (GEMPACK manual 11.2.1)\n",maps[k].mapname);
