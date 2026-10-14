@@ -4741,6 +4741,43 @@ static offset_t closure_var_find(char *vname, array_def *vars, offset_t nvar) {
   return -1;
 }
 
+/* -xacvars v1,v2,... (manual 26.2.6 XAC-retained): the variables the
+   accuracy summary covers, endogenous, exogenous or backsolved; names
+   resolve like closure entries. Fills sel (nvarele, 1 = summarised);
+   an unknown or repeated name is a named fatal */
+int xacvars_resolve(const char *list, array_def *vars, offset_t nvar, offset_t nvarele, unsigned char *sel, int rank) {
+  char buf[TABREADLINE],*tok,*save=NULL;
+  unsigned char *seen=(unsigned char *) calloc (nvar>0?nvar:1,1);
+  offset_t j,k;
+  int n=0;
+  memset(sel,0,nvarele);
+  strncpy(buf,list,sizeof(buf)-1);
+  buf[sizeof(buf)-1]='\0';
+  for(k=0; buf[k]!='\0'; k++) buf[k]=(char)tolower((int)buf[k]);
+  for(tok=strtok_r(buf,", ",&save); tok!=NULL; tok=strtok_r(NULL,", ",&save)) {
+    j=closure_var_find(tok,vars,nvar);
+    if(j<0) {
+      if(rank==0) errmsg("Error: %s named by -xacvars is not a variable of the model (GEMPACK manual 26.2.6)\n",tok);
+      free(seen);
+      return -1;
+    }
+    if(seen[j]) {
+      if(rank==0) errmsg("Error: %s is named more than once by -xacvars\n",tok);
+      free(seen);
+      return -1;
+    }
+    seen[j]=1;
+    for(k=vars[j].offset; k<vars[j].offset+vars[j].nelem; k++) sel[k]=1;
+    n++;
+  }
+  free(seen);
+  if(n==0) {
+    if(rank==0) errmsg("Error: -xacvars names no variable\n");
+    return -1;
+  }
+  return n;
+}
+
 /* closure statements are set operations (manual 23.2.1, 23.2.3): a
    component already exogenous stays exogenous and is counted once. The
    count went up on every mention, so a component listed twice shrank

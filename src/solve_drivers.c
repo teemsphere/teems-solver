@@ -1752,6 +1752,14 @@ static void xac_pass(int sol,dim_t subindx,dim_t subints,array_def *vars,offset_
 static int *acc_keep_fig=NULL;
 static signed char *acc_keep_lev=NULL,*acc_keep_code=NULL;
 
+/* what the variable summary covers, for the log headings */
+static const char *acc_covers_text(void) {
+  static char txt[TABREADLINE+64];
+  if(teems_xac_sel==NULL) return "endogenous and backsolved results";
+  snprintf(txt,sizeof(txt),"results of the XAC-retained variables %s (GEMPACK manual 26.2.6)",teems_xacvars);
+  return txt;
+}
+
 static void acc_block_init(teems_acc_block_t *b) {
   int c;
   memset(b,0,sizeof(*b));
@@ -1838,7 +1846,7 @@ static void xac_codes(offset_t nvarele,array_def *vars,offset_t nvar,const int *
         if(col==0)v=(signed char)figs[e];
         else if(col==1)v=levfigs[e];
         else if(col==2)v=codes[e];
-        else if(col==3)v=(signed char)((CL_EXO(e)?2:1)|(figs[e]==7?4:0)|(CL_BS(e)?8:0));
+        else if(col==3)v=(signed char)((ACC_SUMMARISED(e)?1:0)|(CL_EXO(e)?2:0)|(figs[e]==7?4:0)|(CL_BS(e)?8:0));
         cbuf[m]=v;
       }
       fwrite(cbuf,1,n,xac_fp);
@@ -3826,7 +3834,7 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
             double ls=fmax(fabs(100+e1),fabs(100+e2));
             lev=(ls<=1e-6)?6:acc_figures(d/ls);
           }
-          if(!CL_EXO(k))acc_block_add(&blk,fig,lev,code);
+          if(ACC_SUMMARISED(k))acc_block_add(&blk,fig,lev,code);
           if(xc124[k]>fig)xc124[k]=fig;
           if(xclev[k]>lev)xclev[k]=(signed char)lev;
           if(xccode[k]<code)xccode[k]=(signed char)code;
@@ -3835,7 +3843,7 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
       if(maxsol==3&&sub_eff<subs_eff) {
         teems_acc_stats.sub[sub_eff]=blk;
         if(rank==0&&subs_eff>1&&verbosity>=1) {
-          printf("Accuracy summary for subinterval %d of %d (GEMPACK manual 26.3): %ld endogenous and backsolved results, each judged on its movement across the subinterval\n",sub_eff+1,subs_eff,blk.nsum);
+          printf("Accuracy summary for subinterval %d of %d (GEMPACK manual 26.3): %ld %s, each judged on its movement across the subinterval\n",sub_eff+1,subs_eff,blk.nsum,acc_covers_text());
           acc_block_print(&blk);
         }
       }
@@ -3925,14 +3933,14 @@ bool solve_gragg(PetscBool nohsl,PetscInt VecSize,Mat* A1,PetscInt dnz,PetscInt*
         memcpy(acc_keep_code,xccode,nvarele);
       } else {
         acc_block_init(&st->all);
-        for(i=0; i<nvarele; i++) if(!CL_EXO(i)) acc_block_add(&st->all,xc124[i],xclev[i],xccode[i]);
+        for(i=0; i<nvarele; i++) if(ACC_SUMMARISED(i)) acc_block_add(&st->all,xc124[i],xclev[i],xccode[i]);
         st->subints=subs_eff;
         st->valid=1;
         free(acc_keep_fig); free(acc_keep_lev); free(acc_keep_code);
         acc_keep_fig=NULL; acc_keep_lev=acc_keep_code=NULL;
         if(rank==0) {
-          if(subs_eff>1)printf("Overall accuracy summary over %d subintervals (GEMPACK manual 26.3.1): %ld endogenous and backsolved results, each at its lowest figures and worst code across the subintervals\n",subs_eff,st->all.nsum);
-          else printf("Accuracy summary (GEMPACK manual 26.2.1): %ld endogenous and backsolved results\n",st->all.nsum);
+          if(subs_eff>1)printf("Overall accuracy summary over %d subintervals (GEMPACK manual 26.3.1): %ld %s, each at its lowest figures and worst code across the subintervals\n",subs_eff,st->all.nsum,acc_covers_text());
+          else printf("Accuracy summary (GEMPACK manual 26.2.1): %ld %s\n",st->all.nsum,acc_covers_text());
           acc_block_print(&st->all);
           dacc_print();
         }

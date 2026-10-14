@@ -1071,6 +1071,10 @@ void updates_path_conv_store(int sol, array_def *coefs, offset_t ncof, elem_valu
 void updates_path_conv_apply(double q2, double q3);
 int conv_pick(double c1,double c2,double c3,double q2,double q3,double E,double *R);
 int acc_classify(double c1,double c2,double c3,double q2,double q3,int rqf,double *e12p,double *e24p);
+int xacvars_resolve(const char *list, array_def *vars, offset_t nvar, offset_t nvarele, unsigned char *sel, int rank);
+extern char teems_xacvars[TABREADLINE]; /* -xacvars list as given ("" = none) */
+extern unsigned char *teems_xac_sel;    /* per element: 1 = covered by the accuracy summary; NULL = endogenous and backsolved */
+#define ACC_SUMMARISED(k) (teems_xac_sel!=NULL?teems_xac_sel[(k)]!=0:!CL_EXO(k))
 extern int teems_rqf;     /* -rqf n: required figures for XRA (26.2.6), 0 = none */
 extern int teems_comp_sub; /* complementarity: index of the subinterval the accurate run solves */
 void conv_ratios(bool euler,double *q2,double *q3);

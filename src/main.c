@@ -172,6 +172,7 @@ static const char *const cli_teems_flags[]={
   "nsubints","postsim","probefine","probepattern","random_seed",
   "range_test_initial","range_test_updated","refine","residcheck","retryadj","rkchart",
   "rkctrl","rkguard","rk_h0","rknorm","rkscope","rqf","single_run","sui","sup","two_run",
+  "xacvars",
   "smllthreads","solmed","step1","step2","step3","tempdir","verbosity","zdivshift",
   "withmc66","version",NULL
 };
@@ -717,7 +718,20 @@ static void stats_accuracy_patch(cmf_file_entry *iodata, int niodata, int noutda
     free(buf);
     return;
   }
-  fprintf(fp,"%s,\n  \"accuracy\": {\"covers\": \"endogenous+backsolved\", \"summarised\": %ld, \"subintervals\": %d",buf,st->all.nsum,st->subints);
+  if(teems_xac_sel!=NULL) {
+    char lst[TABREADLINE],*t,*sv=NULL;
+    int first=1;
+    fprintf(fp,"%s,\n  \"accuracy\": {\"covers\": \"xac-retained\", \"variables\": [",buf);
+    strncpy(lst,teems_xacvars,sizeof(lst)-1);
+    lst[sizeof(lst)-1]='\0';
+    for(t=strtok_r(lst,", ",&sv); t!=NULL; t=strtok_r(NULL,", ",&sv)) {
+      fprintf(fp,"%s",first?"":", ");
+      json_string(fp,t);
+      first=0;
+    }
+    fprintf(fp,"], \"summarised\": %ld, \"subintervals\": %d",st->all.nsum,st->subints);
+  }
+  else fprintf(fp,"%s,\n  \"accuracy\": {\"covers\": \"endogenous+backsolved\", \"summarised\": %ld, \"subintervals\": %d",buf,st->all.nsum,st->subints);
   if(teems_rqf>0)fprintf(fp,", \"required_figures\": %d",teems_rqf);
   stats_acc_block_write(fp,&st->all);
   if(st->subints>1&&st->sub!=NULL&&st->nsub==st->subints) {
@@ -1946,6 +1960,7 @@ int main(int argc,char **args) {
   /* -rqf n (manual 26.2.6 RQF): results whose two extrapolations agree
      to n or more figures get the code XRA in the accuracy summary */
   PetscOptionsGetInt(NULL,NULL,"-rqf",&teems_rqf,NULL);
+  PetscOptionsGetString(NULL,NULL,"-xacvars",teems_xacvars,sizeof(teems_xacvars),NULL);
   if(teems_rqf<0||teems_rqf>6) {
     if(rank==0)errmsg("Error: -rqf takes the required figures of accuracy, 1 to 6 (0 = none; GEMPACK manual 26.2.6)\n");
     PetscFinalize();
@@ -2748,6 +2763,13 @@ int main(int argc,char **args) {
   /* element-level border marks (6.5 E3), populated by the ordering scan
      alongside var_inter on the same ranks */
   bool *ele_inter= (bool *) calloc (nvarele,sizeof(bool));
+  if(teems_xacvars[0]!='\0'&&solmethod!=SM_NOSIM) {
+    teems_xac_sel=(unsigned char *) malloc (nvarele>0?nvarele:1);
+    if(xacvars_resolve(teems_xacvars,vars,nvar,nvarele,teems_xac_sel,rank)<0) {
+      MPI_Barrier(PETSC_COMM_WORLD);
+      MPI_Abort(PETSC_COMM_WORLD,1);
+    }
+  }
   if(rank==0&&solmethod!=SM_NOSIM) {
     strcpy(commsyntax,"exogenous");
     nexo=closure_read(closure,commsyntax,closure_vals,vars,nvar,sets,nset,set_elems);
