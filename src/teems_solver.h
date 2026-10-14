@@ -723,6 +723,12 @@ typedef struct
      percent (column weight Xval/100) or change (weight 1). For a
      parameter bound the "value name" is the coefficient itself. */
   char xval[NAMESIZE], lval[NAMESIZE], uval[NAMESIZE];
+  /* the declaration-statement names (differ from varname/lower_name/
+     upper_name, the linear columns, under LINEAR_NAME=/LINEAR_VAR=)
+     and the column text the E_$comp row writes (p_ + name, or the
+     LINEAR_NAME/LINEAR_VAR variable itself) */
+  char xdecl[NAMESIZE], ldecl[NAMESIZE], udecl[NAMESIZE];
+  char xcol[NAMESIZE + 2], lcol[NAMESIZE + 2], ucol[NAMESIZE + 2];
   int xpct, lpct, upct;
 } comp_def ;
 extern comp_def *teems_comps;

@@ -169,6 +169,30 @@ static int lv_find_linvar(lv_ctx *c, const char *name, int len) {
   return -1;
 }
 
+/* the column text a linear equation writes for a levels pair: p_ +
+   name, or the LINEAR_NAME/LINEAR_VAR variable by its own name */
+static void cp_col(char *out, const lv_pair *e) {
+  sprintf(out, "%s%s", e->kind < 2 ? "p_" : "", e->name);
+}
+
+/* a sum condition names a value when any of its words, outside quotes,
+   is a parameter or a levels value */
+static bool lv_cond_has_value(lv_ctx *c, const char *s, int len) {
+  int i = 0, q = 0;
+  while (i < len) {
+    if (s[i] == '"') { q = !q; i++; continue; }
+    if (!q && lv_isnamec(s[i]) && (i == 0 || !lv_isnamec(s[i - 1]))) {
+      int n = 0;
+      while (i + n < len && lv_isnamec(s[i + n])) n++;
+      if (lv_find_cf(c, s + i, n) >= 0 || lv_find_lv(c, s + i, n) >= 0) return true;
+      i += n;
+      continue;
+    }
+    i++;
+  }
+  return false;
+}
+
 /* -------- statement head parsing (shared by scan and rewrite) -------- */
 
 /* after the keyword: skip leading qualifier groups (a '(' group whose
@@ -769,18 +793,30 @@ static int lv_diff(lv_ctx *c, int id, int sign, const char *factors, const lv_su
     ss2.sumidx[ss2.nsum] = nd->name; ss2.sumidxlen[ss2.nsum] = nd->namelen;
     ss2.sumset[ss2.nsum] = nd->set; ss2.sumsetlen[ss2.nsum] = nd->setlen;
     if (colon != NULL) {
-      /* a coefficient condition (COEF(i) op value) becomes an if()
+      /* a condition on values (a parameter or a levels value anywhere in
+         it, in any position, under NOT or in brackets) becomes an if()
          factor on every term -- a linear equation's sum carries only
-         mapping conditions; a mapping condition stays on the set */
-      const char *q = colon + 1;
-      int nl = 0;
-      while (lv_isnamec(q[nl])) nl++;
-      if (nl > 0 && lv_find_cf(c, q, nl) >= 0) {
+         index and mapping conditions, which stay on the set */
+      const char *cs = colon + 1;
+      int cl = (int)(nd->set + nd->setlen - colon - 1);
+      if (lv_cond_has_value(c, cs, cl)) {
+        /* if((A>B),1) does not compile: drop brackets around the whole
+           condition */
+        while (cl >= 2 && cs[0] == '(' && cs[cl - 1] == ')') {
+          int d = 0, k;
+          for (k = 0; k < cl - 1; k++) {
+            if (cs[k] == '(') d++;
+            else if (cs[k] == ')' && --d == 0) break;
+          }
+          if (k < cl - 1) break;
+          cs++;
+          cl -= 2;
+        }
         ss2.sumsetlen[ss2.nsum] = (int)(colon - nd->set);
         strcpy(fbuf, factors);
         if (fbuf[0] != '\0' && lv_strcat_b(fbuf, "*", LV_TERMBUF) < 0) return lv_err(c, "term too large");
         if (lv_strcat_b(fbuf, "(if(", LV_TERMBUF) < 0 ||
-            lv_ncat_b(fbuf, colon + 1, (int)(nd->set + nd->setlen - colon - 1), LV_TERMBUF) < 0 ||
+            lv_ncat_b(fbuf, cs, cl, LV_TERMBUF) < 0 ||
             lv_strcat_b(fbuf, ",1))", LV_TERMBUF) < 0) return lv_err(c, "term too large");
         ss2.nsum++;
         return lv_diff(c, nd->b, sign, fbuf, &ss2);
@@ -1383,18 +1419,22 @@ static int cp_parse_stmt(lv_ctx *c, char *line, comp_def *cp, char *expr, size_t
                   cp->lower_kind = 2;
                   strcpy(cp->lower_name, c->lv[lvi].name);
                   strcpy(cp->lval, c->lv[lvi].valname);
+                  strcpy(cp->ldecl, c->lv[lvi].decl);
+                  cp_col(cp->lcol, &c->lv[lvi]);
                   cp->lpct = !c->lv[lvi].change;
                 } else {
                   cp->upper_kind = 2;
                   strcpy(cp->upper_name, c->lv[lvi].name);
                   strcpy(cp->uval, c->lv[lvi].valname);
+                  strcpy(cp->udecl, c->lv[lvi].decl);
+                  cp_col(cp->ucol, &c->lv[lvi]);
                   cp->upct = !c->lv[lvi].change;
                 }
               } else if (lv_find_cf(c, val, (int)strlen(val)) >= 0) {
                 if (!c->cf[lv_find_cf(c, val, (int)strlen(val))].param)
                   return lv_err(c, "a Complementarity bound must be a levels variable, a Coefficient(parameter) or a real constant (GEMPACK manual 10.17); non-parameter coefficient");
-                if (lower) { cp->lower_kind = 3; strcpy(cp->lower_name, val); strcpy(cp->lval, val); }
-                else { cp->upper_kind = 3; strcpy(cp->upper_name, val); strcpy(cp->uval, val); }
+                if (lower) { cp->lower_kind = 3; strcpy(cp->lower_name, val); strcpy(cp->lval, val); strcpy(cp->ldecl, val); }
+                else { cp->upper_kind = 3; strcpy(cp->upper_name, val); strcpy(cp->uval, val); strcpy(cp->udecl, val); }
               } else if (lv_find_linvar(c, val, (int)strlen(val)) >= 0) {
                 return lv_err(c, "a Complementarity bound must be a levels variable, a Coefficient(parameter) or a real constant (GEMPACK manual 10.17); linear variable");
               } else {
@@ -1425,6 +1465,8 @@ static int cp_parse_stmt(lv_ctx *c, char *line, comp_def *cp, char *expr, size_t
     }
     strcpy(cp->varname, c->lv[xvi].name);
     strcpy(cp->xval, c->lv[xvi].valname);
+    strcpy(cp->xdecl, c->lv[xvi].decl);
+    cp_col(cp->xcol, &c->lv[xvi]);
     cp->xpct = !c->lv[xvi].change;
   }
   /* name */
@@ -1504,7 +1546,7 @@ static int cp_fill_decl_sets(lv_ctx *c, char *fname) {
     for (k = 0; k < teems_ncomp; k++) {
       comp_def *cp = &teems_comps[k];
       c->stmt = line;
-      if (isvar && (int)strlen(cp->varname) == h.namelen && strncmp(cp->varname, h.name, h.namelen) == 0) {
+      if (isvar && (int)strlen(cp->xdecl) == h.namelen && strncmp(cp->xdecl, h.name, h.namelen) == 0) {
         if (cp_argsets(c, &h, argsets, &nargs) < 0) { fclose(f); return -1; }
         if (nargs != cp->nquant) {
           errmsg("Error: Complementarity %s has %d quantifiers but its variable %s has %d arguments (GEMPACK manual 11.14)\n", cp->name, (int)cp->nquant, cp->varname, (int)nargs);
@@ -1514,7 +1556,7 @@ static int cp_fill_decl_sets(lv_ctx *c, char *fname) {
         memcpy(cp->xset, argsets, sizeof(argsets));
       }
       if (cp->lower_kind >= 2 && ((isvar && cp->lower_kind == 2) || (iscoef && cp->lower_kind == 3)) &&
-          (int)strlen(cp->lower_name) == h.namelen && strncmp(cp->lower_name, h.name, h.namelen) == 0) {
+          (int)strlen(cp->ldecl) == h.namelen && strncmp(cp->ldecl, h.name, h.namelen) == 0) {
         if (cp_argsets(c, &h, argsets, &nargs) < 0) { fclose(f); return -1; }
         if (nargs != cp->nquant) {
           errmsg("Error: Complementarity %s has %d quantifiers but its lower bound %s has %d arguments (GEMPACK manual 11.14)\n", cp->name, (int)cp->nquant, cp->lower_name, (int)nargs);
@@ -1524,7 +1566,7 @@ static int cp_fill_decl_sets(lv_ctx *c, char *fname) {
         memcpy(cp->lset, argsets, sizeof(argsets));
       }
       if (cp->upper_kind >= 2 && ((isvar && cp->upper_kind == 2) || (iscoef && cp->upper_kind == 3)) &&
-          (int)strlen(cp->upper_name) == h.namelen && strncmp(cp->upper_name, h.name, h.namelen) == 0) {
+          (int)strlen(cp->udecl) == h.namelen && strncmp(cp->udecl, h.name, h.namelen) == 0) {
         if (cp_argsets(c, &h, argsets, &nargs) < 0) { fclose(f); return -1; }
         if (nargs != cp->nquant) {
           errmsg("Error: Complementarity %s has %d quantifiers but its upper bound %s has %d arguments (GEMPACK manual 11.14)\n", cp->name, (int)cp->nquant, cp->upper_name, (int)nargs);
@@ -1593,13 +1635,13 @@ static int cp_emit_derived(FILE *fout, comp_def *cp, const char *expr) {
   fprintf(fout, "variable (change) %s %s@d%s ;\n", quants, cp->name, idxs);
   if (cp->lower_kind == 2) {
     fprintf(fout, "variable (change,levels) %s %s@l%s ;\n", quants, cp->name, idxs);
-    fprintf(fout, "formula (initial) %s %s@l%s = %s%s - %s%s ;\n", quants, cp->name, idxs, cp->varname, idxs, cp->lower_name, idxs);
-    fprintf(fout, "equation (levels) e_%s@l %s %s@l%s = %s%s - %s%s ;\n", cp->name, quants, cp->name, idxs, cp->varname, idxs, cp->lower_name, idxs);
+    fprintf(fout, "formula (initial) %s %s@l%s = %s%s - %s%s ;\n", quants, cp->name, idxs, cp->xdecl, idxs, cp->ldecl, idxs);
+    fprintf(fout, "equation (levels) e_%s@l %s %s@l%s = %s%s - %s%s ;\n", cp->name, quants, cp->name, idxs, cp->xdecl, idxs, cp->ldecl, idxs);
   }
   if (cp->upper_kind == 2) {
     fprintf(fout, "variable (change,levels) %s %s@u%s ;\n", quants, cp->name, idxs);
-    fprintf(fout, "formula (initial) %s %s@u%s = %s%s - %s%s ;\n", quants, cp->name, idxs, cp->varname, idxs, cp->upper_name, idxs);
-    fprintf(fout, "equation (levels) e_%s@u %s %s@u%s = %s%s - %s%s ;\n", cp->name, quants, cp->name, idxs, cp->varname, idxs, cp->upper_name, idxs);
+    fprintf(fout, "formula (initial) %s %s@u%s = %s%s - %s%s ;\n", quants, cp->name, idxs, cp->xdecl, idxs, cp->udecl, idxs);
+    fprintf(fout, "equation (levels) e_%s@u %s %s@u%s = %s%s - %s%s ;\n", cp->name, quants, cp->name, idxs, cp->xdecl, idxs, cp->udecl, idxs);
   }
   /* C2 (design doc section 8): the E_$comp row as static text. The
      3-state IF of 11.14 lives in the weight coefficients, written by
@@ -1612,9 +1654,9 @@ static int cp_emit_derived(FILE *fout, comp_def *cp, const char *expr) {
   if (cp->lower_kind == 2) fprintf(fout, "coefficient (non_parameter) %s %s@wl%s ;\n", quants, cp->name, idxs);
   if (cp->upper_kind == 2) fprintf(fout, "coefficient (non_parameter) %s %s@wu%s ;\n", quants, cp->name, idxs);
   fprintf(fout, "coefficient (non_parameter) %s %s@wn%s ;\n", quants, cp->name, idxs);
-  fprintf(fout, "equation e_%s@ %s 0+%s@wx%s*p_%s%s", cp->name, quants, cp->name, idxs, cp->varname, idxs);
-  if (cp->lower_kind == 2) fprintf(fout, "-%s@wl%s*p_%s%s", cp->name, idxs, cp->lower_name, idxs);
-  if (cp->upper_kind == 2) fprintf(fout, "-%s@wu%s*p_%s%s", cp->name, idxs, cp->upper_name, idxs);
+  fprintf(fout, "equation e_%s@ %s 0+%s@wx%s*%s%s", cp->name, quants, cp->name, idxs, cp->xcol, idxs);
+  if (cp->lower_kind == 2) fprintf(fout, "-%s@wl%s*%s%s", cp->name, idxs, cp->lcol, idxs);
+  if (cp->upper_kind == 2) fprintf(fout, "-%s@wu%s*%s%s", cp->name, idxs, cp->ucol, idxs);
   fprintf(fout, "+%s@we%s*p_%s@e%s+%s@wn%s*p_del_comp@+p_%s@d%s = 0 ;\n",
           cp->name, idxs, cp->name, idxs, cp->name, idxs, cp->name, idxs);
   return 0;

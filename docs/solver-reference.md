@@ -165,8 +165,9 @@ The solver reads a GEMPACK-style TAB subset (statement syntax per [GM]):
   (a mapped pivot is many-to-one: named fatal).
 - `coefficient` / `variable` — levels or percentage-change quantities
   (`(change)`, `(levels)` variables — levels equations (with
-  conditional sums — a coefficient condition becomes an `if()` factor
-  on each linearized term, a mapping condition stays on the sum — and
+  conditional sums — a condition naming a parameter or a levels value
+  anywhere in it becomes an `if()` factor on each linearized term, an
+  index or mapping condition stays on the sum — and
   SQRT/EXP/LOGE/LOG10, differentiated by the chain rule), equations
   whose left side holds a conditioned sum (split at the top-level `=`),
   and `Formula & Equation` pairs are linearized by `levels.c` at
