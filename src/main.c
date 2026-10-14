@@ -1326,6 +1326,61 @@ static offset_t chain_set_select(set_def *sets, dim_t nset, offset_t *refcount, 
   return chain;
 }
 
+/* Partition probe: equation rows per diagonal block under the current
+   marks (border equations excluded), placed as jacobian_preallocate
+   places them. A block with variables but no equation row has no entry,
+   and MA48 rejects it (GTAPv7 demd: 9 blocks, some carrying demand
+   variables that no equation of that element defines). */
+static offset_t probe_block_pos(set_def *sets, set_element *set_elems, offset_t sid, offset_t el, int sup) {
+  if(sup>0)return set_elems[sets[sid].offset+el].superset_pos[sup];
+  return el;
+}
+
+static void block_eq_count(array_def *eq_defs, offset_t neq, bool *eq_border, dim_t *eq_time, dim_t *eq_reg,
+                           set_def *sets, set_element *set_elems, offset_t alltimeset, offset_t nreg,
+                           dim_t nesteddbbd, offset_t ndblock, offset_t *counteq) {
+  offset_t e,lt,lr,ts,rs,tsid,rsid,b,per;
+  int tsup;
+  for(e=0; e<neq; e++) {
+    if(eq_border[e])continue;
+    rsid=eq_reg[e]>-1?eq_defs[e].setid[eq_reg[e]]:-1;
+    rs=rsid>=0?sets[rsid].size:1;
+    if(alltimeset<0) {
+      if(rsid<0||rs<1)continue;
+      per=eq_defs[e].nelem/rs;
+      for(lr=0; lr<rs; lr++) {
+        b=probe_block_pos(sets,set_elems,rsid,lr,sets[rsid].regsup);
+        if(b>=0&&b<ndblock)counteq[b]+=per;
+      }
+      continue;
+    }
+    if(eq_time[e]<0)continue;
+    tsid=eq_defs[e].setid[eq_time[e]];
+    ts=sets[tsid].size;
+    if(ts<1||rs<1)continue;
+    tsup=0;
+    if(tsid!=alltimeset)for(tsup=1; tsup<MAXSUPSET; tsup++)if(sets[tsid].subsetid[tsup]==alltimeset)break;
+    if(tsup>=MAXSUPSET)continue;
+    per=eq_defs[e].nelem/ts/rs;
+    for(lt=0; lt<ts; lt++) {
+      offset_t tp=probe_block_pos(sets,set_elems,tsid,lt,tsup);
+      if(nesteddbbd==1) {
+        if(rsid<0)b=tp*(nreg+1)+nreg;
+        for(lr=0; lr<rs; lr++) {
+          if(rsid>=0)b=tp*(nreg+1)+probe_block_pos(sets,set_elems,rsid,lr,sets[rsid].regsup);
+          if(b>=0&&b<ndblock)counteq[b]+=per;
+        }
+      }
+      else if(rsid>=0&&nreg>0) {
+        for(lr=0; lr<rs; lr++) {
+          b=tp*nreg+probe_block_pos(sets,set_elems,rsid,lr,sets[rsid].regsup);
+          if(b>=0&&b<ndblock)counteq[b]+=per;
+        }
+      }
+    }
+  }
+}
+
 /* Probe one candidate partition set: apply its marks, run the
    pre-Jacobian ordering scan and the first counting pass, and report
    the border size and per-block extremes that partition would produce.
@@ -1337,7 +1392,7 @@ static int partition_probe(char *tabfile, set_def *sets, dim_t nset, set_element
                            elem_value *elem_vals, offset_t ncofele, offset_t nvarele,
                            closure_entry *closure_vals, offset_t neq, offset_t VecSize,
                            offset_t alltimeset, offset_t ntime, dim_t nesteddbbd, offset_t cand,
-                           offset_t *netcut_out, offset_t *nblocks_out, offset_t *blkmin_out, offset_t *blkmax_out) {
+                           offset_t *netcut_out, offset_t *nblocks_out, offset_t *blkmin_out, offset_t *blkmax_out, offset_t *eqmin_out) {
   char commsyntax[NAMESIZE];
   offset_t i,nreg,ndblock,total,bmin,bmax;
   strcpy(commsyntax,"equation");
@@ -1362,12 +1417,15 @@ static int partition_probe(char *tabfile, set_def *sets, dim_t nset, set_element
     eq_reg[i]=-1;
   }
   offset_t *countvar=(offset_t *) calloc (ndblock,sizeof(offset_t));
+  offset_t *counteq=(offset_t *) calloc (ndblock,sizeof(offset_t));
+  offset_t emin=-1;
   partition_flags_apply(sets,nset,cand);
   if(nesteddbbd==1) {
     if(!equation_order_read_nested(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,closure_vals,var_inter,ele_inter,eq_defs,eq_intertemp,eq_time,eq_reg,cand,alltimeset,orderintra,orderreg))MPI_Abort(PETSC_COMM_WORLD,1);
   }
   else if(!equation_order_read(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,closure_vals,var_inter,ele_inter,eq_defs,eq_intertemp,eq_time,eq_reg,cand,alltimeset,orderintra,orderreg))MPI_Abort(PETSC_COMM_WORLD,1);
   block_var_count(vars,nvar,sets,set_elems,closure_vals,var_inter,ele_inter,orderintra,orderreg,alltimeset,cand,nreg,nesteddbbd,countvar);
+  block_eq_count(eq_defs,neq,eq_intertemp,eq_time,eq_reg,sets,set_elems,alltimeset,nreg,nesteddbbd,ndblock,counteq);
   partition_flags_clear(sets,nset);
   total=0;
   bmin=-1;
@@ -1378,6 +1436,7 @@ static int partition_probe(char *tabfile, set_def *sets, dim_t nset, set_element
        an intra block */
     if(nesteddbbd==1&&i%(nreg+1)==nreg)continue;
     total+=countvar[i];
+    if(emin<0||counteq[i]<emin)emin=counteq[i];
     if(bmin<0||countvar[i]<bmin)bmin=countvar[i];
     if(countvar[i]>bmax)bmax=countvar[i];
   }
@@ -1385,6 +1444,8 @@ static int partition_probe(char *tabfile, set_def *sets, dim_t nset, set_element
   *nblocks_out=ndblock;
   *blkmin_out=bmin<0?0:bmin;
   *blkmax_out=bmax;
+  *eqmin_out=emin<0?0:emin;
+  free(counteq);
   free(var_inter);
   free(ele_inter);
   free(orderintra);
@@ -1402,7 +1463,8 @@ static int partition_probe(char *tabfile, set_def *sets, dim_t nset, set_element
    variable dimension directly or through a subset) and choose the one
    with the smallest border, breaking near-ties (2%) by block balance.
    A candidate is viable when it yields at least n_tasks blocks, a
-   border below half the system, and no empty block. Returns the set id
+   border below half the system, and no block without variables or
+   without equation rows. Returns the set id
    or -1 when no candidate is viable. Deterministic integer arithmetic
    throughout, so every rank reaches the same answer independently.
    *auto_json receives the stats.json candidate table (malloc'd; caller
@@ -1422,6 +1484,7 @@ static offset_t partition_auto_select(char *tabfile, set_def *sets, dim_t nset, 
   offset_t *cnblocks=(offset_t *) calloc (nset,sizeof(offset_t));
   offset_t *cmin=(offset_t *) calloc (nset,sizeof(offset_t));
   offset_t *cmax=(offset_t *) calloc (nset,sizeof(offset_t));
+  offset_t *cemin=(offset_t *) calloc (nset,sizeof(offset_t));
   for(i=0; i<nvar; i++)for(d=0; d<vars[i].size; d++)isdim[vars[i].setid[d]]=true;
   for(s=0; s<nset; s++) {
     if(sets[s].size<2)continue;
@@ -1451,11 +1514,11 @@ static offset_t partition_auto_select(char *tabfile, set_def *sets, dim_t nset, 
   if(rank==0)logmsg(1,"%sPartition detection: probing %ld candidate sets against the equation structure\n",PROBE_PFX,ncand);
   for(s=0; s<nset; s++) {
     if(!iscand[s])continue;
-    partition_probe(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele,nvarele,closure_vals,neq,VecSize,alltimeset,ntime,nesteddbbd,s,&cnetcut[s],&cnblocks[s],&cmin[s],&cmax[s]);
-    viable[s]=cnblocks[s]>=mpisize&&2*cnetcut[s]<VecSize&&cmin[s]>0;
-    if(rank==0)logmsg(1,"%s  %-14s blocks %6ld  border %8ld (%5.1f%%)  block min/max %ld/%ld  %s\n",
+    partition_probe(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele,nvarele,closure_vals,neq,VecSize,alltimeset,ntime,nesteddbbd,s,&cnetcut[s],&cnblocks[s],&cmin[s],&cmax[s],&cemin[s]);
+    viable[s]=cnblocks[s]>=mpisize&&2*cnetcut[s]<VecSize&&cmin[s]>0&&cemin[s]>0;
+    if(rank==0)logmsg(1,"%s  %-14s blocks %6ld  border %8ld (%5.1f%%)  block min/max %ld/%ld  equations min %ld  %s\n",
                         PROBE_PFX,sets[s].setname,cnblocks[s],cnetcut[s],VecSize>0?100.0*cnetcut[s]/VecSize:0.0,
-                        cmin[s],cmax[s],viable[s]?"viable":"not viable");
+                        cmin[s],cmax[s],cemin[s],viable[s]?"viable":"not viable");
   }
   for(s=0; s<nset; s++) {
     if(!viable[s])continue;
@@ -1470,7 +1533,7 @@ static offset_t partition_auto_select(char *tabfile, set_def *sets, dim_t nset, 
   if(rank==0) {
     if(chosen>=0)logmsg(1,"%sPartition detection: selected set %s (%ld blocks, border %.1f%% of system)\n",
                           PROBE_PFX,sets[chosen].setname,cnblocks[chosen],VecSize>0?100.0*cnetcut[chosen]/VecSize:0.0);
-    else if(ncand>0)logmsg(1,"%sPartition detection: no viable candidate (need >=%ld nonempty blocks and a border below half the system)\n",PROBE_PFX,mpisize);
+    else if(ncand>0)logmsg(1,"%sPartition detection: no viable candidate (need >=%ld blocks, each with variables and equation rows, and a border below half the system)\n",PROBE_PFX,mpisize);
     else logmsg(1,"%sPartition detection: no candidate sets to probe\n",PROBE_PFX);
   }
   {
@@ -1484,8 +1547,8 @@ static offset_t partition_auto_select(char *tabfile, set_def *sets, dim_t nset, 
     j=0;
     for(s=0; s<nset; s++) {
       if(!iscand[s])continue;
-      off+=snprintf(js+off,cap-off,"%s\n      {\"set\": \"%s\", \"size\": %d, \"nblocks\": %ld, \"netcut\": %ld, \"block_min\": %ld, \"block_max\": %ld, \"viable\": %s}",
-                    j?",":"",sets[s].setname,sets[s].size,cnblocks[s],cnetcut[s],cmin[s],cmax[s],viable[s]?"true":"false");
+      off+=snprintf(js+off,cap-off,"%s\n      {\"set\": \"%s\", \"size\": %d, \"nblocks\": %ld, \"netcut\": %ld, \"block_min\": %ld, \"block_max\": %ld, \"block_eq_min\": %ld, \"viable\": %s}",
+                    j?",":"",sets[s].setname,sets[s].size,cnblocks[s],cnetcut[s],cmin[s],cmax[s],cemin[s],viable[s]?"true":"false");
       j++;
     }
     if(chosen>=0)off+=snprintf(js+off,cap-off,"\n    ],\n    \"chosen\": \"%s\"\n  },\n",sets[chosen].setname);
@@ -1494,6 +1557,7 @@ static offset_t partition_auto_select(char *tabfile, set_def *sets, dim_t nset, 
   }
   free(isdim);
   free(iscand);
+  free(cemin);
   free(viable);
   free(cnetcut);
   free(cnblocks);
@@ -3468,7 +3532,7 @@ comp_accurate_reentry:
             j2=j0/eq_defs[i].strides[j1];
             j0-=j2*eq_defs[i].strides[j1];
           }
-          counteq[set_elems[eq_time_offsets[i]+j2].superset_pos[0]]++;
+          counteq[set_elems[eq_time_offsets[i]+j2].superset_pos[sets[eq_defs[i].setid[eq_reg[i]]].regsup]]++;
         }
       }
     }
@@ -3533,11 +3597,11 @@ comp_accurate_reentry:
           for (j=0; j<sets[eq_defs[i].setid[eq_time[i]]].size; j++)
             if(eq_defs[i].setid[eq_time[i]]==alltimeset)
               for(j1=0; j1<sets[eq_defs[i].setid[eq_reg[i]]].size; j1++)
-                counteq[set_elems[eq_time_offsets[i]+j].superset_pos[0]*sets[eq_defs[i].setid[eq_reg[i]]].size+set_elems[eq_reg_offsets[i]+j1].superset_pos[0]]+=eq_defs[i].nelem/sets[eq_defs[i].setid[eq_time[i]]].size/sets[eq_defs[i].setid[eq_reg[i]]].size;
+                counteq[set_elems[eq_time_offsets[i]+j].superset_pos[0]*nreg+set_elems[eq_reg_offsets[i]+j1].superset_pos[sets[eq_defs[i].setid[eq_reg[i]]].regsup]]+=eq_defs[i].nelem/sets[eq_defs[i].setid[eq_time[i]]].size/sets[eq_defs[i].setid[eq_reg[i]]].size;
             else {
               for(j3=1; j3<MAXSUPSET; j3++)if(sets[eq_defs[i].setid[eq_time[i]]].subsetid[j3]==alltimeset)break;
               for(j1=0; j1<sets[eq_defs[i].setid[eq_reg[i]]].size; j1++)
-                counteq[set_elems[eq_time_offsets[i]+j].superset_pos[j3]*sets[eq_defs[i].setid[eq_reg[i]]].size+set_elems[eq_reg_offsets[i]+j1].superset_pos[0]]+=eq_defs[i].nelem/sets[eq_defs[i].setid[eq_time[i]]].size/sets[eq_defs[i].setid[eq_reg[i]]].size;
+                counteq[set_elems[eq_time_offsets[i]+j].superset_pos[j3]*nreg+set_elems[eq_reg_offsets[i]+j1].superset_pos[sets[eq_defs[i].setid[eq_reg[i]]].regsup]]+=eq_defs[i].nelem/sets[eq_defs[i].setid[eq_time[i]]].size/sets[eq_defs[i].setid[eq_reg[i]]].size;
             }
         }
       }

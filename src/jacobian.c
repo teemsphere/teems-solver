@@ -2888,7 +2888,7 @@ int equation_order_read(char *fname, char *commsyntax,set_def *sets,dim_t nset,s
         if(j>=2) {
           tempint=eq_orderreg[eqindx];
           eq_orderreg[eqindx]=-1;
-          for (i=0; i<fdim; i++)dimmat[i]=-1;
+          for (i=0; i<fdim; i++)dimmat[i]=0;
           for (i=0; i<fdim; i++) {
             memset(linvarrcount,0,nlinvars*sizeof(bool));
             for(i4=0; i4<nlinvars; i4++) {
@@ -2933,7 +2933,6 @@ int equation_order_read(char *fname, char *commsyntax,set_def *sets,dim_t nset,s
               continue;
             }
             if((orderreg[LinVars[i4].LinVarIndx]<0||strcmp(LinVars[i4].dimnames[orderreg[LinVars[i4].LinVarIndx]],arSet[eq_orderreg[eqindx]].index_name)!=0)&&!var_inter[LinVars[i4].LinVarIndx]) {
-              nelem+=vars[LinVars[i4].LinVarIndx].nelem;
               l01=0;
               for(j01=0; j01<vars[LinVars[i4].LinVarIndx].nelem; j01++)if(CL_EXO(vars[LinVars[i4].LinVarIndx].offset+j01))l01++;
               nelem+=vars[LinVars[i4].LinVarIndx].nelem-l01;
@@ -3237,7 +3236,7 @@ int equation_order_read_nested(char *fname, char *commsyntax,set_def *sets,dim_t
           eq_orderreg[eqindx]=i;
         }
       if(j>=2) {
-        for (i=0; i<fdim; i++)dimmat[i]=-1;
+        for (i=0; i<fdim; i++)dimmat[i]=0;
         for (i=0; i<fdim; i++) {
           memset(linvarrcount,0,nlinvars*sizeof(bool));
           for(i4=0; i4<nlinvars; i4++) {
@@ -3700,10 +3699,10 @@ int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,
               }
               else {
                 if(arSet[eq_time[eqindx]].setid==alltimeset)
-                  Jindx=counteq1[(set_elems[sets[arSet[eq_time[eqindx]].setid].offset+ltime].superset_pos[0])*sets[arSet[eq_reg[eqindx]].setid].size+set_elems[sets[arSet[eq_reg[eqindx]].setid].offset+lreg].superset_pos[0]]+rowindx;
+                  Jindx=counteq1[(set_elems[sets[arSet[eq_time[eqindx]].setid].offset+ltime].superset_pos[0])*nreg+set_elems[sets[arSet[eq_reg[eqindx]].setid].offset+lreg].superset_pos[sets[arSet[eq_reg[eqindx]].setid].regsup]]+rowindx;
                 else {
                   for(i4=1; i4<MAXSUPSET; i4++)if(sets[arSet[eq_time[eqindx]].setid].subsetid[i4]==alltimeset)break;
-                  Jindx=counteq1[(set_elems[sets[arSet[eq_time[eqindx]].setid].offset+ltime].superset_pos[i4])*sets[arSet[eq_reg[eqindx]].setid].size+set_elems[sets[arSet[eq_reg[eqindx]].setid].offset+lreg].superset_pos[0]]+rowindx;
+                  Jindx=counteq1[(set_elems[sets[arSet[eq_time[eqindx]].setid].offset+ltime].superset_pos[i4])*nreg+set_elems[sets[arSet[eq_reg[eqindx]].setid].offset+lreg].superset_pos[sets[arSet[eq_reg[eqindx]].setid].regsup]]+rowindx;
                 }
               }
             }
@@ -3715,7 +3714,7 @@ int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,
                 Jindx=counteq1[set_elems[sets[arSet[eq_time[eqindx]].setid].offset+ltime].superset_pos[i4]]+rowindx;
               }
             }
-            if(alltimeset<0&&allregset>=0) Jindx=counteq1[set_elems[sets[arSet[eq_reg[eqindx]].setid].offset+ltime].superset_pos[0]]+rowindx;
+            if(alltimeset<0&&allregset>=0) Jindx=counteq1[set_elems[sets[arSet[eq_reg[eqindx]].setid].offset+ltime].superset_pos[sets[arSet[eq_reg[eqindx]].setid].regsup]]+rowindx;
           }
           else Jindx=matrow+rowindx;
           leq=matroworg+(offset_t)lj/nloopsfac;//matroworg+rowindxorg;
@@ -3766,11 +3765,11 @@ int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,
           else {
             if(arSet[eq_time[eqindx]].setid==alltimeset)
               for(lj=0; lj<sets[arSet[eq_time[eqindx]].setid].size; lj++)for(l2=0; l2<sets[arSet[eq_reg[eqindx]].setid].size; l2++)
-                  counteq1[set_elems[sets[arSet[eq_time[eqindx]].setid].offset+lj].superset_pos[0]*sets[arSet[eq_reg[eqindx]].setid].size+set_elems[sets[arSet[eq_reg[eqindx]].setid].offset+l2].superset_pos[0]]+=nloops/sets[arSet[eq_time[eqindx]].setid].size/sets[arSet[eq_reg[eqindx]].setid].size;
+                  counteq1[set_elems[sets[arSet[eq_time[eqindx]].setid].offset+lj].superset_pos[0]*nreg+set_elems[sets[arSet[eq_reg[eqindx]].setid].offset+l2].superset_pos[sets[arSet[eq_reg[eqindx]].setid].regsup]]+=nloops/sets[arSet[eq_time[eqindx]].setid].size/sets[arSet[eq_reg[eqindx]].setid].size;
             else {
               for(lj=0; lj<sets[arSet[eq_time[eqindx]].setid].size; lj++)for(l2=0; l2<sets[arSet[eq_reg[eqindx]].setid].size; l2++) {
                   for(i4=1; i4<MAXSUPSET; i4++)if(sets[arSet[eq_time[eqindx]].setid].subsetid[i4]==alltimeset)break;
-                  counteq1[set_elems[sets[arSet[eq_time[eqindx]].setid].offset+lj].superset_pos[i4]*sets[arSet[eq_reg[eqindx]].setid].size+set_elems[sets[arSet[eq_reg[eqindx]].setid].offset+l2].superset_pos[0]]+=nloops/sets[arSet[eq_time[eqindx]].setid].size/sets[arSet[eq_reg[eqindx]].setid].size;
+                  counteq1[set_elems[sets[arSet[eq_time[eqindx]].setid].offset+lj].superset_pos[i4]*nreg+set_elems[sets[arSet[eq_reg[eqindx]].setid].offset+l2].superset_pos[sets[arSet[eq_reg[eqindx]].setid].regsup]]+=nloops/sets[arSet[eq_time[eqindx]].setid].size/sets[arSet[eq_reg[eqindx]].setid].size;
                 }
             }
           }
@@ -3783,7 +3782,7 @@ int jacobian_preallocate(char *fname, char *commsyntax,set_def *sets,dim_t nset,
             for(lj=0; lj<sets[arSet[eq_time[eqindx]].setid].size; lj++)counteq1[set_elems[sets[arSet[eq_time[eqindx]].setid].offset+lj].superset_pos[i4]]+=nloops/sets[arSet[eq_time[eqindx]].setid].size;
           }
         }
-        if(alltimeset<0&&allregset>=0)for(lj=0; lj<sets[arSet[eq_reg[eqindx]].setid].size; lj++)counteq1[set_elems[sets[arSet[eq_reg[eqindx]].setid].offset+lj].superset_pos[0]]+=nloops/sets[arSet[eq_reg[eqindx]].setid].size;
+        if(alltimeset<0&&allregset>=0)for(lj=0; lj<sets[arSet[eq_reg[eqindx]].setid].size; lj++)counteq1[set_elems[sets[arSet[eq_reg[eqindx]].setid].offset+lj].superset_pos[sets[arSet[eq_reg[eqindx]].setid].regsup]]+=nloops/sets[arSet[eq_reg[eqindx]].setid].size;
       }
       else matrow+=nloops;
       if(eqmeta!=NULL) {

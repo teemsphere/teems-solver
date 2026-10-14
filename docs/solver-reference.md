@@ -978,7 +978,8 @@ system at run time:
   terms — is probed: the pre-Jacobian ordering scan runs against it and
   the first counting pass measures the border and block sizes that
   partition would produce. A candidate is viable with ≥ `n_tasks`
-  nonempty blocks and a border under half the system; the smallest
+  blocks, each holding variables and equation rows, and a border under
+  half the system; the smallest
   border wins, near-ties (2 %) broken by block balance. In nested
   (NDBBD) mode the per-chain-block interface column counts as border —
   it is the local border the interface solve pays for. Sets coupled by
@@ -990,7 +991,8 @@ The probe costs one equation-section scan per candidate, runs once
 before the ordering, and is skipped when the method needs neither
 dimension: chain detection runs for SBBD, DBBD, NDBBD and the probe,
 partition detection for DBBD, NDBBD and the probe. The full candidate table
-(set, blocks, border, min/max block, viable) is logged at verbosity 1
+(set, blocks, border, min/max block, fewest equation rows in a block,
+viable) is logged at verbosity 1
 and recorded in `stats.json` under `partition_auto`, with
 `chain_source`/`partition_source` saying how each dimension was
 resolved — the structural evidence teems-R's `matrix_method = "auto"`
