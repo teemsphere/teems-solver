@@ -3686,7 +3686,7 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
     snprintf(detail,sizeof(detail),"chain-block factors %.2f GB%s, border transpose %.2f GB, B rows %.2f GB, workspace %.2f GB",fac_max/1073741824.0,resident?" (resident, aliased)":"",ct_b/1073741824.0,b12_b/1073741824.0,ws_b/1073741824.0);
     ndthr4=ndbbd_team_cap(3,"schur",max_threads,fac_max+ct_b+b12_b+ws_b,detail,rank);
   }
-  #pragma omp parallel num_threads(ndthr4) private(jthrd,timestr,aic,ajc,valsc,nrowc,ncolc,a1i,a1j,val1s,nz,a2i,a2j,val2s,nrowb,ncolb,i,j,j2,xi1point,xi1indx,maxrowcij,la1,longsize,nzc) shared(submatC,submatB1,submatB2,xi1,submatCij,submatBij,insize,yi1,vecbivi,vecbiui)
+  #pragma omp parallel num_threads(ndthr4) private(jthrd,timestr,timeend,aic,ajc,valsc,nrowc,ncolc,a1i,a1j,val1s,nz,a2i,a2j,val2s,nrowb,ncolb,i,j,j2,xi1point,xi1indx,maxrowcij,la1,longsize,nzc) shared(submatC,submatB1,submatB2,xi1,submatCij,submatBij,insize,yi1,vecbivi,vecbiui)
   {
   int icntl[20],info[20];
   solve_real cntl[10],rinfo[10],error1[3];
@@ -4155,7 +4155,8 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
 
   teems_stage_mark("solve:backsub");
   omp_set_num_threads(section_threads);
-  #pragma omp parallel private(jthrd,j1,j2,j,i,timestr,ai,aj,vals,nz,nrow,xi1point,xi1indx,ierr,nindices) shared(submatC,submatCij,submatBij,insize,xi1,colindicesbc1,colindicesbc2,x0)
+  ifremove=true;
+  #pragma omp parallel private(jthrd,j1,j2,j,i,timestr,timeend,ai,aj,vals,nz,nrow,xi1point,xi1indx,ierr,nindices) shared(submatC,submatCij,submatBij,insize,xi1,colindicesbc1,colindicesbc2,x0)
   {
   jthrd=omp_get_thread_num();
   solve_real *biui0= (solve_real *) calloc (maxrowc,sizeof(solve_real));
@@ -4173,7 +4174,6 @@ int ndbbd_solve(Mat A, Vec b, solve_real *x1, offset_t VecSize, PetscInt mpisize
     nrow=submatC[j1]->rmap->n;
     spar_mulnoadd_(xd,&nrow,&nz,ai,aj,vals,be0);
     MatDestroy(&submatC[j1]);
-    ifremove=true;
     if(inmemory||nfr_flag()) {
       /* back-substitute from the resident store, then drop this
          window's factors (the ifremove equivalent) */
