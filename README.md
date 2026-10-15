@@ -27,6 +27,7 @@ The solver is distributed as a Docker image to ensure reproducibility and ease o
     - [Expedited Build (Recommended)](#expedited-build-recommended)
     - [Full Build](#full-build)
 - [Verification](#verification)
+- [Updating an Existing Installation](#updating-an-existing-installation)
 - [Usage](#usage)
 - [Troubleshooting](#troubleshooting)
 - [References](#references)
@@ -182,6 +183,30 @@ Expected output:
 REPOSITORY   TAG       IMAGE ID       CREATED          SIZE
 teems        latest    abc123def456   2 minutes ago    ~175MB
 ```
+
+## Updating an Existing Installation
+
+A new release of the R package can require a newer solver. `ems_solve()` asks the image for its version (`teems-solver -version`) and stops with the required version if the image is too old, so an outdated image is reported before any model runs. Updating means rebuilding the image: there is no `docker pull` for `teems:*` images, because the HSL libraries are compiled from your own licensed tarball.
+
+```bash
+cd teems-solver
+git pull                                   # the repository you built from (or re-clone as in Quick Start)
+docker build --pull \
+  -t teems:latest \
+  --build-arg PATH_LIBHSL="hsl/libHSL.v2026.8.4.tar.gz" \
+  -f ./docker/expedited_build/Dockerfile \
+  .
+```
+
+`--pull` also refreshes the published base image, which carries the open-source dependencies. The rebuild replaces the local `teems:latest` tag in place; the previous image remains as an untagged layer until `docker image prune` removes it. If you built under another tag, rebuild with that `-t teems:<tag>`, since `ems_option_set(docker_tag = "<tag>")` selects the image by tag.
+
+Then restart R: the package remembers the solver version it saw for an image tag for the rest of the session. To check the installed solver directly:
+
+```bash
+docker run --rm --entrypoint /opt/teems-solver/solver/teems-solver teems:latest -version
+```
+
+Images built before the versioned interface print nothing here; the R package reports those as predating it and asks for a rebuild.
 
 ## Usage
 
