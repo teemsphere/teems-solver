@@ -97,7 +97,7 @@ FROM runtime-${TARGETARCH}
 # solver version label = pre-pull hint only; ground truth is the binary's
 # -version (src/version.h). Keep this default equal to that constant, or
 # pass --build-arg TEEMS_VERSION="$(sed -n 's/.*TEEMS_SOLVER_VERSION "\(.*\)"/\1/p' src/version.h)"
-ARG TEEMS_VERSION=1.1.0-dev.4
+ARG TEEMS_VERSION=1.1.0
 
 LABEL org.opencontainers.image.name="TEEMS solver expedited build Dockerfile"
 LABEL org.opencontainers.image.version="${TEEMS_VERSION}"
@@ -167,9 +167,6 @@ RUN echo 'APT::Install-Suggests "0";' >> /etc/apt/apt.conf.d/00-docker \
          echo "BLAS pin $CORE_WANT does not match the base image's ISA level ($(cat ${BUILD_DIR}/solver/blascore))" >&2; \
          exit 1; \
        fi \
-    # transition symlink for scripts referencing the old binary name;
-    # remove one release after the rename ships
-    && ln -s teems-solver ${BUILD_DIR}/solver/hsl \
     && groupadd -g $USER_GID $USERNAME \
     && useradd -m -u $USER_UID -g $USER_GID -s /bin/bash $USERNAME
 

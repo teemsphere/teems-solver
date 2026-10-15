@@ -1,7 +1,7 @@
 # TEEMS Solver
 
 [![License](https://img.shields.io/badge/License-AGPL_v3.0-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.0.0-green.svg)](https://github.com/matthewcantele/teems-solver/releases)
+[![Version](https://img.shields.io/badge/version-1.1.0-green.svg)](https://github.com/matthewcantele/teems-solver/releases)
 [![Docker](https://img.shields.io/badge/docker-required-2496ED.svg)](https://www.docker.com/)
 
 High-performance optimization solver for the TEEMS (Trade and Environment Equilibrium Modeling System) R package. Built on PETSc with MPI parallelization and HSL sparse linear algebra libraries.
