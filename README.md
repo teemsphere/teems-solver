@@ -186,7 +186,7 @@ teems        latest    abc123def456   2 minutes ago    ~175MB
 
 ## Updating an Existing Installation
 
-A new release of the R package can require a newer solver. `ems_solve()` asks the image for its version (`teems-solver -version`) and stops with the required version if the image is too old, so an outdated image is reported before any model runs. Updating means rebuilding the image: there is no `docker pull` for `teems:*` images, because the HSL libraries are compiled from your own licensed tarball.
+A new release of the R package can require a newer solver. `ems_solve()` asks the image for its version (`teems-solver -version`) and stops with the required version if the image is too old, so an outdated image is reported before any model runs. Solver 1.1.0 is such a step despite the minor version number: it is not compatible with 1.0.0 or with the R package 0.1.1 (flags, data layout and the binary's path changed, and 1.1.0 is the first version with the version handshake), so upgrade the two together: `install.packages("teems")`, then the rebuild below. Updating means rebuilding the image: there is no `docker pull` for `teems:*` images, because the HSL libraries are compiled from your own licensed tarball.
 
 ```bash
 cd teems-solver
