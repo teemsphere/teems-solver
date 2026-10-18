@@ -5,5 +5,5 @@
    = pre-pull hint, -version = ground truth). Bump here at tag time. */
 #ifndef TEEMS_VERSION_H_INCLUDED
 #define TEEMS_VERSION_H_INCLUDED
-#define TEEMS_SOLVER_VERSION "1.1.0"
+#define TEEMS_SOLVER_VERSION "1.1.1-dev.1"
 #endif

@@ -97,7 +97,7 @@ FROM runtime-${TARGETARCH}
 # solver version label = pre-pull hint only; ground truth is the binary's
 # -version (src/version.h). Keep this default equal to that constant, or
 # pass --build-arg TEEMS_VERSION="$(sed -n 's/.*TEEMS_SOLVER_VERSION "\(.*\)"/\1/p' src/version.h)"
-ARG TEEMS_VERSION=1.1.0
+ARG TEEMS_VERSION=1.1.1-dev.1
 
 LABEL org.opencontainers.image.name="TEEMS solver expedited build Dockerfile"
 LABEL org.opencontainers.image.version="${TEEMS_VERSION}"
