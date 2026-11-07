@@ -40,6 +40,27 @@
    solved; under -adaptive yes these are the manual 26.5.1 retry triggers
    1-4, with the step retried at h*retryadj.
 
+   DATA.  Product and (explicit) Updates are exact functions of the
+   stage state (a product of levels compounded from the step base), so
+   a stage realizes them by one update pass.  A (change) Update is a
+   rate: its right-hand side is the coefficient's change per unit of
+   the variables' change, and applied once per step from the step base
+   it is the Euler step of that rate -- an O(h^2) error committed into
+   the data every step, O(h) in every Jacobian after 1/h steps, common
+   to all stages of any tableau and invisible to the embedded estimate
+   (measured 2026-11-07 on a GTAP-RE variant with its value flows in
+   change form: RK2, RK4 and both pairs at global order 1).  The driver
+   therefore carries every (change) target as integrated state: after
+   each stage solve the (change) statements are evaluated with the
+   variables' slots holding the stage gradient (updates_apply_product
+   mode 2), giving the coefficient's stage increment k^C_m; a stage or
+   end state sets those targets to base + sum_j a_mj k^C_j (b_j at the
+   end) while the other updates run as before (mode 1).  Standard RK on
+   the augmented system: every tableau keeps its order for any (change)
+   form, minus signs and coefficient factors included.  The committed
+   values of those targets are accumulated in double (cfbase); the
+   final data pass writes them in place of the one-shot (change) value.
+
    No subintervals and no Richardson extrapolation: RK produces a single
    solution and (embedded flavors) the per-element estimated error metric
    (.est ride-along) replaces the extrapolation accuracy census.  Value
@@ -380,6 +401,48 @@ static void rk_state_set(array_def *vars,offset_t nvar,
   }
 }
 
+/* (change) Update targets as RK state: set the ncf carried elements to
+   their committed value plus the tableau-weighted sum of the first nst
+   stage increments (w = a row of the tableau, or b at the end) */
+static void rk_cf_set(offset_t ncf,const offset_t *cfidx,const double *cfbase,
+  solve_real **kc,const double *w,int nst,elem_value *elem_vals) {
+  offset_t i;
+  int j;
+  for(i=0; i<ncf; i++) {
+    double acc=0;
+    for(j=0; j<nst; j++)acc+=w[j]*kc[j][i];
+    elem_vals[cfidx[i]].value=(store_real)(cfbase[i]+acc);
+  }
+}
+
+/* the (change) statements' stage increment: the variables' slots carry
+   the stage gradient as the percent (or ordinary) change per unit of
+   the sub-step -- the log-chart gradient in percent, the additive
+   chart's gradient relative to the stage level -- and the right-hand
+   sides are evaluated at the stage state */
+static void rk_cf_rate(char *tabfile,set_def *sets,dim_t nset,set_element *set_elems,
+  array_def *coefs,offset_t ncof,array_def *vars,offset_t nvar,elem_value *elem_vals,
+  offset_t ncofele,offset_t nvarele,const solve_real *k,const solve_real *stagez,
+  const char *mult,double *cfrate,offset_t ncf,const offset_t *cfidx,solve_real *kcm) {
+  offset_t i;
+  fortran_int tindx1;
+  elem_value *elem_vals1=elem_vals+ncofele;
+  for(i=0; i<nvar; i++) {
+    for(tindx1=vars[i].offset; tindx1<vars[i].nelem+vars[i].offset; tindx1++) {
+      solve_real v=k[tindx1];
+      if(!vars[i].change_real)v=mult[tindx1]?100*v:v/(1+stagez[tindx1]/100);
+      elem_vals1[tindx1].substep_base=v;
+    }
+  }
+  memset(cfrate,0,ncofele*sizeof(double));
+  teems_upd_mode=2;
+  teems_upd_rate=cfrate;
+  updates_apply_product(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele);
+  teems_upd_mode=0;
+  teems_upd_rate=NULL;
+  for(i=0; i<ncf; i++)kcm[i]=(solve_real)cfrate[cfidx[i]];
+}
+
 /* Stage-state checks after a realization (rank_hsl evaluates the
    updates/formulas/assertions; the chart checks run on the state
    arrays).  Returns the manual 26.5.1 trigger class: 0 clean,
@@ -529,6 +592,34 @@ bool solve_rk(PetscBool nohsl,PetscInt VecSize,PetscInt dnz,PetscInt* dnnz,Petsc
     elem_vals[i].initial=elem_vals[i].value;
     base_vals[i]=elem_vals[i].value;
   }
+  /* (change) Update targets carried as state (DATA above): their
+     element list, per-stage increments, committed values in double,
+     and the rate scratch the evaluator writes into (rank_hsl only) */
+  offset_t ncf=0,*cfidx=NULL;
+  double *cfbase=NULL,*cfrate=NULL;
+  solve_real *kc[7]= {NULL};
+  if(rank==rank_hsl) {
+    unsigned char *cfcoef= (unsigned char *) calloc (ncof+1,1);
+    offset_t ncfcoef=updates_change_targets(tabfile,elem_vals,coefs,ncof,cfcoef);
+    for(i=0; i<ncof; i++)if(cfcoef[i])ncf+=coefs[i].nelem;
+    if(ncf>0) {
+      offset_t e,k=0;
+      cfidx= (offset_t *) malloc (ncf*sizeof(offset_t));
+      cfbase= (double *) malloc (ncf*sizeof(double));
+      cfrate= (double *) calloc (ncofele,sizeof(double));
+      for(i=0; i<ncof; i++) {
+        if(!cfcoef[i])continue;
+        for(e=0; e<coefs[i].nelem; e++) {
+          cfidx[k]=coefs[i].offset+e;
+          cfbase[k]=(double)elem_vals[cfidx[k]].value;
+          k++;
+        }
+      }
+      for(m=0; m<s; m++)kc[m]= (solve_real *) calloc (ncf,sizeof(solve_real));
+      if(rank==0)logmsg(1,"%s: %ld elements of %ld (change) Update targets integrated as state\n",scheme.name,(long)ncf,(long)ncfcoef);
+    }
+    free(cfcoef);
+  }
   offset_t nmult=0;
   for(i=0; i<nvar; i++) {
     for(tindx1=vars[i].offset; tindx1<vars[i].nelem+vars[i].offset; tindx1++) {
@@ -589,8 +680,12 @@ bool solve_rk(PetscBool nohsl,PetscInt VecSize,PetscInt dnz,PetscInt* dnnz,Petsc
              linearizes multi-factor product updates, an O(h^2)
              coefficient error per stage that caps every flavor at
              global first order; the product form is exact per factor
-             when compounding from the step base */
+             when compounding from the step base.  The (change) targets
+             are state: set from the stage increments (DATA above) */
+          teems_upd_mode=(ncf>0)?1:0;
           updates_apply_product(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele);
+          teems_upd_mode=0;
+          if(ncf>0)rk_cf_set(ncf,cfidx,cfbase,kc,scheme.a+m*s,m,elem_vals);
           strcpy(commsyntax,"formula");
           IsIni=false;
           statements_execute(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,IsIni,0);
@@ -612,6 +707,7 @@ bool solve_rk(PetscBool nohsl,PetscInt VecSize,PetscInt dnz,PetscInt* dnnz,Petsc
         if(h!=k0_h) {
           double r=h/k0_h;
           for(tindx1=0; tindx1<nvarele; tindx1++)kk[0][tindx1]*=r;
+          for(i=0; i<ncf; i++)kc[0][i]*=r;
           k0_h=h;
         }
         teems_rk_stats.stage_solves_reused++;
@@ -700,6 +796,8 @@ bool solve_rk(PetscBool nohsl,PetscInt VecSize,PetscInt dnz,PetscInt* dnnz,Petsc
           }
         }
       }
+      /* the (change) targets' stage increment at this stage state */
+      if(ncf>0&&rank==rank_hsl)rk_cf_rate(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele,nvarele,kk[m],stagez,mult,cfrate,ncf,cfidx,kc[m]);
       if(m==0) {
         have_k0=true;
         k0_h=h;
@@ -727,6 +825,7 @@ bool solve_rk(PetscBool nohsl,PetscInt VecSize,PetscInt dnz,PetscInt* dnnz,Petsc
             if(rank==0)logmsg(1,"Step 1: initial step size %.4g from the initial gradient (was %.4g)\n",hn,h);
         fflush(stdout);
             for(tindx1=0; tindx1<nvarele; tindx1++)kk[0][tindx1]*=hn/h;
+            for(i=0; i<ncf; i++)kc[0][i]*=hn/h;
             h=hn;
             k0_h=h;
           }
@@ -815,7 +914,10 @@ bool solve_rk(PetscBool nohsl,PetscInt VecSize,PetscInt dnz,PetscInt* dnnz,Petsc
       teems_check_viol_assert=0;
       teems_rk_stage_checks=(adaptive==1&&!checks_suspended)?1:0;
       if(rank==rank_hsl) {
+        teems_upd_mode=(ncf>0)?1:0;
         updates_apply_product(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele);
+        teems_upd_mode=0;
+        if(ncf>0)rk_cf_set(ncf,cfidx,cfbase,kc,scheme.b,s,elem_vals);
         strcpy(commsyntax,"formula");
         IsIni=false;
         statements_execute(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,IsIni,0);
@@ -893,7 +995,13 @@ bool solve_rk(PetscBool nohsl,PetscInt VecSize,PetscInt dnz,PetscInt* dnnz,Petsc
         }
       }
     }
-    /* commit the resident state as the next base */
+    /* commit the resident state as the next base; the (change) targets'
+       committed values accumulate in double */
+    for(i=0; i<ncf; i++) {
+      double acc=0;
+      for(st=0; st<s; st++)acc+=scheme.b[st]*kc[st][i];
+      cfbase[i]+=acc;
+    }
     for(i=0; i<ncofele; i++)base_vals[i]=elem_vals[i].value;
     for(i=0; i<nvar; i++) {
       for(tindx1=vars[i].offset; tindx1<vars[i].nelem+vars[i].offset; tindx1++) {
@@ -914,6 +1022,7 @@ bool solve_rk(PetscBool nohsl,PetscInt VecSize,PetscInt dnz,PetscInt* dnnz,Petsc
        the new base, so its gradient is the next stage 0 */
     if(scheme.fsal) {
       memcpy(kk[0],kk[s-1],nvarele*sizeof(solve_real));
+      if(ncf>0)memcpy(kc[0],kc[s-1],ncf*sizeof(solve_real));
       have_k0=true;
       k0_h=h;
     }
@@ -976,7 +1085,12 @@ bool solve_rk(PetscBool nohsl,PetscInt VecSize,PetscInt dnz,PetscInt* dnnz,Petsc
       }
     }
     for(i=0; i<ncofele; i++) elem_vals[i].value=elem_vals[i].initial;
+    teems_upd_mode=(ncf>0)?1:0;
     updates_apply_product(tabfile,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele);
+    teems_upd_mode=0;
+    /* a (change) target takes its integrated path value, as the
+       extrapolating drivers' targets take their extrapolated one */
+    for(i=0; i<ncf; i++)elem_vals[cfidx[i]].value=(store_real)cfbase[i];
     strcpy(commsyntax,"formula");
     IsIni=false;
     statements_execute(tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,elem_vals,ncofele+nvarele,ncofele,IsIni,0);
@@ -986,6 +1100,10 @@ bool solve_rk(PetscBool nohsl,PetscInt VecSize,PetscInt dnz,PetscInt* dnnz,Petsc
       }
     }
   }
+  free(cfidx);
+  free(cfbase);
+  free(cfrate);
+  for(m=0; m<s; m++)free(kc[m]);
   free(x1);
   free(base_Z);
   free(stagez);

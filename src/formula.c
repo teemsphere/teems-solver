@@ -3701,6 +3701,15 @@ static offset_t *upd_pathbase=NULL;     /* per coefficient: base in upd_pathacc,
 static double *upd_pathacc=NULL;
 static offset_t upd_pathn=0;
 int teems_upd_pathuse=0;
+/* updates_apply_product mode for the Runge-Kutta driver, which carries
+   the (change) Update targets as integrated state: 1 applies every
+   statement but the (change) ones (the driver writes those targets
+   itself), 2 evaluates only the (change) statements and stores each
+   element's right-hand side -- the rate the variables' slots imply --
+   in teems_upd_rate[element] without touching any value. 0 is the
+   ordinary pass. */
+int teems_upd_mode=0;
+double *teems_upd_rate=NULL;
 /* double-precision shadow of those targets' path (value, previous-step
    value): single-precision storage rounds each step's increment onto
    the value, and a change update adding ~1e-6 per step onto ~1 loses a
@@ -3780,6 +3789,37 @@ static void upd_analyse(char *fname, elem_value *elem_vals, array_def *coefs, of
 
 static int upd_stmt_defer(int s) {
   return (s<upd_nstmt)?upd_defer[s]:1;
+}
+
+/* flag[k] = 1 for every coefficient some (change) Update targets;
+   returns the number of flagged coefficients */
+offset_t updates_change_targets(char *fname, elem_value *elem_vals, array_def *coefs, offset_t ncof, unsigned char *flag) {
+  FILE *f;
+  char line[TABREADLINE],cs[NAMESIZE],name[NAMESIZE];
+  solve_real zd=0;
+  offset_t n=0,k;
+  strcpy(cs,"update");
+  f=teems_fopen(fname,"r");
+  while (f!=NULL&&tab_next_statement_resolved(cs,f,line,elem_vals,coefs,ncof,&zd,TABREADLINE)) {
+    char *p=line;
+    int j;
+    if (strstr(line,"(change)")==NULL) continue;
+    while (*p==' ') p++;
+    if (str_find_ci(p,"update")==0) p+=6;
+    for (;;) {
+      int d=0;
+      while (*p==' ') p++;
+      if (*p!='(') break;
+      for (; *p!='\0'; p++) { if (*p=='(') d++; else if (*p==')') { d--; if (d==0) { p++; break; } } }
+    }
+    j=0;
+    while ((isalnum((unsigned char)*p)||*p=='_'||*p=='@')&&j<NAMESIZE-1) name[j++]=*p++;
+    name[j]='\0';
+    k=upd_coef_lookup(name,coefs,ncof);
+    if (k>=0&&!flag[k]) { flag[k]=1; n++; }
+  }
+  if (f!=NULL) fclose(f);
+  return n;
 }
 
 static offset_t upd_pend_reserve(offset_t n) {
@@ -4569,6 +4609,13 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
       IsExplicit=true;
       str_replace_first(line, "(explicit)", "");
     }
+    /* the Runge-Kutta driver's split passes: the statement number
+       still advances, it indexes the deferral analysis */
+    if((teems_upd_mode==1&&IsChange)||(teems_upd_mode==2&&!IsChange)) {
+      upd_cond_free(&uc);
+      stmt++;
+      continue;
+    }
     /* (product) is GEMPACK's explicit spelling of the default update
        form (parity plan 3.4) -- accept and ignore */
     if(strstr(line, "(product)")!=NULL)str_replace_first(line, "(product)", "");
@@ -4728,7 +4775,8 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
         upd_nonfinite_note(check10?-1:index);
     if(!formula_compile(line1,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,ops,&nops,arSet,fdim-1))teems_abort();
     upd_cond_compile(&uc,sets,coefs,ncof,vars,nvar,ncofele,sum_cof,totalsum,arSet,fdim-1);
-    int dfr=upd_stmt_defer(stmt);
+    const int ratemode=(teems_upd_mode==2);
+    int dfr=ratemode?0:upd_stmt_defer(stmt);
     offset_t pb=dfr?upd_pend_reserve(nloops):0;
     /* the post-simulation pass of an extrapolated solve: a (change) or
        (explicit) target takes its extrapolated path value; product
@@ -4790,6 +4838,12 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
         continue;
       }
       temp1=formula_eval(elem_vals,sets,set_elems,sum_vals,ops1,nops,arSet1,fdim-1,zerodivide);
+      if(ratemode){
+        /* the right-hand side alone is the rate; the value stays */
+        if(teems_nonfinite(temp1))upd_nf_hit(offset+l2);
+        teems_upd_rate[offset+l2]=temp1;
+        continue;
+      }
         if(IsChange)temp1+=(double)elem_vals[offset+l2].value;
       if(pathv!=NULL)temp1=pathv[l2];
       if(teems_nonfinite(temp1))upd_nf_hit(offset+l2);
@@ -4819,7 +4873,8 @@ offset_t updates_apply_product(char *fname,set_def *sets,dim_t nset, set_element
     free(arSet);
     free(ops);
 
-        if(dfr) upd_check_later(index,offset,varsize);
+        if(ratemode) ;   /* rates are not values: no range test */
+        else if(dfr) upd_check_later(index,offset,varsize);
         else upd_range_check(coefs,index,offset,varsize,elem_vals);
         upd_cond_free(&uc);
         if(upd_nf_off>=0) {

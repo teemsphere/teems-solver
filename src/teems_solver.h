@@ -1110,6 +1110,9 @@ void conv_ratios(bool euler,double *q2,double *q3);
 void updates_path_restart(void);
 double updates_value_now(array_def *coefs, offset_t k, offset_t e, elem_value *elem_vals);
 extern int teems_upd_pathuse;
+extern int teems_upd_mode;        /* updates_apply_product: 0 all, 1 all but (change), 2 (change) rates only */
+extern double *teems_upd_rate;    /* mode 2: per coefficient element, the (change) right-hand side */
+offset_t updates_change_targets(char *fname, elem_value *elem_vals, array_def *coefs, offset_t ncof, unsigned char *flag);
 
 /* ============ jacobian.c — first-order derivative matrix assembly ======
    (Ha & Kompas 2016 §5; Kompas & Ha 2019) */
