@@ -1338,7 +1338,9 @@ method (basis of the golden-run verification, below).
   done ([GM] 25.4.2; all violators are reported, then the run stops
   under `-range_test_initial 2`, the default), and every updated value
   after each step's Updates and Formulas (`-range_test_updated`, warn
-  by default); values are never clamped.
+  by default); values are never clamped. A bound on a levels variable
+  is carried to its value coefficient and tested there ([GM] 25.4.1);
+  a bound on a linear variable is a named fatal.
 - **BLAS kernel pin.** Debian's `libopenblas` is built `DYNAMIC_ARCH`
   and selects its kernels from CPUID at run time, so an unpinned image
   produced different last digits per host: measured on the same image,

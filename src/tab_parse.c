@@ -5943,7 +5943,16 @@ offset_t variables_read(char *fname, char *commsyntax, array_def *record, offset
     }
     /* tokenized qualifier parsing (audit A4): explicit qualifiers
        override the defaults above */
+    strcpy(linecopy,line);
     if (tab_qualifiers_parse(line,ncommsyntax,&record[j],NULL,NULL,&vgltype2,&vglval2,1)<0) {
+      fclose(filehandle);
+      return -1;
+    }
+    /* a range qualifier restricts a levels value: on a levels variable
+       it rides the value coefficient (levels.c), where the range tests
+       run; a linear variable has no levels value to test */
+    if (record[j].gltype>0&&!record[j].level_par) {
+      errmsg("Error: a range qualifier (GE, GT, LE or LT) applies to coefficients and levels variables only, and this variable is linear; remove the qualifier or declare the variable (levels): %s\n",linecopy);
       fclose(filehandle);
       return -1;
     }

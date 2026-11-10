@@ -218,6 +218,32 @@ static int lv_group_end(const char *p) {
   return -1;
 }
 
+/* a range qualifier on a levels variable restricts its value
+   coefficient (GEMPACK manual 25.4.1): split the comma-joined
+   qualifier tokens of a declaration into the GE/GT/LE/LT bounds, each
+   written with a leading comma for the coefficient's qualifier list,
+   and the remaining tokens */
+static void lv_split_bounds(const char *extra, char *bounds, char *rest) {
+  const char *p = extra, *q;
+  bounds[0] = '\0';
+  rest[0] = '\0';
+  while (*p != '\0') {
+    size_t n;
+    q = strchr(p, ',');
+    n = (q != NULL) ? (size_t)(q - p) : strlen(p);
+    if (n > 2 && (p[0] == 'g' || p[0] == 'l') && (p[1] == 'e' || p[1] == 't') &&
+        (isdigit((unsigned char)p[2]) || p[2] == '-' || p[2] == '+' || p[2] == '.')) {
+      strcat(bounds, ",");
+      strncat(bounds, p, n);
+    } else if (n > 0) {
+      if (rest[0] != '\0') strcat(rest, ",");
+      strncat(rest, p, n);
+    }
+    p += n;
+    if (*p == ',') p++;
+  }
+}
+
 static int lv_parse_head(const char *after_kw, lv_head *h) {
   const char *p = after_kw;
   int ge;
@@ -2491,6 +2517,8 @@ int tab_levels_transform(char *fname) {
     if (strncmp(stmt, "variable", 8) == 0 && !tab_default_value(stmt, defval)) {
       if (lv_parse_head(stmt + 8, &h) == 0 && lv_find_lv_decl(c, h.name, h.namelen) >= 0) {
         int k = lv_find_lv_decl(c, h.name, h.namelen);
+        char bounds[NAMESIZE + 8], rest[NAMESIZE];
+        lv_split_bounds(h.extra, bounds, rest);
         if (c->lv[k].kind >= 2) {
           /* GEMPACK's expansion (9.2.2): LINEAR_NAME= declares the
              linear variable under that name; LINEAR_VAR= uses the one
@@ -2499,12 +2527,12 @@ int tab_levels_transform(char *fname) {
           if (c->lv[k].kind == 2) {
             const char *lb = strchr(h.name + h.namelen, '#'), *le = (lb != NULL) ? strchr(lb + 1, '#') : NULL;
             fprintf(fout, "variable (linear,%s%s%s) %.*s %s%.*s %.*s;\n",
-                    c->lv[k].change ? "change" : "percent_change", h.extra[0] ? "," : "", h.extra,
+                    c->lv[k].change ? "change" : "percent_change", rest[0] ? "," : "", rest,
                     h.quantslen, h.quants, c->lv[k].name, h.argslen, h.args,
                     (lb != NULL && le != NULL) ? (int)(le - lb + 1) : 0, lb != NULL ? lb : "");
           }
-          fprintf(fout, "coefficient (non_parameter) %.*s %s%.*s ;\n",
-                  h.quantslen, h.quants, c->lv[k].valname, h.argslen, h.args);
+          fprintf(fout, "coefficient (non_parameter%s) %.*s %s%.*s ;\n",
+                  bounds, h.quantslen, h.quants, c->lv[k].valname, h.argslen, h.args);
           fprintf(fout, "update %s%.*s %s%.*s = %s%.*s ;\n",
                   c->lv[k].change ? "(change) " : "",
                   h.quantslen, h.quants, c->lv[k].valname, h.argslen, h.args,
@@ -2518,10 +2546,11 @@ int tab_levels_transform(char *fname) {
            as declared (it may differ from quantifier order); the
            coefficient carries the pair's VALUE name (== declared
            unless gen_lv-renamed, C1a), the update RHS the declared
-           column reference. */
+           column reference. A range qualifier restricts the value
+           coefficient (25.4.1), where the range tests run. */
         fprintf(fout, "%s\n", stmt);
-        fprintf(fout, "coefficient (non_parameter) %.*s %s%.*s ;\n",
-                h.quantslen, h.quants, c->lv[k].valname, h.argslen, h.args);
+        fprintf(fout, "coefficient (non_parameter%s) %.*s %s%.*s ;\n",
+                bounds, h.quantslen, h.quants, c->lv[k].valname, h.argslen, h.args);
         fprintf(fout, "update %s%.*s %s%.*s = p_%.*s%.*s ;\n",
                 c->lv[k].change ? "(change) " : "",
                 h.quantslen, h.quants, c->lv[k].valname, h.argslen, h.args,
