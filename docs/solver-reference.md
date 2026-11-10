@@ -875,7 +875,7 @@ unconstrained. Measured on GTAP-RE (40 % pfactwld, float64-coefficient
 diagnostic build): extrapolated error contracts ~8× per step-count
 doubling (the h³ rate), with Euler 8-16-32 matching Gragg 2-4-8.
 teems-R maps `solution_method="Gragg"/"Euler"` → the same `-solmed`
-values; `"Johansen"` forces `-nsubints 1`.
+values; `"Johansen"` takes one subinterval only (teems-R rejects more).
 
 ### Subtotals (Tier B3; [GM] 29, Harrison, Horridge and Pearson 1999, CoPS IP-73)
 
@@ -928,8 +928,8 @@ Output: `.cols` kind 1 (subtotal), or kind 2 (SAGEM individual
 columns; one group per shocked component is GEMPACK's SAGEM) for a
 one-step Johansen run. Supported: LU, `-fastrefac` LU, SBBD,
 `-fastrefac` SBBD and DBBD (resident, `-inmemory 0`, `-fastrefac`) with
-Johansen, Euler, Midpoint and Gragg, any `-nsubints`, `-single_run`,
-`-two_run`. Named
+Johansen (one subinterval), Euler, Midpoint and Gragg (any `-nsubints`,
+`-single_run`, `-two_run`). Named
 fatals: NDBBD and `-withmc66 1` (no kept factorization yet), the
 Runge–Kutta methods (the log-chart stage combination has no settled
 subtotal convention), and models with complementarities (the
@@ -1424,7 +1424,7 @@ needs corpus calibration.
 | `-xacvars v1,v2,...` | none | the variables the accuracy summary covers ([GM] 26.2.6 XAC-retained): every element of each, endogenous, exogenous or backsolved, instead of the endogenous and backsolved elements; names resolve like closure entries (case-insensitive); an unknown or repeated name is a named fatal. `.xac` keeps every row, with the summarised flag marking the covered ones |
 | `-rqf n` | 0 | required figures of accuracy ([GM] 26.2.6 RQF): results whose two extrapolations agree to n (1–6) or more figures get the convergence code XRA; reporting only (§5, Convergence codes) |
 | `-random_seed n` (n ≥ 0) | 1 | seed of RANDOM(a,b) ([GM] 11.5.2); the same seed reproduces every draw (GEMPACK's `randomize = yes`, a new sequence per run, is not the default); `stats.json` records `"random_seed"` |
-| `-nsubints n` | 1 | shock subintervals, at least 1 |
+| `-nsubints n` | 1 | shock subintervals, at least 1; more than 1 is a named fatal with `Johansen` (a single linear solve) |
 | `-laA/-laDi/-laD n` | 2 (teems-R: 300/500/200) | workspace sizing, % of nnz |
 | `-fastrefac {0,1}` | 0 | all matrix methods: analyse once, fast refactorize per step (MA48 JOB=2 / MP48 FACT_JOB=2); LU auto-grows `laA` (§6). DBBD: small rigs only — at 1.4M equations no step reused its extraction and the run was slower than one-shot (§6) |
 | `-ma48_cntl2 x` | library defaults | MA48 / HSL_MP48 pivot threshold `CNTL(2)`, 0 < x ≤ 1, applied at every factorization site (sequential LU, DBBD/NDBBD blocks and rank probes, SBBD's MP48 instance), so it can also move the DBBD/NDBBD block sizes. Absent = each library's own default (MA48 0.1, MP48 0.01), bit-identical to builds without the option; recorded in `stats.json` (`ma48_cntl2`, null when default). A calibration knob, not a tuning recommendation |
@@ -1451,7 +1451,7 @@ needs corpus calibration.
 | `-assertions {0,1,2}` | 2 | TAB `Assertion` statements: off / warn / fatal |
 | `-range_test_initial`, `-range_test_updated {0,1,2}` | 2 / 1 | coefficient bound checks on initial values (every coefficient, after the initial Reads and Formulas; [GM] 25.4.2) and on updated values: off / warn / fatal |
 | `-postsim {0,1}` | 1 | execute the TAB's PostSim section after the simulation |
-| `-comp_steps n`, `-comp_do_approx/-comp_do_acc {0,1}`, `-comp_redo {0,1}`, `-comp_redo_min_frac x`, `-comp_sberr_warn {0,1}` | steps: the accurate run's step sum (10 if below 1); 1, 1, 1, 0.005 in (0,1], 0 | complementarity ([GM] ch. 51) approximate/accurate run controls |
+| `-comp_steps n`, `-comp_do_approx/-comp_do_acc {0,1}`, `-comp_redo {0,1}`, `-comp_redo_min_frac x`, `-comp_sberr_warn {0,1}` | steps: the accurate run's step sum (10 if below 1); 1, 1, 1, 0.005 in (0,1], 0 | complementarity ([GM] ch. 51) approximate/accurate run controls; `-comp_do_acc 0` with `-nsubints` above 1 is a named fatal (the approximate run alone takes no subintervals) |
 | `-nowrites n` | 0 | nonzero: skip the CMF output data files (the solution binaries, `.cof` and `stats.json` are still written) |
 | `-cofdump {0,1}` | 1 | write the `.cof`/`.cbin` coefficient dump and the pre-simulation `.cbin0` (recorded in `stats.json` `options`) |
 | `-sup {0,1,2}` | 0 | GEMPACK SUP ([GM] 26.8.1): save the updated data after the last (1) or every (2) separate multi-step solution to `<stem>.ud5`..`.ud7`, in the `.cbin0` layout indexed by the `.cof`; Euler, Midpoint or Gragg only, one subinterval, needs `-cofdump 1`; `stats.json` `save_updated_passes` |

@@ -2251,6 +2251,15 @@ int main(int argc,char **args) {
     PetscFinalize();
     return 1;
   }
+  /* Johansen is one linear solve on the base data: the shocks are
+     stored per subinterval, so a second subinterval would leave the
+     run with a fraction of the shock, and chained updated solves are
+     Euler steps, not Johansen */
+  if(solmethod==SM_JOHANSEN&&subints>1) {
+    if(rank==0)errmsg("Error: Johansen is a single linear solve and takes no subintervals (got -nsubints %d); for %d updated steps use -solmed Euler -step1 %d -single_run 1\n",subints,subints,subints);
+    PetscFinalize();
+    return 1;
+  }
   if((solmethod==SM_GRAGG||solmethod==SM_MIDPOINT)&&!teems_single_run) {
     /* the h^2 error expansion of Gragg and the midpoint method holds
        within one step parity (Pearson 1991 Thm 6.1; manual 26.1.2,
@@ -2949,6 +2958,13 @@ int main(int argc,char **args) {
     comp_sberr_warn=iopt?1:0;
     if(!comp_do_approx&&!comp_do_acc) {
       if(rank==0)errmsg("Error: -comp_do_approx and -comp_do_acc cannot both be 0\n");
+      teems_abort();
+    }
+    /* the approximate run goes once over the stored shocks, which are
+       divided across the subintervals: with no accurate run to pair it
+       with in each subinterval it would apply a fraction of the shock */
+    if(!comp_do_acc&&subints>1) {
+      if(rank==0)errmsg("Error: -comp_do_acc 0 reports the complementarity approximate run, which takes no subintervals (got -nsubints %d); use -nsubints 1 and raise -comp_steps, or keep the accurate run\n",subints);
       teems_abort();
     }
     /* state flips change the filtered nonzero pattern between steps,
@@ -3898,7 +3914,6 @@ comp_accurate_reentry:
     }
     if(comp_do_approx) {
       if(rank==0)printf("Complementarity: %ld active (endogenous) component(s); approximate simulation as forward Euler with %d steps (GEMPACK manual 51.1.2)\n",(long)teems_comp_active,comp_steps);
-      if(rank==0&&subints>1&&!comp_do_acc)printf("Warning: without an accurate run the complementarity approximate run treats the simulation as one interval (GEMPACK manual 51.7.4 pairs need the accurate run)\n");
       solve_comp_approx(nohsl,VecSize,dnz,dnnz,onz,onnz,dnzB,dnnzB,onzB,onnzB,&vece,rank,rank_hsl,mpisize,tabfile,commsyntax,sets,nset,set_elems,coefs,ncof,vars,nvar,&elem_vals,ncofele,nvarele,&closure_vals,alltimeset,allregset,nintraeq,matsol,Istart,Iend,nreg,ntime,eq_addr,ndblock,countvarintra1,counteq,counteqnoadd,laA,laDi,laD,teems_ma48_cntl4,nesteddbbd,localsize,ndbbddrank1,indata,mc66,ptx,begintime,fcomm,comp_steps,comp_redo,comp_minfrac,&xcf);
       if(rank==0&&comp_do_acc&&xcf!=NULL) {
         free(comp_approx_col);
