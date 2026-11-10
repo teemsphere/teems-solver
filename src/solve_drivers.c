@@ -2083,7 +2083,7 @@ static void dacc_print(void) {
    Mode 0 (26.6.5): each Euler step (Newton-shocked under -newton_shock
    1) is followed by -newton_per_euler corrections and the last by
    -newton_extra more. Mode 1: the corrections after the last Euler step
-   repeat until the residual sum is at most -newton_tol (at most
+   repeat until the relative residual sum is at most -newton_tol (at most
    -newton_maxit of them); with -newton_damp 1 a correction that does
    not reduce the sum is undone and retried at half length. */
 typedef struct {

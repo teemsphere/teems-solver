@@ -202,7 +202,10 @@ static int dfr_nblocks=0,dfr_ready=0;
    with MAT_REUSE_MATRIX (the extraction structure is fixed while the
    orderings are; a row/col-ordering change triggers a full rebuild).
    The per-step IS/index construction stays as-is — REUSE only needs
-   IS content, not object identity. */
+   IS content, not object identity.
+   Lettering: submatC is block rows x border columns (the right border)
+   and submatB is border rows x block columns (the bottom border), the
+   reverse of the usual [A B; C D] block notation. */
 static Mat *xfr_submatA=NULL,*xfr_submatC=NULL,*xfr_submatB=NULL,*xfr_submatBB=NULL,*xfr_submatD=NULL,*xfr_submatCT=NULL;
 static int *xfr_order=NULL;
 static PetscInt xfr_ordlen=0,xfr_nmatin=0;

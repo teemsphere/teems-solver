@@ -52,7 +52,7 @@ The run directory contains:
 | `out/` | solver | outputs (below) |
 
 The CMF is a sequence of statements read by `cmf_read()`:
-`file iodata "<logical>" "<path>";` binds model file names to paths;
+`iodata "<logical>" "<path>";` binds model file names to paths;
 `outdata` statements name per-set/per-coefficient CSV outputs; `soldata`
 names the solution binary prefix; `tabfile`/`closure`/`shock` point at
 the model inputs; the optional `subtotals "<path>";` (Tier B3, at most
@@ -482,25 +482,25 @@ Generated temporaries use the reserved prefixes `gen_sum`, `gen_par`,
 
 Layout after the 2026 restructuring:
 
-| file | lines (2026-10) | role |
+| file | lines (2026-11) | role |
 |---|---|---|
-| `main.c` | ~4,020 | orchestration: options, MPI topology, phases, solve dispatch, solution output, `stats.json` |
-| `teems_solver.h` | ~1,200 | umbrella header: constants, globals, typedefs, enums, structs, prototypes grouped per module |
-| `globals.c` | ~380 | single definitions of the program-wide globals; `errmsg`, the stage/RSS markers, condest hooks, the `.outputs.json` completion marker (`outputs_note`, `outputs_json_write`) |
+| `main.c` | ~4,340 | orchestration: options, MPI topology, phases, solve dispatch, solution output, `stats.json`, coefficient dump (`coefficients_dump`) |
+| `teems_solver.h` | ~1,290 | umbrella header: constants, globals, typedefs, enums, structs, prototypes grouped per module |
+| `globals.c` | ~390 | single definitions of the program-wide globals; `errmsg`, the stage/RSS markers, condest hooks, the `.outputs.json` completion marker (`outputs_note`, `outputs_json_write`) |
 | `version.h` | 9 | `TEEMS_SOLVER_VERSION`, the one version constant |
-| `str_util.c` | ~190 | string helpers (case-insensitive search and compare, bounded copy, sign-run collapse) and the checked opens `teems_fopen`/`teems_fopen_opt` |
-| `cmf_io.c` | ~4,050 | CMF reading, TAB preprocessing (incl. the PostSim split and set-builder transform), data-file headers, output CSVs, coefficient dump |
-| `tab_parse.c` | ~9,040 | TAB language: sets and set expressions, mappings, declarations and qualifiers, data reads, closure, shocks, backsolve statements + equation-scan filter, name validation |
-| `formula.c` | ~5,490 | FORMULA compile/eval, conditional quantifiers/sums, intrinsics, UPDATE application, subinterval re-shocking |
-| `levels.c` | ~2,600 | levels variables / `Formula & Equation` linearization at preprocess; complementarity and ADD_HOMOTOPY transforms |
+| `str_util.c` | ~220 | string helpers (case-insensitive search and compare, bounded copy, sign-run collapse) and the checked opens `teems_fopen`/`teems_fopen_opt` |
+| `cmf_io.c` | ~4,120 | CMF reading, TAB preprocessing (incl. the PostSim split and set-builder transform), data-file headers, output CSVs |
+| `tab_parse.c` | ~9,260 | TAB language: sets and set expressions, mappings, declarations and qualifiers, data reads, closure, shocks, backsolve statements + equation-scan filter, name validation |
+| `formula.c` | ~5,680 | FORMULA compile/eval, conditional quantifiers/sums, intrinsics, UPDATE application, subinterval re-shocking |
+| `levels.c` | ~2,690 | levels variables / `Formula & Equation` linearization at preprocess; complementarity and ADD_HOMOTOPY transforms |
 | `tab_loop.c` | ~490 | `LOOP`/`BREAK`/`CYCLE` ([GM] 11.18): loops rewritten into quantified statements at preprocess |
-| `jacobian.c` | ~3,780 | equation ordering, derivative-matrix preallocation and fill, backsolve recovery programs, complementarity state |
-| `block_order.c` | ~690 | (N)DBBD row/column ordering into bordered block form |
-| `block_solve.c` | ~4,550 | (N)DBBD parallel factorization, interface problem, back-solve, persistent factors |
-| `solve_drivers.c` | ~3,690 | Johansen, Gragg and Euler drivers; spill/residency logic; condest |
-| `solve_rk.c` | ~1,260 | Runge–Kutta drivers (RK2/Heun/RK4, embedded BoSha32/DoPri54, log-level chart, adaptive control with stage-level retries) |
+| `jacobian.c` | ~3,820 | equation ordering, derivative-matrix preallocation and fill, backsolve recovery programs, complementarity state |
+| `block_order.c` | ~720 | (N)DBBD row/column ordering into bordered block form |
+| `block_solve.c` | ~4,580 | (N)DBBD parallel factorization, interface problem, back-solve, persistent factors |
+| `solve_drivers.c` | ~4,080 | Johansen, Gragg and Euler drivers; spill/residency logic; condest |
+| `solve_rk.c` | ~1,390 | Runge–Kutta drivers (RK2/Heun/RK4, embedded BoSha32/DoPri54, log-level chart, adaptive control with stage-level retries) |
 | `probe.c` | ~950 | `-solmed probe`: MC79 structural diagnosis and `probe.json` |
-| `hsl_kernels.f90` | ~3,060 | Fortran wrappers around HSL MP48/MA48/MA51/MC66/MC79/MA60 plus sparse kernels |
+| `hsl_kernels.f90` | ~3,150 | Fortran wrappers around HSL MP48/MA48/MA51/MC66/MC79/MA60 plus sparse kernels |
 | `hsl_kernels.h` | ~40 | C extern declarations for the Fortran kernels |
 | `makefile`, `mp48_mod.sh`, `patches/` | — | build (`teems-solver` and `teems-solver-f64` targets); HSL source patching (see below) |
 
