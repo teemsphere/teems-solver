@@ -200,7 +200,7 @@ docker build --pull \
 
 `--pull` also refreshes the published base image, which carries the open-source dependencies. The rebuild replaces the local `teems:latest` tag in place; the previous image remains as an untagged layer until `docker image prune` removes it. If you built under another tag, rebuild with that `-t teems:<tag>`, since `ems_option_set(docker_tag = "<tag>")` selects the image by tag.
 
-Then restart R: the package remembers the solver version it saw for an image tag for the rest of the session. To check the installed solver directly:
+Then restart R: the package remembers the solver version it saw for an image tag for the rest of the session. `ems_solver_check()` in R compares the image's solver with the latest release here and prints these instructions when the image is behind; `ems_solve()` makes the same comparison once per session and reports only a newer release. To check the installed solver directly:
 
 ```bash
 docker run --rm --entrypoint /opt/teems-solver/solver/teems-solver teems:latest -version
@@ -258,13 +258,12 @@ The solver implements methods described in the following works.
 
 - Schiffmann, F. (2022), 'Runge Kutta integrators for fast and accurate solutions in GEMPACK'.
 - Munthe-Kaas, H. (1999), 'High order Runge-Kutta methods on manifolds', Applied Numerical Mathematics, vol. 29, pp. 115-127.
-- Butcher, J.C. (2015), 'Runge-Kutta Methods for Ordinary Differential Equations', in M. Al-Baali, L. Grandinetti and A. Purnama (eds), *Numerical Analysis and Optimization*, Springer Proceedings in Mathematics & Statistics, vol. 134, pp. 37-58.
 - Bogacki, P. and L.F. Shampine (1989), 'A 3(2) pair of Runge-Kutta formulas', Applied Mathematics Letters, vol. 2, pp. 321-325.
 - Dormand, J.R. and P.J. Prince (1980), 'A family of embedded Runge-Kutta formulae', Journal of Computational and Applied Mathematics, vol. 6, pp. 19-26.
-- Gustafsson, K. (1991), 'Control theoretic techniques for stepsize selection in explicit Runge-Kutta methods', ACM Transactions on Mathematical Software, vol. 17, pp. 533-554.
 
-**Parallel matrix methods (SBBD, NDBBD)**
+**Parallel matrix methods (DBBD, SBBD, NDBBD)**
 
+- Van Ha, P. and T. Kompas (2015), 'Solving the GTAP model in parallel using a doubly bordered block diagonal ordering technique', 2nd International Workshop on Financial Markets and Nonlinear Dynamics (FMND), Paris, 4-5 June.
 - Van Ha, P. and T. Kompas (2016), 'Solving intertemporal CGE models in parallel using a singly bordered block diagonal ordering technique', Economic Modelling, vol. 52, pp. 3-12. <https://doi.org/10.1016/j.econmod.2015.07.011>
 - Kompas, T. and P. Van Ha (2019), 'The "curse of dimensionality" resolved: The effects of climate change and trade barriers in large dimensional modelling', Economic Modelling, vol. 80, pp. 103-110. <https://doi.org/10.1016/j.econmod.2018.08.011>
 
@@ -288,13 +287,6 @@ This project is licensed under the **GNU Affero General Public License v3.0** â€
 | PETSc | BSD 2-Clause |
 | MPICH | Custom Open Source |
 | HSL Libraries | (user must obtain) |
-
-## Code Authorship
-
-| Component | Author(s) |
-|-----------|-----------|
-| Source code (`src/`) | Tom Kompas, Ha Van Pham, Matthew Cantele |
-| Docker scripts | Matthew Cantele |
 
 ## Contact
 
