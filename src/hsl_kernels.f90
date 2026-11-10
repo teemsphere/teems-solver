@@ -237,7 +237,7 @@ SUBROUTINE SPEC48_NOMC66(indata,jcn1,b1,values1,x,neleperrow,fcomm,rowptrin,colp
 
   integer myid, numprocs
   integer (8) :: i,j,o,h
-  integer (8) :: nblocks,maxsbcols,ncols
+  integer (8) :: nblocks
 
   TYPE (MP48_DATA) data
   INTEGER ERCODE,ST
@@ -277,18 +277,13 @@ SUBROUTINE SPEC48_NOMC66(indata,jcn1,b1,values1,x,neleperrow,fcomm,rowptrin,colp
     ALLOCATE(data%VALUES(1:data%NE),STAT=ST )
     ALLOCATE(data%B(1:data%NEQ),STAT=ST )
     ! Read matrix data on host.
-    maxsbcols=0
     do i = 1, nblocks
       data%NEQSB(i)=int(rowptrin(i+1)-rowptrin(i),4) ! MP48 fields are INTEGER(4); bounded by the counts hsl_i4 checked
       if (teems_verbosity()>=2) write(*,"('nomc block ',i4,' of dimension  ',i10,' X ',i10)") &
       i,data%NEQSB(i),colptrin(i+1)-colptrin(i)
-      ncols=colptrin(i+1)-colptrin(i)
-      if(maxsbcols.LT.ncols)maxsbcols=ncols
     end do
-    maxsbcols=maxsbcols+m-colptrin(nblocks+1)
-    if (teems_verbosity()>=2) print *, "row ", m,"nz ",nz,"maxcolsb ",maxsbcols
+    if (teems_verbosity()>=2) print *, "row ", m,"nz ",nz
     h=1
-    data%MAXSBCOLS=int(maxsbcols,4)
     do j = 1, m
       data%EQPTR(j)=int(h,4)
       do i = 1,neleperrow(j)
@@ -364,7 +359,7 @@ SUBROUTINE SPEC48_NOMC66_P(indata,jcn1,b1,values1,x,neleperrow,fcomm,rowptrin,co
   use constants
   IMPLICIT NONE
   integer (8) :: i,j,o,h
-  integer (8) :: nblocks,maxsbcols,ncols
+  integer (8) :: nblocks
   INTEGER ERCODE,ST
   integer (4) fcomm(*),fcomm1
   integer (4) redo(*)
@@ -451,18 +446,13 @@ SUBROUTINE SPEC48_NOMC66_P(indata,jcn1,b1,values1,x,neleperrow,fcomm,rowptrin,co
     ALLOCATE(pdata%VALUES(1:pdata%NE),STAT=ST )
     ALLOCATE(pdata%B(1:pdata%NEQ),STAT=ST )
     ALLOCATE(pdata%X(1:pdata%NEQ),STAT=ST )
-    maxsbcols=0
     do i = 1, nblocks
       pdata%NEQSB(i)=int(rowptrin(i+1)-rowptrin(i),4) ! MP48 fields are INTEGER(4); bounded by the counts hsl_i4 checked
       if (teems_verbosity()>=2) write(*,"('nomc block ',i4,' of dimension  ',i10,' X ',i10)") &
       i,pdata%NEQSB(i),colptrin(i+1)-colptrin(i)
-      ncols=colptrin(i+1)-colptrin(i)
-      if(maxsbcols.LT.ncols)maxsbcols=ncols
     end do
-    maxsbcols=maxsbcols+m-colptrin(nblocks+1)
-    if (teems_verbosity()>=2) print *, "row ", m,"nz ",nz,"maxcolsb ",maxsbcols
+    if (teems_verbosity()>=2) print *, "row ", m,"nz ",nz
     h=1
-    pdata%MAXSBCOLS=int(maxsbcols,4)
     do j = 1, m
       pdata%EQPTR(j)=int(h,4)
       do i = 1,neleperrow(j)
@@ -555,7 +545,7 @@ SUBROUTINE SPEC48_NOMC66_STAGE(indata,ai,aj,a,b1,fcomm,rowptrin,colptrin)
   use mp48_oneshot
   use constants
   IMPLICIT NONE
-  integer (8) :: i,j,h,nz,m,nblocks,maxsbcols,ncols
+  integer (8) :: i,j,h,nz,m,nblocks
   INTEGER ST
   integer (4) fcomm(*)
   integer (4) ai(*),aj(*)
@@ -583,17 +573,12 @@ SUBROUTINE SPEC48_NOMC66_STAGE(indata,ai,aj,a,b1,fcomm,rowptrin,colptrin)
     ALLOCATE(odata%EQVAR(1:odata%NE),STAT=ST )
     ALLOCATE(odata%VALUES(1:odata%NE),STAT=ST )
     ALLOCATE(odata%B(1:odata%NEQ),STAT=ST )
-    maxsbcols=0
     do i = 1, nblocks
       odata%NEQSB(i)=int(rowptrin(i+1)-rowptrin(i),4) ! MP48 fields are INTEGER(4); bounded by the counts hsl_i4 checked
       if (teems_verbosity()>=2) write(*,"('nomc block ',i4,' of dimension  ',i10,' X ',i10)") &
       i,odata%NEQSB(i),colptrin(i+1)-colptrin(i)
-      ncols=colptrin(i+1)-colptrin(i)
-      if(maxsbcols.LT.ncols)maxsbcols=ncols
     end do
-    maxsbcols=maxsbcols+m-colptrin(nblocks+1)
-    if (teems_verbosity()>=2) print *, "row ", m,"nz ",nz,"maxcolsb ",maxsbcols
-    odata%MAXSBCOLS=int(maxsbcols,4)
+    if (teems_verbosity()>=2) print *, "row ", m,"nz ",nz
     h=1
     do j = 1, m
       odata%EQPTR(j)=int(h,4)
@@ -749,7 +734,7 @@ SUBROUTINE SPEC48_NOMC66_P_CSR(indata,ai,aj,a,b1,x,fcomm,rowptrin,colptrin,redo)
   use mp48_persist
   use constants
   IMPLICIT NONE
-  integer (8) :: i,j,o,nz,m,nblocks,maxsbcols,ncols
+  integer (8) :: i,j,o,nz,m,nblocks
   INTEGER ERCODE,ST
   integer (4) fcomm(*),fcomm1
   integer (4) redo(*)
@@ -832,17 +817,12 @@ SUBROUTINE SPEC48_NOMC66_P_CSR(indata,ai,aj,a,b1,x,fcomm,rowptrin,colptrin,redo)
     ALLOCATE(pdata%VALUES(1:pdata%NE),STAT=ST )
     ALLOCATE(pdata%B(1:pdata%NEQ),STAT=ST )
     ALLOCATE(pdata%X(1:pdata%NEQ),STAT=ST )
-    maxsbcols=0
     do i = 1, nblocks
       pdata%NEQSB(i)=int(rowptrin(i+1)-rowptrin(i),4) ! MP48 fields are INTEGER(4); bounded by the counts hsl_i4 checked
       if (teems_verbosity()>=2) write(*,"('nomc block ',i4,' of dimension  ',i10,' X ',i10)") &
       i,pdata%NEQSB(i),colptrin(i+1)-colptrin(i)
-      ncols=colptrin(i+1)-colptrin(i)
-      if(maxsbcols.LT.ncols)maxsbcols=ncols
     end do
-    maxsbcols=maxsbcols+m-colptrin(nblocks+1)
-    if (teems_verbosity()>=2) print *, "row ", m,"nz ",nz,"maxcolsb ",maxsbcols
-    pdata%MAXSBCOLS=int(maxsbcols,4)
+    if (teems_verbosity()>=2) print *, "row ", m,"nz ",nz
     do j = 1, m+1
       pdata%EQPTR(j)=ai(j)+1
     end do

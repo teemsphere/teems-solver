@@ -6,15 +6,7 @@
  ! COPYRIGHT (c) 2003 Council for the Central Laboratory
  !                    of the Research Councils
  ! Original date 13 March 2003
-@@ -109,6 +111,7 @@
-       INTEGER NULL           ! number of null cols.
-       INTEGER NINTER         ! No. of cols. in interface problem
-       INTEGER RINTER         ! No. of rows in interface problem
-+      INTEGER MAXSBCOLS      ! Maximum No. of cols in single block (including border part)
-       INTEGER ICNTL(20)      ! Control parameters.
- ! ICNTL(1)     Error output unit (default 6)
- ! ICNTL(2)     Warning output unit (default 6)
-@@ -544,7 +547,7 @@
+@@ -544,7 +546,7 @@
                K,KL, &
                L,L1,LCNT,LDGN,LGUARD, &
                LLPTR,LORDER,LP, &
@@ -23,7 +15,7 @@
                RANK,ST,STRM,WRN
        LOGICAL EX,OPEN,LERR,LFLAG,LWRN
  
-@@ -1150,11 +1153,9 @@
+@@ -1150,11 +1152,9 @@
           ALLOCATE (IW(NEQ), &
                     IWORK(2*NEQ),STAT=ST)
           IF (ST /= 0) GO TO 180
@@ -36,7 +28,7 @@
                     data%private%INULL(NEQ), &
                     STAT=ST)
           IF (ST /= 0) GO TO 180
-@@ -1242,6 +1243,40 @@
+@@ -1242,6 +1242,40 @@
           data%BORDER = NIN
  
           IWORK(1:2*NEQ) = 0
@@ -77,7 +69,7 @@
           DO 190 JBLOCK = 1,NBLOCK
  ! Flag columns that appear within the block and add up
  ! number of columns in block
-@@ -1634,6 +1669,7 @@
+@@ -1634,6 +1668,7 @@
                NBLOCK,NEQ,NPROC,NC,NZBLK,NCMX,NZMX,NVAR,NP, &
                RANK,STRM,SRC,VALCRD,WRN
  
@@ -85,7 +77,7 @@
        INTEGER IOS        !  Holds IOSTAT parameter for files.
        INTEGER ST         !  Holds STAT parameter (ALLOCATE statement)
        INTEGER STD        !  Holds STAT parameter (DEALLOCATE statement)
-@@ -1659,6 +1695,7 @@
+@@ -1659,6 +1694,7 @@
        INTEGER, DIMENSION (:), ALLOCATABLE :: IFIRST
        INTEGER, DIMENSION (:), ALLOCATABLE :: IW
        INTEGER, DIMENSION (:), ALLOCATABLE :: IW1
@@ -93,7 +85,7 @@
        INTEGER, DIMENSION (:), ALLOCATABLE :: IRN
        INTEGER, DIMENSION (:), ALLOCATABLE :: JCN
        INTEGER, DIMENSION (:), ALLOCATABLE :: JFIRST
-@@ -2139,6 +2176,8 @@
+@@ -2139,6 +2175,8 @@
                  NEXTC(1:NCMX), &
                  ROWPTR(1:LORDER+1), &
                  STAT=ST)
@@ -102,7 +94,7 @@
        IF (ST /= 0) GO TO 190
        IF (ICONTROL(8) == 0) THEN
                  ALLOCATE (LASTR(1:MMX), &
-@@ -2203,12 +2242,12 @@
+@@ -2203,12 +2241,12 @@
  
        FLAG = 0
        IDUP = 0
@@ -118,7 +110,7 @@
           data%private%IMAP(1:NVARSB(LCNT),LCNT) = 0
           JBLOCK = data%IBLOCK(LCNT)
  ! M is number of rows in the block
-@@ -2227,9 +2266,9 @@
+@@ -2227,9 +2265,9 @@
             DO 220 K = KSTART,KSTOP - 1
               I = data%EQVAR(J1+K-1)
               J = J + 1
@@ -130,7 +122,7 @@
               ELSE
  ! We have a duplicate in row L
                 IDUP1 = IDUP1 + 1
-@@ -2241,7 +2280,7 @@
+@@ -2241,7 +2279,7 @@
    220      CONTINUE
             KSTART = KSTOP
    230    CONTINUE
@@ -139,7 +131,7 @@
           data%private%IDUP(LCNT) = IDUP1
           IDUP = IDUP + IDUP1
    240 CONTINUE
-@@ -2315,8 +2354,8 @@
+@@ -2315,8 +2353,8 @@
  ! Call MP48_MA60A/AD to perform analyse.
  ! Loop over submatrices.
        FLAG = 0
@@ -150,7 +142,7 @@
        IF (ICONTROL(7) == 1 .OR. &
          (ICONTROL(7) == 2 .AND. RANK == 0)) THEN
  ! Find length required for VALUES.
-@@ -2402,8 +2441,8 @@
+@@ -2402,8 +2440,8 @@
                   I = data%EQVAR(J1+K-1)
                   J = J + 1
                   JJ = data%private%IMAP(J,LCNT)
@@ -161,7 +153,7 @@
                      ROWPTR(L+1) = ROWPTR(L+1) + 1
  ! Set col. index in IRN
                      IRN(JJ) = I
-@@ -2412,7 +2451,7 @@
+@@ -2412,7 +2450,7 @@
    260          CONTINUE
                 KSTART = KSTOP
    270        CONTINUE
@@ -170,7 +162,7 @@
             ELSE
               DO 271 L = 1,M
                 NVAR = data%EQPTR(L1+L) - data%EQPTR(L1+L-1)
-@@ -2422,8 +2461,8 @@
+@@ -2422,8 +2460,8 @@
                   I = data%EQVAR(J1+K-1)
                   J = J + 1
                   JJ = data%private%IMAP(J,LCNT)
@@ -181,7 +173,7 @@
                      ROWPTR(L+1) = ROWPTR(L+1) + 1
  ! Set col. index in IRN
                      IRN(JJ) = I
-@@ -2432,7 +2471,7 @@
+@@ -2432,7 +2470,7 @@
    261          CONTINUE
                 KSTART = KSTOP
    271        CONTINUE
@@ -190,7 +182,7 @@
             END IF
          END IF
  
-@@ -2618,6 +2657,7 @@
+@@ -2618,6 +2656,7 @@
        DEALLOCATE (IFIRST,STAT=ST)
        DEALLOCATE (IW,STAT=ST)
        DEALLOCATE (IW1,STAT=ST)
@@ -198,7 +190,7 @@
        DEALLOCATE (IRN,STAT=ST)
        DEALLOCATE (JCN,STAT=ST)
        DEALLOCATE (JFIRST,STAT=ST)
-@@ -2669,16 +2709,21 @@
+@@ -2669,16 +2708,21 @@
        REAL(DP) T1,T2
        INTEGER BLANK,DEST,DGN,ERCODE,ERR, &
                FLAG, &
@@ -224,7 +216,7 @@
  
        INTEGER IOS
  !  Holds IOSTAT parameter for files.
-@@ -2723,7 +2768,7 @@
+@@ -2723,7 +2767,7 @@
        INTEGER, DIMENSION (:,:), ALLOCATABLE :: IQM
  
  !     .. External Subroutines ..
@@ -233,7 +225,7 @@
  
  !     .. MPI routines
        EXTERNAL MPI_BARRIER,MPI_BCAST,MPI_COMM_RANK, &
-@@ -3026,7 +3071,7 @@
+@@ -3026,7 +3070,7 @@
  ! Check how large array VALUES must be.
              L = 1
              DO JBLOCK = 1,NBLOCK
@@ -242,7 +234,7 @@
              END DO
              DEALLOCATE (VALUES,STAT=ST)
              ALLOCATE (VALUES(1:L),STAT=ST)
-@@ -3185,7 +3230,7 @@
+@@ -3185,7 +3229,7 @@
              MF = data%INFO_MA60(7,JBLOCK)
              NF = data%private%NF(JBLOCK)
              LICOPY = LICOPY + MF
@@ -251,7 +243,7 @@
           END DO
           ALLOCATE (FACT_COPY(1:LFCOPY),NE_SCHUR(1:NBLOCK),STAT=ST)
  !      END IF
-@@ -3226,16 +3271,16 @@
+@@ -3226,16 +3270,16 @@
    250 CONTINUE
        IF (JOB50 == 1 .AND. ICONTROL(11) == 0) THEN
  ! First run. Not using files to hold factor data
@@ -273,7 +265,7 @@
           IF (ST /= 0) GO TO 300
        END IF
  
-@@ -3257,7 +3302,7 @@
+@@ -3257,7 +3301,7 @@
  ! Find length required for VALUES.
           L = 1
           DO LCNT = 1,ICOUNT_RANK
@@ -282,7 +274,7 @@
           END DO
           DEALLOCATE (data%VALUES,STAT=ST)
           ALLOCATE (data%VALUES(1:L),STAT=ST)
-@@ -3272,12 +3317,12 @@
+@@ -3272,12 +3316,12 @@
              IF (JOB50 == 1) THEN
                 LFACT = data%private%LFACT(LCNT)
                 LIRNF = data%private%LIRNF(LCNT)
@@ -297,7 +289,7 @@
                L1 = MAX(L1,INFO10)
              END IF
           END DO
-@@ -3560,11 +3605,11 @@
+@@ -3560,11 +3604,11 @@
           NF = data%private%NF(JBLOCK)
           II1 = data%private%IPTRL(NC,LCNT)
           L = I4
@@ -311,7 +303,7 @@
  ! Increase space for FACT_COPY
               DO STRM = 8,99
                 IF (STRM == DGN .OR. STRM == ERR .OR. STRM == WRN) &
-@@ -3713,7 +3758,7 @@
+@@ -3713,7 +3757,7 @@
                 MF = data%INFO_MA60(7,JBLOCK)
                 LF = data%INFO_MA60(11,JBLOCK)
                 NF = data%private%NF(JBLOCK)
@@ -320,7 +312,7 @@
                 CALL MPI_RECV(NE_SCHUR(JBLOCK),1,MPI_INTEGER, &
                               SRC,7,data%private%COMM,STAT,ERCODE)
                 TOTNE_SCHUR = TOTNE_SCHUR + NE_SCHUR(JBLOCK)
-@@ -3768,7 +3813,7 @@
+@@ -3768,7 +3812,7 @@
              MF = data%INFO_MA60(7,JBLOCK)
              LF = data%INFO_MA60(11,JBLOCK)
              NF = data%private%NF(JBLOCK)
@@ -329,7 +321,7 @@
              CALL MPI_SEND(NE_SCHUR(JBLOCK),1,MPI_INTEGER, &
                            0,7,data%private%COMM,ERCODE)
              I4 = I4 + MNF
-@@ -3821,7 +3866,7 @@
+@@ -3821,7 +3865,7 @@
              MF = data%INFO_MA60(7,JBLOCK)
              LF = data%INFO_MA60(11,JBLOCK)
              NF = data%private%NF(JBLOCK)
@@ -338,7 +330,7 @@
              I4 = I4 + MNF
           END DO
        ELSE
-@@ -3831,7 +3876,7 @@
+@@ -3831,7 +3875,7 @@
              MF = data%INFO_MA60(7,JBLOCK)
              LF = data%INFO_MA60(11,JBLOCK)
              NF = data%private%NF(JBLOCK)
@@ -347,7 +339,7 @@
              IF (NE_SCHUR(JBLOCK) /= 0) &
              CALL MPI_SEND(FACT_COPY(I4),NE_SCHUR(JBLOCK), &
                            MPI_DOUBLE_PRECISION,0,1,data%private%COMM,ERCODE)
-@@ -4092,7 +4137,7 @@
+@@ -4092,7 +4136,7 @@
  ! pattern (data%private%FJOB = 1)
         IF (data%private%FJOB == 1) THEN
  ! First call.
@@ -356,7 +348,7 @@
  
  ! Switch off printing from MA48
           data%private%ICNTL_48(1) = -1
-@@ -4109,8 +4154,8 @@
+@@ -4109,8 +4153,8 @@
           data%private%ICNTL_48(7) = 0
  
  ! Switch control from sparse to full matrix processing (default 0.5)
@@ -367,7 +359,7 @@
           data%private%CNTL_48(1) = CONTROL(1)
  ! Set threshold pivoting parameter
           data%private%CNTL_48(2) = CONTROL(2)
-@@ -4227,7 +4272,7 @@
+@@ -4227,7 +4271,7 @@
  ! (data%private%FJOB = 1)
           IF (data%private%FJOB == 1) THEN
             JOB48 = 1
@@ -376,7 +368,7 @@
                  data%private%IRN(1:LA),data%private%JCN(1:LA), &
                  data%private%KEEP48(1:LKEEP48), &
                  data%private%CNTL_48,data%private%ICNTL_48, &
-@@ -4315,7 +4360,7 @@
+@@ -4315,7 +4359,7 @@
           ALLOCATE (IW(1:2*RINTER+2*NINTER),STAT=ST )
           IF (ST /= 0) GO TO 420
  
@@ -385,7 +377,7 @@
                  data%private%IRN(1:LA),data%private%JCN(1:NE), &
                  data%private%KEEP48(1:LKEEP48),data%private%CNTL_48, &
                  data%private%ICNTL_48,W,IW, &
-@@ -4557,7 +4602,7 @@
+@@ -4557,7 +4601,7 @@
  
        REAL(DP) T1,T2,T3,T4
        INTEGER DGN,ERCODE,ERR,FLAG, &
@@ -394,7 +386,7 @@
                J,JBLOCK,JOB48, &
                K, &
                L,L1,LA,LDGN,LFACT,LIRNF,LCNT,LORDER, &
-@@ -4565,6 +4610,8 @@
+@@ -4565,6 +4609,8 @@
                M,MMX,MF, &
                NBLOCK,NEQ,NPROC,NP,NC,NINTER,RINTER,NF, &
                RANK,STRM,SRC,WRN
@@ -403,7 +395,7 @@
  
        INTEGER IOS
  !  Holds IOSTAT parameter for files.
-@@ -4595,7 +4642,7 @@
+@@ -4595,7 +4641,7 @@
        INTEGER, DIMENSION (:), ALLOCATABLE :: NVARSB
  
  !     .. External Subroutines ..
@@ -412,7 +404,7 @@
  
  !     .. MPI routines
        EXTERNAL MPI_BARRIER,MPI_BCAST,MPI_COMM_RANK, &
-@@ -4990,7 +5037,7 @@
+@@ -4990,7 +5036,7 @@
           JOB48 = 1
           LKEEP48 =  data%private%LKEEP48
  
@@ -421,7 +413,7 @@
                data%private%IRN(1:LA), &
                       data%private%KEEP48(1:LKEEP48),data%private%CNTL_48, &
                       data%private%ICNTL_48,B1,X1,ERR48,W,IW, &
-@@ -5245,7 +5292,7 @@
+@@ -5245,7 +5291,7 @@
  
        SUBROUTINE MP48ED(M,N,KEEP,LKEEP,INFO)
  ! This subroutine computes statistics for MA48
