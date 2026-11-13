@@ -1,3 +1,12 @@
+# teems-solver 1.2.0
+
+## Changes affecting results
+* Runge-Kutta methods now carry `(change)` Update targets as part of the integrated state. Before, a `(change)` Update was applied once per step, which held every tableau to first order on models whose value flows are written as change-form updates. This combination is rare: no shipped model solutions are impacted.
+* Range qualifiers (`GE`, `GT`, `LE`, `LT`) on a levels `Variable` were not binding. They now bound the variable's levels value under the initial and updated range tests, including the `LINEAR_NAME=` and `LINEAR_VAR=` forms. A bound on a linear variable is a named error.
+
+## New named errors
+* `-solmed Johansen` with `-nsubints` above 1 solved once with 1/S of the shock. Johansen with more than one subinterval now fails within the solver. The next R package release will include a check to prevent this from reaching the solver.
+
 # teems-solver 1.1.0
 
 ## Breaking changes

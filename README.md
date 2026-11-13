@@ -1,7 +1,7 @@
 # TEEMS Solver
 
 [![License](https://img.shields.io/badge/License-AGPL_v3.0-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.1.0-green.svg)](https://github.com/matthewcantele/teems-solver/releases)
+[![Version](https://img.shields.io/badge/version-1.2.0-green.svg)](https://github.com/matthewcantele/teems-solver/releases)
 [![Docker](https://img.shields.io/badge/docker-required-2496ED.svg)](https://www.docker.com/)
 
 High-performance optimization solver for the TEEMS (Trade and Environment Equilibrium Modeling System) R package. Built on PETSc with MPI parallelization and HSL sparse linear algebra libraries.
@@ -200,7 +200,7 @@ docker build --pull \
 
 `--pull` also refreshes the published base image, which carries the open-source dependencies. The rebuild replaces the local `teems:latest` tag in place; the previous image remains as an untagged layer until `docker image prune` removes it. If you built under another tag, rebuild with that `-t teems:<tag>`, since `ems_option_set(docker_tag = "<tag>")` selects the image by tag.
 
-Then restart R: the package remembers the solver version it saw for an image tag for the rest of the session. `ems_solver_check()` in R compares the image's solver with the latest release here and prints these instructions when the image is behind; `ems_solve()` makes the same comparison once per session and reports only a newer release. To check the installed solver directly:
+Then restart R: the package remembers the solver version it saw for an image tag for the rest of the session. `ems_solve()` compares the image's solver with the latest release here once per session and prints these instructions when a newer release exists. To check the installed solver directly:
 
 ```bash
 docker run --rm --entrypoint /opt/teems-solver/solver/teems-solver teems:latest -version
