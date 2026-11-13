@@ -1,7 +1,7 @@
 # Select the base variant matching the target ISA level (see
 # README, ISA levels); the solver and HSL libraries below are
 # compiled at the level recorded in the base image's archflags file.
-ARG BASE_IMAGE=matthewcantele/teems_base:latest
+ARG BASE_IMAGE=matthewcantele/teems_base:1
 # BuildKit fills TARGETARCH; declared here (global scope) so the runtime
 # base can be selected per architecture further down
 ARG TARGETARCH
@@ -97,7 +97,7 @@ FROM runtime-${TARGETARCH}
 # solver version label = pre-pull hint only; ground truth is the binary's
 # -version (src/version.h). Keep this default equal to that constant, or
 # pass --build-arg TEEMS_VERSION="$(sed -n 's/.*TEEMS_SOLVER_VERSION "\(.*\)"/\1/p' src/version.h)"
-ARG TEEMS_VERSION=1.2.0
+ARG TEEMS_VERSION=1.2.1-dev.1
 
 LABEL org.opencontainers.image.name="TEEMS solver expedited build Dockerfile"
 LABEL org.opencontainers.image.version="${TEEMS_VERSION}"

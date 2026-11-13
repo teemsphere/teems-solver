@@ -141,7 +141,7 @@ the build stops with a pointer to these instructions if given one.)
 
 ##### Expedited Build (Recommended)
 
-Pulls the pre-built base image (`matthewcantele/teems_base:latest`) from Dockerhub and adds HSL compilation and the final solver binary. The correct base image architecture (`amd64` or `arm64`) is selected automatically.
+Pulls the pre-built base image from Dockerhub and adds HSL compilation and the final solver binary. The correct base image architecture (`amd64` or `arm64`) is selected automatically. The base (compilers, MPI, PETSc, OpenBLAS) has its own version series, `matthewcantele/teems_base:<n>`, that moves only when its contents change; each solver release names the base it was built and tested on in the Dockerfile's `BASE_IMAGE` default (`teems_base:1` for 1.2.0), so a build of a given release reproduces the same stack.
 
 ```bash
 docker build --pull \
