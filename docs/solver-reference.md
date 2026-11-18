@@ -1450,6 +1450,7 @@ needs corpus calibration.
 | `-rkctrl {std,pi}` | std | step-size controller: elementary (0.85 safety, 0.5–2 clamp) or PI |
 | `-rk_h0 h` | 0 | first step length; 0 = `1/step1` capped from the initial gradient (exp(5) level ratio in the log chart, 90 points in the percent chart) |
 | `-rkguard r` | 1e30 | log chart: level ratio beyond which a stage state is rejected |
+| `-stepbudget n` | 500 | adaptive runs: the run aborts once the step attempts made plus the steps still needed to reach t = 1 at the mean of the last 10 accepted step sizes exceed `n`; 0 = no limit. Ends a run whose steps have settled far too short to finish but above the 1e-8 collapse test |
 | `-assertions {0,1,2}` | 2 | TAB `Assertion` statements: off / warn / fatal |
 | `-range_test_initial`, `-range_test_updated {0,1,2}` | 2 / 1 | coefficient bound checks on initial values (every coefficient, after the initial Reads and Formulas; [GM] 25.4.2) and on updated values: off / warn / fatal |
 | `-postsim {0,1}` | 1 | execute the TAB's PostSim section after the simulation |

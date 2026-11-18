@@ -481,10 +481,15 @@ static int rk_state_check(array_def *vars,offset_t nvar,solve_real *stagez,const
 }
 
 /* name of the variable owning element index t, for log lines */
-static const char *rk_elem_var(array_def *vars,offset_t nvar,fortran_int t) {
-  offset_t i;
-  for(i=0; i<nvar; i++)if(t>=vars[i].offset&&t<vars[i].offset+vars[i].nelem)return vars[i].cofname;
-  return "?";
+#define RK_BUDGET_WINDOW 10
+/* steps still needed to reach t = 1 at the mean of the last accepted
+   step sizes (0 before the first accepted step) */
+static double rk_steps_needed(double t,const double *hist,long naccepted) {
+  long i,n=naccepted<RK_BUDGET_WINDOW?naccepted:RK_BUDGET_WINDOW;
+  double sum=0;
+  if(n<1)return 0;
+  for(i=0; i<n; i++)sum+=hist[i];
+  return (1.0-t)*(double)n/sum;
 }
 
 static const char *rk_fail_name(int code) {
@@ -657,6 +662,10 @@ bool solve_rk(PetscBool nohsl,PetscInt VecSize,PetscInt dnz,PetscInt* dnnz,Petsc
   double t=0,h=1.0/steps1,q;
   if(rko->h0>0&&rko->h0<h)h=rko->h0;
   int stepno=0,checkretries=0;
+  long nattempts=0;
+  double hist[RK_BUDGET_WINDOW]= {0},needed=0;
+  char worstname[(MAXVARDIM+2)*NAMESIZE]="";
+  bool budgeted=(adaptive&&embedded&&rko->step_budget>0);
   bool firstsolve=true,crossed_warned=false,have_k0=false,checks_suspended=false;
   double k0_h=0,metric,metric_prev=-1,stepdata[2];
   if(rank==0)logmsg(1,"%s: %s chart (%ld of %ld elements multiplicative), h0 %.4g, %s norm over %s (%ld elements), %s controller\n",scheme.name,chart_log?"log":"percent",(long)nmult,(long)nvarele,h,rko->norm==RK_NORM_RMS?"rms":"max",rko->scope==RK_SCOPE_PCT?"percent-change elements":"all elements",(long)(rko->scope==RK_SCOPE_PCT?nsteer:nvarele),rko->ctrl==RK_CTRL_PI?"PI":"standard");
@@ -664,6 +673,16 @@ bool solve_rk(PetscBool nohsl,PetscInt VecSize,PetscInt dnz,PetscInt* dnnz,Petsc
     if(t+h>1.0)h=1.0-t;   /* land exactly on t=1 */
     int failcode=0;
     fortran_int worst_t=0;
+    /* -stepbudget: the attempts made plus the steps still needed at the
+       recent step size bound the run.  The 1e-8 collapse test below
+       sees only the step size, and a run whose steps settle above it
+       but far below what reaching t = 1 takes would otherwise never
+       end (a solution path nearing a singular point does this). */
+    if(budgeted&&(double)nattempts+needed>(double)rko->step_budget) {
+      if(rank==0)errmsg("Error: depleted step budget: the adaptive %s run reached t = %.5f after %ld step attempts and needs about %.3g more at the recent step size, over the budget of %ld (-stepbudget); worst element %s. Either the budget is too low for this run or the solution does not exist beyond this point for this shock. A Gragg run of the same shock (-solmed Gragg) tells the two apart: if its results converge, raise -stepbudget; if they are reported as oscillating or diverging, the solution breaks down near this point and a smaller shock is needed\n",scheme.name,t,nattempts,needed,rko->step_budget,worstname[0]?worstname:"not measured");
+      teems_abort();
+    }
+    nattempts++;
     for(m=0; m<s; m++) {
       if(m>0) {
         for(tindx1=0; tindx1<nvarele; tindx1++) {
@@ -892,10 +911,16 @@ bool solve_rk(PetscBool nohsl,PetscInt VecSize,PetscInt dnz,PetscInt* dnnz,Petsc
         if(q<0.5)q=0.5;
         h*=q;
         if(h<1e-8) {
-          if(rank==0)errmsg("Error: adaptive step size collapsed below 1e-8 without meeting epsTolerance %.3g (worst error metric %.3g); the problem may be too stiff for %s\n",epstol,metric,scheme.name);
+          if(rank==0) {
+            probe_var_ele_name(worst_t,vars,nvar,sets,set_elems,worstname);
+            errmsg("Error: adaptive step size collapsed below 1e-8 at t = %.5f without meeting epsTolerance %.3g (worst error metric %.3g, worst element %s); the problem may be too stiff for %s\n",t,epstol,metric,worstname,scheme.name);
+          }
           teems_abort();
         }
-        if(rank==0)logmsg(1,"Step %d rejected (accuracy metric %.3g > %.3g, worst element %s[%ld]), retrying with step size %.4g\n",stepno+1,metric,epstol,rk_elem_var(vars,nvar,worst_t),(long)worst_t,h);
+        if(rank==0) {
+          probe_var_ele_name(worst_t,vars,nvar,sets,set_elems,worstname);
+          logmsg(1,"Step %d rejected (accuracy metric %.3g > %.3g, worst element %s), retrying with step size %.4g\n",stepno+1,metric,epstol,worstname,h);
+        }
         fflush(stdout);
         for(i=0; i<ncofele; i++)elem_vals[i].value=base_vals[i];
         for(tindx1=0; tindx1<nvarele; tindx1++)stagez[tindx1]=base_Z[tindx1];
@@ -1015,7 +1040,12 @@ bool solve_rk(PetscBool nohsl,PetscInt VecSize,PetscInt dnz,PetscInt* dnnz,Petsc
     if(h<teems_rk_stats.h_min)teems_rk_stats.h_min=h;
     if(h>teems_rk_stats.h_max)teems_rk_stats.h_max=h;
     if(metric>teems_rk_stats.worst_step_metric)teems_rk_stats.worst_step_metric=metric;
-    if(rank==0)logmsg(1,"Step %d accepted: t %.5f, step size %.4g, accuracy metric %.3g (worst element %s[%ld])\n",stepno,t,h,metric,rk_elem_var(vars,nvar,worst_t),(long)worst_t);
+    hist[(stepno-1)%RK_BUDGET_WINDOW]=h;
+    needed=rk_steps_needed(t,hist,stepno);
+    if(rank==0) {
+      probe_var_ele_name(worst_t,vars,nvar,sets,set_elems,worstname);
+      logmsg(1,"Step %d accepted: t %.5f, step size %.4g, accuracy metric %.3g (worst element %s)\n",stepno,t,h,metric,worstname);
+    }
     teems_rss_probe("step");
         fflush(stdout);
     /* first-same-as-last: the last stage was solved at the end state =

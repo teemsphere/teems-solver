@@ -171,7 +171,7 @@ static const char *const cli_teems_flags[]={
   "newton_per_euler","newton_shock","newton_tol",
   "nsubints","postsim","probefine","probepattern","random_seed",
   "range_test_initial","range_test_updated","refine","residcheck","retryadj","rkchart",
-  "rkctrl","rkguard","rk_h0","rknorm","rkscope","rqf","single_run","sui","sup","two_run",
+  "rkctrl","rkguard","rk_h0","rknorm","rkscope","rqf","single_run","stepbudget","sui","sup","two_run",
   "xacvars",
   "smllthreads","solmed","step1","step2","step3","tempdir","verbosity","zdivshift",
   "withmc66","version",NULL
@@ -427,6 +427,7 @@ typedef struct {
   double epstol;
   int rk_chart, rk_norm, rk_ctrl, rk_scope;
   double rk_h0;
+  long step_budget;
   int maxretries;
   double retryadj;
   long laA, laDi, laD;
@@ -528,8 +529,8 @@ static void ordering_stats_write(cmf_file_entry *iodata, int niodata, int noutda
     }
     fprintf(fp,"    \"save_updated_passes\": \"%s\",\n",teems_sup==2?"all":(teems_sup==1?"last":"none"));
     fprintf(fp,"    \"random_seed\": %ld,\n",teems_random_seed);
-    if(isrk)fprintf(fp,"    \"adaptive\": %d,\n    \"eps_tolerance\": %g,\n    \"max_retries\": %d,\n    \"retry_adjust\": %g,\n    \"rk_chart\": \"%s\",\n    \"rk_norm\": \"%s\",\n    \"rk_controller\": \"%s\",\n    \"rk_scope\": \"%s\",\n    \"rk_h0\": %g,\n",ropt->adaptive,ropt->epstol,ropt->maxretries,ropt->retryadj,ropt->rk_chart==RK_CHART_LOG?"log":"percent",ropt->rk_norm==RK_NORM_RMS?"rms":"max",ropt->rk_ctrl==RK_CTRL_PI?"pi":"std",ropt->rk_scope==RK_SCOPE_ALL?"all":"pct",ropt->rk_h0);
-    else fprintf(fp,"    \"adaptive\": null,\n    \"eps_tolerance\": null,\n    \"max_retries\": null,\n    \"retry_adjust\": null,\n    \"rk_chart\": null,\n    \"rk_norm\": null,\n    \"rk_controller\": null,\n    \"rk_scope\": null,\n    \"rk_h0\": null,\n");
+    if(isrk)fprintf(fp,"    \"adaptive\": %d,\n    \"eps_tolerance\": %g,\n    \"max_retries\": %d,\n    \"retry_adjust\": %g,\n    \"rk_chart\": \"%s\",\n    \"rk_norm\": \"%s\",\n    \"rk_controller\": \"%s\",\n    \"rk_scope\": \"%s\",\n    \"rk_h0\": %g,\n    \"step_budget\": %ld,\n",ropt->adaptive,ropt->epstol,ropt->maxretries,ropt->retryadj,ropt->rk_chart==RK_CHART_LOG?"log":"percent",ropt->rk_norm==RK_NORM_RMS?"rms":"max",ropt->rk_ctrl==RK_CTRL_PI?"pi":"std",ropt->rk_scope==RK_SCOPE_ALL?"all":"pct",ropt->rk_h0,ropt->step_budget);
+    else fprintf(fp,"    \"adaptive\": null,\n    \"eps_tolerance\": null,\n    \"max_retries\": null,\n    \"retry_adjust\": null,\n    \"rk_chart\": null,\n    \"rk_norm\": null,\n    \"rk_controller\": null,\n    \"rk_scope\": null,\n    \"rk_h0\": null,\n    \"step_budget\": null,\n");
     fprintf(fp,"    \"laA\": %ld,\n    \"laDi\": %ld,\n    \"laD\": %ld,\n",ropt->laA,ropt->laDi,ropt->laD);
     fprintf(fp,"    \"max_threads\": %d,\n",(int)max_threads);
     fprintf(fp,"    \"store_precision\": \"%s\",\n",TEEMS_STORE_PRECISION);
@@ -2123,7 +2124,7 @@ int main(int argc,char **args) {
      bound, -retryadj/-maxretries the check-failure retry policy */
   int adaptive=0,maxretries=3;
   PetscReal epstol=0.1,retryadj=0.5;
-  rk_options rko={RK_CHART_LOG,RK_NORM_MAX,RK_CTRL_STD,RK_SCOPE_PCT,0.0,log(1e30)};
+  rk_options rko={RK_CHART_LOG,RK_NORM_MAX,RK_CTRL_STD,RK_SCOPE_PCT,0.0,log(1e30),500};
   {
     char adaptbuf[NAMESIZE];
     PetscOptionsGetString(NULL,NULL,"-adaptive",adaptbuf,NAMESIZE,&flg);
@@ -2223,6 +2224,17 @@ int main(int argc,char **args) {
           return 1;
         }
         rko.guard=log((double)rtmp);
+      }
+      {
+        /* -stepbudget n: an adaptive run stops when the attempts made
+           plus the steps still needed at the recent step size exceed n
+           (0 = no limit) */
+        PetscInt itmp=0;
+        PetscOptionsGetInt(NULL,NULL,"-stepbudget",&itmp,&flg);
+        if(flg) {
+          if(opt_range_bad(rank,"-stepbudget",itmp,0,LONG_MAX,"a non-negative step count (0 = no limit)")) { PetscFinalize(); return 1; }
+          rko.step_budget=(long)itmp;
+        }
       }
     }
     if(isrk) {
@@ -3664,6 +3676,7 @@ comp_accurate_reentry:
     ropt.rk_ctrl=rko.ctrl;
     ropt.rk_scope=rko.scope;
     ropt.rk_h0=rko.h0;
+    ropt.step_budget=rko.step_budget;
     ropt.epstol=(double)epstol;
     ropt.maxretries=maxretries;
     ropt.retryadj=(double)retryadj;

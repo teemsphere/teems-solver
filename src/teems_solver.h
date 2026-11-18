@@ -448,7 +448,7 @@ extern double teems_newton_tol;
 extern long teems_newton_nlevels, teems_newton_nlinear;
 extern int teems_range_test_updated;
 /* Runge-Kutta run controls (main parses -rkchart/-rknorm/-rkctrl/
-   -rk_h0/-rkguard; solve_rk.c reads them) */
+   -rk_h0/-rkguard/-stepbudget; solve_rk.c reads them) */
 enum rk_chart_kind { RK_CHART_LOG=0, RK_CHART_PERCENT=1 };
 enum rk_norm_kind { RK_NORM_MAX=0, RK_NORM_RMS=1 };
 enum rk_ctrl_kind { RK_CTRL_STD=0, RK_CTRL_PI=1 };
@@ -460,6 +460,7 @@ typedef struct {
   int scope;        /* rk_scope_kind: which elements steer the accept test */
   double h0;        /* initial step length (0 = 1/step1 capped by the initial gradient) */
   double guard;     /* log chart: |log(level/level0)| beyond which a stage is rejected */
+  long step_budget; /* adaptive: attempts made plus steps still needed at the recent step size may not exceed this (0 = no limit) */
 } rk_options;
 /* Runge-Kutta run record (solve_rk.c fills, main patches into stats.json) */
 typedef struct {
@@ -1052,6 +1053,7 @@ extern solve_real *teems_comp_xac_base;
 int coefficients_dump_phase(const char *stem, const char *ext, offset_t phase, offset_t ncof, offset_t ncofele, elem_value *elem_vals);
 extern long zdiv_default_hits;
 extern double teems_zdiv_shift;
+void probe_var_ele_name(offset_t j5,array_def *vars,offset_t nvar,set_def *sets,set_element *set_elems,char *out);
 void probe_col_label(PetscInt col, char *out, size_t cap);
 void probe_row_label(PetscInt row, char *out, size_t cap);
 void solve_x_check(const solve_real *x, PetscInt n, int doit);

@@ -158,7 +158,7 @@ static offset_t probe_stmt_of_leq(offset_t leq,eq_probe_meta *eqmeta,offset_t ne
 }
 
 /* "name(ele,ele)" for the variable element at closure position j5 */
-static void probe_var_ele_name(offset_t j5,array_def *vars,offset_t nvar,set_def *sets,set_element *set_elems,char *out) {
+void probe_var_ele_name(offset_t j5,array_def *vars,offset_t nvar,set_def *sets,set_element *set_elems,char *out) {
   offset_t i,j,idx;
   dim_t d;
   i=probe_var_of_ele(j5,vars,nvar);
