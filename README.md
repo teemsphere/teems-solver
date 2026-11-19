@@ -1,7 +1,7 @@
 # TEEMS Solver
 
 [![License](https://img.shields.io/badge/License-AGPL_v3.0-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.2.0-green.svg)](https://github.com/matthewcantele/teems-solver/releases)
+[![Version](https://img.shields.io/badge/version-1.2.1-green.svg)](https://github.com/matthewcantele/teems-solver/releases)
 [![Docker](https://img.shields.io/badge/docker-required-2496ED.svg)](https://www.docker.com/)
 
 High-performance optimization solver for the TEEMS (Trade and Environment Equilibrium Modeling System) R package. Built on PETSc with MPI parallelization and HSL sparse linear algebra libraries.
@@ -141,7 +141,7 @@ the build stops with a pointer to these instructions if given one.)
 
 ##### Expedited Build (Recommended)
 
-Pulls the pre-built base image from Dockerhub and adds HSL compilation and the final solver binary. The correct base image architecture (`amd64` or `arm64`) is selected automatically. The base (compilers, MPI, PETSc, OpenBLAS) has its own version series, `matthewcantele/teems_base:<n>`, that moves only when its contents change; each solver release names the base it was built and tested on in the Dockerfile's `BASE_IMAGE` default (`teems_base:1` for 1.2.0), so a build of a given release reproduces the same stack.
+Pulls the pre-built base image from Dockerhub and adds HSL compilation and the final solver binary. The correct base image architecture (`amd64` or `arm64`) is selected automatically. The base (compilers, MPI, PETSc, OpenBLAS) has its own version series, `matthewcantele/teems_base:<n>`, that moves only when its contents change; each solver release names the base it was built and tested on in the Dockerfile's `BASE_IMAGE` default (`teems_base:1` for 1.2.0 and 1.2.1), so a build of a given release reproduces the same stack.
 
 ```bash
 docker build --pull \

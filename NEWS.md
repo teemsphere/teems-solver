@@ -1,3 +1,11 @@
+# teems-solver 1.2.1
+
+## New options
+* `-stepbudget n` (default `500`, `0` = no limit), adaptive Runge-Kutta runs only: the run aborts once the step attempts made plus those still needed at the recent step length exceed `n`. Before, a run whose step had settled too short to make progress ran on without end. The error reports the point reached, the attempts, the worst element and how to tell a low budget from a solution that breaks down there. The step lines and the step-collapse error now name the worst element (`qxs(ppp,syr,irq)`) instead of its index.
+
+## Build
+* The expedited build pins the base image by its own version, `matthewcantele/teems_base:1`, which has not changed since 1.1.0. Results are unaffected.
+
 # teems-solver 1.2.0
 
 ## Changes affecting results
